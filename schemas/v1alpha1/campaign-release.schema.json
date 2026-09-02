@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.planeon.ai/conformance/v1alpha1/campaign-release.schema.json",
+  "type": "object", "additionalProperties": false,
+  "required": ["schemaVersion", "campaignId", "campaignDefinitionDigest", "kitDigest", "bundleDigest", "endpointPolicyDigests", "tree"],
+  "properties": {
+    "schemaVersion": {"const": "harness.planeon.ai/campaign-release/v1alpha1"},
+    "campaignId": {"type": "string"}, "campaignDefinitionDigest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "kitDigest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}, "bundleDigest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "endpointPolicyDigests": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}},
+    "tree": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["path", "mode", "size", "sha256"], "properties": {"path": {"type": "string"}, "mode": {"type": "string", "pattern": "^[0-7]{4}$"}, "size": {"type": "integer", "minimum": 0}, "sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}}}}
+  }
+}

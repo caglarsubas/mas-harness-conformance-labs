@@ -1,0 +1,20 @@
+[build-system]
+requires = []
+build-backend = "harness_conformance.build_backend"
+backend-path = ["src"]
+
+[project]
+name = "planeon-harness-conformance"
+version = "0.1.0"
+description = "Deterministic offline conformance kit for the Planeon Harness Onion"
+readme = "README.md"
+requires-python = "==3.12.*"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Planeon contributors" }]
+dependencies = []
+
+[project.scripts]
+harness-conformance = "harness_conformance.cli:main"
+
+[tool.uv]
+package = true

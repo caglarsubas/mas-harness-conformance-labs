@@ -1,0 +1,51 @@
+{
+  "authorities": {
+    "contracts": {
+      "commit": "63a1af44ce0abe31075c37c3529848ebe8fe2fcb",
+      "packet": "CON-005",
+      "pullRequestRun": 33363060818,
+      "releaseManifestSha256": "beb70f35185ce631f23f60b1e0b4c2d7d800cccc5b713a819cac62d596b5f509"
+    },
+    "generatedClients": {
+      "commit": "702239f542a563158595a7fa05e63612facc0eeb",
+      "contractsLockSha256": "bb1c088fbafcf07b4edba43f92015c935fcd2cfed224874c6569320da146199d",
+      "packet": "SDK-001",
+      "pullRequestRun": 33372138592
+    },
+    "planning": {
+      "commit": "95d14248d6bfcfbcbec48a7372d7f2d3bfb19ce6",
+      "liveContractSha256": "18509ade585005def652c848f1a456f31c7e55f7871dd60a6919095bae422242",
+      "liveEnvelopeSchemaSha256": "ee5ce21417760c941b70b03fc7d48c6462104268f374a424f4cd01f7ed5ca6ee",
+      "packet": "CONF-001",
+      "packetSha256": "2ad6741244eb83c152b0880ffb3518b10a02d5cc65bf2e1012b879866069de48"
+    },
+    "zeroBill": {
+      "commit": "97da35afff79e1582b964b613472609a613ea81b",
+      "packet": "MET-003",
+      "policySha256": "77c1385d014db8562be215f03a806deafb66e38c6e7faed9167f53299dadd43e",
+      "pullRequestRun": 33313396516,
+      "scannerSha256": "57fa7e94bf5657f0daf959d5229dfc2a53a0ab94793d1d5fa03a7513b1272fd7"
+    }
+  },
+  "dependencies": [],
+  "packetId": "CONF-001",
+  "repositorySeed": {
+    "commit": "592291decb1d77f3cbacd02251e169eb8886c8c2",
+    "tree": "aff629e4afeb07cab7294343789bdc7d2f4b27b5"
+  },
+  "runtime": {
+    "interpreterPath": "/opt/planeon/python/3.12.14/bin/python3.12",
+    "interpreterSha256": "ac60cfe0268614638d0ffa35f3b0284fc7b3a11482723793455e17eeb278509e",
+    "inventoryPath": "/etc/planeon/python-3.12.14.inventory.json",
+    "inventorySha256": "36167810c1ec56f5d5dc55410d9e528c58700ff138608e3b116f868a4d650799",
+    "pythonVersion": "3.12.14",
+    "uvPath": "/opt/planeon/bin/uv",
+    "uvSha256": "55936a60bff5de7ac04facb72f9e6fd0ffd9661063480224c3ab321c3f10caff",
+    "uvVersion": "0.12.7"
+  },
+  "schemaVersion": "harness.planeon.ai/conformance-toolchain-lock/v1alpha1",
+  "workflow": {
+    "checkoutCommit": "11bd71901bbe5b1630ceea73d27597364c9af683",
+    "hostedRunner": false
+  }
+}

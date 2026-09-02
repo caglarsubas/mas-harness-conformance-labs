@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.planeon.ai/conformance/v1alpha1/control-result.schema.json",
+  "type": "object", "additionalProperties": false,
+  "required": ["axis", "controlId", "handler", "observationDigest", "reasonCode", "required", "status"],
+  "properties": {
+    "axis": {"enum": ["SOURCE", "UNIT", "CI", "MERGE", "ARTIFACT", "SIGNATURE", "DEPLOYMENT", "RUNTIME", "SECURITY", "ASSURANCE", "TENANT_ACCEPTANCE_CANDIDATE", "TENANT_ACCEPTANCE"]},
+    "controlId": {"type": "string", "pattern": "^[a-z][a-z0-9.-]*$", "maxLength": 128},
+    "handler": {"enum": ["STATIC_ASSERTION", "SCHEMA_ASSERTION", "LIFECYCLE_ASSERTION", "EVENT_ASSERTION", "ENVIRONMENT_CAPABILITY"]},
+    "observationDigest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "reasonCode": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]*$", "maxLength": 128},
+    "required": {"type": "boolean"},
+    "status": {"enum": ["PASS", "FAIL", "WARN", "NOT_APPLICABLE", "NOT_RUN_ENV_UNAVAILABLE"]}
+  }
+}
