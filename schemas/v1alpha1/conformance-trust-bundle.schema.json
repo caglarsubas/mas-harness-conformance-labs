@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.planeon.ai/conformance/v1alpha1/conformance-trust-bundle.schema.json",
+  "type": "object", "additionalProperties": false,
+  "required": ["schemaVersion", "keys"],
+  "properties": {
+    "schemaVersion": {"enum": ["harness.planeon.ai/conformance-trust-bundle/v1alpha1", "harness.planeon.ai/live-trust-bundle/v1alpha1"]},
+    "revocationsDigest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "keys": {"type": "array", "maxItems": 128, "items": {"type": "object", "additionalProperties": false, "required": ["keyId", "purpose", "publicKey", "tenantId", "validFrom", "validUntil", "revoked"], "properties": {"keyId": {"type": "string"}, "purpose": {"enum": ["TECHNICAL_EVIDENCE", "PLATFORM_RELEASE", "TENANT_LIVE_EXECUTION", "CAPACITY_OPERATOR"]}, "publicKey": {"type": "string"}, "owner": {"type": "string"}, "tenantId": {"type": ["string", "null"]}, "environmentId": {"type": ["string", "null"]}, "validFrom": {"type": "string", "format": "date-time"}, "validUntil": {"type": "string", "format": "date-time"}, "revoked": {"type": "boolean"}}}}
+  }
+}

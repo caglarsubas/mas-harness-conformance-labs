@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.planeon.ai/conformance/v1alpha1/live-capacity-authorization.schema.json",
+  "type": "object", "additionalProperties": false,
+  "required": ["schemaVersion", "authorizationId", "operatorId", "tenantId", "environmentId", "namespace", "serviceAccountSubject", "permittedEndpointIds", "kubernetesApiRules", "campaignProxyRules", "permittedGvksAndVerbs", "preexistingResourceRefs", "resourceQuotaDigest", "limitRangeDigest", "preallocatedStorageRefs", "preallocatedAcceleratorRefs", "credentialIdentities", "mutationProfile", "admissionPolicyDigest", "validFrom", "expiresAt", "nonce", "signerKeyId", "signature"],
+  "properties": {
+    "schemaVersion": {"const": "harness.planeon.ai/live-capacity-authorization/v1alpha1"},
+    "authorizationId": {"type": "string"}, "operatorId": {"type": "string"}, "tenantId": {"type": "string"}, "environmentId": {"type": "string"}, "namespace": {"type": "string"}, "serviceAccountSubject": {"type": "string"},
+    "permittedEndpointIds": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+    "kubernetesApiRules": {"type": "array", "items": {"type": "object"}}, "campaignProxyRules": {"type": "array", "items": {"type": "object"}}, "permittedGvksAndVerbs": {"type": "array", "items": {"type": "object"}},
+    "preexistingResourceRefs": {"type": "array", "items": {"type": "object"}}, "resourceQuotaDigest": {"$ref": "#/$defs/digest"}, "limitRangeDigest": {"$ref": "#/$defs/digest"},
+    "preallocatedStorageRefs": {"type": "array", "items": {"type": "object"}}, "preallocatedAcceleratorRefs": {"type": "array", "items": {"type": "object"}}, "credentialIdentities": {"type": "array", "items": {"type": "object"}},
+    "mutationProfile": {"const": "ZERO_INCREMENTAL_COST_KUBERNETES_V1"}, "admissionPolicyDigest": {"$ref": "#/$defs/digest"},
+    "validFrom": {"type": "string", "format": "date-time"}, "expiresAt": {"type": "string", "format": "date-time"}, "nonce": {"type": "string"}, "signerKeyId": {"type": "string"}, "signature": {"type": "string"}
+  },
+  "$defs": {"digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}}
+}

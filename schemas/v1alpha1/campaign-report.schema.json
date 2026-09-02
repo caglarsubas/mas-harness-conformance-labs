@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.planeon.ai/conformance/v1alpha1/campaign-report.schema.json",
+  "type": "object", "additionalProperties": false,
+  "required": ["schemaVersion", "campaignId", "campaignVersion", "environmentId", "executionClass", "observedAt", "results", "runId", "status", "tenantId", "reportDigest"],
+  "properties": {
+    "schemaVersion": {"const": "harness.planeon.ai/campaign-report/v1alpha1"},
+    "campaignId": {"type": "string"}, "campaignVersion": {"type": "string"},
+    "environmentId": {"type": "string"}, "executionClass": {"enum": ["OFFLINE_TEST", "LIVE_CAMPAIGN"]},
+    "observedAt": {"type": "string", "format": "date-time"},
+    "results": {"type": "array", "items": {"$ref": "control-result.schema.json"}, "maxItems": 512},
+    "runId": {"type": "string", "maxLength": 128},
+    "status": {"enum": ["PASS", "FAIL", "WARN", "NOT_APPLICABLE", "NOT_RUN_ENV_UNAVAILABLE"]},
+    "tenantId": {"type": "string"}, "reportDigest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

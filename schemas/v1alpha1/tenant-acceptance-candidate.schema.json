@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.planeon.ai/conformance/v1alpha1/tenant-acceptance-candidate.schema.json",
+  "type": "object", "additionalProperties": false,
+  "required": ["schemaVersion", "candidateId", "campaignId", "createdAt", "evidenceDigests", "findings", "status", "tenantId", "unsigned", "candidateDigest"],
+  "properties": {
+    "schemaVersion": {"const": "harness.planeon.ai/tenant-acceptance-candidate/v1alpha1"},
+    "candidateId": {"type": "string"}, "campaignId": {"type": "string"}, "createdAt": {"type": "string", "format": "date-time"},
+    "evidenceDigests": {"type": "array", "minItems": 1, "items": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}},
+    "findings": {"type": "array", "items": {"type": "string"}, "maxItems": 512},
+    "status": {"const": "PENDING"}, "tenantId": {"type": "string"}, "unsigned": {"const": true},
+    "candidateDigest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

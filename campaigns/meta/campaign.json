@@ -1,0 +1,18 @@
+{
+  "campaignId": "meta-core",
+  "controls": [
+    {"axis": "UNIT", "controlId": "static-pass", "handler": "STATIC_ASSERTION", "input": {"actual": "closed", "expected": "closed"}, "required": true},
+    {"axis": "UNIT", "controlId": "schema-pass", "handler": "SCHEMA_ASSERTION", "input": {"document": {"capabilities": {"local-filesystem": true}, "capturedAt": "2026-01-01T00:00:00Z", "environmentId": "embedded-local", "schemaVersion": "harness.planeon.ai/environment-intake/v1alpha1", "tenantId": "fixture-tenant"}, "kind": "environment-intake"}, "required": true},
+    {"axis": "UNIT", "controlId": "lifecycle-pass", "handler": "LIFECYCLE_ASSERTION", "input": {"entity": "Operation", "fromState": "PENDING", "toState": "RUNNING"}, "required": true},
+    {"axis": "UNIT", "controlId": "event-pass", "handler": "EVENT_ASSERTION", "input": {"event": {"data": {"entityId": "operation-1", "evidenceDigest": "sha256:0000000000000000000000000000000000000000000000000000000000000001", "fromState": "PENDING", "toState": "RUNNING", "version": 1}, "datacontenttype": "application/json", "id": "event-1", "source": "urn:planeon:meta", "specversion": "1.0", "subject": "operations/operation-1", "tenantid": "fixture-tenant", "time": "2026-01-01T00:00:00Z", "type": "harness.operation.state.changed.v1"}}, "required": true},
+    {"axis": "UNIT", "controlId": "capability-pass", "handler": "ENVIRONMENT_CAPABILITY", "input": {"capability": "local-filesystem", "expected": true}, "required": true},
+    {"axis": "UNIT", "controlId": "advisory-warning", "handler": "STATIC_ASSERTION", "input": {"actual": "candidate", "expected": "release", "severity": "ADVISORY"}, "required": false},
+    {"axis": "UNIT", "controlId": "not-applicable", "handler": "STATIC_ASSERTION", "input": {"actual": false, "applicable": false, "expected": true}, "required": false},
+    {"axis": "UNIT", "controlId": "optional-unavailable", "handler": "ENVIRONMENT_CAPABILITY", "input": {"capability": "external-cluster", "expected": true}, "required": false}
+  ],
+  "description": "Deterministic offline meta campaign covering all closed handlers and non-failing result semantics.",
+  "environmentFixture": "fixtures/environments/meta-complete.json",
+  "executionClass": "OFFLINE_TEST",
+  "schemaVersion": "harness.planeon.ai/conformance-campaign/v1alpha1",
+  "version": "0.1.0"
+}

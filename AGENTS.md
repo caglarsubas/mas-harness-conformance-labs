@@ -15,3 +15,6 @@
 13. Only `CONF-001` may seed `Makefile`, `ci/run_make_target.py`, and `PORTING.yaml`; later packets add only their packet-owned descriptors or campaign paths.
 14. A conformance result is exactly `PASS`, `FAIL`, `WARN`, `NOT_APPLICABLE`, or `NOT_RUN_ENV_UNAVAILABLE`. Missing authority or environment never becomes pass.
 15. A campaign may emit an unsigned `TENANT_ACCEPTANCE_CANDIDATE`; it may never sign, originate, or claim `TENANT_ACCEPTANCE`.
+16. CONF-001 uses only Python 3.12 standard-library code. Do not add a dependency, generated network client, executable, or mutable tool reference without a later packet that pins and prefetches it.
+17. Campaign definitions are declarative JSON records. They never contain a shell command, executable path, URL, secret, arbitrary module, or dynamically imported handler.
+18. Preserve deterministic bytes: caller-fixed time and run ID must produce identical reports, evidence, candidates, and launcher builds.

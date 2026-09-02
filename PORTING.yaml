@@ -1,0 +1,5 @@
+schemaVersion: harness.planeon.ai/porting-ledger/v1alpha1
+destinationRepository: mas-harness-conformance-labs
+records:
+  - disposition: NO_AUTHORIZATION
+    reason: No source path is authorized for copying, adaptation, translation, or derivative reuse.

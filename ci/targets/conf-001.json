@@ -1,0 +1,11 @@
+{
+  "schemaVersion": "harness.planeon.ai/make-target-descriptor/v1alpha1",
+  "packetId": "CONF-001",
+  "handlers": [
+    {"target": "acceptance-package-contract", "variables": {}, "argv": ["@PYTHON@", "ci/acceptance_package_contract.py"]},
+    {"target": "build-reproducible", "variables": {}, "argv": ["@PYTHON@", "ci/build_live_launcher.py", "--verify-reproducible"]},
+    {"target": "meta-conformance", "variables": {}, "argv": ["@PYTHON@", "-m", "unittest", "discover", "-s", "tests/meta", "-p", "test_*.py"]},
+    {"target": "prefetch", "variables": {}, "argv": ["@PYTHON@", "ci/prefetch.py"]},
+    {"target": "zero-bill", "variables": {}, "argv": ["@PYTHON@", "ci/zero_bill.py"]}
+  ]
+}

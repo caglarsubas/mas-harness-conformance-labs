@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.planeon.ai/conformance/v1alpha1/live-campaign-execution-envelope.schema.json",
+  "type": "object", "additionalProperties": false,
+  "required": ["schemaVersion", "packetId", "packetFileReference", "packetDigest", "commands", "commandSetDigest", "conformanceKitRoot", "conformanceKitDigest", "campaignId", "campaignDefinitionFileReference", "campaignDefinitionDigest", "campaignReleaseFileReference", "campaignReleaseDigest", "launcherDigest", "bundleFileReference", "bundleDigest", "allowedEvidenceAxes", "tenantId", "environmentId", "capacityAuthorizationId", "capacityAuthorizationFileReference", "capacityAuthorizationDigest", "mutationProfile", "admissionPolicyDigest", "resourceQuotaDigest", "endpoints", "issuedAt", "expiresAt", "nonce", "releaseTrustStoreDigest", "tenantTrustStoreDigest", "platformSignerKeyId", "platformSignature", "tenantSignerKeyId", "tenantSignature"],
+  "properties": {
+    "schemaVersion": {"const": "harness.planeon.ai/live-campaign-execution-envelope/v1alpha1"},
+    "packetId": {"type": "string", "pattern": "^CONF-[A-Z0-9-]+$"},
+    "packetFileReference": {"$ref": "#/$defs/path"}, "packetDigest": {"$ref": "#/$defs/digest"},
+    "commands": {"type": "array", "minItems": 1, "items": {"type": "array", "minItems": 1, "items": {"type": "string"}}},
+    "commandSetDigest": {"$ref": "#/$defs/digest"}, "conformanceKitRoot": {"$ref": "#/$defs/path"}, "conformanceKitDigest": {"$ref": "#/$defs/digest"},
+    "campaignId": {"type": "string"}, "campaignDefinitionFileReference": {"$ref": "#/$defs/path"}, "campaignDefinitionDigest": {"$ref": "#/$defs/digest"},
+    "campaignReleaseFileReference": {"$ref": "#/$defs/path"}, "campaignReleaseDigest": {"$ref": "#/$defs/digest"}, "launcherDigest": {"$ref": "#/$defs/digest"},
+    "bundleFileReference": {"$ref": "#/$defs/path"}, "bundleDigest": {"$ref": "#/$defs/digest"},
+    "allowedEvidenceAxes": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"enum": ["DEPLOYMENT", "RUNTIME", "SECURITY", "ASSURANCE", "TENANT_ACCEPTANCE_CANDIDATE"]}},
+    "tenantId": {"type": "string"}, "environmentId": {"type": "string"}, "capacityAuthorizationId": {"type": "string"},
+    "capacityAuthorizationFileReference": {"$ref": "#/$defs/path"}, "capacityAuthorizationDigest": {"$ref": "#/$defs/digest"},
+    "mutationProfile": {"const": "ZERO_INCREMENTAL_COST_KUBERNETES_V1"}, "admissionPolicyDigest": {"$ref": "#/$defs/digest"}, "resourceQuotaDigest": {"$ref": "#/$defs/digest"},
+    "endpoints": {"type": "array", "minItems": 1, "maxItems": 32, "items": {"type": "object", "additionalProperties": false, "required": ["endpointId", "kind", "ipAddress", "port", "tls", "credentialFileReference", "authorizationPolicyDigest", "costDisposition", "accessMode", "discovery"], "properties": {"endpointId": {"type": "string"}, "kind": {"enum": ["KUBERNETES_API_PROXY", "CAMPAIGN_PROXY", "LOCAL_REGISTRY", "LOCAL_EVIDENCE_SINK"]}, "ipAddress": {"type": "string"}, "port": {"type": "integer", "minimum": 1, "maximum": 65535}, "tls": {"type": "object", "additionalProperties": false, "required": ["serverName", "serverSpkiDigest", "caCertificateFileReference"], "properties": {"serverName": {"type": "string"}, "serverSpkiDigest": {"$ref": "#/$defs/digest"}, "caCertificateFileReference": {"$ref": "#/$defs/path"}}}, "credentialFileReference": {"$ref": "#/$defs/path"}, "authorizationPolicyDigest": {"$ref": "#/$defs/digest"}, "costDisposition": {"enum": ["SELF_HOSTED_OPEN_SOURCE_NON_METERED", "TENANT_SUPPLIED_OPEN_SOURCE_NON_METERED"]}, "accessMode": {"enum": ["PREAUTHORIZED_PROXY", "LOCAL_PREEXISTING"]}, "discovery": {"const": false}}}},
+    "issuedAt": {"type": "string", "format": "date-time"}, "expiresAt": {"type": "string", "format": "date-time"}, "nonce": {"type": "string"},
+    "releaseTrustStoreDigest": {"$ref": "#/$defs/digest"}, "tenantTrustStoreDigest": {"$ref": "#/$defs/digest"},
+    "platformSignerKeyId": {"type": "string"}, "platformSignature": {"type": "string"}, "tenantSignerKeyId": {"type": "string"}, "tenantSignature": {"type": "string"}
+  },
+  "$defs": {"digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}, "path": {"type": "string", "pattern": "^/", "maxLength": 4096}}
+}

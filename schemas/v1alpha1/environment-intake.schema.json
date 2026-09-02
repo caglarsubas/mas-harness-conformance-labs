@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.planeon.ai/conformance/v1alpha1/environment-intake.schema.json",
+  "type": "object", "additionalProperties": false,
+  "required": ["schemaVersion", "environmentId", "tenantId", "capturedAt", "capabilities"],
+  "properties": {
+    "schemaVersion": {"const": "harness.planeon.ai/environment-intake/v1alpha1"},
+    "environmentId": {"type": "string", "pattern": "^[a-z][a-z0-9.-]*$", "maxLength": 128},
+    "tenantId": {"type": "string", "pattern": "^[a-z][a-z0-9.-]*$", "maxLength": 128},
+    "capturedAt": {"type": "string", "format": "date-time", "maxLength": 40},
+    "capabilities": {"type": "object", "additionalProperties": {"type": ["boolean", "null"]}, "maxProperties": 128}
+  }
+}
