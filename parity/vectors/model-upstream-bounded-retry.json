@@ -1,0 +1,1 @@
+{"exclusions":["SOURCE_EXECUTION","PUBLIC_NETWORK"],"expected":{"bounded":true},"family":"UPSTREAM_RETRY","input":{"attempts":2,"maximumAttempts":2},"vectorId":"model-upstream-bounded-retry"}

@@ -1,0 +1,1 @@
+{"exclusions":["SOURCE_EXECUTION","MUTATION"],"expected":{"valid":true},"family":"DATA_BATCH","input":{"batchId":"batch-1","lineage":{"sourceId":"source-1","watermark":"2026-01-01T00:00:00Z"},"records":[]},"vectorId":"data-batch-lineage"}

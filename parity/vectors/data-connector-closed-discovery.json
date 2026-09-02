@@ -1,0 +1,1 @@
+{"exclusions":["SOURCE_EXECUTION","CREDENTIAL"],"expected":{"valid":true},"family":"CONNECTOR_PROFILE","input":{"connectorId":"connector-1","discoveryMethod":"DECLARED_SCHEMA","localOnly":true},"vectorId":"data-connector-closed-discovery"}

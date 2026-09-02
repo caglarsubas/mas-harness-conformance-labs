@@ -1,0 +1,1 @@
+{"exclusions":["SOURCE_EXECUTION","PROVIDER_API"],"expected":{"disposition":"REFUSED"},"family":"MODEL_ROUTE","input":{"enforcement":true,"selectedRoute":null},"vectorId":"model-route-fail-closed"}
