@@ -1,0 +1,1 @@
+{"exclusions":["SOURCE_EXECUTION","PUBLIC_NETWORK"],"expected":{"tenantNeutral":true},"family":"MODEL_USAGE","input":{"attributes":{"mcp.integration.operation":"chat","mcp.integration.provider":"local"},"forbiddenPrefixes":["declarai.","prometa.internal."]},"vectorId":"model-usage-tenant-neutral"}

@@ -1,0 +1,1 @@
+{"exclusions":["SOURCE_EXECUTION","DESTINATION_MOUNT","MUTATION"],"expected":{"selectedHarnesses":["knowledge.domain-semantic","knowledge.data-integration"]},"family":"UNAVAILABLE","input":{"journey":"QUESTIONNAIRE_TO_FOUNDATION"},"vectorId":"white-goods-foundation-boundary"}

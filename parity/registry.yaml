@@ -1,0 +1,29 @@
+{
+  "schemaVersion": "harness.planeon.ai/warm-parity-registry/v1alpha1",
+  "provenanceAuthority": {
+    "commit": "95d14248d6bfcfbcbec48a7372d7f2d3bfb19ce6",
+    "reuseMapSha256": "77a7a1613cd7584ed692d8ca8db64e0142ec536d9fa9654da3cd3867075589b8",
+    "reusePathIndexSha256": "5e6843e56b0e4f884400848277c8c3a14b8d0c1d21bf66933a0f5bf0a712c283"
+  },
+  "records": [
+    {"recordId": "model-usage-contract", "repository": "git@github.com:caglarsubas/llm_inference_engine.git", "commit": "6815c21cb10a4d7dc0b4804f6bb223afb4321e97", "path": "contracts/prometa-model-usage-v2.schema.json", "gitObject": "c3ac327e2989ffbbc2452209e2a32f76be911534", "recordType": "BLOB_PENDING", "reuseDisposition": "REFERENCE_ONLY_PENDING_PATH_REVIEW"},
+    {"recordId": "model-routing-policy", "repository": "git@github.com:caglarsubas/llm_inference_engine.git", "commit": "6815c21cb10a4d7dc0b4804f6bb223afb4321e97", "path": "tests/test_model_routing_policy.py", "gitObject": "68340eccbe4f7784f80788967add702995d0424b", "recordType": "BLOB_PENDING", "reuseDisposition": "REFERENCE_ONLY_PENDING_PATH_REVIEW"},
+    {"recordId": "model-request-identity", "repository": "git@github.com:caglarsubas/llm_inference_engine.git", "commit": "6815c21cb10a4d7dc0b4804f6bb223afb4321e97", "path": "tests/test_request_identity.py", "gitObject": "657b26d35244cc28fe2ce4339af3f67082d76b29", "recordType": "BLOB_PENDING", "reuseDisposition": "REFERENCE_ONLY_PENDING_PATH_REVIEW"},
+    {"recordId": "model-upstream-resilience", "repository": "git@github.com:caglarsubas/llm_inference_engine.git", "commit": "6815c21cb10a4d7dc0b4804f6bb223afb4321e97", "path": "tests/test_upstream_resilience.py", "gitObject": "c110ed4d990736b2dc126b3c218333ab7cb16899", "recordType": "BLOB_PENDING", "reuseDisposition": "REFERENCE_ONLY_PENDING_PATH_REVIEW"},
+    {"recordId": "data-white-goods-pack", "repository": "git@github.com:caglarsubas/data-source-harness.git", "commit": "858281f4b845ffacfe05cdb2c40a402c237d4c54", "path": "reference_labs/white_goods/pack-manifest.json", "gitObject": "b18e6d7099220d1b6a2e6797097400a9b3e4e510", "recordType": "BLOB_PENDING", "reuseDisposition": "REFERENCE_ONLY_PENDING_PATH_REVIEW"},
+    {"recordId": "data-batch-schema", "repository": "git@github.com:caglarsubas/data-source-harness.git", "commit": "858281f4b845ffacfe05cdb2c40a402c237d4c54", "path": "schemas/v1/data-batch.schema.json", "gitObject": "aaf77198b1ef680d1f6fa8deaaca1d198f1796a8", "recordType": "BLOB_PENDING", "reuseDisposition": "REFERENCE_ONLY_PENDING_PATH_REVIEW"},
+    {"recordId": "data-connector-profile", "repository": "git@github.com:caglarsubas/data-source-harness.git", "commit": "858281f4b845ffacfe05cdb2c40a402c237d4c54", "path": "schemas/v1/data-source-connector-profile.schema.json", "gitObject": "224728dadb9c9829494c4db04fd9c90833c7bc30", "recordType": "BLOB_PENDING", "reuseDisposition": "REFERENCE_ONLY_PENDING_PATH_REVIEW"},
+    {"recordId": "data-contract-tests", "repository": "git@github.com:caglarsubas/data-source-harness.git", "commit": "858281f4b845ffacfe05cdb2c40a402c237d4c54", "path": "tests/test_contracts.py", "gitObject": "4e197257af4b372e4e9d949d7b6a23d3cbfed51f", "recordType": "BLOB_PENDING", "reuseDisposition": "REFERENCE_ONLY_PENDING_PATH_REVIEW"},
+    {"recordId": "data-local-only-tests", "repository": "git@github.com:caglarsubas/data-source-harness.git", "commit": "858281f4b845ffacfe05cdb2c40a402c237d4c54", "path": "tests/test_local_only.py", "gitObject": "988ed77cce9beaea8c6c5c0c15fbee2e4b02ce61", "recordType": "BLOB_PENDING", "reuseDisposition": "REFERENCE_ONLY_PENDING_PATH_REVIEW"}
+  ],
+  "vectors": [
+    {"vectorId": "model-usage-tenant-neutral", "records": ["model-usage-contract", "model-request-identity"], "fixture": "parity/vectors/model-usage-tenant-neutral.json", "adapter": "MODEL_USAGE", "expectedRelation": "EXACT", "reason": "PUBLIC_PLATFORM_CONTRACT"},
+    {"vectorId": "model-route-fail-closed", "records": ["model-routing-policy"], "fixture": "parity/vectors/model-route-fail-closed.json", "adapter": "MODEL_ROUTE", "expectedRelation": "EXACT", "reason": "PUBLIC_PLATFORM_CONTRACT"},
+    {"vectorId": "model-upstream-bounded-retry", "records": ["model-upstream-resilience"], "fixture": "parity/vectors/model-upstream-bounded-retry.json", "adapter": "UPSTREAM_RETRY", "expectedRelation": "EXACT", "reason": "PUBLIC_PLATFORM_CONTRACT"},
+    {"vectorId": "data-batch-lineage", "records": ["data-batch-schema", "data-contract-tests"], "fixture": "parity/vectors/data-batch-lineage.json", "adapter": "DATA_BATCH", "expectedRelation": "EXACT", "reason": "PUBLIC_PLATFORM_CONTRACT"},
+    {"vectorId": "data-connector-closed-discovery", "records": ["data-connector-profile", "data-contract-tests"], "fixture": "parity/vectors/data-connector-closed-discovery.json", "adapter": "CONNECTOR_PROFILE", "expectedRelation": "EXACT", "reason": "PUBLIC_PLATFORM_CONTRACT"},
+    {"vectorId": "data-local-only-no-fallback", "records": ["data-local-only-tests"], "fixture": "parity/vectors/data-local-only-no-fallback.json", "adapter": "LOCAL_ONLY", "expectedRelation": "EXACT", "reason": "ZERO_BILL_PLATFORM_CONTRACT"},
+    {"vectorId": "white-goods-foundation-boundary", "records": ["data-white-goods-pack"], "fixture": "parity/vectors/white-goods-foundation-boundary.json", "adapter": "UNAVAILABLE", "expectedRelation": "UNTESTABLE_NO_DESTINATION_TARGET", "reason": "COMPOSED_ALPHA1_DESTINATION_NOT_MOUNTED_IN_PARITY_PACKET"}
+  ],
+  "exclusions": ["CLOUD_API", "BILLING_API", "THIRD_PARTY_KEY", "PUBLIC_NETWORK", "SOURCE_EXECUTION", "MUTATION"]
+}

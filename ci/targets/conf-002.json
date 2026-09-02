@@ -1,0 +1,1 @@
+{"handlers":[{"argv":["@PYTHON@","parity/adapters/validate_registry.py"],"target":"parity-registry-check","variables":{}},{"argv":["@PYTHON@","-m","unittest","discover","-s","tests/parity","-p","test_*.py"],"target":"parity-meta","variables":{}}],"packetId":"CONF-002","schemaVersion":"harness.planeon.ai/make-target-descriptor/v1alpha1"}

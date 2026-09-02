@@ -1,0 +1,1 @@
+{"exclusions":["SOURCE_EXECUTION","PUBLIC_NETWORK"],"expected":{"localOnly":true},"family":"LOCAL_ONLY","input":{"endpointKind":"LOCAL_FILE","onlineFallback":false},"vectorId":"data-local-only-no-fallback"}
