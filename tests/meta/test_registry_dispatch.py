@@ -15,10 +15,14 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class RegistryDispatchTests(unittest.TestCase):
-    def test_meta_campaign_resolves_exactly(self) -> None:
+    def test_packet_campaigns_resolve_additively(self) -> None:
         registry = campaign_registry(ROOT)
-        self.assertEqual(set(registry), {"meta-core"})
+        self.assertTrue({"meta-core", "parity-metadata", "alpha1-white-goods"} <= set(registry))
         self.assertEqual(resolve_campaign(ROOT, "meta-core"), ROOT / "campaigns/meta/campaign.json")
+        for campaign_id, campaign_path in registry.items():
+            with self.subTest(campaign=campaign_id):
+                self.assertEqual(resolve_campaign(ROOT, campaign_id), campaign_path)
+                self.assertTrue(campaign_path.is_relative_to(ROOT / "campaigns"))
         for invalid in ("", "../meta", "META", "meta core", "https://invalid"):
             with self.subTest(invalid=invalid), self.assertRaises(ConformanceError):
                 resolve_campaign(ROOT, invalid)
