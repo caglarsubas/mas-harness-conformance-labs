@@ -1,0 +1,85 @@
+{
+  "tests/meta/test_build_cli.py": [
+    "BuildCliTests.test_build_backend_wheel_is_reproducible",
+    "BuildCliTests.test_cli_report_and_evidence_are_deterministic",
+    "BuildCliTests.test_live_inner_adapter_refuses_direct_and_ci",
+    "BuildCliTests.test_reproducible_live_candidate"
+  ],
+  "tests/meta/test_campaign.py": [
+    "CampaignTests.test_all_handlers_and_non_failing_states_are_exercised",
+    "CampaignTests.test_illegal_lifecycle_and_event_fail",
+    "CampaignTests.test_required_failure_blocks",
+    "CampaignTests.test_required_unavailable_is_honest",
+    "CampaignTests.test_two_runs_are_byte_identical",
+    "CampaignTests.test_unknown_result_aliases_do_not_exist"
+  ],
+  "tests/meta/test_canonical_schema.py": [
+    "CanonicalSchemaTests.test_campaign_and_environment_are_closed",
+    "CanonicalSchemaTests.test_canonical_bytes_are_stable",
+    "CanonicalSchemaTests.test_closed_vocabularies",
+    "CanonicalSchemaTests.test_duplicate_and_noncanonical_numbers_are_rejected",
+    "CanonicalSchemaTests.test_every_published_schema_is_closed_and_valid_json",
+    "CanonicalSchemaTests.test_secure_read_refuses_symlink"
+  ],
+  "tests/meta/test_evidence_crypto.py": [
+    "EvidenceCryptoTests.test_candidate_is_unsigned_pending_and_digest_bound",
+    "EvidenceCryptoTests.test_cli_requires_private_key_mode",
+    "EvidenceCryptoTests.test_rfc8032_vector",
+    "EvidenceCryptoTests.test_tamper_revocation_scope_and_duplicate_key_fail",
+    "EvidenceCryptoTests.test_technical_evidence_sign_and_verify",
+    "EvidenceCryptoTests.test_tenant_acceptance_signing_is_forbidden"
+  ],
+  "tests/meta/test_live.py": [
+    "LiveContractTests.test_capacity_scope_and_window_are_exact",
+    "LiveContractTests.test_command_axis_signature_and_capacity_mismatches_fail",
+    "LiveContractTests.test_positive_preflight_verifies_every_authority_class",
+    "LiveContractTests.test_public_discovered_wildcard_and_metadata_endpoints_fail",
+    "LiveContractTests.test_repository_candidate_refuses_ci_and_direct_authority"
+  ],
+  "tests/meta/test_porting_zero_bill.py": [
+    "PortingZeroBillTests.test_every_copy_claim_is_rejected",
+    "PortingZeroBillTests.test_porting_ledger_is_exact_inert_sentinel",
+    "PortingZeroBillTests.test_workflow_and_toolchain_are_zero_bill",
+    "PortingZeroBillTests.test_zero_bill_scanner_rejects_each_declared_vector"
+  ],
+  "tests/meta/test_registry_dispatch.py": [
+    "RegistryDispatchTests.test_descriptor_is_closed_direct_argv",
+    "RegistryDispatchTests.test_duplicate_campaign_fails_closed",
+    "RegistryDispatchTests.test_generic_campaign_has_no_shell_injection",
+    "RegistryDispatchTests.test_makefile_never_interpolates_campaign",
+    "RegistryDispatchTests.test_packet_campaigns_resolve_additively",
+    "RegistryDispatchTests.test_unknown_and_undeclared_dispatch_fail"
+  ],
+  "tests/parity/test_adapters.py": [
+    "AdapterTests.test_altered_expectation_fails_exact",
+    "AdapterTests.test_every_vector_is_deterministic",
+    "AdapterTests.test_unknown_family_and_unbound_vector_fail",
+    "AdapterTests.test_vector_shape_rejects_command_url_and_credentials"
+  ],
+  "tests/parity/test_packet_runner.py": [
+    "PacketRunnerTests.test_alias_and_empty_acceptance_are_rejected",
+    "PacketRunnerTests.test_current_packet_inline_authority_parses",
+    "PacketRunnerTests.test_duplicate_inline_authority_is_rejected",
+    "PacketRunnerTests.test_main_preserves_phase_order_and_hides_authority",
+    "PacketRunnerTests.test_packet_replacement_is_detected",
+    "PacketRunnerTests.test_shell_download_recursive_and_strings_fail",
+    "PacketRunnerTests.test_wrong_execution_and_warm_access_fail"
+  ],
+  "tests/parity/test_registry.py": [
+    "RegistryTests.test_registry_and_vectors_pass_without_source_access",
+    "RegistryTests.test_registry_contains_no_content_or_copy_authority",
+    "RegistryTests.test_unknown_object_relation_and_binding_fail"
+  ],
+  "tests/alpha1/test_alpha1.py": [
+    "Alpha1CampaignTests.test_campaign_and_evidence_are_reproducible",
+    "Alpha1CampaignTests.test_offline_campaign_is_honestly_unavailable",
+    "Alpha1CampaignTests.test_report_template_preserves_authority_boundaries",
+    "Alpha1ContractTests.test_complete_journey_and_overview_are_closed",
+    "Alpha1ContractTests.test_fixture_has_no_public_request_or_secret_material",
+    "Alpha1ContractTests.test_fixture_reads_and_canonical_outputs_are_deterministic",
+    "Alpha1ContractTests.test_journey_mutations_fail_closed",
+    "Alpha1ContractTests.test_navigation_and_evidence_axes_are_complete",
+    "Alpha1ContractTests.test_overview_mutations_fail_closed"
+  ]
+}
+

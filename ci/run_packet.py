@@ -13,6 +13,21 @@ from typing import Any
 FIELDS = ("id", "repository", "warmSourceAccess", "prefetchCommands", "offlineAcceptanceCommands", "offlineExecution")
 SHELLS = {"sh", "bash", "zsh", "fish", "dash", "cmd", "powershell", "pwsh"}
 DOWNLOAD_TOKENS = {"fetch", "download", "install", "pull", "clone", "curl", "wget", "pip", "npm", "npx"}
+ROOT = Path(__file__).resolve().parents[1]
+CHILD_ENVIRONMENT = frozenset({
+    "PATH", "HOME", "TMPDIR", "USER", "LOGNAME", "LANG", "LC_ALL",
+    "CI", "GITHUB_ACTIONS", "GITHUB_REPOSITORY", "GITHUB_SHA", "GITHUB_WORKSPACE",
+    "HARNESS_OFFLINE_ENFORCED", "HARNESS_OFFLINE_BACKEND", "HARNESS_OFFLINE_SESSION_ID",
+    "UV_CACHE_DIR", "UV_OFFLINE", "UV_FROZEN", "UV_NO_SYNC", "UV_PYTHON_DOWNLOADS",
+})
+
+
+def child_environment() -> dict[str, str]:
+    # Import only this checkout's own source; never inherit a caller import path.
+    environment = {name: os.environ[name] for name in CHILD_ENVIRONMENT if name in os.environ}
+    environment["PYTHONPATH"] = str(ROOT / "src")
+    environment["PYTHONDONTWRITEBYTECODE"] = "1"
+    return environment
 
 
 def refuse(message: str) -> "NoReturn":
@@ -23,13 +38,13 @@ def refuse(message: str) -> "NoReturn":
 def read_once(path: Path) -> tuple[int, os.stat_result, bytes]:
     if not path.is_absolute() or ".." in path.parts:
         refuse("packet path must be absolute and canonical")
-    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC
     try:
         descriptor = os.open(path, flags)
     except OSError:
         refuse("packet path is unavailable")
     info = os.fstat(descriptor)
-    if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or stat.S_IMODE(info.st_mode) != 0o444:
+    if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_gid != 0 or info.st_nlink != 1 or stat.S_IMODE(info.st_mode) != 0o444:
         os.close(descriptor)
         refuse("packet custody is invalid")
     data = b""
@@ -113,7 +128,7 @@ def still_same(path: Path, descriptor: int, original: os.stat_result, digest: st
         current_path = path.stat(follow_symlinks=False)
     except OSError:
         refuse("packet path disappeared")
-    identity = lambda item: (item.st_dev, item.st_ino, item.st_size, item.st_mtime_ns, item.st_mode, item.st_uid, item.st_gid)
+    identity = lambda item: (item.st_dev, item.st_ino, item.st_size, item.st_mtime_ns, item.st_ctime_ns, item.st_mode, item.st_uid, item.st_gid, item.st_nlink)
     if identity(current_fd) != identity(original) or identity(current_path) != identity(original):
         refuse("packet changed during execution")
     if hashlib.sha256(os.pread(descriptor, original.st_size, 0)).hexdigest() != digest:
@@ -123,7 +138,8 @@ def still_same(path: Path, descriptor: int, original: os.stat_result, digest: st
 def main(argv: list[str]) -> int:
     if len(argv) != 1:
         refuse("one packet path is required")
-    if os.environ.get("HARNESS_OFFLINE_ENFORCED") != "1" or os.environ.get("HARNESS_OFFLINE_BACKEND") != "darwin-sandbox" or not os.environ.get("HARNESS_OFFLINE_SESSION_ID"):
+    backend = {"darwin": "darwin-sandbox", "linux": "linux-firejail"}.get(sys.platform)
+    if backend is None or os.environ.get("HARNESS_OFFLINE_ENFORCED") != "1" or os.environ.get("HARNESS_OFFLINE_BACKEND") != backend or not os.environ.get("HARNESS_OFFLINE_SESSION_ID"):
         refuse("existing OS-isolated session is required")
     if os.environ.get("HARNESS_WARM_SOURCE_ROOTS"):
         refuse("warm-source roots reached the packet runner")
@@ -137,17 +153,15 @@ def main(argv: list[str]) -> int:
         packet = extract(text)
         prefetch, acceptance = validate_packet(packet)
         packet_digest = hashlib.sha256(data).hexdigest()
-        child_environment = os.environ.copy()
-        child_environment.pop("HARNESS_TASK_PACKET", None)
-        child_environment.pop("HARNESS_WARM_SOURCE_ROOTS", None)
-        network = subprocess.run([sys.executable, "ci/network_canary.py"], env=child_environment, check=False)
+        environment = child_environment()
+        network = subprocess.run([sys.executable, "ci/network_canary.py"], env=environment, check=False)
+        still_same(path, descriptor, info, packet_digest)
         if network.returncode:
             return network.returncode
-        still_same(path, descriptor, info, packet_digest)
         for phase, commands in (("prefetch", prefetch), ("offline", acceptance)):
             for command in commands:
                 print(f"{phase}-argv=" + json.dumps(command, separators=(",", ":")))
-                completed = subprocess.run(command, env=child_environment, check=False)
+                completed = subprocess.run(command, env=environment, check=False)
                 still_same(path, descriptor, info, packet_digest)
                 if completed.returncode:
                     return completed.returncode

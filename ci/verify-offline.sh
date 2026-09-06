@@ -8,11 +8,14 @@ refuse() {
 
 readonly packet_path="${HARNESS_TASK_PACKET:-}"
 [[ "${HARNESS_OFFLINE_ENFORCED:-}" == "1" ]] || refuse "OS isolation marker is absent"
-[[ "${HARNESS_OFFLINE_BACKEND:-}" == "darwin-sandbox" ]] || refuse "unsupported isolation backend"
+case "$(/usr/bin/uname -s):${HARNESS_OFFLINE_BACKEND:-}" in
+  Darwin:darwin-sandbox|Linux:linux-firejail) ;;
+  *) refuse "isolation backend does not match the operating system" ;;
+esac
 [[ -n "${HARNESS_OFFLINE_SESSION_ID:-}" ]] || refuse "offline session ID is absent"
 [[ -n "$packet_path" && -f "$packet_path" && ! -L "$packet_path" ]] || refuse "packet path is unavailable"
 [[ -z "${HARNESS_WARM_SOURCE_ROOTS:-}" ]] || refuse "warm-source authority reached repository code"
 [[ "${UV_OFFLINE:-}" == "1" && "${UV_FROZEN:-}" == "1" && "${UV_NO_SYNC:-}" == "1" ]] || refuse "offline uv policy is absent"
 
 unset HARNESS_TASK_PACKET
-exec python3 ci/run_packet.py "$packet_path"
+exec python3 -B ci/run_packet_argv.py "$packet_path"
