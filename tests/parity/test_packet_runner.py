@@ -100,7 +100,7 @@ class PacketRunnerTests(unittest.TestCase):
             "HARNESS_TASK_PACKET": "/hidden/from/children",
         }
         try:
-            with mock.patch.dict(os.environ, environment, clear=True), mock.patch.object(
+            with mock.patch.object(MODULE.sys, "platform", "darwin"), mock.patch.dict(os.environ, environment, clear=True), mock.patch.object(
                 MODULE, "read_once", return_value=(descriptor, info, b"packet")
             ), mock.patch.object(MODULE, "extract", return_value=document), mock.patch.object(
                 MODULE, "still_same"
