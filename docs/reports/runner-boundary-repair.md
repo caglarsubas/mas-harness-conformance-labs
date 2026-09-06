@@ -1,6 +1,7 @@
 # CONF-FIX-001 — Alpha 2 runner-boundary repair
 
-Status at source preparation: ONGOING; no CI, merge or Linux PASS inferred.
+Status at publication preparation: local source checks PASS; PR CI and merge
+remain separate pending gates. No Linux PASS is inferred.
 Authority: MET-REPAIR-003, meta main
 `7047ec93170d5db8a148d1f6cfd34ad7877fb423`; packet SHA-256
 `b02d7c6f2872c61fbde5be10451ac8de08e8336ee032e85b468e40dfaf8790ac`.
@@ -66,10 +67,18 @@ outbound process tree. Record test counts per root and retain failed attempts.
 Inventory checks collect but do not execute another copy of predecessor tests.
 Required self-hosted PR checks, merge and exact-main replay are separate gates.
 
+First corrected signed source replay: `787b946e1bd3675a36e59eb4d44bf039aeb3186f`,
+83 tests passed (meta 37, parity 14, alpha1 9, runner-boundary 23), no skips.
+Every suite inventory closed and the replay's tracked files remained unchanged.
+Log SHA-256: `de1d2fa4f22636b580c0d9ebfdf5abc0681e7e9f4d303fa425c5971dd7b7a7f9`.
+Publication documentation is rechecked on the final candidate before PR dispatch.
+The PR closure record must bind final head, accepted CI job/run, merge SHA and
+exact-main replay separately; this pre-merge report cannot certify its own merge.
+
 | Evidence axis | Current state |
 | --- | --- |
-| Source implementation | Prepared; acceptance pending |
-| Local signed-head acceptance | WAITING |
+| Source implementation | PASS at the source commit above |
+| Local signed-head acceptance | PASS: 83 tests, full legacy inventory |
 | Required self-hosted PR CI | WAITING |
 | Merge / exact-main | WAITING / WAITING |
 | Native Linux / usable external live backend | NOT_RUN_ENV_UNAVAILABLE / NOT_RUN_ENV_UNAVAILABLE |
