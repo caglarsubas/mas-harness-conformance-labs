@@ -19,7 +19,7 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="harness-conformance", allow_abbrev=False)
     commands = parser.add_subparsers(dest="command", required=True)
     validate_command = commands.add_parser("validate", allow_abbrev=False)
-    validate_command.add_argument("--kind", required=True, choices=("campaign", "environment-intake", "control-result", "porting-ledger", "technical-evidence", "tenant-acceptance-candidate"))
+    validate_command.add_argument("--kind", required=True, choices=("campaign", "environment-intake", "control-result", "porting-ledger", "technical-evidence", "tenant-acceptance-candidate", "linux-readiness-evidence"))
     validate_command.add_argument("path", type=Path)
     for name in ("run", "evidence-verify", "acceptance-candidate"):
         command = commands.add_parser(name, allow_abbrev=False)
@@ -59,14 +59,20 @@ def main(argv: list[str] | None = None) -> int:
                 validate_candidate(document)
             else:
                 validate(args.kind, document)
-            _emit({"kind": args.kind, "status": "PASS"})
+            result = {"kind": args.kind, "status": "PASS"}
+            if args.kind == "linux-readiness-evidence":
+                result.update({"verificationClass": "STRUCTURAL_ONLY", "nativeAcceptance": False})
+            _emit(result)
         elif args.command == "run":
             report, _ = _run_files(args)
             _emit(report)
         elif args.command == "evidence-verify":
             report, evidence = _run_files(args)
             validate_evidence(evidence, signed=False)
-            _emit({"bundleDigest": evidence["bundleDigest"], "reportDigest": report["reportDigest"], "status": "PASS"})
+            result = {"bundleDigest": evidence["bundleDigest"], "reportDigest": report["reportDigest"], "status": "PASS"}
+            if report["campaignId"] == "linux-baseline":
+                result.update({"verificationClass": "STRUCTURAL_ONLY", "nativeAcceptance": False, "resultStatus": report["status"]})
+            _emit(result)
         elif args.command == "acceptance-candidate":
             report, evidence = _run_files(args)
             candidate = build_candidate(report, evidence)

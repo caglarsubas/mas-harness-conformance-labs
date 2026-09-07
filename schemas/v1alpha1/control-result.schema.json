@@ -6,7 +6,7 @@
   "properties": {
     "axis": {"enum": ["SOURCE", "UNIT", "CI", "MERGE", "ARTIFACT", "SIGNATURE", "DEPLOYMENT", "RUNTIME", "SECURITY", "ASSURANCE", "TENANT_ACCEPTANCE_CANDIDATE", "TENANT_ACCEPTANCE"]},
     "controlId": {"type": "string", "pattern": "^[a-z][a-z0-9.-]*$", "maxLength": 128},
-    "handler": {"enum": ["STATIC_ASSERTION", "SCHEMA_ASSERTION", "LIFECYCLE_ASSERTION", "EVENT_ASSERTION", "ENVIRONMENT_CAPABILITY"]},
+    "handler": {"enum": ["STATIC_ASSERTION", "SCHEMA_ASSERTION", "LIFECYCLE_ASSERTION", "EVENT_ASSERTION", "ENVIRONMENT_CAPABILITY", "LINUX_READINESS"]},
     "observationDigest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "reasonCode": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]*$", "maxLength": 128},
     "required": {"type": "boolean"},

@@ -3,27 +3,344 @@
   "$id": "https://schemas.planeon.ai/conformance/v1alpha1/conformance-campaign.schema.json",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "campaignId", "version", "description", "executionClass", "environmentFixture", "controls"],
+  "required": [
+    "schemaVersion",
+    "campaignId",
+    "version",
+    "description",
+    "executionClass",
+    "environmentFixture",
+    "controls"
+  ],
   "properties": {
-    "schemaVersion": {"const": "harness.planeon.ai/conformance-campaign/v1alpha1"},
-    "campaignId": {"type": "string", "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$", "maxLength": 128},
-    "version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
-    "description": {"type": "string", "minLength": 1, "maxLength": 512},
-    "executionClass": {"enum": ["OFFLINE_TEST", "LIVE_CAMPAIGN"]},
-    "environmentFixture": {"type": "string", "pattern": "^[A-Za-z0-9_./-]+\\.json$", "maxLength": 512},
+    "schemaVersion": {
+      "const": "harness.planeon.ai/conformance-campaign/v1alpha1"
+    },
+    "campaignId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$",
+      "maxLength": 128
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "executionClass": {
+      "enum": [
+        "OFFLINE_TEST",
+        "LIVE_CAMPAIGN"
+      ]
+    },
+    "environmentFixture": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_./-]+\\.json$",
+      "maxLength": 512
+    },
     "controls": {
-      "type": "array", "minItems": 1, "maxItems": 512,
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 512,
       "items": {
-        "type": "object", "additionalProperties": false,
-        "required": ["controlId", "handler", "required", "axis", "input"],
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "controlId",
+          "handler",
+          "required",
+          "axis",
+          "input"
+        ],
         "properties": {
-          "controlId": {"type": "string", "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$", "maxLength": 128},
-          "handler": {"enum": ["STATIC_ASSERTION", "SCHEMA_ASSERTION", "LIFECYCLE_ASSERTION", "EVENT_ASSERTION", "ENVIRONMENT_CAPABILITY"]},
-          "required": {"type": "boolean"},
-          "axis": {"enum": ["SOURCE", "UNIT", "CI", "MERGE", "ARTIFACT", "SIGNATURE", "DEPLOYMENT", "RUNTIME", "SECURITY", "ASSURANCE", "TENANT_ACCEPTANCE_CANDIDATE", "TENANT_ACCEPTANCE"]},
-          "input": {"type": "object", "maxProperties": 32}
+          "controlId": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$",
+            "maxLength": 128
+          },
+          "handler": {
+            "enum": [
+              "STATIC_ASSERTION",
+              "SCHEMA_ASSERTION",
+              "LIFECYCLE_ASSERTION",
+              "EVENT_ASSERTION",
+              "ENVIRONMENT_CAPABILITY",
+              "LINUX_READINESS"
+            ]
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "axis": {
+            "enum": [
+              "SOURCE",
+              "UNIT",
+              "CI",
+              "MERGE",
+              "ARTIFACT",
+              "SIGNATURE",
+              "DEPLOYMENT",
+              "RUNTIME",
+              "SECURITY",
+              "ASSURANCE",
+              "TENANT_ACCEPTANCE_CANDIDATE",
+              "TENANT_ACCEPTANCE"
+            ]
+          },
+          "input": {
+            "type": "object",
+            "maxProperties": 32
+          }
         }
       }
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "anyOf": [
+          {
+            "properties": {
+              "campaignId": {
+                "const": "linux-baseline"
+              }
+            }
+          },
+          {
+            "properties": {
+              "controls": {
+                "contains": {
+                  "properties": {
+                    "handler": {
+                      "const": "LINUX_READINESS"
+                    }
+                  },
+                  "required": [
+                    "handler"
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      },
+      "then": {
+        "properties": {
+          "campaignId": {
+            "const": "linux-baseline"
+          },
+          "executionClass": {
+            "const": "LIVE_CAMPAIGN"
+          },
+          "controls": {
+            "const": [
+              {
+                "controlId": "amd64.host-isolation-negatives",
+                "handler": "LINUX_READINESS",
+                "required": true,
+                "axis": "SECURITY",
+                "input": {
+                  "architecture": "amd64",
+                  "caseId": "HOST_ISOLATION_NEGATIVES"
+                }
+              },
+              {
+                "controlId": "amd64.linux-target-build",
+                "handler": "LINUX_READINESS",
+                "required": true,
+                "axis": "DEPLOYMENT",
+                "input": {
+                  "architecture": "amd64",
+                  "caseId": "LINUX_TARGET_BUILD"
+                }
+              },
+              {
+                "controlId": "amd64.full-predecessor-regression",
+                "handler": "LINUX_READINESS",
+                "required": true,
+                "axis": "ASSURANCE",
+                "input": {
+                  "architecture": "amd64",
+                  "caseId": "FULL_PREDECESSOR_REGRESSION"
+                }
+              },
+              {
+                "controlId": "amd64.control-container-startup",
+                "handler": "LINUX_READINESS",
+                "required": true,
+                "axis": "RUNTIME",
+                "input": {
+                  "architecture": "amd64",
+                  "caseId": "CONTROL_CONTAINER_STARTUP"
+                }
+              },
+              {
+                "controlId": "amd64.postgres-migration-and-rls",
+                "handler": "LINUX_READINESS",
+                "required": true,
+                "axis": "RUNTIME",
+                "input": {
+                  "architecture": "amd64",
+                  "caseId": "POSTGRES_MIGRATION_AND_RLS"
+                }
+              },
+              {
+                "controlId": "amd64.durable-restart",
+                "handler": "LINUX_READINESS",
+                "required": true,
+                "axis": "RUNTIME",
+                "input": {
+                  "architecture": "amd64",
+                  "caseId": "DURABLE_RESTART"
+                }
+              },
+              {
+                "controlId": "amd64.arbitrary-non-root-uid",
+                "handler": "LINUX_READINESS",
+                "required": true,
+                "axis": "SECURITY",
+                "input": {
+                  "architecture": "amd64",
+                  "caseId": "ARBITRARY_NON_ROOT_UID"
+                }
+              },
+              {
+                "controlId": "amd64.read-only-root-filesystem",
+                "handler": "LINUX_READINESS",
+                "required": true,
+                "axis": "SECURITY",
+                "input": {
+                  "architecture": "amd64",
+                  "caseId": "READ_ONLY_ROOT_FILESYSTEM"
+                }
+              },
+              {
+                "controlId": "amd64.kubernetes-smoke",
+                "handler": "LINUX_READINESS",
+                "required": true,
+                "axis": "DEPLOYMENT",
+                "input": {
+                  "architecture": "amd64",
+                  "caseId": "KUBERNETES_SMOKE"
+                }
+              },
+              {
+                "controlId": "amd64.default-deny-network",
+                "handler": "LINUX_READINESS",
+                "required": true,
+                "axis": "SECURITY",
+                "input": {
+                  "architecture": "amd64",
+                  "caseId": "DEFAULT_DENY_NETWORK"
+                }
+              },
+              {
+                "controlId": "arm64.host-isolation-negatives",
+                "handler": "LINUX_READINESS",
+                "required": true,
+                "axis": "SECURITY",
+                "input": {
+                  "architecture": "arm64",
+                  "caseId": "HOST_ISOLATION_NEGATIVES"
+                }
+              },
+              {
+                "controlId": "arm64.linux-target-build",
+                "handler": "LINUX_READINESS",
+                "required": true,
+                "axis": "DEPLOYMENT",
+                "input": {
+                  "architecture": "arm64",
+                  "caseId": "LINUX_TARGET_BUILD"
+                }
+              },
+              {
+                "controlId": "arm64.full-predecessor-regression",
+                "handler": "LINUX_READINESS",
+                "required": true,
+                "axis": "ASSURANCE",
+                "input": {
+                  "architecture": "arm64",
+                  "caseId": "FULL_PREDECESSOR_REGRESSION"
+                }
+              },
+              {
+                "controlId": "arm64.control-container-startup",
+                "handler": "LINUX_READINESS",
+                "required": true,
+                "axis": "RUNTIME",
+                "input": {
+                  "architecture": "arm64",
+                  "caseId": "CONTROL_CONTAINER_STARTUP"
+                }
+              },
+              {
+                "controlId": "arm64.postgres-migration-and-rls",
+                "handler": "LINUX_READINESS",
+                "required": true,
+                "axis": "RUNTIME",
+                "input": {
+                  "architecture": "arm64",
+                  "caseId": "POSTGRES_MIGRATION_AND_RLS"
+                }
+              },
+              {
+                "controlId": "arm64.durable-restart",
+                "handler": "LINUX_READINESS",
+                "required": true,
+                "axis": "RUNTIME",
+                "input": {
+                  "architecture": "arm64",
+                  "caseId": "DURABLE_RESTART"
+                }
+              },
+              {
+                "controlId": "arm64.arbitrary-non-root-uid",
+                "handler": "LINUX_READINESS",
+                "required": true,
+                "axis": "SECURITY",
+                "input": {
+                  "architecture": "arm64",
+                  "caseId": "ARBITRARY_NON_ROOT_UID"
+                }
+              },
+              {
+                "controlId": "arm64.read-only-root-filesystem",
+                "handler": "LINUX_READINESS",
+                "required": true,
+                "axis": "SECURITY",
+                "input": {
+                  "architecture": "arm64",
+                  "caseId": "READ_ONLY_ROOT_FILESYSTEM"
+                }
+              },
+              {
+                "controlId": "arm64.kubernetes-smoke",
+                "handler": "LINUX_READINESS",
+                "required": true,
+                "axis": "DEPLOYMENT",
+                "input": {
+                  "architecture": "arm64",
+                  "caseId": "KUBERNETES_SMOKE"
+                }
+              },
+              {
+                "controlId": "arm64.default-deny-network",
+                "handler": "LINUX_READINESS",
+                "required": true,
+                "axis": "SECURITY",
+                "input": {
+                  "architecture": "arm64",
+                  "caseId": "DEFAULT_DENY_NETWORK"
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
 }

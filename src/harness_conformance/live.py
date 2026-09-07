@@ -287,3 +287,57 @@ def preflight(
         "environmentId": envelope["environmentId"],
         "tenantId": envelope["tenantId"],
     }
+
+
+def verify_linux_authority(envelope_bytes: bytes, capacity_bytes: bytes,
+                           release_trust_bytes: bytes, tenant_trust_bytes: bytes,
+                           *, now: datetime) -> tuple[dict[str, Any], ...]:
+    """Verify data bindings only; no filesystem custody or live session grant."""
+    from .canonical import require_canonical_document
+    from .linux_readiness import AXES, COMMANDS, PACKET_DIGEST, require, require_time
+    from .schema import require_id
+
+    try:
+        envelope = validate_envelope(require_canonical_document(envelope_bytes), now=now)
+        require_time(envelope["issuedAt"], "issuedAt")
+        require(envelope["packetId"] == "CONF-LINUX-001" and envelope["packetDigest"] == PACKET_DIGEST
+                and envelope["campaignId"] == "linux-baseline" and envelope["commands"] == COMMANDS
+                and envelope["allowedEvidenceAxes"] == list(AXES), "LINUX_ENVELOPE_SCOPE_MISMATCH")
+        require(now < require_time(envelope["expiresAt"], "expiresAt"), "LINUX_ENVELOPE_EXPIRED")
+        for name in ("tenantId", "environmentId", "nonce", "capacityAuthorizationId"):
+            require_id(envelope[name], name)
+        for raw, field in ((capacity_bytes, "capacityAuthorizationDigest"),
+                           (release_trust_bytes, "releaseTrustStoreDigest"),
+                           (tenant_trust_bytes, "tenantTrustStoreDigest")):
+            require(byte_digest(raw) == envelope[field], "LINUX_AUTHORITY_DIGEST_MISMATCH")
+        capacity = validate_capacity(require_canonical_document(capacity_bytes), envelope, now=now)
+        require_time(capacity["validFrom"], "validFrom")
+        require(now < require_time(capacity["expiresAt"], "expiresAt"), "LINUX_CAPACITY_EXPIRED")
+        for name in ("nonce", "namespace", "operatorId"):
+            require_id(capacity[name], name)
+        require(len(capacity["permittedEndpointIds"]) == len(set(capacity["permittedEndpointIds"])), "LINUX_DUPLICATE_ENDPOINT")
+        release_trust = require_canonical_document(release_trust_bytes)
+        tenant_trust = require_canonical_document(tenant_trust_bytes)
+        for trust in (release_trust, tenant_trust):
+            closed(require_object(trust, "Linux trust"), ("schemaVersion", "keys", "revocationsDigest"))
+            require(isinstance(trust["keys"], list) and 0 < len(trust["keys"]) <= 128, "LINUX_TRUST_INVALID")
+            seen = set()
+            for key in trust["keys"]:
+                closed(require_object(key, "Linux key"), ("keyId", "purpose", "publicKey", "owner", "tenantId", "environmentId", "validFrom", "validUntil", "revoked"))
+                require_key_id(key["keyId"], "keyId")
+                require(key["keyId"] not in seen and type(key["revoked"]) is bool, "LINUX_TRUST_INVALID")
+                seen.add(key["keyId"])
+                require_id(key["owner"], "owner")
+                require_time(key["validFrom"], "validFrom")
+                require_time(key["validUntil"], "validUntil")
+                b64url_decode(key["publicKey"], expected_length=32)
+        verify_live_signatures(envelope, capacity, release_trust, tenant_trust, now=now)
+        owners = [next(item["owner"] for item in trust["keys"] if item["keyId"] == key_id) for trust, key_id in (
+            (release_trust, envelope["platformSignerKeyId"]), (tenant_trust, envelope["tenantSignerKeyId"]),
+            (tenant_trust, capacity["signerKeyId"]))]
+        require(len(set(owners)) == 3, "LINUX_SIGNER_OWNERS_NOT_INDEPENDENT")
+        return envelope, capacity, release_trust, tenant_trust
+    except ConformanceError:
+        raise
+    except (TypeError, ValueError, KeyError, OverflowError, RecursionError) as exc:
+        raise ConformanceError("LINUX_AUTHORITY_MALFORMED", "malformed Linux authority") from exc

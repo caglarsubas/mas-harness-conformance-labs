@@ -17,7 +17,7 @@ class CanonicalSchemaTests(unittest.TestCase):
     def test_closed_vocabularies(self) -> None:
         self.assertEqual(RESULT_STATES, ("PASS", "FAIL", "WARN", "NOT_APPLICABLE", "NOT_RUN_ENV_UNAVAILABLE"))
         self.assertEqual(len(EVIDENCE_AXES), 12)
-        self.assertEqual(len(HANDLERS), 5)
+        self.assertEqual(HANDLERS, ("STATIC_ASSERTION", "SCHEMA_ASSERTION", "LIFECYCLE_ASSERTION", "EVENT_ASSERTION", "ENVIRONMENT_CAPABILITY", "LINUX_READINESS"))
 
     def test_duplicate_and_noncanonical_numbers_are_rejected(self) -> None:
         for data, reason in ((b'{"a":1,"a":2}', "DUPLICATE_JSON_MEMBER"), (b'{"a":1.5}', "NON_CANONICAL_NUMBER"), (b'{"a":NaN}', "NON_CANONICAL_NUMBER")):
