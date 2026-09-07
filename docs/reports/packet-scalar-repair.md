@@ -51,21 +51,37 @@ The corrected whole-file hashes must be exactly:
 
 ## Evidence checkpoint
 
-This report is initially committed before the red/green replays. No result is
-inferred from inspection or test count declarations. Execute only the seven
+This report records the red replay and is committed before the corrected replay.
+No green result is inferred from inspection or test count declarations. Execute only the seven
 packet-declared commands through the installed signed offline launcher: all five
 suite roots, then the unchanged offline Linux campaign and evidence commands.
 No direct acceptance command or live campaign may be run outside that boundary.
 
 | Gate | Current checkpoint |
 |---|---|
-| New regressions on unchanged old parser | PENDING — expected refusal/regression reproduction |
+| New regressions on unchanged old parser | REPRODUCED — red checkpoint below; not acceptance |
 | Corrected exact-head offline | PENDING |
 | Required localhost PR CI | PENDING |
 | Merge | PENDING |
 | Separate local exact-main | PENDING |
 | Native AMD64 / ARM64 | NOT_RUN_ENV_UNAVAILABLE |
 | Live/backend/runtime/tenant acceptance | NOT_RUN_ENV_UNAVAILABLE |
+
+The signed isolated test-only checkpoint
+`a4f8c83131d8552f648cb14831acbe887b07f65d` retained both original files.
+Activation 58 and fresh OS isolation succeeded. All five suite commands ran:
+37 meta, 14 parity, nine Alpha-1, 23 runner-boundary and 67 Linux-baseline tests.
+All 120 predecessor tests passed. New tests produced 237 failing subcases and
+four error records: quoted identities were not decoded, malformed identifiers
+were not rejected, and the two required source transformations were absent.
+The independent inventory collected all 120 predecessor plus 30 new test IDs,
+without skips. These are subcase/error counts, not 241 distinct test methods.
+The fail-fast launcher exited 1; the final campaign and evidence commands were
+NOT_RUN. The clean detached clone had no working-tree overlay or tracked edits.
+Red log SHA-256:
+`d1f8b7c6891051a7b91d0b50189d3448255f2a02074cd75713d5e42e92eaf6ef`.
+Corrected head, PR CI, merge and exact-main evidence will be published in the PR
+and retained operator records separately from this pre-green source checkpoint.
 
 The earlier session draft PR 6 at `57ee9668e029b08310c57f502990e419b4a1c797`
 remains untouched and blocked. Activation 53 established isolation, but exited 2
