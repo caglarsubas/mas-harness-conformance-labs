@@ -294,11 +294,12 @@ def verify_linux_authority(envelope_bytes: bytes, capacity_bytes: bytes,
                            *, now: datetime) -> tuple[dict[str, Any], ...]:
     """Verify data bindings only; no filesystem custody or live session grant."""
     from .canonical import require_canonical_document
-    from .linux_readiness import AXES, COMMANDS, PACKET_DIGEST, require
+    from .linux_readiness import AXES, COMMANDS, PACKET_DIGEST, require, require_time
     from .schema import require_id
 
     try:
         envelope = validate_envelope(require_canonical_document(envelope_bytes), now=now)
+        require_time(envelope["issuedAt"], "issuedAt")
         require(envelope["packetId"] == "CONF-LINUX-001" and envelope["packetDigest"] == PACKET_DIGEST
                 and envelope["campaignId"] == "linux-baseline" and envelope["commands"] == COMMANDS
                 and envelope["allowedEvidenceAxes"] == list(AXES), "LINUX_ENVELOPE_SCOPE_MISMATCH")
@@ -310,6 +311,7 @@ def verify_linux_authority(envelope_bytes: bytes, capacity_bytes: bytes,
                            (tenant_trust_bytes, "tenantTrustStoreDigest")):
             require(byte_digest(raw) == envelope[field], "LINUX_AUTHORITY_DIGEST_MISMATCH")
         capacity = validate_capacity(require_canonical_document(capacity_bytes), envelope, now=now)
+        require_time(capacity["validFrom"], "validFrom")
         require(now < require_time(capacity["expiresAt"], "expiresAt"), "LINUX_CAPACITY_EXPIRED")
         for name in ("nonce", "namespace", "operatorId"):
             require_id(capacity[name], name)
@@ -326,6 +328,8 @@ def verify_linux_authority(envelope_bytes: bytes, capacity_bytes: bytes,
                 require(key["keyId"] not in seen and type(key["revoked"]) is bool, "LINUX_TRUST_INVALID")
                 seen.add(key["keyId"])
                 require_id(key["owner"], "owner")
+                require_time(key["validFrom"], "validFrom")
+                require_time(key["validUntil"], "validUntil")
                 b64url_decode(key["publicKey"], expected_length=32)
         verify_live_signatures(envelope, capacity, release_trust, tenant_trust, now=now)
         owners = [next(item["owner"] for item in trust["keys"] if item["keyId"] == key_id) for trust, key_id in (
@@ -335,5 +339,5 @@ def verify_linux_authority(envelope_bytes: bytes, capacity_bytes: bytes,
         return envelope, capacity, release_trust, tenant_trust
     except ConformanceError:
         raise
-    except (TypeError, ValueError, KeyError, OverflowError) as exc:
+    except (TypeError, ValueError, KeyError, OverflowError, RecursionError) as exc:
         raise ConformanceError("LINUX_AUTHORITY_MALFORMED", "malformed Linux authority") from exc

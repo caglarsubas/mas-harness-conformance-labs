@@ -244,9 +244,17 @@ class LinuxEvidenceTests(unittest.TestCase):
 
     def test_duplicate_json_floats_invalid_utf8_and_malformed_inputs_fail(self):
         fixture = LinuxFixture()
-        for raw in (b'{"x":1,"x":2}', b'{"x":1.2}', b'{"x":NaN}', b'\xff', b'[]', b'null', b'{}', b'{}' * 2200000):
+        for raw in (b'{"x":1,"x":2}', b'{"x":1.2}', b'{"x":NaN}', b'\xff', b'[]', b'null', b'{}', b'{}' * 2200000, b'[' * 2000 + b'0' + b']' * 2000):
             with self.subTest(raw=raw[:30]), self.assertRaises(ConformanceError):
                 verify_linux_evidence(raw, **fixture.inputs())
         for value in (None, [], True, 1, "record", {"schemaVersion": SCHEMA}):
             with self.subTest(value=value), self.assertRaises(ConformanceError):
                 validate_linux_evidence(value)
+
+    def test_only_precise_utc_rfc3339_timestamps_are_accepted(self):
+        fixture = LinuxFixture()
+        for value in ("20260907T003000Z", "2026-09-07X00:30:00Z", "2026-09-07T00:30Z", "2026-09-07T00:30:00.1234567Z", "2026-02-30T00:30:00Z"):
+            record = deepcopy(fixture.record)
+            record["observedAt"] = value
+            with self.subTest(time=value), self.assertRaises(ConformanceError):
+                validate_linux_evidence(record)

@@ -122,6 +122,13 @@ emulation/cross-architecture/non-Linux substitution, source/image/build drift,
 digest mismatch, scope changes, signatures/owners/purposes, revoked/expired keys,
 stale/future/replayed evidence, hidden regression skips and proxy scope expansion.
 
+The first exact candidate, `5e5d631cdfa029ea083d1d003da61b265f477f10`,
+passed all seven commands with 119 tests (83 predecessors plus 36 Linux tests),
+no skips, and unchanged tracked files. Its signed local replay log SHA-256 is
+`67c00e00b5d10b7780e9961a6e42e67693629e71f322340270482c672b28ed46`.
+Subsequent malformed-depth/strict-UTC hardening and this report require a fresh
+exact-candidate replay before PR CI; this earlier receipt does not cover them.
+
 | Evidence axis | Source snapshot state | What it does not establish |
 | --- | --- | --- |
 | Source implementation | Implemented; candidate verification pending | Runtime transport or native qualification |

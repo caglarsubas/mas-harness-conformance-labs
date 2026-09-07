@@ -15,7 +15,7 @@ from typing import Any
 from .canonical import byte_digest, canonical_bytes, canonical_digest, require_canonical_document
 from .crypto import b64url_decode, signature_payload, verify
 from .errors import ConformanceError
-from .schema import closed, require_digest, require_id, require_key_id, require_object, require_time
+from .schema import closed, require_digest, require_id, require_key_id, require_object, require_time as parse_time
 
 SCHEMA = "harness.planeon.ai/linux-readiness-evidence/v1alpha1"
 PLAN_SCHEMA = "harness.planeon.ai/linux-readiness-plan/v1alpha1"
@@ -61,7 +61,7 @@ def malformed_boundary(function):
             return function(*args, **kwargs)
         except ConformanceError:
             raise
-        except (TypeError, ValueError, KeyError, AttributeError, OverflowError) as exc:
+        except (TypeError, ValueError, KeyError, AttributeError, OverflowError, RecursionError) as exc:
             raise ConformanceError("LINUX_INPUT_MALFORMED", "malformed Linux evidence input") from exc
     return wrapped
 
@@ -70,6 +70,12 @@ def obj(value: Any, fields: tuple[str, ...], name: str) -> dict[str, Any]:
     result = require_object(value, name)
     closed(result, fields)
     return result
+
+
+def require_time(value: Any, name: str):
+    require(isinstance(value, str) and re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,6})?Z", value) is not None,
+            "LINUX_TIME_INVALID")
+    return parse_time(value, name)
 
 
 def text(value: Any, name: str, maximum: int = 128) -> str:
@@ -238,6 +244,8 @@ def verify_linux_evidence(record_bytes: bytes, *, envelope_bytes: bytes, capacit
     from .live import _trust_key, verify_linux_authority
 
     require(all(type(raw) is bytes for raw in (record_bytes, envelope_bytes, capacity_bytes, release_bytes, plan_bytes, release_trust_bytes, tenant_trust_bytes)), "LINUX_BYTES_REQUIRED")
+    # Reject malformed records before doing any expensive signature work.
+    record = validate_linux_evidence(require_canonical_document(record_bytes))
     require(type(replayed_nonces) is frozenset and all(isinstance(item, str) for item in replayed_nonces), "LINUX_REPLAY_HISTORY_INVALID")
     require_id(expected_nonce, "expected nonce")
     require(expected_nonce not in replayed_nonces, "LINUX_NONCE_REPLAYED")
@@ -248,7 +256,6 @@ def verify_linux_evidence(record_bytes: bytes, *, envelope_bytes: bytes, capacit
             and envelope["environmentId"] == expected_environment
             and envelope["campaignReleaseDigest"] == expected_release, "LINUX_EXPECTED_SUBJECT_MISMATCH")
     require(byte_digest(release_bytes) == expected_release, "LINUX_RELEASE_DIGEST_MISMATCH")
-    record = validate_linux_evidence(require_canonical_document(record_bytes))
     plan = _release_plan(require_canonical_document(release_bytes), plan_bytes, envelope, record["target"]["architecture"])
     for name in ("target", "sources", "images", "build", "preflightDigest"):
         require(canonical_bytes(record[name]) == canonical_bytes(plan[name]), "LINUX_BASELINE_CHANGED")

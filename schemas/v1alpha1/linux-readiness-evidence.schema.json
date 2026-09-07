@@ -316,13 +316,13 @@
     "observedAt": {
       "type": "string",
       "format": "date-time",
-      "pattern": "Z$",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,6})?Z$",
       "maxLength": 40
     },
     "validUntil": {
       "type": "string",
       "format": "date-time",
-      "pattern": "Z$",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,6})?Z$",
       "maxLength": 40
     },
     "cases": {
@@ -357,7 +357,7 @@
             "observedAt": {
               "type": "string",
               "format": "date-time",
-              "pattern": "Z$",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,6})?Z$",
               "maxLength": 40
             },
             "runNonce": {
@@ -502,7 +502,7 @@
             "observedAt": {
               "type": "string",
               "format": "date-time",
-              "pattern": "Z$",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,6})?Z$",
               "maxLength": 40
             },
             "runNonce": {
@@ -623,7 +623,7 @@
             "observedAt": {
               "type": "string",
               "format": "date-time",
-              "pattern": "Z$",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,6})?Z$",
               "maxLength": 40
             },
             "runNonce": {
@@ -844,7 +844,7 @@
             "observedAt": {
               "type": "string",
               "format": "date-time",
-              "pattern": "Z$",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,6})?Z$",
               "maxLength": 40
             },
             "runNonce": {
@@ -949,7 +949,7 @@
             "observedAt": {
               "type": "string",
               "format": "date-time",
-              "pattern": "Z$",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,6})?Z$",
               "maxLength": 40
             },
             "runNonce": {
@@ -1054,7 +1054,7 @@
             "observedAt": {
               "type": "string",
               "format": "date-time",
-              "pattern": "Z$",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,6})?Z$",
               "maxLength": 40
             },
             "runNonce": {
@@ -1151,7 +1151,7 @@
             "observedAt": {
               "type": "string",
               "format": "date-time",
-              "pattern": "Z$",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,6})?Z$",
               "maxLength": 40
             },
             "runNonce": {
@@ -1256,7 +1256,7 @@
             "observedAt": {
               "type": "string",
               "format": "date-time",
-              "pattern": "Z$",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,6})?Z$",
               "maxLength": 40
             },
             "runNonce": {
@@ -1353,7 +1353,7 @@
             "observedAt": {
               "type": "string",
               "format": "date-time",
-              "pattern": "Z$",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,6})?Z$",
               "maxLength": 40
             },
             "runNonce": {
@@ -1466,7 +1466,7 @@
             "observedAt": {
               "type": "string",
               "format": "date-time",
-              "pattern": "Z$",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,6})?Z$",
               "maxLength": 40
             },
             "runNonce": {
