@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[2]
 class RegistryDispatchTests(unittest.TestCase):
     def test_packet_campaigns_resolve_additively(self) -> None:
         registry = campaign_registry(ROOT)
-        self.assertTrue({"meta-core", "parity-metadata", "alpha1-white-goods"} <= set(registry))
+        self.assertTrue({"meta-core", "parity-metadata", "alpha1-white-goods", "linux-baseline"} <= set(registry))
         self.assertEqual(resolve_campaign(ROOT, "meta-core"), ROOT / "campaigns/meta/campaign.json")
         for campaign_id, campaign_path in registry.items():
             with self.subTest(campaign=campaign_id):

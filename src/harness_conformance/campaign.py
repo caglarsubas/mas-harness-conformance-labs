@@ -7,6 +7,7 @@ from .canonical import canonical_digest, load_json
 from .errors import ConformanceError
 from .events import validate_event
 from .lifecycle import assert_transition
+from .linux_readiness import evaluate_control
 from .models import ControlResult, ResultStatus
 from .schema import closed, require_object, validate, validate_campaign, validate_environment
 
@@ -81,6 +82,7 @@ HANDLERS: dict[str, Callable[[dict[str, Any], dict[str, Any]], tuple[ResultStatu
     "LIFECYCLE_ASSERTION": _lifecycle,
     "EVENT_ASSERTION": _event,
     "ENVIRONMENT_CAPABILITY": _capability,
+    "LINUX_READINESS": evaluate_control,
 }
 
 

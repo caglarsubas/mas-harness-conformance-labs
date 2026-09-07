@@ -1,0 +1,480 @@
+{
+  "commit": "07453d3e6313c836426545c454380176bc2a2ee1",
+  "files": {
+    ".github/workflows/verify.yml": {
+      "mode": "100644",
+      "blob": "48af47e6d1ca5c5198d934c1dd10c3ba947c3192"
+    },
+    ".gitignore": {
+      "mode": "100644",
+      "blob": "d9d863a13c2bfc70183b59f43ddfa236f7fa7e34"
+    },
+    "AGENTS.md": {
+      "mode": "100644",
+      "blob": "3bef97c6f3d501a0b5528179880053f787147de2"
+    },
+    "CONTRIBUTING.md": {
+      "mode": "100644",
+      "blob": "21f949ba69f148982b99313a6fc319ed5caf3527"
+    },
+    "LICENSE": {
+      "mode": "100644",
+      "blob": "94f474d4d34ef439ac1bb0f1961d5cc9e9096c7e"
+    },
+    "Makefile": {
+      "mode": "100644",
+      "blob": "729893b50ddf19f0be9a3024f435af789a283897"
+    },
+    "NOTICE": {
+      "mode": "100644",
+      "blob": "0c12f4d5afbb8d0b984d4e3b094735be11607cf5"
+    },
+    "PORTING.yaml": {
+      "mode": "100644",
+      "blob": "cdd098dabfe545c4f513a6821d32cb6da17ee047"
+    },
+    "README.md": {
+      "mode": "100644",
+      "blob": "f04615d13827a0412fa15e7f37f2ffea5c9e4a2d"
+    },
+    "SECURITY.md": {
+      "mode": "100644",
+      "blob": "5d25e68338f66ca93863af7783affebc252ecc9f"
+    },
+    "campaigns/alpha1/campaign.json": {
+      "mode": "100644",
+      "blob": "a68dd8467599be5349e9cbfb217a1930867ffc62"
+    },
+    "campaigns/meta/campaign.json": {
+      "mode": "100644",
+      "blob": "dadfca33c5ed23ceb111cbeae6c5289a364fafe0"
+    },
+    "campaigns/parity/campaign.json": {
+      "mode": "100644",
+      "blob": "f5ae7920b55249d1c35a15dd167ce2bf94c8d653"
+    },
+    "ci/acceptance_package_contract.py": {
+      "mode": "100644",
+      "blob": "12e0ca1ddb11d6533ca5e30023c1afb660051c3f"
+    },
+    "ci/build_live_launcher.py": {
+      "mode": "100644",
+      "blob": "f5e37e0a02494893c4d4db356892a2c3f1dd9585"
+    },
+    "ci/network_canary.py": {
+      "mode": "100644",
+      "blob": "453da00b448d2514ac7070539444d7c55d19616c"
+    },
+    "ci/prefetch.py": {
+      "mode": "100644",
+      "blob": "b38fb5d15a9cf6df2891c1da368f4db4d505fc04"
+    },
+    "ci/run_make_target.py": {
+      "mode": "100644",
+      "blob": "0e05e3879fbd2ad165adf2e7e54c4ec6d08052db"
+    },
+    "ci/run_packet.py": {
+      "mode": "100644",
+      "blob": "ba69b8da7ea06fc3917c67ca1e813d1cd8f13194"
+    },
+    "ci/run_packet_argv.py": {
+      "mode": "100644",
+      "blob": "9b76420194a17a92ccff6fa6e18d2e8c80f31a9f"
+    },
+    "ci/targets/conf-001.json": {
+      "mode": "100644",
+      "blob": "9082a2d49ba5dbe0cd8098274c597bee44da9d27"
+    },
+    "ci/targets/conf-002.json": {
+      "mode": "100644",
+      "blob": "ef49a2be8314bb16ee456cff30bce9ced734bf97"
+    },
+    "ci/trust/live-runner-root.pub": {
+      "mode": "100644",
+      "blob": "e10a1ac95a5738f59b78c3f7aa999bed90d800a8"
+    },
+    "ci/verify-live-campaign.py": {
+      "mode": "100644",
+      "blob": "6d666e9cc402ed99b91cbf170a1ffc11da369922"
+    },
+    "ci/verify-offline.sh": {
+      "mode": "100755",
+      "blob": "6ceda876eb6e83d17c7ba48e962bc55bb81e905d"
+    },
+    "ci/zero_bill.py": {
+      "mode": "100644",
+      "blob": "6715ef0f0a9b4a1215ff4fd411a13affd6c4a321"
+    },
+    "docs/parity.md": {
+      "mode": "100644",
+      "blob": "7a6e06eb12db130a3893360e5ef6bcb82d3e207f"
+    },
+    "docs/reports/alpha1-template.md": {
+      "mode": "100644",
+      "blob": "857b5db337b41b07a1be30b10faa1a674fe3ac26"
+    },
+    "docs/reports/runner-boundary-repair.md": {
+      "mode": "100644",
+      "blob": "a3484dd5932307bf1cc1cbaab05a4e937841b943"
+    },
+    "fixtures/alpha1/environment-unavailable.json": {
+      "mode": "100644",
+      "blob": "da2bbfff05610ac26d574a49436d22e508ace7d4"
+    },
+    "fixtures/alpha1/journey.json": {
+      "mode": "100644",
+      "blob": "a1be9b330b42820803b572548d8a57edda7c95c0"
+    },
+    "fixtures/alpha1/overview.json": {
+      "mode": "100644",
+      "blob": "bafa30410741034579954865f92aaad13c977b9c"
+    },
+    "fixtures/environments/meta-complete.json": {
+      "mode": "100644",
+      "blob": "8fc90838acc3ee792146bd2251592d43882734d8"
+    },
+    "fixtures/environments/meta-unavailable.json": {
+      "mode": "100644",
+      "blob": "acca65615c5f77cbb97cd2abed3b7e210e27330b"
+    },
+    "parity/adapters/run_parity.py": {
+      "mode": "100644",
+      "blob": "d3de27cf2f33a1c74d746f12d5fb1cb7c3267e29"
+    },
+    "parity/adapters/validate_registry.py": {
+      "mode": "100644",
+      "blob": "8f59afa4c1e14d9cd1a2f6ed5bb8942f541c027a"
+    },
+    "parity/registry.yaml": {
+      "mode": "100644",
+      "blob": "1cad50d5d694df6dfc127b39025518601db54285"
+    },
+    "parity/vectors/data-batch-lineage.json": {
+      "mode": "100644",
+      "blob": "70c82ac4d21e439139f47ae7aa4ee22e22e3d9f0"
+    },
+    "parity/vectors/data-connector-closed-discovery.json": {
+      "mode": "100644",
+      "blob": "34ec386fff24d08c70ff2ea3594c3830d953d0b0"
+    },
+    "parity/vectors/data-local-only-no-fallback.json": {
+      "mode": "100644",
+      "blob": "d1e3f2a65cc5aa39244e2f1511aa8eca21541c81"
+    },
+    "parity/vectors/model-route-fail-closed.json": {
+      "mode": "100644",
+      "blob": "3168f7be8c41152efe67924537d953a697002a56"
+    },
+    "parity/vectors/model-upstream-bounded-retry.json": {
+      "mode": "100644",
+      "blob": "be842691179449079ecb52c87fbcea7b8f4305df"
+    },
+    "parity/vectors/model-usage-tenant-neutral.json": {
+      "mode": "100644",
+      "blob": "b596b1dc64bb2dca2128c9be1d7f74d65c19d06f"
+    },
+    "parity/vectors/white-goods-foundation-boundary.json": {
+      "mode": "100644",
+      "blob": "1265779205f37c842941abb201b8bf253f6f128f"
+    },
+    "pyproject.toml": {
+      "mode": "100644",
+      "blob": "4b42959660c2d19e0190b5e5f885f826d84264e3"
+    },
+    "schemas/v1alpha1/campaign-release.schema.json": {
+      "mode": "100644",
+      "blob": "310a5b6506656a547bacdd071a44a481654749fa"
+    },
+    "schemas/v1alpha1/campaign-report.schema.json": {
+      "mode": "100644",
+      "blob": "3726b8f1298f85c5482ec5cf28a9d69512bd418b"
+    },
+    "schemas/v1alpha1/conformance-campaign.schema.json": {
+      "mode": "100644",
+      "blob": "d98395ca1d3d0bebe6e1d3903b3b771ae0c7f867"
+    },
+    "schemas/v1alpha1/conformance-trust-bundle.schema.json": {
+      "mode": "100644",
+      "blob": "25e5054c6fe449249419c76fded16a482bb339ba"
+    },
+    "schemas/v1alpha1/control-result.schema.json": {
+      "mode": "100644",
+      "blob": "afb5d950f51eec229b58fa37cae52211231419e6"
+    },
+    "schemas/v1alpha1/environment-intake.schema.json": {
+      "mode": "100644",
+      "blob": "b303695d6f954b95e218726db6d0fac6e519c8fd"
+    },
+    "schemas/v1alpha1/live-campaign-execution-envelope.schema.json": {
+      "mode": "100644",
+      "blob": "0276cd0438895d8874ea076262a6bb9071bfd3c5"
+    },
+    "schemas/v1alpha1/live-capacity-authorization.schema.json": {
+      "mode": "100644",
+      "blob": "4902a75d338b4242cf54642bc005b90cd40513a9"
+    },
+    "schemas/v1alpha1/technical-evidence-bundle.schema.json": {
+      "mode": "100644",
+      "blob": "8c66a359cd84085b4729cf8bae263bb523494cec"
+    },
+    "schemas/v1alpha1/tenant-acceptance-candidate.schema.json": {
+      "mode": "100644",
+      "blob": "69c535c74b5dc71454fac60c066ac03c785ef75f"
+    },
+    "src/harness_conformance/__init__.py": {
+      "mode": "100644",
+      "blob": "7d8e8ae786e942135fae50701e31ac25d700869e"
+    },
+    "src/harness_conformance/__main__.py": {
+      "mode": "100644",
+      "blob": "eb53e2f31b2f703ad32ef64b8a41faa3e7d18e08"
+    },
+    "src/harness_conformance/acceptance.py": {
+      "mode": "100644",
+      "blob": "85fba5611d427772e8f0a4a71aaed3f13824b8cb"
+    },
+    "src/harness_conformance/build_backend.py": {
+      "mode": "100644",
+      "blob": "779090a50431f086f497e26319de9265d664666c"
+    },
+    "src/harness_conformance/campaign.py": {
+      "mode": "100644",
+      "blob": "e673d0fd09538acb1c703ad38101670e263bdc80"
+    },
+    "src/harness_conformance/canonical.py": {
+      "mode": "100644",
+      "blob": "18ab1dd28aeea326c177748aa357e85d56df0086"
+    },
+    "src/harness_conformance/cli.py": {
+      "mode": "100644",
+      "blob": "4958233b34b5e5ed4c0b3d68e6fb88280ab629c4"
+    },
+    "src/harness_conformance/crypto.py": {
+      "mode": "100644",
+      "blob": "efda93c52fe47c15d4238676a0a2aede8e1ddda6"
+    },
+    "src/harness_conformance/errors.py": {
+      "mode": "100644",
+      "blob": "3c78aa2fd3f372fa45df8eba47c1958e70376ea8"
+    },
+    "src/harness_conformance/events.py": {
+      "mode": "100644",
+      "blob": "c5294e469638af15d9616a08594c99b3ca48ecd2"
+    },
+    "src/harness_conformance/evidence.py": {
+      "mode": "100644",
+      "blob": "cb5ac52a8cdab8f23cc3dee05d063c0eedada7cc"
+    },
+    "src/harness_conformance/lifecycle.py": {
+      "mode": "100644",
+      "blob": "0e3874da1b086941ec6319386ecb379238e25f42"
+    },
+    "src/harness_conformance/live.py": {
+      "mode": "100644",
+      "blob": "75aedb75b1cef0ad39520db1118fe080ea0ea97d"
+    },
+    "src/harness_conformance/live_launcher.py": {
+      "mode": "100644",
+      "blob": "b9d1fd68b4711d29717342cd5753a5e478afcc82"
+    },
+    "src/harness_conformance/models.py": {
+      "mode": "100644",
+      "blob": "663a00302d378bcd0c3528778f13c1fb6dce93b2"
+    },
+    "src/harness_conformance/registry.py": {
+      "mode": "100644",
+      "blob": "539cfbb0f1177dd9614f83e333e2a342a97fabf1"
+    },
+    "src/harness_conformance/schema.py": {
+      "mode": "100644",
+      "blob": "ccd7912b2812c84bdca1b78efcf3ef003db0fc5e"
+    },
+    "tests/alpha1/__init__.py": {
+      "mode": "100644",
+      "blob": "68a01f42298a8f26633b2142b6a0005197345c61"
+    },
+    "tests/alpha1/contract.py": {
+      "mode": "100644",
+      "blob": "cab06a287c4bb3af9b46d6aad540463494572429"
+    },
+    "tests/alpha1/test_alpha1.py": {
+      "mode": "100644",
+      "blob": "27d0f87d11dd4db53c9b2ac0e96ff8c8e8ce08b7"
+    },
+    "tests/fixes/runner_boundary/_inventory.py": {
+      "mode": "100644",
+      "blob": "fdf58c985872348225fcf9706890349dcceb8a2c"
+    },
+    "tests/fixes/runner_boundary/legacy-tests.json": {
+      "mode": "100644",
+      "blob": "f0fd3094ae447ae25840d8a13d29d89fdaecbd26"
+    },
+    "tests/fixes/runner_boundary/test_boundaries.py": {
+      "mode": "100644",
+      "blob": "ee6aaffe5e7a8b067f5051208f9fb7080f192400"
+    },
+    "tests/fixes/runner_boundary/test_inventory.py": {
+      "mode": "100644",
+      "blob": "b32df3cf7b119502baa187661589145446fe317b"
+    },
+    "tests/meta/test_build_cli.py": {
+      "mode": "100644",
+      "blob": "7b71afb1541acc77c25af4edd83e42807e9bad99"
+    },
+    "tests/meta/test_campaign.py": {
+      "mode": "100644",
+      "blob": "01bbbfb3a347dc97562597744c3940e11cd67185"
+    },
+    "tests/meta/test_canonical_schema.py": {
+      "mode": "100644",
+      "blob": "68274ef91b33f99df71ce141b136f0c4abf953fc"
+    },
+    "tests/meta/test_evidence_crypto.py": {
+      "mode": "100644",
+      "blob": "deb7af4af91219aa7a688e67bd66cfb856897ed7"
+    },
+    "tests/meta/test_live.py": {
+      "mode": "100644",
+      "blob": "cd6f7ea911bd1fe55132723f30f9924b2dcdb63b"
+    },
+    "tests/meta/test_porting_zero_bill.py": {
+      "mode": "100644",
+      "blob": "eef6f33647b7ef061616939b1f8c5a03472e9aee"
+    },
+    "tests/meta/test_registry_dispatch.py": {
+      "mode": "100644",
+      "blob": "2bcfc3b933fa0001e9f854820e9b750e25029084"
+    },
+    "tests/parity/test_adapters.py": {
+      "mode": "100644",
+      "blob": "bac9d9424411a7441f721f31c10b6e92992f67d9"
+    },
+    "tests/parity/test_packet_runner.py": {
+      "mode": "100644",
+      "blob": "756551e665a844d2dcec790becb31a82c4a82cfd"
+    },
+    "tests/parity/test_registry.py": {
+      "mode": "100644",
+      "blob": "50e8fc23c9bbf139b0eed861817977157316c03a"
+    },
+    "toolchain.lock": {
+      "mode": "100644",
+      "blob": "1a9f18620f9d55bb5308b5a817ae671cf07a7246"
+    },
+    "uv.lock": {
+      "mode": "100644",
+      "blob": "c9043e59c92f5861c567a815a866257459b1b409"
+    }
+  },
+  "tests": {
+    "tests/fixes/runner_boundary/test_inventory.py": [
+      "InventoryTests.test_added_file_is_collected_without_manual_registration",
+      "InventoryTests.test_all_four_suites_collect_every_module_and_keep_legacy_cases",
+      "InventoryTests.test_empty_or_import_broken_module_fails",
+      "InventoryTests.test_load_tests_cannot_hide_or_duplicate_a_case",
+      "InventoryTests.test_missing_or_empty_root_fails",
+      "InventoryTests.test_nested_unimportable_new_file_cannot_be_silently_omitted",
+      "InventoryTests.test_skipped_or_expected_failure_cannot_hide_a_case"
+    ],
+    "tests/fixes/runner_boundary/test_boundaries.py": [
+      "CanaryTests.test_absent_unknown_mismatched_marker_never_opens_socket",
+      "CanaryTests.test_backend_specific_permission_denials_pass",
+      "CanaryTests.test_route_dns_timeout_and_unsupported_family_are_not_isolation",
+      "CanaryTests.test_successful_socket_or_connect_is_not_isolation",
+      "CanaryTests.test_wrong_stage_permission_denials_fail",
+      "RetiredLiveTests.test_adapter_has_no_execution_or_io_imports",
+      "RetiredLiveTests.test_arbitrary_argv_invalid_descriptor_and_removed_ci_are_refused",
+      "RetiredLiveTests.test_caller_created_pipe_file_and_memfd_magic_are_not_authority",
+      "RunnerBoundaryTests.test_backend_os_mismatch_unknown_missing_or_warm_marker_stops_before_io",
+      "RunnerBoundaryTests.test_both_os_backends_keep_order_digest_rechecks_and_short_circuit",
+      "RunnerBoundaryTests.test_bridge_delegates_exact_argv_without_another_process",
+      "RunnerBoundaryTests.test_closed_child_environment_uses_only_local_source_imports",
+      "RunnerBoundaryTests.test_content_change_even_with_fixed_metadata_is_detected",
+      "RunnerBoundaryTests.test_packet_custody_refuses_user_file_symlink_hardlink_and_fifo",
+      "RunnerBoundaryTests.test_real_wrapper_rejects_missing_unknown_and_wrong_os_backend",
+      "RunnerBoundaryTests.test_wrapper_binds_os_and_executes_only_the_fixed_bridge"
+    ],
+    "tests/meta/test_campaign.py": [
+      "CampaignTests.test_all_handlers_and_non_failing_states_are_exercised",
+      "CampaignTests.test_illegal_lifecycle_and_event_fail",
+      "CampaignTests.test_required_failure_blocks",
+      "CampaignTests.test_required_unavailable_is_honest",
+      "CampaignTests.test_two_runs_are_byte_identical",
+      "CampaignTests.test_unknown_result_aliases_do_not_exist"
+    ],
+    "tests/alpha1/test_alpha1.py": [
+      "Alpha1CampaignTests.test_campaign_and_evidence_are_reproducible",
+      "Alpha1CampaignTests.test_offline_campaign_is_honestly_unavailable",
+      "Alpha1CampaignTests.test_report_template_preserves_authority_boundaries",
+      "Alpha1ContractTests.test_complete_journey_and_overview_are_closed",
+      "Alpha1ContractTests.test_fixture_has_no_public_request_or_secret_material",
+      "Alpha1ContractTests.test_fixture_reads_and_canonical_outputs_are_deterministic",
+      "Alpha1ContractTests.test_journey_mutations_fail_closed",
+      "Alpha1ContractTests.test_navigation_and_evidence_axes_are_complete",
+      "Alpha1ContractTests.test_overview_mutations_fail_closed"
+    ],
+    "tests/meta/test_canonical_schema.py": [
+      "CanonicalSchemaTests.test_campaign_and_environment_are_closed",
+      "CanonicalSchemaTests.test_canonical_bytes_are_stable",
+      "CanonicalSchemaTests.test_closed_vocabularies",
+      "CanonicalSchemaTests.test_duplicate_and_noncanonical_numbers_are_rejected",
+      "CanonicalSchemaTests.test_every_published_schema_is_closed_and_valid_json",
+      "CanonicalSchemaTests.test_secure_read_refuses_symlink"
+    ],
+    "tests/meta/test_build_cli.py": [
+      "BuildCliTests.test_build_backend_wheel_is_reproducible",
+      "BuildCliTests.test_cli_report_and_evidence_are_deterministic",
+      "BuildCliTests.test_live_inner_adapter_refuses_direct_and_ci",
+      "BuildCliTests.test_reproducible_live_candidate"
+    ],
+    "tests/meta/test_evidence_crypto.py": [
+      "EvidenceCryptoTests.test_candidate_is_unsigned_pending_and_digest_bound",
+      "EvidenceCryptoTests.test_cli_requires_private_key_mode",
+      "EvidenceCryptoTests.test_rfc8032_vector",
+      "EvidenceCryptoTests.test_tamper_revocation_scope_and_duplicate_key_fail",
+      "EvidenceCryptoTests.test_technical_evidence_sign_and_verify",
+      "EvidenceCryptoTests.test_tenant_acceptance_signing_is_forbidden"
+    ],
+    "tests/meta/test_live.py": [
+      "LiveContractTests.test_capacity_scope_and_window_are_exact",
+      "LiveContractTests.test_command_axis_signature_and_capacity_mismatches_fail",
+      "LiveContractTests.test_positive_preflight_verifies_every_authority_class",
+      "LiveContractTests.test_public_discovered_wildcard_and_metadata_endpoints_fail",
+      "LiveContractTests.test_repository_candidate_refuses_ci_and_direct_authority"
+    ],
+    "tests/meta/test_porting_zero_bill.py": [
+      "PortingZeroBillTests.test_every_copy_claim_is_rejected",
+      "PortingZeroBillTests.test_porting_ledger_is_exact_inert_sentinel",
+      "PortingZeroBillTests.test_workflow_and_toolchain_are_zero_bill",
+      "PortingZeroBillTests.test_zero_bill_scanner_rejects_each_declared_vector"
+    ],
+    "tests/meta/test_registry_dispatch.py": [
+      "RegistryDispatchTests.test_descriptor_is_closed_direct_argv",
+      "RegistryDispatchTests.test_duplicate_campaign_fails_closed",
+      "RegistryDispatchTests.test_generic_campaign_has_no_shell_injection",
+      "RegistryDispatchTests.test_makefile_never_interpolates_campaign",
+      "RegistryDispatchTests.test_packet_campaigns_resolve_additively",
+      "RegistryDispatchTests.test_unknown_and_undeclared_dispatch_fail"
+    ],
+    "tests/parity/test_adapters.py": [
+      "AdapterTests.test_altered_expectation_fails_exact",
+      "AdapterTests.test_every_vector_is_deterministic",
+      "AdapterTests.test_unknown_family_and_unbound_vector_fail",
+      "AdapterTests.test_vector_shape_rejects_command_url_and_credentials"
+    ],
+    "tests/parity/test_packet_runner.py": [
+      "PacketRunnerTests.test_alias_and_empty_acceptance_are_rejected",
+      "PacketRunnerTests.test_current_packet_inline_authority_parses",
+      "PacketRunnerTests.test_duplicate_inline_authority_is_rejected",
+      "PacketRunnerTests.test_main_preserves_phase_order_and_hides_authority",
+      "PacketRunnerTests.test_packet_replacement_is_detected",
+      "PacketRunnerTests.test_shell_download_recursive_and_strings_fail",
+      "PacketRunnerTests.test_wrong_execution_and_warm_access_fail"
+    ],
+    "tests/parity/test_registry.py": [
+      "RegistryTests.test_registry_and_vectors_pass_without_source_access",
+      "RegistryTests.test_registry_contains_no_content_or_copy_authority",
+      "RegistryTests.test_unknown_object_relation_and_binding_fail"
+    ]
+  }
+}

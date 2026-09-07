@@ -1,0 +1,2085 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.planeon.ai/conformance/v1alpha1/linux-readiness-evidence.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "authority",
+    "target",
+    "sources",
+    "images",
+    "build",
+    "preflightDigest",
+    "observedAt",
+    "validUntil",
+    "cases",
+    "platformSignerKeyId",
+    "platformSignature",
+    "tenantSignerKeyId",
+    "tenantSignature",
+    "capacitySignerKeyId",
+    "capacitySignature"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "harness.planeon.ai/linux-readiness-evidence/v1alpha1"
+    },
+    "authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "packetDigest",
+        "envelopeDigest",
+        "capacityDigest",
+        "releaseDigest",
+        "planDigest",
+        "tenantId",
+        "environmentId",
+        "runNonce",
+        "endpointId",
+        "endpointDigest",
+        "namespace",
+        "serviceAccountSubject",
+        "admissionPolicyDigest",
+        "resourceQuotaDigest"
+      ],
+      "properties": {
+        "packetDigest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "envelopeDigest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "capacityDigest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "releaseDigest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "planDigest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "tenantId": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$",
+          "maxLength": 128
+        },
+        "environmentId": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$",
+          "maxLength": 128
+        },
+        "runNonce": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$",
+          "maxLength": 128
+        },
+        "endpointId": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$",
+          "maxLength": 128
+        },
+        "endpointDigest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "namespace": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$",
+          "maxLength": 128
+        },
+        "serviceAccountSubject": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._:/-]+$",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "admissionPolicyDigest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "resourceQuotaDigest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "os",
+        "kernel",
+        "architecture",
+        "hostArchitecture",
+        "execution",
+        "libc"
+      ],
+      "properties": {
+        "os": {
+          "const": "linux"
+        },
+        "kernel": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._:/-]+$",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "architecture": {
+          "enum": [
+            "amd64",
+            "arm64"
+          ]
+        },
+        "hostArchitecture": {
+          "enum": [
+            "amd64",
+            "arm64"
+          ]
+        },
+        "execution": {
+          "const": "NATIVE"
+        },
+        "libc": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._:/-]+$",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "architecture": {
+                "const": "amd64"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "hostArchitecture": {
+                "const": "amd64"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "architecture": {
+                "const": "arm64"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "hostArchitecture": {
+                "const": "arm64"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "sources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contracts",
+        "control",
+        "conformance"
+      ],
+      "properties": {
+        "contracts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "commit",
+            "treeDigest"
+          ],
+          "properties": {
+            "commit": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$"
+            },
+            "treeDigest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            }
+          }
+        },
+        "control": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "commit",
+            "treeDigest"
+          ],
+          "properties": {
+            "commit": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$"
+            },
+            "treeDigest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            }
+          }
+        },
+        "conformance": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "commit",
+            "treeDigest"
+          ],
+          "properties": {
+            "commit": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$"
+            },
+            "treeDigest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            }
+          }
+        }
+      }
+    },
+    "images": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "control",
+        "postgres",
+        "kubernetes"
+      ],
+      "properties": {
+        "control": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "postgres": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "kubernetes": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    },
+    "build": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recipeDigest",
+        "toolchainDigest",
+        "cacheDigest",
+        "sbomDigest",
+        "logDigest"
+      ],
+      "properties": {
+        "recipeDigest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "toolchainDigest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "cacheDigest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "sbomDigest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "logDigest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    },
+    "preflightDigest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "observedAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$",
+      "maxLength": 40
+    },
+    "validUntil": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$",
+      "maxLength": 40
+    },
+    "cases": {
+      "type": "array",
+      "minItems": 10,
+      "maxItems": 10,
+      "prefixItems": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "caseId",
+            "status",
+            "observedAt",
+            "runNonce",
+            "probeDigest",
+            "commandDigest",
+            "outputDigest",
+            "output"
+          ],
+          "properties": {
+            "caseId": {
+              "const": "HOST_ISOLATION_NEGATIVES"
+            },
+            "status": {
+              "enum": [
+                "PASS",
+                "FAIL",
+                "NOT_RUN_ENV_UNAVAILABLE"
+              ]
+            },
+            "observedAt": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "Z$",
+              "maxLength": 40
+            },
+            "runNonce": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$",
+              "maxLength": 128
+            },
+            "probeDigest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "commandDigest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "outputDigest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "output": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "checks",
+                "regressions"
+              ],
+              "properties": {
+                "checks": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "ipv4-denied",
+                    "ipv6-denied",
+                    "dns-denied",
+                    "loopback-denied",
+                    "descendants-denied",
+                    "warm-roots-hidden",
+                    "credentials-hidden",
+                    "sockets-denied",
+                    "packet-immutable"
+                  ],
+                  "properties": {
+                    "ipv4-denied": {
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_RUN_ENV_UNAVAILABLE"
+                      ]
+                    },
+                    "ipv6-denied": {
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_RUN_ENV_UNAVAILABLE"
+                      ]
+                    },
+                    "dns-denied": {
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_RUN_ENV_UNAVAILABLE"
+                      ]
+                    },
+                    "loopback-denied": {
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_RUN_ENV_UNAVAILABLE"
+                      ]
+                    },
+                    "descendants-denied": {
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_RUN_ENV_UNAVAILABLE"
+                      ]
+                    },
+                    "warm-roots-hidden": {
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_RUN_ENV_UNAVAILABLE"
+                      ]
+                    },
+                    "credentials-hidden": {
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_RUN_ENV_UNAVAILABLE"
+                      ]
+                    },
+                    "sockets-denied": {
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_RUN_ENV_UNAVAILABLE"
+                      ]
+                    },
+                    "packet-immutable": {
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_RUN_ENV_UNAVAILABLE"
+                      ]
+                    }
+                  }
+                },
+                "regressions": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [],
+                  "properties": {}
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "caseId",
+            "status",
+            "observedAt",
+            "runNonce",
+            "probeDigest",
+            "commandDigest",
+            "outputDigest",
+            "output"
+          ],
+          "properties": {
+            "caseId": {
+              "const": "LINUX_TARGET_BUILD"
+            },
+            "status": {
+              "enum": [
+                "PASS",
+                "FAIL",
+                "NOT_RUN_ENV_UNAVAILABLE"
+              ]
+            },
+            "observedAt": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "Z$",
+              "maxLength": 40
+            },
+            "runNonce": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$",
+              "maxLength": 128
+            },
+            "probeDigest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "commandDigest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "outputDigest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "output": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "checks",
+                "regressions"
+              ],
+              "properties": {
+                "checks": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "target-local-build",
+                    "native-dependencies",
+                    "linux-executable",
+                    "cache-pinned",
+                    "sbom-pinned",
+                    "no-downloads"
+                  ],
+                  "properties": {
+                    "target-local-build": {
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_RUN_ENV_UNAVAILABLE"
+                      ]
+                    },
+                    "native-dependencies": {
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_RUN_ENV_UNAVAILABLE"
+                      ]
+                    },
+                    "linux-executable": {
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_RUN_ENV_UNAVAILABLE"
+                      ]
+                    },
+                    "cache-pinned": {
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_RUN_ENV_UNAVAILABLE"
+                      ]
+                    },
+                    "sbom-pinned": {
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_RUN_ENV_UNAVAILABLE"
+                      ]
+                    },
+                    "no-downloads": {
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_RUN_ENV_UNAVAILABLE"
+                      ]
+                    }
+                  }
+                },
+                "regressions": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [],
+                  "properties": {}
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "caseId",
+            "status",
+            "observedAt",
+            "runNonce",
+            "probeDigest",
+            "commandDigest",
+            "outputDigest",
+            "output"
+          ],
+          "properties": {
+            "caseId": {
+              "const": "FULL_PREDECESSOR_REGRESSION"
+            },
+            "status": {
+              "enum": [
+                "PASS",
+                "FAIL",
+                "NOT_RUN_ENV_UNAVAILABLE"
+              ]
+            },
+            "observedAt": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "Z$",
+              "maxLength": 40
+            },
+            "runNonce": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$",
+              "maxLength": 128
+            },
+            "probeDigest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "commandDigest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "outputDigest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "output": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "checks",
+                "regressions"
+              ],
+              "properties": {
+                "checks": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "full-inventory",
+                    "all-suites-executed",
+                    "no-deselection",
+                    "no-skip-or-xfail"
+                  ],
+                  "properties": {
+                    "full-inventory": {
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_RUN_ENV_UNAVAILABLE"
+                      ]
+                    },
+                    "all-suites-executed": {
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_RUN_ENV_UNAVAILABLE"
+                      ]
+                    },
+                    "no-deselection": {
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_RUN_ENV_UNAVAILABLE"
+                      ]
+                    },
+                    "no-skip-or-xfail": {
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_RUN_ENV_UNAVAILABLE"
+                      ]
+                    }
+                  }
+                },
+                "regressions": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "contracts",
+                    "control",
+                    "conformance"
+                  ],
+                  "properties": {
+                    "contracts": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "inventoryDigest",
+                        "collected",
+                        "executed",
+                        "skipped",
+                        "failed"
+                      ],
+                      "properties": {
+                        "inventoryDigest": {
+                          "type": "string",
+                          "pattern": "^sha256:[0-9a-f]{64}$"
+                        },
+                        "collected": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 10000000
+                        },
+                        "executed": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 10000000
+                        },
+                        "skipped": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 10000000
+                        },
+                        "failed": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 10000000
+                        }
+                      }
+                    },
+                    "control": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "inventoryDigest",
+                        "collected",
+                        "executed",
+                        "skipped",
+                        "failed"
+                      ],
+                      "properties": {
+                        "inventoryDigest": {
+                          "type": "string",
+                          "pattern": "^sha256:[0-9a-f]{64}$"
+                        },
+                        "collected": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 10000000
+                        },
+                        "executed": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 10000000
+                        },
+                        "skipped": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 10000000
+                        },
+                        "failed": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 10000000
+                        }
+                      }
+                    },
+                    "conformance": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "inventoryDigest",
+                        "collected",
+                        "executed",
+                        "skipped",
+                        "failed"
+                      ],
+                      "properties": {
+                        "inventoryDigest": {
+                          "type": "string",
+                          "pattern": "^sha256:[0-9a-f]{64}$"
+                        },
+                        "collected": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 10000000
+                        },
+                        "executed": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 10000000
+                        },
+                        "skipped": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 10000000
+                        },
+                        "failed": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 10000000
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "caseId",
+            "status",
+            "observedAt",
+            "runNonce",
+            "probeDigest",
+            "commandDigest",
+            "outputDigest",
+            "output"
+          ],
+          "properties": {
+            "caseId": {
+              "const": "CONTROL_CONTAINER_STARTUP"
+            },
+            "status": {
+              "enum": [
+                "PASS",
+                "FAIL",
+                "NOT_RUN_ENV_UNAVAILABLE"
+              ]
+            },
+            "observedAt": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "Z$",
+              "maxLength": 40
+            },
+            "runNonce": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$",
+              "maxLength": 128
+            },
+            "probeDigest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "commandDigest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "outputDigest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "output": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "checks",
+                "regressions"
+              ],
+              "properties": {
+                "checks": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "standalone-started",
+                    "health-ready",
+                    "no-downloads",
+                    "telemetry-disabled"
+                  ],
+                  "properties": {
+                    "standalone-started": {
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_RUN_ENV_UNAVAILABLE"
+                      ]
+                    },
+                    "health-ready": {
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_RUN_ENV_UNAVAILABLE"
+                      ]
+                    },
+                    "no-downloads": {
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_RUN_ENV_UNAVAILABLE"
+                      ]
+                    },
+                    "telemetry-disabled": {
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_RUN_ENV_UNAVAILABLE"
+                      ]
+                    }
+                  }
+                },
+                "regressions": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [],
+                  "properties": {}
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "caseId",
+            "status",
+            "observedAt",
+            "runNonce",
+            "probeDigest",
+            "commandDigest",
+            "outputDigest",
+            "output"
+          ],
+          "properties": {
+            "caseId": {
+              "const": "POSTGRES_MIGRATION_AND_RLS"
+            },
+            "status": {
+              "enum": [
+                "PASS",
+                "FAIL",
+                "NOT_RUN_ENV_UNAVAILABLE"
+              ]
+            },
+            "observedAt": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "Z$",
+              "maxLength": 40
+            },
+            "runNonce": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$",
+              "maxLength": 128
+            },
+            "probeDigest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "commandDigest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "outputDigest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "output": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "checks",
+                "regressions"
+              ],
+              "properties": {
+                "checks": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "forward-migration",
+                    "idempotent-migration",
+                    "cross-tenant-denied",
+                    "fixture-only"
+                  ],
+                  "properties": {
+                    "forward-migration": {
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_RUN_ENV_UNAVAILABLE"
+                      ]
+                    },
+                    "idempotent-migration": {
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_RUN_ENV_UNAVAILABLE"
+                      ]
+                    },
+                    "cross-tenant-denied": {
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_RUN_ENV_UNAVAILABLE"
+                      ]
+                    },
+                    "fixture-only": {
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_RUN_ENV_UNAVAILABLE"
+                      ]
+                    }
+                  }
+                },
+                "regressions": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [],
+                  "properties": {}
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "caseId",
+            "status",
+            "observedAt",
+            "runNonce",
+            "probeDigest",
+            "commandDigest",
+            "outputDigest",
+            "output"
+          ],
+          "properties": {
+            "caseId": {
+              "const": "DURABLE_RESTART"
+            },
+            "status": {
+              "enum": [
+                "PASS",
+                "FAIL",
+                "NOT_RUN_ENV_UNAVAILABLE"
+              ]
+            },
+            "observedAt": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "Z$",
+              "maxLength": 40
+            },
+            "runNonce": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$",
+              "maxLength": 128
+            },
+            "probeDigest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "commandDigest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "outputDigest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "output": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "checks",
+                "regressions"
+              ],
+              "properties": {
+                "checks": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "restart-completed",
+                    "records-persisted",
+                    "tenant-boundaries-preserved"
+                  ],
+                  "properties": {
+                    "restart-completed": {
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_RUN_ENV_UNAVAILABLE"
+                      ]
+                    },
+                    "records-persisted": {
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_RUN_ENV_UNAVAILABLE"
+                      ]
+                    },
+                    "tenant-boundaries-preserved": {
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_RUN_ENV_UNAVAILABLE"
+                      ]
+                    }
+                  }
+                },
+                "regressions": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [],
+                  "properties": {}
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "caseId",
+            "status",
+            "observedAt",
+            "runNonce",
+            "probeDigest",
+            "commandDigest",
+            "outputDigest",
+            "output"
+          ],
+          "properties": {
+            "caseId": {
+              "const": "ARBITRARY_NON_ROOT_UID"
+            },
+            "status": {
+              "enum": [
+                "PASS",
+                "FAIL",
+                "NOT_RUN_ENV_UNAVAILABLE"
+              ]
+            },
+            "observedAt": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "Z$",
+              "maxLength": 40
+            },
+            "runNonce": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$",
+              "maxLength": 128
+            },
+            "probeDigest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "commandDigest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "outputDigest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "output": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "checks",
+                "regressions"
+              ],
+              "properties": {
+                "checks": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "arbitrary-nonroot-uid",
+                    "capabilities-dropped",
+                    "seccomp-enforced",
+                    "no-fixed-home"
+                  ],
+                  "properties": {
+                    "arbitrary-nonroot-uid": {
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_RUN_ENV_UNAVAILABLE"
+                      ]
+                    },
+                    "capabilities-dropped": {
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_RUN_ENV_UNAVAILABLE"
+                      ]
+                    },
+                    "seccomp-enforced": {
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_RUN_ENV_UNAVAILABLE"
+                      ]
+                    },
+                    "no-fixed-home": {
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_RUN_ENV_UNAVAILABLE"
+                      ]
+                    }
+                  }
+                },
+                "regressions": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [],
+                  "properties": {}
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "caseId",
+            "status",
+            "observedAt",
+            "runNonce",
+            "probeDigest",
+            "commandDigest",
+            "outputDigest",
+            "output"
+          ],
+          "properties": {
+            "caseId": {
+              "const": "READ_ONLY_ROOT_FILESYSTEM"
+            },
+            "status": {
+              "enum": [
+                "PASS",
+                "FAIL",
+                "NOT_RUN_ENV_UNAVAILABLE"
+              ]
+            },
+            "observedAt": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "Z$",
+              "maxLength": 40
+            },
+            "runNonce": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$",
+              "maxLength": 128
+            },
+            "probeDigest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "commandDigest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "outputDigest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "output": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "checks",
+                "regressions"
+              ],
+              "properties": {
+                "checks": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "root-read-only",
+                    "declared-volumes-only",
+                    "no-privilege-escalation"
+                  ],
+                  "properties": {
+                    "root-read-only": {
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_RUN_ENV_UNAVAILABLE"
+                      ]
+                    },
+                    "declared-volumes-only": {
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_RUN_ENV_UNAVAILABLE"
+                      ]
+                    },
+                    "no-privilege-escalation": {
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_RUN_ENV_UNAVAILABLE"
+                      ]
+                    }
+                  }
+                },
+                "regressions": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [],
+                  "properties": {}
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "caseId",
+            "status",
+            "observedAt",
+            "runNonce",
+            "probeDigest",
+            "commandDigest",
+            "outputDigest",
+            "output"
+          ],
+          "properties": {
+            "caseId": {
+              "const": "KUBERNETES_SMOKE"
+            },
+            "status": {
+              "enum": [
+                "PASS",
+                "FAIL",
+                "NOT_RUN_ENV_UNAVAILABLE"
+              ]
+            },
+            "observedAt": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "Z$",
+              "maxLength": 40
+            },
+            "runNonce": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$",
+              "maxLength": 128
+            },
+            "probeDigest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "commandDigest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "outputDigest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "output": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "checks",
+                "regressions"
+              ],
+              "properties": {
+                "checks": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "namespace-pinned",
+                    "quota-pinned",
+                    "admission-enforced",
+                    "readiness-passed",
+                    "run-labelled-cleanup"
+                  ],
+                  "properties": {
+                    "namespace-pinned": {
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_RUN_ENV_UNAVAILABLE"
+                      ]
+                    },
+                    "quota-pinned": {
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_RUN_ENV_UNAVAILABLE"
+                      ]
+                    },
+                    "admission-enforced": {
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_RUN_ENV_UNAVAILABLE"
+                      ]
+                    },
+                    "readiness-passed": {
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_RUN_ENV_UNAVAILABLE"
+                      ]
+                    },
+                    "run-labelled-cleanup": {
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_RUN_ENV_UNAVAILABLE"
+                      ]
+                    }
+                  }
+                },
+                "regressions": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [],
+                  "properties": {}
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "caseId",
+            "status",
+            "observedAt",
+            "runNonce",
+            "probeDigest",
+            "commandDigest",
+            "outputDigest",
+            "output"
+          ],
+          "properties": {
+            "caseId": {
+              "const": "DEFAULT_DENY_NETWORK"
+            },
+            "status": {
+              "enum": [
+                "PASS",
+                "FAIL",
+                "NOT_RUN_ENV_UNAVAILABLE"
+              ]
+            },
+            "observedAt": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "Z$",
+              "maxLength": 40
+            },
+            "runNonce": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$",
+              "maxLength": 128
+            },
+            "probeDigest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "commandDigest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "outputDigest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "output": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "checks",
+                "regressions"
+              ],
+              "properties": {
+                "checks": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "undeclared-egress-denied",
+                    "metadata-denied",
+                    "proxy-only",
+                    "policy-not-bypassable"
+                  ],
+                  "properties": {
+                    "undeclared-egress-denied": {
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_RUN_ENV_UNAVAILABLE"
+                      ]
+                    },
+                    "metadata-denied": {
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_RUN_ENV_UNAVAILABLE"
+                      ]
+                    },
+                    "proxy-only": {
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_RUN_ENV_UNAVAILABLE"
+                      ]
+                    },
+                    "policy-not-bypassable": {
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_RUN_ENV_UNAVAILABLE"
+                      ]
+                    }
+                  }
+                },
+                "regressions": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [],
+                  "properties": {}
+                }
+              }
+            }
+          }
+        }
+      ],
+      "items": false
+    },
+    "platformSignerKeyId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "platformSignature": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{86}$"
+    },
+    "tenantSignerKeyId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "tenantSignature": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{86}$"
+    },
+    "capacitySignerKeyId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "capacitySignature": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{86}$"
+    }
+  },
+  "$defs": {
+    "plan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "target",
+        "sources",
+        "images",
+        "build",
+        "preflightDigest",
+        "endpointId",
+        "namespace",
+        "serviceAccountSubject",
+        "regressions",
+        "probes"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "harness.planeon.ai/linux-readiness-plan/v1alpha1"
+        },
+        "target": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "os",
+            "kernel",
+            "architecture",
+            "hostArchitecture",
+            "execution",
+            "libc"
+          ],
+          "properties": {
+            "os": {
+              "const": "linux"
+            },
+            "kernel": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:/-]+$",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "architecture": {
+              "enum": [
+                "amd64",
+                "arm64"
+              ]
+            },
+            "hostArchitecture": {
+              "enum": [
+                "amd64",
+                "arm64"
+              ]
+            },
+            "execution": {
+              "const": "NATIVE"
+            },
+            "libc": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:/-]+$",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "architecture": {
+                    "const": "amd64"
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "hostArchitecture": {
+                    "const": "amd64"
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "architecture": {
+                    "const": "arm64"
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "hostArchitecture": {
+                    "const": "arm64"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "sources": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "contracts",
+            "control",
+            "conformance"
+          ],
+          "properties": {
+            "contracts": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "commit",
+                "treeDigest"
+              ],
+              "properties": {
+                "commit": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{40}$"
+                },
+                "treeDigest": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                }
+              }
+            },
+            "control": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "commit",
+                "treeDigest"
+              ],
+              "properties": {
+                "commit": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{40}$"
+                },
+                "treeDigest": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                }
+              }
+            },
+            "conformance": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "commit",
+                "treeDigest"
+              ],
+              "properties": {
+                "commit": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{40}$"
+                },
+                "treeDigest": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                }
+              }
+            }
+          }
+        },
+        "images": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "control",
+            "postgres",
+            "kubernetes"
+          ],
+          "properties": {
+            "control": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "postgres": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "kubernetes": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            }
+          }
+        },
+        "build": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "recipeDigest",
+            "toolchainDigest",
+            "cacheDigest",
+            "sbomDigest",
+            "logDigest"
+          ],
+          "properties": {
+            "recipeDigest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "toolchainDigest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "cacheDigest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "sbomDigest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "logDigest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            }
+          }
+        },
+        "preflightDigest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "endpointId": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$",
+          "maxLength": 128
+        },
+        "namespace": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$",
+          "maxLength": 128
+        },
+        "serviceAccountSubject": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._:/-]+$",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "regressions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "contracts",
+            "control",
+            "conformance"
+          ],
+          "properties": {
+            "contracts": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "inventoryDigest",
+                "testCount"
+              ],
+              "properties": {
+                "inventoryDigest": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "testCount": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 10000000
+                }
+              }
+            },
+            "control": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "inventoryDigest",
+                "testCount"
+              ],
+              "properties": {
+                "inventoryDigest": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "testCount": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 10000000
+                }
+              }
+            },
+            "conformance": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "inventoryDigest",
+                "testCount"
+              ],
+              "properties": {
+                "inventoryDigest": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "testCount": {
+                  "type": "integer",
+                  "minimum": 83,
+                  "maximum": 10000000
+                }
+              }
+            }
+          }
+        },
+        "probes": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "HOST_ISOLATION_NEGATIVES",
+            "LINUX_TARGET_BUILD",
+            "FULL_PREDECESSOR_REGRESSION",
+            "CONTROL_CONTAINER_STARTUP",
+            "POSTGRES_MIGRATION_AND_RLS",
+            "DURABLE_RESTART",
+            "ARBITRARY_NON_ROOT_UID",
+            "READ_ONLY_ROOT_FILESYSTEM",
+            "KUBERNETES_SMOKE",
+            "DEFAULT_DENY_NETWORK"
+          ],
+          "properties": {
+            "HOST_ISOLATION_NEGATIVES": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "probeDigest",
+                "commandDigest"
+              ],
+              "properties": {
+                "probeDigest": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "commandDigest": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                }
+              }
+            },
+            "LINUX_TARGET_BUILD": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "probeDigest",
+                "commandDigest"
+              ],
+              "properties": {
+                "probeDigest": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "commandDigest": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                }
+              }
+            },
+            "FULL_PREDECESSOR_REGRESSION": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "probeDigest",
+                "commandDigest"
+              ],
+              "properties": {
+                "probeDigest": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "commandDigest": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                }
+              }
+            },
+            "CONTROL_CONTAINER_STARTUP": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "probeDigest",
+                "commandDigest"
+              ],
+              "properties": {
+                "probeDigest": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "commandDigest": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                }
+              }
+            },
+            "POSTGRES_MIGRATION_AND_RLS": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "probeDigest",
+                "commandDigest"
+              ],
+              "properties": {
+                "probeDigest": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "commandDigest": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                }
+              }
+            },
+            "DURABLE_RESTART": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "probeDigest",
+                "commandDigest"
+              ],
+              "properties": {
+                "probeDigest": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "commandDigest": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                }
+              }
+            },
+            "ARBITRARY_NON_ROOT_UID": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "probeDigest",
+                "commandDigest"
+              ],
+              "properties": {
+                "probeDigest": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "commandDigest": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                }
+              }
+            },
+            "READ_ONLY_ROOT_FILESYSTEM": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "probeDigest",
+                "commandDigest"
+              ],
+              "properties": {
+                "probeDigest": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "commandDigest": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                }
+              }
+            },
+            "KUBERNETES_SMOKE": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "probeDigest",
+                "commandDigest"
+              ],
+              "properties": {
+                "probeDigest": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "commandDigest": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                }
+              }
+            },
+            "DEFAULT_DENY_NETWORK": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "probeDigest",
+                "commandDigest"
+              ],
+              "properties": {
+                "probeDigest": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "commandDigest": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$comment": "Structure only: signature, release bindings, output digests, freshness, nonce replay, regression inventory and real installed execution must be independently verified. Unit or emulated records cannot qualify native Linux."
+}

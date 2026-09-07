@@ -1,0 +1,7 @@
+{
+  "schemaVersion": "harness.planeon.ai/environment-intake/v1alpha1",
+  "environmentId": "linux-fixture-unavailable",
+  "tenantId": "unit-fixture-tenant",
+  "capturedAt": "2026-09-07T00:00:00Z",
+  "capabilities": {}
+}

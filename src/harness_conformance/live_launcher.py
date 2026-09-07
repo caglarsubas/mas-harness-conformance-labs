@@ -20,6 +20,17 @@ from .live import (
 from .schema import closed
 
 
+def linux_runtime_availability() -> dict[str, str]:
+    """No caller flag, descriptor, environment variable or fixture grants a session.
+
+    CONF-FIX-001 retired the unauthenticated bridge. The external endpoint
+    isolation/proxy backend is still absent; CONF-LINUX-001 cannot replace it.
+    Native execution needs separately reviewed operator integration, not an
+    in-repository fallback or a test transport installed into production.
+    """
+    return {"status": "NOT_RUN_ENV_UNAVAILABLE", "reasonCode": "LINUX_LIVE_BACKEND_UNAVAILABLE"}
+
+
 def _verify_root_manifest() -> None:
     public_bytes = secure_read(FIXED_MANIFEST_PUBLIC, require_absolute=True)
     if byte_digest(public_bytes) != PINNED_ROOT_PUBLIC_KEY_SHA256:

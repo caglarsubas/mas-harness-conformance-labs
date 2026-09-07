@@ -121,10 +121,20 @@ def validate_campaign(document: Any) -> dict[str, Any]:
         if control["axis"] not in EVIDENCE_AXES:
             raise ConformanceError("INVALID_AXIS", "unknown evidence axis")
         require_object(control["input"], "control input")
+        if control["handler"] == "LINUX_READINESS":
+            from .linux_readiness import validate_control_input
+
+            validate_control_input(control["input"])
+            if value["executionClass"] != "LIVE_CAMPAIGN" or control["axis"] not in ("DEPLOYMENT", "RUNTIME", "SECURITY", "ASSURANCE") or control["required"] is not True:
+                raise ConformanceError("LINUX_CONTROL_SCOPE_INVALID", "Linux qualification is mandatory live evidence only")
     if value["executionClass"] == "OFFLINE_TEST" and any(item["axis"] != "UNIT" for item in controls):
         raise ConformanceError("OFFLINE_AXIS_ESCALATION", "offline campaigns may originate UNIT only")
     if value["executionClass"] == "LIVE_CAMPAIGN" and any(item["axis"] not in LIVE_EVIDENCE_AXES for item in controls):
         raise ConformanceError("LIVE_AXIS_ESCALATION", "live campaign axis is not allowed")
+    if value["campaignId"] == "linux-baseline" or any(item["handler"] == "LINUX_READINESS" for item in controls):
+        from .linux_readiness import validate_linux_campaign
+
+        validate_linux_campaign(value)
     reject_secret_shape(value)
     return value
 
@@ -174,6 +184,10 @@ VALIDATORS = {
 
 
 def validate(kind: str, document: Any) -> dict[str, Any]:
+    if kind == "linux-readiness-evidence":
+        from .linux_readiness import validate_linux_evidence
+
+        return validate_linux_evidence(document)
     try:
         validator = VALIDATORS[kind]
     except KeyError as exc:
