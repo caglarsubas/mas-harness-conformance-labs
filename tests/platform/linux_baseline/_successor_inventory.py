@@ -298,7 +298,7 @@ def collect_in_child(root):
         suite = loader.discover(str(root), pattern="test_*.py")
     tests = list(leaves(suite))
     if loader.errors or not tests or suite.countTestCases() != len(tests):
-        raise ValueError("failed or empty actual collection")
+        raise ValueError("failed or empty actual collection: " + "\n".join(loader.errors))
     observed = {}
     for test in tests:
         cls, name = type(test), test._testMethodName
@@ -352,4 +352,7 @@ def verify_repository(root):
 if __name__ == "__main__":
     if len(sys.argv) != 3 or sys.argv[1] != "--collect":
         raise SystemExit("only fresh-child test collection is supported")
+    # -I deliberately ignores PYTHONPATH; import only this checkout's approved
+    # package root explicitly, never an inherited or caller-selected path.
+    sys.path.insert(0, str(checked_directory(ROOT / "src")))
     print(json.dumps(collect_in_child(Path(sys.argv[2])), sort_keys=True))

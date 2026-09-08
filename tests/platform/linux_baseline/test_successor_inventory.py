@@ -188,7 +188,8 @@ class SuccessorInventoryTests(unittest.TestCase):
             for i in range(2):
                 root = parent / str(i)
                 root.mkdir()
-                source = COLLECTIBLE.replace("test_present", "test_root_" + str(i))
+                source = ("from harness_conformance.errors import ConformanceError\n"
+                          + COLLECTIBLE.replace("test_present", "test_root_" + str(i)))
                 (root / "test_collision.py").write_text(source)
                 self.assertEqual(HELPER.discover_inventory(root), {"test_collision.py": ["Check.test_root_" + str(i)]})
         print("successor-test-inventory roots=5 predecessor=150 added=20 skipped=0 status=PASS", flush=True)

@@ -103,6 +103,16 @@ The actual product launcher remains unchanged by this packet.
 
 ## Acceptance and handoff
 
+First signed local candidate `d582425ac6ef9c3ec43984866068fe11a6a2f049`,
+activation 67, ran 170 methods with three collection-related errors and zero
+skips; exit 1 after the five suites. Campaign/evidence were NOT_RUN by fail-fast.
+Log SHA256 `3820936b82948bd335f5d2dfdf0db353a379037b698a853f32225cb88b39df71`.
+The fresh collector's `-I` correctly ignored inherited PYTHONPATH but also
+omitted the approved local package root. The helper now explicitly adds only
+this checkout's checked `src` directory; a collision vector requires a local
+package import. No environment isolation, older file or test was weakened.
+The corrected candidate still requires a fresh full signed replay.
+
 | Gate | Status at this source publication |
 |---|---|
 | Source | Five-path implementation checkpoint |
