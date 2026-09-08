@@ -1,70 +1,116 @@
 import ast
+from copy import deepcopy
 import hashlib
 import json
+import os
 from pathlib import Path
-import subprocess
 import tempfile
 import unittest
 
 from _fixtures import ROOT
-from _inventory import isolated_inventory, source_inventory
+from _inventory import (BASELINE, CURRENT, SUCCESSOR, isolated_inventory, load_baseline,
+                        source_inventory, validate_checkpoint, verify_repository)
 from harness_conformance.live_backend_authority import COMMANDS, PACKET_DIGEST, SUITE_ROOTS
-
-BASELINE = json.loads((ROOT / "fixtures/live-backend/baseline.json").read_bytes())
 
 
 class BackendInventoryTests(unittest.TestCase):
-    def test_all_six_roots_ast_equal_actual_and_all_120_predecessors_preserved(self):
+    def test_all_six_roots_ast_equal_actual_and_all_170_predecessors_preserved(self):
         count = 0
         for root in SUITE_ROOTS:
             observed = isolated_inventory(ROOT / root)
-            for path, methods in BASELINE["tests"].items():
-                if path.startswith(root + "/"):
-                    self.assertEqual(observed[path[len(root) + 1:]], methods)
-                    count += len(methods)
+            expected = {path[len(root) + 1:]: methods for path, methods in CURRENT["tests"].items()
+                        if path.startswith(root + "/")}
+            if root != "tests/live_backend":
+                self.assertEqual(observed, expected)
+                count += sum(map(len, observed.values()))
             cases = sum(map(len, observed.values()))
-            if root in BASELINE["suites"]:
-                self.assertEqual(BASELINE["suites"][root], {"modules": len(observed), "testCount": cases})
             print(f"backend-inventory root={root} modules={len(observed)} cases={cases} status=PASS", flush=True)
-        self.assertEqual(count, 120)
+        self.assertEqual(count, 170)
         self.assertEqual(tuple(BASELINE["suiteRoots"]), SUITE_ROOTS[:5])
 
-    def test_clean_103_file_baseline_immutable_except_final_owned_launcher_hook(self):
+    def test_all_110_accepted_files_are_fixed_with_only_closed_final_hook_proof(self):
+        self.assertEqual(CURRENT["commit"], "01ef8b1ca9e86ae36331c82d6d552fcc9f236221")
+        self.assertEqual(CURRENT["tree"], "9860515758052c17174c33321a8eb017106cf29b")
+        self.assertEqual(len(CURRENT["files"]), 110)
+        result = verify_repository(ROOT)
+        self.assertEqual(result["evidenceClass"], "SOURCE_INVENTORY_ONLY")
+        self.assertIs(result["nativeAcceptance"], False)
+        self.assertEqual(result["trackedFiles"], (110, 120, 127, 135, 141, 146, 151)[result["stage"]])
+
+    def test_original_103_120_and_scalar_106_150_histories_remain_separate(self):
+        scalar = json.loads(CURRENT["scalarBaselineRaw"])
+        historical = json.loads(scalar["historical103Raw"])
+        self.assertEqual(len(BASELINE["files"]), 103)
+        self.assertEqual(sum(map(len, BASELINE["tests"].values())), 120)
         self.assertEqual(BASELINE["commit"], "88de1d9b7272a25678b01129e51d5756dbe608ed")
         self.assertEqual(BASELINE["tree"], "71270ce85626c71680a42435423b7537870964cb")
-        self.assertEqual(len(BASELINE["files"]), 103)
-        # Only CONF-LIVE-006 owns the one existing production file. Until its
-        # independently owned integration module exists, its bytes remain fixed.
-        integration = ROOT / "src/harness_conformance/live_backend_campaign.py"
-        for name, expected in BASELINE["files"].items():
-            with self.subTest(path=name):
-                path = ROOT / name
-                self.assertFalse(path.is_symlink())
-                self.assertTrue(path.is_file())
-                self.assertEqual(bool(path.stat().st_mode & 0o111), expected["mode"] == "100755")
-                if name == "src/harness_conformance/live_launcher.py" and integration.is_file():
-                    continue
-                raw = path.read_bytes()
-                self.assertEqual(len(raw), expected["size"])
-                self.assertEqual("sha256:" + hashlib.sha256(raw).hexdigest(), expected["sha256"])
-                self.assertEqual(hashlib.sha1(b"blob " + str(len(raw)).encode() + b"\0" + raw).hexdigest(), expected["blob"])
+        self.assertEqual(len(scalar["files"]), 106)
+        self.assertEqual(sum(map(len, scalar["tests"].values())), 150)
+        self.assertEqual(len(historical["files"]), 103)
+        self.assertEqual(sum(map(len, historical["tests"].values())), 120)
+        for path, ids in BASELINE["tests"].items():
+            self.assertEqual(CURRENT["tests"][path], ids)
+        for path, ids in scalar["tests"].items():
+            self.assertEqual(CURRENT["tests"][path], ids)
+        self.assertEqual(CURRENT["draft"]["status"], "CANCELLED_NOT_PASS")
+        self.assertEqual(CURRENT["closure"]["main"], CURRENT["commit"])
+        self.assertEqual(CURRENT["closure"]["mainReplay"]["tests"], 170)
+        self.assertFalse(CURRENT["closure"]["nativeAcceptance"])
 
-    def test_tracked_inventory_has_only_closed_additive_packet_paths(self):
-        result = subprocess.run(["git", "ls-files", "-z"], cwd=ROOT, capture_output=True, check=True)
-        tracked = set(result.stdout.decode().strip("\0").split("\0"))
-        allowed = set(BASELINE["files"])
-        for paths in BASELINE["packetPaths"].values():
-            self.assertTrue(all(not p.endswith("/") and ".." not in p.split("/") for p in paths))
-            allowed.update(paths)
-        self.assertTrue(set(BASELINE["files"]) <= tracked)
-        self.assertFalse(tracked - allowed, tracked - allowed)
-        self.assertTrue(set(BASELINE["packetPaths"]["CONF-LIVE-001"]) <= tracked)
-        # The immutable historical file hash guards above still execute; there
-        # is no extension to either predecessor guard's old mutable exceptions.
-        for packet, paths in BASELINE["packetPaths"].items():
-            overlap = set(paths) & set(BASELINE["files"])
-            self.assertEqual(overlap, {"src/harness_conformance/live_launcher.py"}
-                             if packet == "CONF-LIVE-006" else set())
+    def test_tracked_inventory_has_only_complete_ordered_packet_stages(self):
+        rows, sources = SUCCESSOR.tracked_inventory(ROOT)
+        result = validate_checkpoint(rows, sources)
+        expected = set(CURRENT["files"])
+        for stage in range(1, result["stage"] + 1):
+            expected.update(BASELINE["packetPaths"][f"CONF-LIVE-{stage:03d}"])
+        self.assertEqual({row["path"] for row in rows}, expected)
+        for row in rows:
+            if row["path"] in BASELINE["packetPaths"]["CONF-LIVE-001"]:
+                with self.subTest(missing=row["path"]), self.assertRaises(ValueError):
+                    validate_checkpoint([r for r in rows if r is not row], sources)
+
+    def test_presence_of_integration_file_never_exempts_launcher(self):
+        rows, sources = SUCCESSOR.tracked_inventory(ROOT)
+        changed = dict(sources)
+        changed["src/harness_conformance/live_backend_campaign.py"] = b"# inert adversarial presence\n"
+        changed["src/harness_conformance/live_launcher.py"] += b"# unapproved delta\n"
+        with self.assertRaises(ValueError):
+            validate_checkpoint(rows, changed)
+
+    def test_all_four_accepted_correction_additions_are_hash_bound(self):
+        rows, sources = SUCCESSOR.tracked_inventory(ROOT)
+        for path in SUCCESSOR.RECORD["repairPaths"]:
+            altered_rows, altered_sources = deepcopy(rows), dict(sources)
+            altered_sources[path] += b"\n"
+            row = next(r for r in altered_rows if r["path"] == path)
+            row.update(size=len(altered_sources[path]), sha256=hashlib.sha256(altered_sources[path]).hexdigest())
+            with self.subTest(path=path), self.assertRaises(ValueError):
+                validate_checkpoint(altered_rows, altered_sources)
+
+    def test_baseline_tampering_and_duplicate_members_refuse(self):
+        raw = (ROOT / "fixtures/live-backend/baseline.json").read_bytes()
+        for altered in (raw + b"\n", b'{"a":1,"a":2}', b"{}", raw.replace(b"CANCELLED_NOT_PASS", b"PASS")):
+            with self.subTest(size=len(altered)), self.assertRaises(ValueError):
+                load_baseline(altered)
+
+    def test_linked_root_ancestor_and_hardlinked_test_are_rejected(self):
+        with tempfile.TemporaryDirectory() as folder:
+            real = Path(folder).resolve()
+            root = real / "suite"
+            root.mkdir()
+            source = root / "test_link.py"
+            source.write_text("import unittest\nclass T(unittest.TestCase):\n def test_ok(self): pass\n")
+            link = real / "alias"
+            link.symlink_to(root, target_is_directory=True)
+            with self.assertRaises(ValueError):
+                source_inventory(link)
+            nested = root / "nested"
+            nested.mkdir()
+            with self.assertRaises(ValueError):
+                source_inventory(link / "nested")
+            os.link(source, real / "hardlink")
+            with self.assertRaises(ValueError):
+                source_inventory(root)
 
     def test_authority_source_and_model_release_are_exact_nonexecuting_pins(self):
         self.assertEqual(BASELINE["metaCommit"], "50cfd3f13c6942bc7a6995d463482a390db0a98e")

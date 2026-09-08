@@ -30,7 +30,8 @@ def backend_fixture(architecture="amd64"):
     fixture.envelope["packetDigest"] = PACKET_DIGEST
     fixture.envelope["commands"] = [list(argv) for argv in COMMANDS]
     fixture.envelope["commandSetDigest"] = command_set_digest(fixture.envelope["commands"])
-    fixture.plan["regressions"]["conformance"]["testCount"] = 120
+    # Illustrative unit input, not an observed runtime test inventory.
+    fixture.plan["regressions"]["conformance"]["testCount"] = 170
     refresh_plan(fixture)
     return fixture
 

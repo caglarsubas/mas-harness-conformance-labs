@@ -16,6 +16,22 @@ It also pins the source-only model release manifest, model-input lock, exact
 authority guide/runner contract/roadmap and all six packet digests and path grants.
 No warm-source code, original-source execution or behavioral parity is claimed.
 
+Those are immutable historical inputs, not this resumed packet's current base.
+The accepted base is CONF-FIX-003 main
+`01ef8b1ca9e86ae36331c82d6d552fcc9f236221`, tree
+`9860515758052c17174c33321a8eb017106cf29b`: **110 files, 170 tests**.
+The baseline's separate `acceptedCheckpoint` preserves every current file's
+mode/size/blob/SHA-256, all 170 method IDs, the original 103/120 history and the
+intermediate CONF-FIX-002 106/150 raw inventory. MET-REPAIR-008 authority is meta
+`3b1ea6b9b8514fbb51e37ba4703f5d06298bd938`. Its accepted correction helper and
+fixture are fixed by byte digest, not mutable presence or caller claims.
+
+Draft PR 6 at `57ee9668e029b08310c57f502990e419b4a1c797` is preserved in this
+branch's history. Its pre-test parser refusal and cancelled CI `34115040866`
+remain non-PASS. Accepted main was merged into the draft without rewriting that
+history. The predecessor closure records local, PR CI and local exact-main
+170-test results separately; they are not results for this new session source.
+
 The new adapter hard-pins CONF-LIVE-006 to
 `sha256:f95c277cffdfb622f45a1b4b91a5292d9d9a5bfabc8f9388b3899cbb20c5213d`
 and the ordered eight commands from that published packet. The old
@@ -47,6 +63,9 @@ the predecessor grammar; UTC timestamps use its strict RFC3339 subset (up to
 six fractional digits). Strict canonical JSON accepts the predecessor's optional
 single final LF. Both transport bytes and canonical content must fit the bound.
 Session/request limit: **16 KiB**; receipt limit: **4 MiB**; nesting: **8**.
+Object inputs have a shared occurrence budget before canonical encoding, so
+aliased graphs cannot expand exponentially within per-node limits. Each selected
+signing key also expires exclusively in the direct authority adapter itself.
 Duplicate members, floats/non-finite numbers, invalid UTF-8, non-normalized
 strings, cycles, object hooks and builtin subclasses are rejected. Runtime
 validation additionally checks cross-field constraints not expressible in JSON
@@ -94,8 +113,13 @@ their separately declared suite commands. No namespace omission, load_tests
 deselection, skip, expected failure, inherited extra or substituted module is
 accepted. The complete tracked inventory is the baseline plus exact declared
 new paths; no broad directory exemptions. All old file hashes remain enforced.
-Only the final CONF-LIVE-006 hook may later change old `live_launcher.py`, and
-the old inventory guards continue to execute unchanged.
+The unchanged accepted CONF-FIX-003 helper enforces complete ordered stages
+110/120/127/135/141/146/151, strict regular unlinked files and all 170 predecessor
+IDs. This packet additionally pins all four accepted correction additions.
+Only the final CONF-LIVE-006 hook may later change old `live_launcher.py`, with
+the exact closed source-delta proof. Creating an integration filename cannot
+exempt any bytes. Source proof is not an execution grant. The final source diff
+against the accepted base contains exactly this packet's ten new paths.
 
 Negative vectors cover all session fields and bindings, canonical/size/depth
 boundaries, every one of 64 state pairs, forged flags/FDs, the full original
@@ -110,6 +134,7 @@ cloud/VM provisioning, billable API, hosted runner or source/native promotion.
 | Phase | ID | Status at source implementation | Description |
 | --- | --- | --- | --- |
 | Alpha 2 | MET-LIVE-001 | DONE | Published source authority, separate exact-main closure |
+| Alpha 2 | CONF-FIX-002 / CONF-FIX-003 | DONE source gates | Scalar parser and cumulative inventory corrections; 150 then 170 tests |
 | Alpha 2 | CONF-LIVE-001 | ONGOING verification | This bounded source increment; terminal status in PR closure |
 | Alpha 2 | CONF-LIVE-002 | WAITING | Protected Linux supervisor and isolation candidate |
 | Alpha 2 | CONF-LIVE-003 | WAITING | Fixed proxy and server-side zero-cost admission |

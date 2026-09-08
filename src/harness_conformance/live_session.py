@@ -41,24 +41,37 @@ def _require(condition: bool, code: str) -> None:
         raise ConformanceError(code, "invalid live-backend data; no execution authority")
 
 
-def _bounded(value: Any, maximum: int, depth: int = 0) -> None:
+def _bounded(value: Any, maximum: int, depth: int = 0, remaining: int | None = None) -> int:
+    # Charge every occurrence, including aliased containers, before encoding.
+    # This lower bound caps traversal and expanded output; final canonical bytes
+    # enforce exact UTF-8 size. Per-node limits alone permit exponential DAGs.
+    if remaining is None:
+        remaining = maximum
     _require(depth <= MAX_DEPTH, "SESSION_DEPTH_EXCEEDED")
     kind = type(value)
     # Exact builtin types: do not invoke user object serialization hooks.
     if kind is str:
         _require(len(value) <= maximum, "SESSION_SIZE_EXCEEDED")
+        remaining -= len(value) + 2
     elif kind in (dict, list):
         _require(len(value) <= 4096, "SESSION_COLLECTION_EXCEEDED")
+        remaining -= 2 + max(0, len(value) - 1) + (len(value) if kind is dict else 0)
+        _require(remaining >= 0, "SESSION_SIZE_EXCEEDED")
         if kind is dict:
             for key, item in value.items():
                 _require(type(key) is str, "SESSION_TYPE_INVALID")
-                _bounded(key, maximum, depth + 1)
-                _bounded(item, maximum, depth + 1)
+                remaining = _bounded(key, maximum, depth + 1, remaining)
+                remaining = _bounded(item, maximum, depth + 1, remaining)
         else:
             for item in value:
-                _bounded(item, maximum, depth + 1)
+                remaining = _bounded(item, maximum, depth + 1, remaining)
     else:
         _require(kind in (int, bool, type(None)), "SESSION_TYPE_INVALID")
+        if kind is int:
+            _require(-(2**53 - 1) <= value <= 2**53 - 1, "SESSION_TYPE_INVALID")
+        remaining -= 1
+    _require(remaining >= 0, "SESSION_SIZE_EXCEEDED")
+    return remaining
 
 
 def data_document(value: Any, maximum: int = MAX_SESSION_BYTES) -> dict[str, Any]:
@@ -208,6 +221,8 @@ authorize acceptance. CONF-LIVE-006 separately verifies the full signed record.
         integer(baseline["testCount"], 120 if name == "conformance" else 1)
         for field in ("collected", "executed", "skipped", "failed"):
             integer(result[field])
+        _require(result["failed"] <= result["executed"] <= result["collected"]
+                 and result["skipped"] <= result["collected"], "SESSION_REGRESSION_COUNTS_INVALID")
         _require(result["inventoryDigest"] == baseline["inventoryDigest"] and
                  result["collected"] == baseline["testCount"], "SESSION_REGRESSION_MISMATCH")
         failed |= bool(result["skipped"] or result["failed"] or result["collected"] != result["executed"])

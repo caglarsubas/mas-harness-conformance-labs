@@ -86,9 +86,12 @@ not open the envelope's reference paths or prove their installed custody.
                          require_time(key["validUntil"], "validUntil"), "BACKEND_TRUST_WINDOW_INVALID")
                 b64url_decode(key["publicKey"], expected_length=32)
         verify_live_signatures(envelope, capacity, release_trust, tenant_trust, now=now)
-        owners = [next(item["owner"] for item in trust["keys"] if item["keyId"] == key_id)
-                  for trust, key_id in ((release_trust, envelope["platformSignerKeyId"]),
-                      (tenant_trust, envelope["tenantSignerKeyId"]), (tenant_trust, capacity["signerKeyId"]))]
+        selected = [next(item for item in trust["keys"] if item["keyId"] == key_id)
+                    for trust, key_id in ((release_trust, envelope["platformSignerKeyId"]),
+                        (tenant_trust, envelope["tenantSignerKeyId"]), (tenant_trust, capacity["signerKeyId"]))]
+        _require(all(now < require_time(key["validUntil"], "validUntil") for key in selected),
+                 "BACKEND_TRUST_EXPIRED")
+        owners = [key["owner"] for key in selected]
         _require(len(set(owners)) == 3, "BACKEND_SIGNER_OWNERS_NOT_INDEPENDENT")
         return envelope, capacity, release_trust, tenant_trust
     except ConformanceError:

@@ -115,6 +115,15 @@ class SessionDataTests(unittest.TestCase):
         with self.assertRaises(ConformanceError):
             data_document({}, MAX_SESSION_BYTES + 1)
 
+    def test_shared_container_expansion_is_bounded_before_canonical_encoding(self):
+        shared = ["x" * 4096] * 8
+        for value in ({"a": [shared] * 4096}, {"a": [[""] * 4096] * 4096}, {"a": 1 << 100000}):
+            with self.subTest(kind=type(value["a"])), patch(
+                    "harness_conformance.live_session.canonical_bytes",
+                    side_effect=AssertionError("oversized graph reached encoder")):
+                with self.assertRaises(ConformanceError):
+                    data_document(value)
+
     def test_python_objects_subclasses_and_cycles_never_serialize_or_execute(self):
         class Forged(dict):
             def items(self):
@@ -315,6 +324,18 @@ class BackendAuthorityTests(unittest.TestCase):
             with self.assertRaises(ConformanceError):
                 self.check(fixture)
 
+    def test_each_selected_key_expiry_is_exclusive_in_direct_authority_adapter(self):
+        for trust_name, index in (("release_trust", 0), ("tenant_trust", 0), ("tenant_trust", 1)):
+            fixture = backend_fixture()
+            getattr(fixture, trust_name)["keys"][index]["validUntil"] = NOW
+            fixture.resign_authority()
+            with self.subTest(trust=trust_name, index=index):
+                verify_backend_authority(*authority_args(fixture),
+                    now=require_time("2026-09-07T00:59:59.999999Z", "before"))
+                with self.assertRaises(ConformanceError) as refused:
+                    self.check(fixture)
+                self.assertEqual(refused.exception.reason, "BACKEND_TRUST_EXPIRED")
+
     def test_every_capacity_scope_digest_array_and_validity_boundary_is_preserved(self):
         original = backend_fixture()
         mutations = [(name, "wrong-scope") for name in ("authorizationId", "tenantId", "environmentId")]
@@ -417,6 +438,16 @@ class RequestReceiptDataTests(unittest.TestCase):
     def receipt(self, value, case=CASES[0], **kwargs):
         return validate_receipt(value, self.session, self.binding, self.request(case),
             self.fixture.plan["regressions"] if case == "FULL_PREDECESSOR_REGRESSION" else {}, kwargs.get("now", NOW))
+
+    def test_impossible_regression_counts_are_not_valid_failure_receipts(self):
+        case = "FULL_PREDECESSOR_REGRESSION"
+        for field, value in (("failed", 171), ("executed", 171), ("skipped", 171)):
+            receipt = receipt_from(self.fixture, case)
+            receipt["output"]["regressions"]["conformance"][field] = value
+            receipt["status"] = "FAIL"
+            receipt["outputDigest"] = canonical_digest(receipt["output"], "planeon.linux-probe-output/v1alpha1")
+            with self.subTest(field=field), self.assertRaises(ConformanceError):
+                self.receipt(receipt, case)
 
     def test_every_fixed_case_on_each_architecture_retains_existing_wire_bytes(self):
         for architecture in ("amd64", "arm64"):
