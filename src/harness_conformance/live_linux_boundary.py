@@ -65,7 +65,11 @@ def _installed_manifest_digest():
     Internal per-process custody is not a caller-supplied verified flag.
     """
     global _VERIFIED_MANIFEST
-    if _VERIFIED_MANIFEST is not None and _VERIFIED_MANIFEST[0] == os.getpid():
+    custody = _capture()
+    if custody is not None and custody.manifest_digest is not None:
+        custody.check()
+        return custody.manifest_digest
+    if custody is None and _VERIFIED_MANIFEST is not None and _VERIFIED_MANIFEST[0] == os.getpid():
         return _VERIFIED_MANIFEST[1]
     from .live import (EXPECTED_LAUNCHER, FIXED_MANIFEST, FIXED_MANIFEST_PUBLIC,
                       FIXED_MANIFEST_SIGNATURE, PINNED_ROOT_PUBLIC_KEY_SHA256)
@@ -92,6 +96,11 @@ def _installed_manifest_digest():
             "networkPolicy": "DENY_ALL_EXCEPT_DUAL_SIGNED_ENDPOINTS", "credentialSocketsDenied": True,
             "ciDenied": True}, "ISOLATION_MANIFEST_INVALID")
     _VERIFIED_MANIFEST = (os.getpid(), digest)
+    if custody is not None:
+        custody.require_bytes({str(FIXED_MANIFEST_PUBLIC): public_raw,
+            str(FIXED_MANIFEST): raw, str(EXPECTED_LAUNCHER): launcher_raw})
+        require(str(FIXED_MANIFEST_SIGNATURE) in custody.files, "CUSTODY_INCOMPLETE")
+        custody.manifest_digest = digest
     return digest
 
 
@@ -100,6 +109,8 @@ def ambient_custody():
     # Short-lived credentials are opened later from signed references, never env.
     allowed = {"PATH", "HOME", "USER", "LOGNAME", "LANG", "LC_ALL", "TZ", "HARNESS_LIVE_EXECUTION_ENVELOPE"}
     require(not set(os.environ) - allowed, "AMBIENT_ENVIRONMENT_FORBIDDEN")
+    custody = _capture()
+    owned = set() if custody is None else custody.checked_fds()
     for name in os.listdir("/proc/self/fd"):
         require(name.isdigit(), "AMBIENT_DESCRIPTOR_FORBIDDEN")
         fd = int(name)
@@ -110,11 +121,14 @@ def ambient_custody():
             if exc.errno == errno.EBADF:
                 continue
             raise
-        require(fd <= 2 and not stat.S_ISSOCK(info.st_mode), "AMBIENT_DESCRIPTOR_FORBIDDEN")
+        require((fd <= 2 or fd in owned) and not stat.S_ISSOCK(info.st_mode), "AMBIENT_DESCRIPTOR_FORBIDDEN")
 
 
 def read_owned(path, maximum=4194304, expected_digest=None, expected_mode=None):
     """Retained no-follow ancestry and exact inode/metadata/read-only custody."""
+    custody = _capture()
+    if custody is not None:
+        return custody.read(path, maximum, expected_digest, expected_mode)
     require(type(path) is str and path.startswith("/") and "\\" not in path
             and all(p not in ("", ".", "..") for p in path[1:].split("/")),
             "CUSTODY_PATH_INVALID")
@@ -153,6 +167,9 @@ def read_owned_kit(root, expected_digest):
     Reject mount crossings, hard links, writable/extraneous files and unbounded
     inventories. Returning bytes is verification data, not an execution grant.
     """
+    custody = _capture()
+    if custody is not None:
+        return custody.read_kit(root, expected_digest)
     root_fd = open_directory(root)
     rows, sources = [], {}
     total, entries = 0, 0
@@ -484,3 +501,307 @@ class UnitBoundary:
                      "readonly_root", "close_ambient_fds", "drop_capabilities", "no_new_privs", "seccomp", "peer_check"):
             self.syscalls.step(step)
         return {"evidenceClass": self.evidence_class, "nativeAcceptance": False}
+
+
+def _capture():
+    """Process-private registry, never a caller-supplied descriptor allowlist."""
+    custody = getattr(_capture, "current", None)
+    if custody is not None:
+        require(type(custody) is _RetainedCustody, "CUSTODY_OWNER_INVALID")
+        custody.owner_check()
+    return custody
+
+
+def _begin_custody(owner):
+    from .live_supervisor import NativeSupervisor
+    require(type(owner) is NativeSupervisor
+            and sys._getframe(1).f_code is NativeSupervisor.__init__.__code__
+            and sys._getframe(1).f_locals.get("self") is owner,
+            "CUSTODY_FACTORY_REQUIRED")
+    require(getattr(_capture, "current", None) is None, "CUSTODY_ALREADY_OWNED")
+    custody = _RetainedCustody(owner)
+    _capture.current = custody
+    return custody
+
+
+def _owned_custody(owner):
+    custody = _capture()
+    require(custody is not None and custody.owner is owner, "CUSTODY_OWNER_INVALID")
+    return custody
+
+
+def _custody_identity(info):
+    return (info.st_dev, info.st_ino, info.st_uid, info.st_gid, info.st_mode,
+            info.st_nlink, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+
+
+class _RetainedCustody:
+    """Single close owner for bounded, read-once authority and full ancestry.
+
+    Instances alone grant nothing: the factory registry, current process, fixed
+    installed verification and active supervisor must all agree. No raw-FD API.
+    """
+    def __init__(self, owner):
+        import threading
+        self.owner, self.pid, self.thread = owner, os.getpid(), threading.get_ident()
+        self.handles, self.files = {}, {}
+        self.total = 0
+        self.manifest_digest = None
+        self.kit_root = self.kit_digest = None
+        self.kit_sources = {}
+        self.closed = self.sealed = False
+        self.runtime_handles = None
+        self.replay_handles = None
+
+    def __reduce__(self):
+        raise TypeError("retained custody is not serializable")
+
+    def owner_check(self):
+        import threading
+        from .live_supervisor import NativeSupervisor
+        require(not self.closed and type(self.owner) is NativeSupervisor
+                and self.pid == os.getpid() and self.thread == threading.get_ident()
+                and getattr(_capture, "current", None) is self, "CUSTODY_OWNER_INVALID")
+
+    def path(self, path):
+        require(type(path) is str and path.startswith("/") and "\\" not in path
+                and len(path.encode("utf-8")) <= 4096
+                and all(p not in ("", ".", "..") for p in path[1:].split("/"))
+                and len(path[1:].split("/")) <= 64, "CUSTODY_PATH_INVALID")
+        return path[1:].split("/")
+
+    def acquire(self, path, parent, name, directory, strict=False):
+        self.owner_check()
+        require(not self.sealed and path not in self.handles and len(self.handles) < 8448,
+                "CUSTODY_DESCRIPTOR_LIMIT")
+        flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK
+        if directory:
+            flags |= os.O_DIRECTORY
+        fd = os.open(name, flags, dir_fd=parent)
+        # Register immediately: even a failing fstat owns a close attempt.
+        row = dict(fd=fd, parent=parent, name=name, identity=None)
+        self.handles[path] = row
+        require(2 < fd < 1048576, "CUSTODY_DESCRIPTOR_RANGE")
+        info = os.fstat(fd)
+        row["identity"] = _custody_identity(info)
+        require((stat.S_ISDIR(info.st_mode) if directory else stat.S_ISREG(info.st_mode))
+                and info.st_uid == info.st_gid == 0
+                and (directory or info.st_nlink == 1)
+                and not stat.S_IMODE(info.st_mode) & (0o222 if strict or not directory else 0o022),
+                "CUSTODY_FILE_INVALID")
+        self.check_row(row)
+        return fd
+
+    def directory(self, path, strict=False):
+        self.owner_check()
+        parts = self.path(path)
+        if "/" not in self.handles:
+            self.acquire("/", None, "/", True)
+        parent, current = self.handles["/"]["fd"], ""
+        for part in parts:
+            current += "/" + part
+            if current not in self.handles:
+                self.acquire(current, parent, part, True, strict and current == path)
+            row = self.handles[current]
+            self.check_row(row)
+            require(stat.S_ISDIR(row["identity"][4]), "CUSTODY_DIRECTORY_REQUIRED")
+            parent = row["fd"]
+        if strict:
+            require(not stat.S_IMODE(self.handles[path]["identity"][4]) & 0o222, "KIT_CUSTODY_INVALID")
+        return parent
+
+    def check_row(self, row):
+        expected = row["identity"]
+        require(expected is not None
+                and _custody_identity(os.fstat(row["fd"])) == expected
+                and _custody_identity(os.stat(row["name"], dir_fd=row["parent"], follow_symlinks=False)) == expected,
+                "CUSTODY_FILE_CHANGED")
+
+    def check(self):
+        self.owner_check()
+        for row in self.handles.values():
+            self.check_row(row)
+
+    def checked_fds(self):
+        self.check()
+        return {row["fd"] for row in self.handles.values()}
+
+    def bind_runtime(self):
+        from .live_supervisor import NativeSupervisor
+        self.owner_check()
+        require(sys._getframe(1).f_code is NativeSupervisor.__init__.__code__
+                and self.runtime_handles is None, "CUSTODY_FACTORY_REQUIRED")
+        owner = self.owner
+        # Fixed factory-owned resources only, not an enumerated ambient list.
+        fds = (owner._lease_fd, owner._lease.fd, owner._journal._storage.fd,
+               owner._journal._storage.directory)
+        self.replay_handles = fds[2:]
+        require(all(type(fd) is int and 2 < fd < 1048576 for fd in fds)
+                and len(set(fds)) == 4 and not set(fds) & self.checked_fds(), "CUSTODY_RUNTIME_INVALID")
+        rows = {}
+        for fd in fds:
+            info = os.fstat(fd)
+            require(info.st_uid == info.st_gid == 0 and not stat.S_IMODE(info.st_mode) & 0o022
+                    and (stat.S_ISDIR(info.st_mode) or stat.S_ISREG(info.st_mode) and info.st_nlink == 1),
+                    "CUSTODY_RUNTIME_INVALID")
+            # Journal contents legitimately grow; type/owner/mode/inode do not.
+            rows[fd] = _custody_identity(info)[:6]
+        self.runtime_handles = rows
+        self.check_ambient(None)
+
+    def check_ambient(self, channel):
+        from .live_supervisor import _NativeChannel
+        owned = self.checked_fds()
+        require(type(self.runtime_handles) is dict and len(self.runtime_handles) == 4, "CUSTODY_RUNTIME_INVALID")
+        for fd, expected in self.runtime_handles.items():
+            require(_custody_identity(os.fstat(fd))[:6] == expected, "CUSTODY_RUNTIME_CHANGED")
+            owned.add(fd)
+        if channel is not None:
+            require(type(channel) is _NativeChannel and channel is self.owner._boundary
+                    and channel.context is self.owner._context and channel.peer is not None
+                    and not channel.cancelled, "CUSTODY_CHANNEL_INVALID")
+            socket_fd, pidfd = channel.channel.fileno(), channel.pidfd
+            require(type(socket_fd) is int and type(pidfd) is int and socket_fd != pidfd
+                    and socket_fd not in owned and pidfd not in owned
+                    and 2 < socket_fd < 1048576 and 2 < pidfd < 1048576
+                    and stat.S_ISSOCK(os.fstat(socket_fd).st_mode)
+                    and os.fstat(socket_fd).st_ino == channel.channel_identity, "CUSTODY_CHANNEL_INVALID")
+            owned.update((socket_fd, pidfd))
+        for name in os.listdir("/proc/self/fd"):
+            require(name.isdigit(), "AMBIENT_DESCRIPTOR_FORBIDDEN")
+            fd = int(name)
+            try:
+                info = os.fstat(fd)
+            except OSError as exc:
+                if exc.errno == errno.EBADF:
+                    continue
+                raise
+            require(fd in owned or fd <= 2 and not stat.S_ISSOCK(info.st_mode), "AMBIENT_DESCRIPTOR_FORBIDDEN")
+
+    def read(self, path, maximum, expected_digest, expected_mode):
+        try:
+            self.check()
+            self.path(path)
+            require(type(maximum) is int and 0 < maximum <= 4194304, "CUSTODY_READ_LIMIT")
+            if path not in self.files:
+                require(not self.sealed and len(self.files) < 4112, "CUSTODY_FILE_LIMIT")
+                parent_path = path.rsplit("/", 1)[0]
+                if not parent_path:
+                    if "/" not in self.handles:
+                        self.acquire("/", None, "/", True)
+                    parent = self.handles["/"]["fd"]
+                else:
+                    parent = self.directory(parent_path)
+                fd = self.acquire(path, parent, path.rsplit("/", 1)[1], False)
+                size = self.handles[path]["identity"][6]
+                require(0 <= size <= maximum and self.total + size <= 100663296, "CUSTODY_READ_LIMIT")
+                data = bytearray()
+                while len(data) <= size:
+                    chunk = os.read(fd, min(65536, size + 1 - len(data)))
+                    self.check()
+                    if not chunk:
+                        break
+                    data.extend(chunk)
+                require(len(data) == size, "CUSTODY_FILE_CHANGED")
+                self.files[path] = bytes(data)
+                self.total += size
+            raw = self.files[path]
+            require(len(raw) <= maximum, "CUSTODY_READ_LIMIT")
+            require(expected_mode is None or stat.S_IMODE(self.handles[path]["identity"][4]) == expected_mode,
+                    "CUSTODY_MODE_INVALID")
+            require(expected_digest is None or byte_digest(raw) == expected_digest, "CUSTODY_DIGEST_MISMATCH")
+            return raw
+        except BaseException:
+            self.close()
+            raise
+
+    def read_kit(self, root, expected_digest):
+        try:
+            self.check()
+            require(not self.sealed and self.kit_root is None, "KIT_ALREADY_READ")
+            root_fd = self.directory(root, strict=True)
+            device = self.handles[root]["identity"][0]
+            rows, sources = [], {}
+            entries = total = 0
+            def walk(path, prefix, depth):
+                nonlocal entries, total
+                require(depth <= 32, "KIT_DEPTH_EXCEEDED")
+                fd = self.directory(path, strict=True)
+                require(self.handles[path]["identity"][0] == device, "KIT_MOUNT_OR_CUSTODY_INVALID")
+                names = sorted(os.listdir(fd), key=lambda name: name.encode("utf-8"))
+                self.check()
+                require(len(names) <= 4096, "KIT_INVENTORY_FULL")
+                entries += len(names)
+                require(entries <= 8192, "KIT_INVENTORY_FULL")
+                for name in names:
+                    require(type(name) is str and name not in ("", ".", "..")
+                            and "/" not in name and "\\" not in name, "KIT_PATH_INVALID")
+                    info = os.stat(name, dir_fd=fd, follow_symlinks=False)
+                    require(info.st_dev == device and info.st_uid == info.st_gid == 0
+                            and not stat.S_IMODE(info.st_mode) & 0o222, "KIT_CUSTODY_INVALID")
+                    child, relative = path + "/" + name, prefix + name
+                    if stat.S_ISDIR(info.st_mode):
+                        walk(child, relative + "/", depth + 1)
+                    else:
+                        require(stat.S_ISREG(info.st_mode) and info.st_nlink == 1
+                                and 0 <= info.st_size <= 4194304, "KIT_FILE_INVALID")
+                        require(len(rows) < 4096 and total + info.st_size <= 67108864, "KIT_INVENTORY_FULL")
+                        raw = self.read(child, 4194304, None, None)
+                        require(self.handles[child]["identity"] == _custody_identity(info), "KIT_CHANGED")
+                        sources[relative] = raw
+                        total += len(raw)
+                        rows.append(dict(mode=f"{stat.S_IMODE(info.st_mode):04o}", path=relative,
+                                         sha256=byte_digest(raw), size=len(raw)))
+                self.check()
+            walk(root, "", 0)
+            rows.sort(key=lambda row: row["path"].encode("utf-8"))
+            require(canonical_digest(rows, "planeon.harness-live-tree/v1alpha1") == expected_digest,
+                    "KIT_DIGEST_MISMATCH")
+            require(root + "/rootfs" in self.handles
+                    and stat.S_ISDIR(self.handles[root + "/rootfs"]["identity"][4]), "KIT_ROOTFS_REQUIRED")
+            self.kit_root, self.kit_digest, self.kit_sources = root, expected_digest, sources
+            return dict(sources)
+        except BaseException:
+            self.close()
+            raise
+
+    def require_bytes(self, expected):
+        self.check()
+        require(all(type(raw) is bytes and self.files.get(path) == raw for path, raw in expected.items()),
+                "CUSTODY_INCOMPLETE")
+
+    def seal(self, expected, kit_root, kit_digest, kit_sources):
+        self.require_bytes(expected)
+        require(self.manifest_digest is not None and not self.sealed
+                and self.kit_root == kit_root and self.kit_digest == kit_digest
+                and self.kit_sources == kit_sources and bool(self.kit_sources), "CUSTODY_INCOMPLETE")
+        from types import MappingProxyType
+        self.files = MappingProxyType(dict(self.files))
+        self.kit_sources = MappingProxyType(dict(self.kit_sources))
+        self.sealed = True
+        return self.handles[kit_root + "/rootfs"]["fd"]
+
+    def close(self):
+        if self.closed:
+            return
+        self.closed = True
+        # Invalidate before any close. Never retry a descriptor number that the
+        # OS may have released even when close reports an error.
+        if getattr(_capture, "current", None) is self:
+            _capture.current = None
+        rows, self.handles = self.handles, {}
+        self.files, self.kit_sources = {}, {}
+        failure = None
+        for row in reversed(tuple(rows.values())):
+            try:
+                expected = row["identity"]
+                if expected is not None:
+                    info = os.fstat(row["fd"])
+                    require((info.st_dev, info.st_ino, stat.S_IFMT(info.st_mode))
+                            == (expected[0], expected[1], stat.S_IFMT(expected[4])), "CUSTODY_DESCRIPTOR_REUSED")
+                os.close(row["fd"])
+            except BaseException as exc:
+                if failure is None:
+                    failure = exc
+        if failure is not None:
+            raise failure

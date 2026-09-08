@@ -364,3 +364,383 @@ class LinuxBoundaryTests(unittest.TestCase):
         native.call = lambda *args: None
         with self.assertRaises(ConformanceError):
             native.require_cgroup2(9)
+
+
+def _custody_packet_bytes():
+    # Exact public successor packet bytes; inert fixture, never executed.
+    return "id: \"CONF-LIVE-006\"\nrepository: \"mas-harness-conformance-labs\"\nbranch: \"codex/conf-live-006-campaign-integration\"\nobjective: \"Trusted campaign integration and manual qualification declaration under the approved trusted backend roadmap; source coding only.\"\npredecessors: [\"CONF-LIVE-005\"]\nallowedPaths: [\"src/harness_conformance/live_launcher.py\",\"src/harness_conformance/live_backend_campaign.py\",\"src/harness_conformance/live_backend_evidence.py\",\"tests/live_backend/test_campaign_integration.py\",\"tests/live_backend/test_cumulative_release.py\",\"docs/live-backend/qualification.md\"]\nwarmSourceAccess: \"PROHIBITED_DURING_IMPLEMENTATION\"\nsourceReuse: []\ncontracts: [\"Consumes docs/alpha-2/LIVE_BACKEND_READINESS.md and architecture/live-backend-roadmap.json from the exact merged MET-LIVE-001 authority, the existing trusted live-runner contract and unchanged CONF-LINUX-001/CON-007 wire contracts. Pin exact merged predecessor SHA and complete source inventory before edits.\",\"Source-only enablement before the native gate is limited to these six packets. No installation or live execution occurs in a coding run. Missing authority, supported OS backend or native capacity fails closed; offline fakes remain UNIT_VERIFICATION_ONLY with nativeAcceptance=false.\",\"Preserve all 120 original test identities across tests/meta, tests/parity, tests/alpha1, tests/fixes/runner_boundary and tests/platform/linux_baseline. Add flat tests/live_backend discovery, run all six roots on every packet and prove no module/test omission, skip, xfail, deselection or test-only runtime shortcut.\",\"Python 3.12.14 standard library and existing pinned conformance crypto/canonical helpers only; no new dependency, public API/signature schema/role, Makefile/dispatcher, PORTING ledger, warm-source, workflow or toolchain change. Kernel primitives and fixed operator prerequisites are preinstalled, never downloaded.\"]\ndeliverables: [\"Add the sole existing-file integration hook in live_launcher.py, after independent installed-manifest/signature/custody checks and before any checked-out code/credential access. Delegate to the fixed installed supervisor implementation, never import checkout-selected modules. Preserve the direct/unauthorized CLI refusal and pure linux_readiness.py UNIT_VERIFICATION_ONLY behavior.\",\"Implement the authenticated external campaign context path in live_backend_campaign.py. Reuse the existing pure validators and data-only request builder, but obtain all transport/session authority and signed receipts from the protected channel. The offline campaign API and its three predecessor campaign outputs remain byte-identical; environment flags and fixture evidence never enter the live path.\",\"Run all eight cumulative commands and inventory checks, rebuild the complete candidate via the new builder from tests, and prove every original test and all newly added packet tests are discovered. Bind all six source increments, final release inputs and current packet/command digests; never reuse a seven-command historical envelope.\",\"Declare the future manual post-merge linux-baseline run through only the external root-owned launcher with an independent installed candidate, dual-signed exact eight-command envelope, capacity authorization and existing native target. This declaration does not perform or authorize an installation, network call or live run in coding/CI. Missing prerequisites remain NOT_RUN_ENV_UNAVAILABLE.\",\"Publish per-architecture/per-case runtime evidence references separately from source/head/CI/merge/exact-main/package/preflight. Ten fresh mandatory AMD64 cases plus all original gate conditions are required before runtime product dispatch; ARM64 remains separate. No campaign signature becomes tenant acceptance.\",\"Implement the separate pure live_backend_evidence verifier using the new authority adapter and the existing Linux evidence shape/plan/request primitives. Bind authority.packetDigest to the exact CONF-LIVE-006 packet and eight commands, not the old hardcoded digest. Preserve all three independent evidence signatures, every release/plan/case/freshness check and UNIT_VERIFICATION_ONLY/nativeAcceptance=false for pure verification. Only the protected installed supervisor plus independently verified real receipts can support a separate native qualification decision; no substitution or monkeypatch of old constants.\"]\nexcluded: [\"No administrator installation, provisioning, kernel/cluster policy modification on this workstation, live network/probe argv, emulation-based native PASS, paid API or third-party key, mutable artifact, warm-source access, external telemetry or source-to-runtime evidence promotion.\",\"No edits to predecessor tests, crypto.py, canonical.py, models.py, schema.py, registry.py, campaign.py, live.py, cli.py, linux_readiness.py, existing schemas, ci/build_live_launcher.py, Makefile, dispatcher, toolchain, workflow or PORTING.yaml. New tests independently preserve old source guards; no relaxing immutable baseline hashes. The sole permitted existing-file exception is live_launcher.py as specified above.\"]\nprefetchCommands: []\nofflineAcceptanceCommands: [[\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests/meta\",\"-p\",\"test_*.py\"],[\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests/parity\",\"-p\",\"test_*.py\"],[\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests/alpha1\",\"-p\",\"test_*.py\"],[\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests/fixes/runner_boundary\",\"-p\",\"test_*.py\"],[\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests/platform/linux_baseline\",\"-p\",\"test_*.py\"],[\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests/live_backend\",\"-p\",\"test_*.py\"],[\"make\",\"campaign\",\"CAMPAIGN=linux-baseline\"],[\"make\",\"evidence-verify\",\"CAMPAIGN=linux-baseline\"]]\nofflineExecution: {\"wrapperArgv\":[\"./ci/verify-offline.sh\"],\"packetPathEnvironment\":\"HARNESS_TASK_PACKET\",\"packetPathMode\":\"HASH_PINNED_READ_ONCE_NO_CHILD_PATH\",\"commandTransport\":\"ARGV_ARRAY_V1\",\"isolation\":\"OS_ENFORCED_DENY_ALL_OUTBOUND\",\"sessionScope\":\"SINGLE_PROCESS_TREE\",\"prefetchOutsideSession\":false,\"offlineEnvironment\":{\"UV_OFFLINE\":\"1\",\"UV_FROZEN\":\"1\",\"UV_NO_SYNC\":\"1\"}}\nliveCampaignExecution: {\"launcherArgv\":[\"/opt/planeon/bin/harness-live-campaign-launch\"],\"commandTransport\":\"ARGV_ARRAY_V1\",\"executionPlacement\":\"PREINSTALLED_TARGET_LOCAL_EPHEMERAL_RUNNER\",\"executionEnvelopeEnvironment\":\"HARNESS_LIVE_EXECUTION_ENVELOPE\",\"executionEnvelopeMode\":\"DUAL_SIGNED_PACKET_COMMAND_CAMPAIGN_ENDPOINT_BINDING_V1\",\"releaseTrustStoreMount\":\"/etc/planeon/trust/release-trust-bundle.json\",\"tenantTrustStoreMount\":\"/etc/planeon/trust/tenant-trust-bundle.json\",\"trustStoreMode\":\"HASH_PINNED_LOCAL_PUBLIC_KEYS_VALIDITY_PURPOSE_AND_REVOCATION_V1\",\"revocationRequired\":true,\"networkIsolation\":\"OS_ENFORCED_DENY_ALL_EXCEPT_SIGNED_ENDPOINTS\",\"endpointAuthority\":\"TENANT_CONTROLLED_PREEXISTING_CAPACITY_ONLY\",\"dynamicEndpointTransport\":\"PREAUTHORIZED_API_OR_CAMPAIGN_PROXY_ONLY\",\"mutationAdmission\":\"SERVER_SIDE_SIGNED_ZERO_INCREMENTAL_COST_POLICY_AND_RBAC_REQUIRED\",\"capacityAuthorization\":\"INDEPENDENT_OPERATOR_SIGNED_FIXED_PREEXISTING_CAPACITY\",\"publicInternetDiscovery\":\"DENIED\",\"cloudManagementApis\":\"DENIED\",\"billingApis\":\"DENIED\",\"thirdPartyApiKeys\":\"DENIED\",\"credentialMode\":\"TENANT_LOCAL_SHORT_LIVED_FILE_REFERENCE\",\"unavailableResult\":\"NOT_RUN_ENV_UNAVAILABLE\",\"ciEvidenceUse\":\"FORBIDDEN\",\"allowedEvidenceAxes\":[\"DEPLOYMENT\",\"RUNTIME\",\"SECURITY\",\"ASSURANCE\"],\"commands\":[[\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests/meta\",\"-p\",\"test_*.py\"],[\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests/parity\",\"-p\",\"test_*.py\"],[\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests/alpha1\",\"-p\",\"test_*.py\"],[\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests/fixes/runner_boundary\",\"-p\",\"test_*.py\"],[\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests/platform/linux_baseline\",\"-p\",\"test_*.py\"],[\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests/live_backend\",\"-p\",\"test_*.py\"],[\"make\",\"campaign\",\"CAMPAIGN=linux-baseline\"],[\"make\",\"evidence-verify\",\"CAMPAIGN=linux-baseline\"]]}\nexpectedEvidence: [\"Direct inner-launcher invocation, forged context, unsigned/mismatched/expired/revoked/replayed envelopes, wrong command count, credential-open ordering, source/native conflation, regression output drift, integration bypass and incomplete final-package inventory.\",\"All eight offline commands run in one signed deny-all process tree; all original 120 test identities and every predecessor backend test remain discovered and passing. New tests never replace real native qualification.\",\"Source/CI/merge/exact-main and unsigned candidate/package evidence are separate from installed preflight, native artifacts, runtime, assurance and tenant acceptance. Missing independent backend/target/authority is NOT_RUN_ENV_UNAVAILABLE; no phase completion claim.\"]\nrollback: \"Revert unconsumed integration source only. Independently installed artifacts require operator-reviewed rollback retaining replay/trust history; no tenant data or capacity destruction. Preserve completed evidence and mark mismatched native qualification stale.\"\n".encode("utf-8")
+
+
+class _CustodyOS:
+    """In-memory OS observation fixture. No native files, sockets or policies."""
+    def __init__(self):
+        self.nodes, self.fds, self.offsets = {}, {}, {}
+        self.opens, self.closes, self.reads = [], [], []
+        self.next_fd, self.next_inode = 1000, 100
+        self.fail_open = self.fail_read = self.fail_close = self.after_read = None
+        self.max_open = 9000
+        self.add("/", None, 0o555)
+
+    def add(self, path, raw, mode=0o444):
+        parent = path.rsplit("/", 1)[0] or "/"
+        if path != "/" and parent not in self.nodes:
+            self.add(parent, None, 0o555)
+        self.next_inode += 1
+        self.nodes[path] = SimpleNamespace(st_dev=1, st_ino=self.next_inode,
+            st_uid=0, st_gid=0, st_mode=(stat.S_IFDIR if raw is None else stat.S_IFREG) | mode,
+            st_nlink=2 if raw is None else 1, st_size=0 if raw is None else len(raw),
+            st_mtime_ns=1, st_ctime_ns=1, raw=raw)
+        return self.nodes[path]
+
+    def path(self, name, dir_fd=None):
+        return str(name) if dir_fd is None else self.fds[dir_fd][0].rstrip("/") + "/" + str(name)
+
+    def open(self, name, flags, mode=0o777, *, dir_fd=None):
+        path = self.path(name, dir_fd)
+        if path == self.fail_open or len(self.fds) >= self.max_open:
+            raise OSError(errno.EMFILE, "unit descriptor exhaustion")
+        if path not in self.nodes:
+            raise FileNotFoundError(path)
+        node = self.nodes[path]
+        if flags & os.O_NOFOLLOW and stat.S_ISLNK(node.st_mode):
+            raise OSError(errno.ELOOP, "unit no-follow")
+        if flags & os.O_DIRECTORY and not stat.S_ISDIR(node.st_mode):
+            raise NotADirectoryError(path)
+        fd, self.next_fd = self.next_fd, self.next_fd + 1
+        self.fds[fd], self.offsets[fd] = (path, node), 0
+        self.opens.append((path, fd, flags))
+        return fd
+
+    def fstat(self, fd):
+        if fd <= 2:
+            return SimpleNamespace(st_mode=stat.S_IFREG | 0o600)
+        if fd not in self.fds:
+            raise OSError(errno.EBADF, "unit closed descriptor")
+        return deepcopy(self.fds[fd][1])
+
+    def stat(self, name, *, dir_fd=None, follow_symlinks=True):
+        path = self.path(name, dir_fd)
+        if path.startswith("/proc/self/ns/"):
+            return SimpleNamespace(st_ino=900)
+        return deepcopy(self.nodes[path])
+
+    def close(self, fd):
+        if fd not in self.fds:
+            raise AssertionError("duplicate/recycled close")
+        path = self.fds.pop(fd)[0]
+        self.closes.append(fd)
+        if self.fail_close == path:
+            raise OSError(errno.EIO, "unit close reported failure")
+
+    def read(self, fd, size):
+        path, node = self.fds[fd]
+        self.reads.append(path)
+        if path == self.fail_read:
+            raise OSError(errno.EIO, "unit read failed")
+        start = self.offsets[fd]
+        raw = node.raw[start:start + size]
+        self.offsets[fd] += len(raw)
+        if self.after_read is not None:
+            self.after_read(path)
+        return raw
+
+    def listdir(self, path):
+        if path == "/proc/self/task":
+            return ["42"]
+        if path == "/proc/self/fd":
+            return ["0", "1", "2"] + [str(fd) for fd in self.fds]
+        root = self.fds[path][0] if type(path) is int else path
+        prefix = root.rstrip("/") + "/"
+        return sorted(name[len(prefix):] for name in self.nodes
+                      if name.startswith(prefix) and "/" not in name[len(prefix):])
+
+    def kernel_fd(self, name):
+        self.add(name, b"", 0o600)
+        return self.open(name, os.O_RDONLY)
+
+    def pipe2(self, flags):
+        return self.kernel_fd("/unit-kernel/gate-r"), self.kernel_fd("/unit-kernel/gate-w")
+
+
+class _CustodySocket:
+    def __init__(self, fs, name, parent):
+        self.fs, self.fd, self.parent = fs, fs.kernel_fd(name), parent
+        fs.fds[self.fd][1].st_mode = stat.S_IFSOCK | 0o600
+        self.receives = 0
+
+    def fileno(self):
+        return self.fd
+
+    def close(self):
+        if self.fd is not None:
+            fd, self.fd = self.fd, None
+            self.fs.close(fd)
+
+    def setsockopt(self, *args):
+        pass
+
+    def settimeout(self, value):
+        if not 0 < value <= 1:
+            raise AssertionError("unbounded receive")
+
+    def send(self, raw):
+        return len(raw)
+
+    def recvmsg(self, *args):
+        self.receives += 1
+        raw, peer = ((b"MAP", (100, 0, 0)) if self.receives == 1 else
+                     (b"READY", (120, 65532, 65532)) if self.receives == 2 else
+                     (b"P", (120, 65532, 65532)))
+        return raw, [(socket.SOL_SOCKET, 2, struct.pack("3i", *peer))], 0, None
+
+
+class _CustodyRig:
+    """Real factory, signatures, custody, lifecycle and channel; OS observations mocked."""
+    def __init__(self):
+        from _fixtures import ROOT, NOW, backend_fixture
+        from harness_conformance import live_supervisor as module
+        from harness_conformance.live_replay_store import UnitReplayStore
+        from test_replay_store import MemoryJournal
+        self.module, self.fixture, self.fs = module, backend_fixture(), _CustodyOS()
+        self.wall, self.mono, self.owner = NOW, 1, None
+        self.journal = MemoryJournal()
+        self.store = UnitReplayStore(self.journal)
+        self.store.close = Mock()  # Unit store has no OS descriptors to release.
+        self.lease = Mock(owned=True, closed=False)
+        self.syscalls = Mock()
+        self.kernel_failure = None
+        self.hook_calls = []
+        seed = bytes([31]) * 32
+        public = canonical_bytes(dict(algorithm="ED25519", publicKey=b64url_encode(public_key(seed))))
+        launcher = b"UNIT_ONLY_NOT_REAL_launcher"
+        manifest = dict(schemaVersion="harness.planeon.ai/live-runner-manifest/v1alpha1",
+            launcher=dict(path=str(live.EXPECTED_LAUNCHER), version="0.1.0", sha256=byte_digest(launcher),
+                ownerUid=0, ownerGid=0, mode="0555"),
+            fixedTrustMounts=[str(live.FIXED_RELEASE_TRUST), str(live.FIXED_TENANT_TRUST)],
+            isolation=dict(backend="PREINSTALLED_OS_ENDPOINT_ALLOWLIST_V1",
+                networkPolicy="DENY_ALL_EXCEPT_DUAL_SIGNED_ENDPOINTS", credentialSocketsDenied=True, ciDenied=True),
+            preflightEvidenceDigest="sha256:" + "a" * 64)
+        raw = canonical_bytes(manifest)
+        for path, data in ((live.FIXED_MANIFEST_PUBLIC, public), (live.FIXED_MANIFEST, raw),
+                           (live.FIXED_MANIFEST_SIGNATURE, b64url_encode(sign(seed, raw)).encode()),
+                           (live.EXPECTED_LAUNCHER, launcher)):
+            self.fs.add(str(path), data, 0o555 if path == live.EXPECTED_LAUNCHER else 0o444)
+        self.public_digest = byte_digest(public)
+        kit = self.fixture.envelope["conformanceKitRoot"]
+        self.kit = {"campaigns/platform/linux-baseline/inputs/amd64.json": canonical_bytes(self.fixture.plan),
+                    "profiles/proxy.json": b'{"unit":"profile"}', "certificates/ca.pem": b"UNIT_CA_BYTES",
+                    "observations/binding.json": b'{"unit":"observation-binding"}', "rootfs/README": b"UNIT_ROOTFS"}
+        for path, raw in self.kit.items():
+            self.fs.add(kit + "/" + path, raw)
+        rows = [dict(path=path, mode="0444", size=len(raw), sha256=byte_digest(raw))
+                for path, raw in sorted(self.kit.items())]
+        self.fixture.release["tree"] = rows
+        self.fixture.release["kitDigest"] = canonical_digest(rows, "planeon.harness-live-tree/v1alpha1")
+        self.fixture.envelope["conformanceKitDigest"] = self.fixture.release["kitDigest"]
+        self.fixture.envelope["campaignReleaseDigest"] = byte_digest(canonical_bytes(self.fixture.release))
+        self.fixture.resign_authority()
+        self.fs.add("/var/lib/planeon/live-backend", None, 0o700)
+        self.fs.add("/var/lib/planeon/live-backend/session.lock", b"", 0o600)
+        for name in ("setgroups", "uid_map", "gid_map"):
+            self.fs.add("/proc/100/" + name, b"", 0o600)
+        self.packet = _custody_packet_bytes()
+        self.campaign = canonical_bytes(__import__("json").loads((ROOT / "campaigns/platform/linux-baseline/campaign.json").read_bytes()))
+        self.refresh()
+
+    def refresh(self):
+        self.fixture.resign_authority()
+        env = self.fixture.envelope
+        for path, raw in ((str(live.FIXED_RELEASE_TRUST), canonical_bytes(self.fixture.release_trust)),
+                (str(live.FIXED_TENANT_TRUST), canonical_bytes(self.fixture.tenant_trust)),
+                (env["capacityAuthorizationFileReference"], canonical_bytes(self.fixture.capacity)),
+                (env["campaignReleaseFileReference"], canonical_bytes(self.fixture.release)),
+                (env["packetFileReference"], self.packet), (env["campaignDefinitionFileReference"], self.campaign),
+                (env["bundleFileReference"], b"UNIT_ONLY_NOT_REAL_bundle")):
+            self.fs.add(path, raw)
+
+    def lease_factory(self):
+        self.lease.fd = self.fs.kernel_fd("/unit-kernel/cgroup")
+        self.lease.close.side_effect = lambda: self.fs.close(self.lease.fd)
+        return self.lease
+
+    def journal_factory(self):
+        self.journal.fd = self.fs.kernel_fd("/unit-kernel/journal")
+        self.journal.directory = self.fs.kernel_fd("/unit-kernel/journal-directory")
+        return self.store
+
+    def __enter__(self):
+        import sys
+        from contextlib import ExitStack
+        self.stack = ExitStack()
+        patchers = [
+            patch.dict(os.environ, {}, clear=True), patch.object(linux.sys, "platform", "linux"),
+            patch.object(linux.sys, "argv", [str(live.EXPECTED_LAUNCHER)]),
+            patch.object(linux, "__loader__", SimpleNamespace(archive=str(live.EXPECTED_LAUNCHER))),
+            patch.object(linux, "_VERIFIED_MANIFEST", None),
+            patch.object(live, "PINNED_ROOT_PUBLIC_KEY_SHA256", self.public_digest),
+            patch.object(os, "geteuid", return_value=0), patch.object(os, "getegid", return_value=0),
+            patch.object(os, "getpid", return_value=42),
+            patch.object(os, "uname", return_value=SimpleNamespace(machine="x86_64")),
+            patch.object(os, "open", side_effect=self.fs.open), patch.object(os, "close", side_effect=self.fs.close),
+            patch.object(os, "read", side_effect=self.fs.read), patch.object(os, "fstat", side_effect=self.fs.fstat),
+            patch.object(os, "stat", side_effect=self.fs.stat), patch.object(os, "listdir", side_effect=self.fs.listdir),
+            patch.object(os, "write", side_effect=lambda fd, raw: len(raw)),
+            patch.object(os, "pipe2", side_effect=self.fs.pipe2, create=True),
+            patch.object(os, "fork", return_value=100),
+            patch.object(os, "pidfd_open", side_effect=lambda *args: self.fs.kernel_fd("/unit-kernel/pidfd"), create=True),
+            patch.object(Path, "read_text", return_value=""),
+            patch.object(self.module.signal, "getsignal", return_value=self.module.signal.SIG_DFL),
+            patch.object(self.module.fcntl, "flock"),
+            patch.object(self.module, "LinuxSyscalls", return_value=self.syscalls),
+            patch.object(self.module, "CgroupLease", side_effect=self.lease_factory),
+            patch.object(self.module, "ReplayStore", side_effect=self.journal_factory),
+            patch.object(self.module, "utc_now", side_effect=lambda: self.wall),
+            patch.object(self.module.time, "monotonic", side_effect=lambda: self.mono),
+            patch.object(self.module.select, "select", return_value=([], [], [])),
+            patch.object(self.module, "process_identity", side_effect=lambda pid: peer_fixture()),
+            patch.object(socket, "socketpair", side_effect=lambda *args: (
+                _CustodySocket(self.fs, "/unit-kernel/parent", True), _CustodySocket(self.fs, "/unit-kernel/child", False))),
+            patch.dict(sys.modules, {"harness_conformance.live_proxy_client": SimpleNamespace(execute_protected=self.hook)}),
+        ]
+        try:
+            for patcher in patchers:
+                self.stack.enter_context(patcher)
+            self.owner = self.module.NativeSupervisor()
+            # Explicit unit clocks; neither creates custody nor skips any gate.
+            self.owner._clock, self.owner._monotonic = lambda: self.wall, lambda: self.mono
+            return self
+        except BaseException:
+            self.stack.close()
+            raise
+
+    def __exit__(self, *args):
+        try:
+            if self.owner is not None:
+                self.owner.close()
+        finally:
+            self.stack.close()
+
+    def open(self):
+        return self.owner.open_session(canonical_bytes(self.fixture.envelope))
+
+    def hook(self, request, context, deadline):
+        from _fixtures import receipt_from
+        self.hook_calls.append((request, context, deadline))
+        return canonical_bytes(receipt_from(self.fixture, request["operation"]))
+
+
+class RetainedBoundaryTests(unittest.TestCase):
+    def test_fixed_identity_read_once_and_cached_digest_cannot_replace_registry(self):
+        with _CustodyRig() as rig:
+            expected = {str(live.FIXED_MANIFEST_PUBLIC), str(live.FIXED_MANIFEST),
+                        str(live.FIXED_MANIFEST_SIGNATURE), str(live.EXPECTED_LAUNCHER)}
+            self.assertEqual(set(rig.owner._custody.files), expected)
+            count = len(rig.fs.opens)
+            self.assertEqual(linux._installed_manifest_digest(), rig.fixture.envelope["launcherDigest"])
+            self.assertEqual(len(rig.fs.opens), count)
+            self.assertTrue(expected <= {p for p, _, _ in rig.fs.opens})
+            self.assertEqual(len(rig.owner._custody.checked_fds()), len(rig.owner._custody.handles))
+        self.assertFalse(rig.fs.fds)
+
+    def test_each_retained_file_and_ancestor_substitution_is_detected(self):
+        with _CustodyRig() as rig:
+            custody = rig.owner._custody
+            for path in tuple(custody.handles):
+                with self.subTest(path=path):
+                    old = rig.fs.nodes[path]
+                    rig.fs.nodes[path] = deepcopy(old)
+                    rig.fs.nodes[path].st_ino += 10000
+                    with self.assertRaises(ConformanceError):
+                        custody.check()
+                    rig.fs.nodes[path] = old
+            custody.check()
+
+    def test_every_custody_metadata_field_is_rechecked(self):
+        with _CustodyRig() as rig:
+            custody = rig.owner._custody
+            for path in ("/", str(live.FIXED_MANIFEST)):
+                node = rig.fs.nodes[path]
+                for field in ("st_uid", "st_gid", "st_mode", "st_nlink", "st_size", "st_mtime_ns", "st_ctime_ns", "st_dev", "st_ino"):
+                    original = getattr(node, field)
+                    with self.subTest(path=path, field=field):
+                        setattr(node, field, original + 1)
+                        with self.assertRaises(ConformanceError):
+                            custody.check()
+                        setattr(node, field, original)
+
+    def test_ambient_unknown_descriptor_and_forked_registry_never_authorize(self):
+        with _CustodyRig() as rig:
+            # Session lock is independently owned but NOT an authority FD.
+            # An arbitrary extra descriptor never enters the custody allowlist.
+            with self.assertRaises(ConformanceError):
+                linux.ambient_custody()
+            with patch.object(os, "getpid", return_value=43), self.assertRaises(ConformanceError):
+                linux._capture()
+            with self.assertRaises(TypeError):
+                __import__("pickle").dumps(rig.owner._custody)
+            with self.assertRaises(ConformanceError):
+                linux._owned_custody(object.__new__(rig.module.NativeSupervisor))
+
+    def test_native_constructor_exhaustion_or_bad_installed_read_closes_every_handle(self):
+        for mode in ("limit", "open", "read", "short", "substitution"):
+            rig = _CustodyRig()
+            path = str(live.FIXED_MANIFEST)
+            if mode == "limit":
+                rig.fs.max_open = 3
+            elif mode == "open":
+                rig.fs.fail_open = path
+            elif mode == "read":
+                rig.fs.fail_read = path
+            elif mode == "short":
+                rig.fs.nodes[path].st_size += 1
+            else:
+                rig.fs.after_read = lambda observed: setattr(rig.fs.nodes[path], "st_ctime_ns", 2) if observed == path else None
+            with self.subTest(mode=mode), self.assertRaises((OSError, ConformanceError)):
+                with rig:
+                    self.fail("partial custody accepted")
+            self.assertFalse(rig.fs.fds)
+            self.assertEqual(len(rig.fs.closes), len(set(rig.fs.closes)))
+            self.assertIsNone(linux._capture())
+
+    def test_close_error_attempts_all_handles_once_and_invalidates_first(self):
+        with _CustodyRig() as rig:
+            custody = rig.owner._custody
+            owned = custody.checked_fds()
+            rig.fs.fail_close = str(live.FIXED_MANIFEST)
+            with self.assertRaises(OSError):
+                custody.close()
+            self.assertTrue(custody.closed)
+            self.assertIsNone(linux._capture())
+            self.assertTrue(owned <= set(rig.fs.closes))
+            count = len(rig.fs.closes)
+            custody.close()
+            self.assertEqual(len(rig.fs.closes), count)
+
+    def test_closed_recycled_descriptor_is_never_closed_as_new_authority(self):
+        with _CustodyRig() as rig:
+            custody = rig.owner._custody
+            fd = custody.handles[str(live.FIXED_MANIFEST)]["fd"]
+            other = rig.fs.add("/unit-other", b"not-authority")
+            rig.fs.fds[fd] = ("/unit-other", other)
+            with self.assertRaises(ConformanceError):
+                custody.close()
+            self.assertNotIn(fd, rig.fs.closes)
+            self.assertIn(fd, rig.fs.fds)
+            rig.fs.close(fd)
+
+    def test_kit_rootfs_is_borrowed_once_and_signed_bytes_are_immutable(self):
+        with _CustodyRig() as rig:
+            handle = rig.open()
+            context = rig.owner._context
+            self.assertEqual(dict(context._kit), rig.kit)
+            root = rig.fixture.envelope["conformanceKitRoot"] + "/rootfs"
+            self.assertEqual(context._root_fd, rig.owner._custody.handles[root]["fd"])
+            self.assertEqual(sum(path == root for path, _, _ in rig.fs.opens), 1)
+            with self.assertRaises(TypeError):
+                context._kit["certificates/ca.pem"] = b"replacement"
+            with self.assertRaises(TypeError):
+                context._bytes[str(live.FIXED_MANIFEST)] = b"replacement"
+            before = len(rig.fs.opens)
+            rig.owner.execute_fixed(handle, rig.module.CASES[0], "amd64")
+            self.assertEqual(len(rig.fs.opens), before)
+            self.assertEqual(len(rig.hook_calls), 1)

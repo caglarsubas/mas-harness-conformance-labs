@@ -85,12 +85,19 @@ class _Lifecycle:
         self._opened = False
 
     def _now(self, active):
+        import math
         now = self._clock()
         instant = require_time(now, "now")
+        monotonic = self._monotonic()
+        require(type(monotonic) in (int, float) and math.isfinite(monotonic)
+                and monotonic >= active["lastMonotonic"], "SUPERVISOR_MONOTONIC_ROLLBACK")
         require(instant >= active["lastWall"], "SUPERVISOR_CLOCK_ROLLBACK")
         active["lastWall"] = instant
+        active["lastMonotonic"] = monotonic
         require(instant < require_time(active["binding"]["notAfter"], "end")
-                and self._monotonic() < active["deadline"], "SUPERVISOR_EXPIRED")
+                and monotonic < active["deadline"], "SUPERVISOR_EXPIRED")
+        if type(self) is NativeSupervisor:
+            _check_retained_context(self._context, self._boundary, now)
         return now
 
     def _open(self, binding, plan):
@@ -103,13 +110,25 @@ class _Lifecycle:
         validate_session(state, binding, now)
         require(plan["target"]["architecture"] in ARCHITECTURES, "SUPERVISOR_ARCHITECTURE_INVALID")
         duration = (require_time(binding["notAfter"], "end") - require_time(now, "now")).total_seconds()
+        import math
+        monotonic = self._monotonic()
+        require(type(monotonic) in (int, float) and math.isfinite(monotonic), "SUPERVISOR_MONOTONIC_INVALID")
         active = {"binding": binding, "session": state, "plan": plan, "done": {}, "handle": None,
-                  "deadline": self._monotonic() + min(duration, 900), "lastWall": require_time(now, "now")}
+                  "deadline": monotonic + min(duration, 900), "lastWall": require_time(now, "now"),
+                  "lastMonotonic": monotonic, "reserved": False}
+        if type(self) is NativeSupervisor:
+            require(self._context._deadline is None, "SUPERVISOR_DEADLINE_CHANGED")
+            self._context._deadline = active["deadline"]
         # No child, credential, or operation exists before durable reservation.
-        self._journal.reserve_nonce(binding, now)
+        # Even an ambiguous reservation makes this instance one-shot.
         self._opened = True
-        self._active = active
         try:
+            self._journal.reserve_nonce(binding, now)
+            active["reserved"] = True
+            self._active = active
+            self._now(active)
+            if type(self) is NativeSupervisor:
+                self._custody.check_ambient(None)
             self._boundary.establish(binding, plan, active["deadline"])
             self._boundary.check_peer()
             self._journal.running(binding, self._now(active))
@@ -119,7 +138,8 @@ class _Lifecycle:
             active["handle"] = handle
             return handle
         except BaseException:
-            self._terminate("FAILED")
+            if self._active is not None:
+                self._terminate("FAILED")
             raise
 
     def _get(self, handle):
@@ -164,17 +184,28 @@ class _Lifecycle:
             return
         # Invalidate first. Failure to clean up or persist never resurrects it.
         self._active = None
-        now = self._clock()
-        if (require_time(now, "now") >= require_time(active["binding"]["notAfter"], "end")
-                or self._monotonic() >= active["deadline"]):
-            # A monotonic timeout earlier than signed wall expiry is FAILED,
-            # not a fabricated wall-time EXPIRED transition.
-            state = "EXPIRED" if require_time(now, "now") >= require_time(active["binding"]["notAfter"], "end") else "FAILED"
+        failure = None
+        try:
+            import math
+            now = self._clock()
+            instant, monotonic = require_time(now, "now"), self._monotonic()
+            require(instant >= active["lastWall"], "SUPERVISOR_CLOCK_ROLLBACK")
+            require(type(monotonic) in (int, float) and math.isfinite(monotonic)
+                    and monotonic >= active["lastMonotonic"], "SUPERVISOR_MONOTONIC_ROLLBACK")
+            if instant >= require_time(active["binding"]["notAfter"], "end"):
+                state = "EXPIRED"
+            elif monotonic >= active["deadline"]:
+                state = "FAILED"
+        except BaseException as exc:
+            failure = exc
         try:
             self._boundary.cleanup()
-        except BaseException:
-            # Leave durable RESERVED/RUNNING consumed; never certify cleanup.
-            raise
+        except BaseException as exc:
+            if failure is None:
+                failure = exc
+        if failure is not None:
+            # Consumed nonce, no terminal claim when time or cleanup is unproven.
+            raise failure
         self._journal.terminal(active["binding"], state, now, canonical_digest(
             {"state": state, "receipts": active["done"], "nativeAcceptance": False}))
 
@@ -202,7 +233,8 @@ class UnitSupervisor(_Lifecycle):
 
 class InstalledContext:
     """Factory-owned custody, not a dict or caller-provided FD/verified flag."""
-    __slots__ = ("_owner", "_binding", "_plan", "_envelope", "_capacity", "_source_digest", "_root_fd")
+    __slots__ = ("_owner", "_binding", "_plan", "_envelope", "_capacity", "_source_digest", "_root_fd",
+                 "_custody", "_bytes", "_kit", "_authority", "_snapshot", "_pid", "_deadline")
 
     def __new__(cls, *args, **kwargs):
         raise TypeError("only NativeSupervisor.open_session may construct installed context")
@@ -326,19 +358,28 @@ class _NativeChannel:
         raise ConformanceError("SUPERVISOR_EXPIRED", "bounded channel deadline reached")
 
     def check_peer(self):
+        require(type(self) is _NativeChannel and type(self.context) is InstalledContext
+                and type(self.context._owner) is NativeSupervisor, "CUSTODY_CONTEXT_INVALID")
+        self.context._owner._now(self.context._owner._active)
         require(self.peer is not None and not self.cancelled
                 and os.fstat(self.channel.fileno()).st_ino == self.channel_identity, "PEER_CHANNEL_CHANGED")
         require(not select.select([self.pidfd], [], [], 0)[0], "PEER_DIED")
         validate_peer(process_identity(self.peer["pid"]), self.peer, self.parent_namespaces)
+        self.context._custody.check_ambient(self)
 
     def request(self, case_id):
+        self.check_peer()
         return build_probe_request(self.context._envelope, self.context._capacity, self.context._plan, case_id)
 
     def execute(self, request, deadline):
         self.check_peer()
+        require(type(request) is dict and request.get("operation") in CASES
+                and request == self.request(request["operation"]), "SUPERVISOR_OPERATION_INVALID")
         self.channel.send(b"P")
         raw, peer = self._receive(1)
         require(raw == b"P" and peer == (self.peer["pid"], CHILD_UID, CHILD_GID), "PEER_CHANNEL_CHANGED")
+        self.check_peer()
+        require(deadline == self.context._owner._active["deadline"], "SUPERVISOR_DEADLINE_CHANGED")
         # Only the fixed, installed successor module is eligible. No registry,
         # module name, callback or command comes from caller data. It must enforce
         # the signed endpoint and server-side admission under CONF-LIVE-003.
@@ -346,7 +387,9 @@ class _NativeChannel:
             from .live_proxy_client import execute_protected
         except ImportError as exc:
             raise ConformanceError("PROTECTED_PROXY_UNAVAILABLE", "CONF-LIVE-003 is not installed") from exc
-        return execute_protected(request, self.context, deadline)
+        result = execute_protected(request, self.context, deadline)
+        self.check_peer()
+        return result
 
     def interrupt(self):
         self.cancelled = True
@@ -354,16 +397,34 @@ class _NativeChannel:
             self.lease.write("cgroup.kill", b"1")
 
     def cleanup(self):
+        self.cancelled = True
+        failure = None
         try:
             if self.child_pid is not None and self.lease.owned and not self.lease.closed:
                 self.lease.kill_and_reap(self.child_pid, time.monotonic() + 10)
-        finally:
-            if self.channel is not None:
-                self.channel.close()
-                self.channel = None
-            if self.pidfd is not None:
-                os.close(self.pidfd)
-                self.pidfd = None
+        except BaseException as exc:
+            failure = exc
+        channel, pidfd = self.channel, self.pidfd
+        self.channel = self.pidfd = None
+        operations = []
+        if channel is not None:
+            operations.append(channel.close)
+        if pidfd is not None:
+            operations.append(lambda: os.close(pidfd))
+        # Partial construction may have no context; absence permits cleanup
+        # only, never any check_peer/request/execute authority.
+        context = getattr(self, "context", None)
+        if type(context) is InstalledContext:
+            context._root_fd = None
+            operations.append(context._custody.close)
+        for operation in operations:
+            try:
+                operation()
+            except BaseException as exc:
+                if failure is None:
+                    failure = exc
+        if failure is not None:
+            raise failure
 
 
 class NativeSupervisor(_Lifecycle):
@@ -371,89 +432,187 @@ class NativeSupervisor(_Lifecycle):
     evidence_class = "UNSIGNED_PROTECTED_RECEIPT_CANDIDATE"
 
     def __init__(self):
-        self._launcher_digest = installed_process()
-        ambient_custody()
-        self._syscalls = LinuxSyscalls()
-        directory = open_directory("/var/lib/planeon/live-backend", private=True)
+        from .live_linux_boundary import _begin_custody
+        self._context = self._custody = self._journal = self._lease = self._lease_fd = None
+        self._closed = False
+        directory = None
         try:
+            self._custody = _begin_custody(self)
+            self._launcher_digest = installed_process()
+            require(self._custody.manifest_digest == self._launcher_digest, "CUSTODY_INCOMPLETE")
+            ambient_custody()
+            self._syscalls = LinuxSyscalls()
+            directory = open_directory("/var/lib/planeon/live-backend", private=True)
             self._lease_fd = os.open("session.lock", os.O_RDWR | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=directory)
             info = os.fstat(self._lease_fd)
             require(stat.S_ISREG(info.st_mode) and info.st_uid == info.st_gid == 0 and info.st_nlink == 1
                     and stat.S_IMODE(info.st_mode) == 0o600, "SUPERVISOR_LEASE_INVALID")
             fcntl.flock(self._lease_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BaseException:
-            if hasattr(self, "_lease_fd"):
-                os.close(self._lease_fd)
-            raise
-        finally:
-            os.close(directory)
-        try:
+            retained_directory, directory = directory, None
+            os.close(retained_directory)
             self._lease = CgroupLease()
             super().__init__(ReplayStore(), None)
+            self._custody.bind_runtime()
         except BaseException:
-            if hasattr(self, "_lease"):
-                self._lease.close()
-            os.close(self._lease_fd)
+            self._closed = True
+            _cleanup_native(self, directory)
             raise
-        self._context = None
-        self._closed = False
 
     def open_session(self, envelope_bytes, installed_context=None):
-        # The sole context is generated here from independently owned files.
-        # No caller-owned context (even another native instance's) is accepted.
+        # Keep dual-signature first-read ordering even for data-only unit mocks.
         require(installed_context is None, "CALLER_CONTEXT_FORBIDDEN")
         with self._mutex:
             require(not self._closed and self._context is None, "SUPERVISOR_ONE_SHOT")
-            from .live import validate_envelope
-            now = utc_now()
-            envelope = validate_envelope(require_canonical_document(envelope_bytes), now=require_time(now, "now"))
-            release_trust = read_owned(str(FIXED_RELEASE_TRUST))
-            tenant_trust = read_owned(str(FIXED_TENANT_TRUST))
-            _verify_reference_authority(envelope, release_trust, tenant_trust, now)
-            capacity = read_owned(envelope["capacityAuthorizationFileReference"], expected_digest=envelope["capacityAuthorizationDigest"])
-            envelope, capacity_data, _, _ = verify_backend_authority(envelope_bytes, capacity, release_trust, tenant_trust,
-                                                                  now=require_time(now, "now"))
-            require(self._launcher_digest == envelope["launcherDigest"], "LAUNCHER_DIGEST_MISMATCH")
-            release_raw = read_owned(envelope["campaignReleaseFileReference"], expected_digest=envelope["campaignReleaseDigest"])
-            release = require_canonical_document(release_raw)
-            architecture = {"x86_64": "amd64", "aarch64": "arm64"}.get(os.uname().machine)
-            require(architecture is not None, "LINUX_ARCHITECTURE_UNAVAILABLE")
-            # The signed release already names each architecture's plan.
-            plan_path = f"campaigns/platform/linux-baseline/inputs/{architecture}.json"
-            match = [row for row in release["tree"] if row["path"] == plan_path]
-            require(len(match) == 1, "RELEASE_PLAN_UNAVAILABLE")
-            kit_sources = read_owned_kit(envelope["conformanceKitRoot"], envelope["conformanceKitDigest"])
-            require(plan_path in kit_sources, "RELEASE_PLAN_UNAVAILABLE")
-            plan_raw = kit_sources[plan_path]
-            binding = binding_from_authority(envelope_bytes, capacity, release_trust, tenant_trust,
-                release_bytes=release_raw, plan_bytes=plan_raw, architecture=architecture,
-                expected_nonce=envelope["nonce"], expected_tenant=envelope["tenantId"],
-                expected_environment=envelope["environmentId"], expected_release=envelope["campaignReleaseDigest"], now=now)
-            for path_field, digest_field in (("packetFileReference", "packetDigest"),
-                    ("campaignDefinitionFileReference", "campaignDefinitionDigest"), ("bundleFileReference", "bundleDigest")):
-                read_owned(envelope[path_field], expected_digest=envelope[digest_field])
-            # All rootfs bytes must belong to the signed kit. No host filesystem
-            # fallback, runtime download, or arbitrary mount selected by a child.
-            context = object.__new__(InstalledContext)
-            context._owner, context._binding = self, binding
-            context._plan = require_canonical_document(plan_raw)
-            context._envelope, context._capacity = envelope, capacity_data
-            context._source_digest = envelope["conformanceKitDigest"]
-            context._root_fd = open_directory(envelope["conformanceKitRoot"] + "/rootfs")
-            self._context = context
-            self._boundary = _NativeChannel(context, self._syscalls, self._lease)
-            return self._open(binding, context._plan)
+            try:
+                return _open_retained_session(self, envelope_bytes)
+            except BaseException:
+                self._closed = True
+                _cleanup_native(self, None)
+                raise
 
     def close(self):
         if self._closed:
             return
         self._closed = True
+        failure = None
         try:
             super().close()
-        finally:
-            if self._context is not None:
-                os.close(self._context._root_fd)
-                self._context = None
-            self._journal.close()
-            self._lease.close()
-            os.close(self._lease_fd)
+        except BaseException as exc:
+            failure = exc
+        try:
+            _cleanup_native(self, None)
+        except BaseException as exc:
+            if failure is None:
+                failure = exc
+        if failure is not None:
+            raise failure
+
+
+def _cleanup_native(owner, directory):
+    operations = []
+    custody = getattr(owner, "_custody", None)
+    if directory is not None:
+        operations.append(lambda: os.close(directory))
+    context = getattr(owner, "_context", None)
+    owner._context = None
+    if type(context) is InstalledContext:
+        context._root_fd = None
+    for name in ("_custody", "_journal", "_lease"):
+        resource = getattr(owner, name, None)
+        setattr(owner, name, None)
+        if resource is not None:
+            if name == "_journal":
+                operations.append(lambda resource=resource: _close_replay_handles(resource, custody))
+            else:
+                operations.append(lambda resource=resource: resource.close())
+    fd = getattr(owner, "_lease_fd", None)
+    owner._lease_fd = None
+    if fd is not None:
+        operations.append(lambda: os.close(fd))
+    failure = None
+    for operation in operations:
+        try:
+            operation()
+        except BaseException as exc:
+            if failure is None:
+                failure = exc
+    if failure is not None:
+        raise failure
+
+
+def _close_replay_handles(journal, custody):
+    # The fixed ReplayStore has two close-owned FDs. Its legacy close method
+    # stops after its first error; take both once so that directory custody is
+    # not leaked. No journal bytes/history or transaction logic is changed.
+    storage = journal._storage
+    fd, directory = storage.fd, storage.directory
+    storage.fd = storage.directory = None
+    retained = None if custody is None else custody.replay_handles
+    descriptors = (fd, directory) if retained is None else retained
+    failure = None
+    if descriptors != (fd, directory):
+        failure = ConformanceError("CUSTODY_RUNTIME_CHANGED", "replay descriptors changed")
+    for descriptor in descriptors:
+        try:
+            if custody is not None and custody.runtime_handles is not None:
+                expected = custody.runtime_handles[descriptor]
+                info = os.fstat(descriptor)
+                require((info.st_dev, info.st_ino, stat.S_IFMT(info.st_mode))
+                        == (expected[0], expected[1], stat.S_IFMT(expected[4])), "CUSTODY_DESCRIPTOR_REUSED")
+            os.close(descriptor)
+        except BaseException as exc:
+            if failure is None:
+                failure = exc
+    if failure is not None:
+        raise failure
+
+
+def _open_retained_session(owner, envelope_bytes):
+    from .live import validate_envelope
+    from .live_linux_boundary import _owned_custody
+    now = utc_now()
+    envelope = validate_envelope(require_canonical_document(envelope_bytes), now=require_time(now, "now"))
+    release_trust = read_owned(str(FIXED_RELEASE_TRUST))
+    tenant_trust = read_owned(str(FIXED_TENANT_TRUST))
+    _verify_reference_authority(envelope, release_trust, tenant_trust, now)
+    capacity = read_owned(envelope["capacityAuthorizationFileReference"], expected_digest=envelope["capacityAuthorizationDigest"])
+    envelope, capacity_data, _, _ = verify_backend_authority(envelope_bytes, capacity, release_trust, tenant_trust,
+                                                          now=require_time(now, "now"))
+    custody = _owned_custody(owner)
+    custody.check_ambient(None)
+    require(owner._custody is custody and owner._launcher_digest == envelope["launcherDigest"], "LAUNCHER_DIGEST_MISMATCH")
+    expected = {str(FIXED_RELEASE_TRUST): release_trust, str(FIXED_TENANT_TRUST): tenant_trust,
+                envelope["capacityAuthorizationFileReference"]: capacity}
+    custody.require_bytes(expected)
+    release_raw = read_owned(envelope["campaignReleaseFileReference"], expected_digest=envelope["campaignReleaseDigest"])
+    expected[envelope["campaignReleaseFileReference"]] = release_raw
+    release = require_canonical_document(release_raw)
+    architecture = {"x86_64": "amd64", "aarch64": "arm64"}.get(os.uname().machine)
+    require(architecture is not None, "LINUX_ARCHITECTURE_UNAVAILABLE")
+    plan_path = f"campaigns/platform/linux-baseline/inputs/{architecture}.json"
+    require(len([row for row in release["tree"] if row["path"] == plan_path]) == 1, "RELEASE_PLAN_UNAVAILABLE")
+    kit_sources = read_owned_kit(envelope["conformanceKitRoot"], envelope["conformanceKitDigest"])
+    require(plan_path in kit_sources, "RELEASE_PLAN_UNAVAILABLE")
+    plan_raw = kit_sources[plan_path]
+    binding = binding_from_authority(envelope_bytes, capacity, release_trust, tenant_trust,
+        release_bytes=release_raw, plan_bytes=plan_raw, architecture=architecture,
+        expected_nonce=envelope["nonce"], expected_tenant=envelope["tenantId"],
+        expected_environment=envelope["environmentId"], expected_release=envelope["campaignReleaseDigest"], now=now)
+    for path_field, digest_field in (("packetFileReference", "packetDigest"),
+            ("campaignDefinitionFileReference", "campaignDefinitionDigest"), ("bundleFileReference", "bundleDigest")):
+        expected[envelope[path_field]] = read_owned(envelope[path_field], expected_digest=envelope[digest_field])
+    root_fd = custody.seal(expected, envelope["conformanceKitRoot"], envelope["conformanceKitDigest"], kit_sources)
+    context = object.__new__(InstalledContext)
+    context._owner, context._binding, context._custody = owner, binding, custody
+    context._plan = require_canonical_document(plan_raw)
+    context._envelope, context._capacity = envelope, capacity_data
+    context._source_digest, context._root_fd = envelope["conformanceKitDigest"], root_fd
+    context._bytes, context._kit = custody.files, custody.kit_sources
+    context._authority = (envelope_bytes, capacity, release_trust, tenant_trust)
+    context._pid = os.getpid()
+    context._deadline = None
+    context._snapshot = canonical_bytes([binding, context._plan, envelope, capacity_data])
+    owner._context = context
+    owner._boundary = _NativeChannel(context, owner._syscalls, owner._lease)
+    return owner._open(binding, context._plan)
+
+
+def _check_retained_context(context, channel, now):
+    from .live_linux_boundary import _owned_custody
+    require(type(context) is InstalledContext and type(context._owner) is NativeSupervisor
+            and context._pid == os.getpid(), "CUSTODY_CONTEXT_INVALID")
+    owner = context._owner
+    custody = _owned_custody(owner)
+    require(owner._context is context and owner._custody is custody and context._custody is custody
+            and not owner._closed and custody.sealed and type(channel) is _NativeChannel and owner._boundary is channel
+            and channel.context is context and not channel.cancelled
+            and owner._active is not None and owner._active["reserved"], "CUSTODY_SESSION_INVALID")
+    require(owner._active["binding"] == context._binding
+            and owner._active["deadline"] == context._deadline
+            and context._snapshot == canonical_bytes([context._binding, context._plan, context._envelope, context._capacity])
+            and context._bytes is custody.files and context._kit is custody.kit_sources
+            and context._source_digest == custody.kit_digest
+            and context._root_fd == custody.handles[custody.kit_root + "/rootfs"]["fd"], "CUSTODY_CONTEXT_CHANGED")
+    custody.check()
+    envelope, capacity, _, _ = verify_backend_authority(*context._authority, now=require_time(now, "now"))
+    require(envelope == context._envelope and capacity == context._capacity, "CUSTODY_AUTHORITY_CHANGED")
