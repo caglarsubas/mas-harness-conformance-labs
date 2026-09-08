@@ -71,6 +71,12 @@ custody, verified with the unchanged signature/key contract, and retained by
 the dedicated process. Repeated internal native constructors use that verified
 snapshot; the envelope's launcher digest must equal it.
 
+Both platform and tenant signatures and fixed trust-store digests are verified
+before opening any envelope-selected reference, including the capacity file.
+Only then may that exact digest-bound capacity reference be read and its
+independent CAPACITY_OPERATOR signature and complete binding verified. Invalid
+or forged references therefore never reach a file open; none grants execution.
+
 Authority references use retained no-follow directory/file descriptors, exact
 root ownership, no write bits, single-link regular files, bounded reads and
 inode/metadata rechecks. The signed kit is enumerated independently, with each

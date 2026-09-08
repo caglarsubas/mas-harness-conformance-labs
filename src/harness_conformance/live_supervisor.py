@@ -17,11 +17,12 @@ import stat
 import threading
 import time
 
-from .canonical import canonical_bytes, canonical_digest, require_canonical_document
+from .canonical import byte_digest, canonical_bytes, canonical_digest, require_canonical_document
+from .crypto import b64url_decode, signature_payload, verify
 from .errors import ConformanceError
 from .linux_readiness import ARCHITECTURES, CASES, build_probe_request, require_time
-from .live import FIXED_RELEASE_TRUST, FIXED_TENANT_TRUST
-from .live_backend_authority import binding_from_authority, verify_backend_authority
+from .live import ENVELOPE_DOMAIN, FIXED_RELEASE_TRUST, FIXED_TENANT_TRUST, _trust_key
+from .live_backend_authority import COMMANDS, PACKET_ID, PACKET_DIGEST, binding_from_authority, verify_backend_authority
 from .live_linux_boundary import (CHILD_UID, CHILD_GID, CgroupLease, LinuxSyscalls, credentials,
     ambient_custody, installed_process, process_identity, read_owned, read_owned_kit, require, validate_peer)
 from .live_replay_store import ReplayStore, UnitReplayStore, open_directory
@@ -30,6 +31,35 @@ from .live_session import SCHEMA, validate_binding, validate_receipt, validate_s
 
 def utc_now():
     return datetime.now(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
+
+
+def _verify_reference_authority(envelope, release_raw, tenant_raw, now):
+    """Verify BOTH signatures before opening any envelope-selected reference.
+
+    Capacity's independent third signature is verified after reading its exact
+    now-authenticated reference. This early check grants no session/execution.
+    """
+    instant = require_time(now, "now")
+    require(envelope["packetId"] == PACKET_ID and envelope["packetDigest"] == PACKET_DIGEST
+            and envelope["campaignId"] == "linux-baseline"
+            and envelope["commands"] == [list(command) for command in COMMANDS]
+            and instant < require_time(envelope["expiresAt"], "expiresAt"), "REFERENCE_AUTHORITY_SCOPE_INVALID")
+    require(byte_digest(release_raw) == envelope["releaseTrustStoreDigest"]
+            and byte_digest(tenant_raw) == envelope["tenantTrustStoreDigest"], "REFERENCE_TRUST_DIGEST_MISMATCH")
+    payload = signature_payload(ENVELOPE_DOMAIN, envelope, ("platformSignature", "tenantSignature"))
+    selected = []
+    for raw, role, field, signature, tenant, environment in (
+            (release_raw, "PLATFORM_RELEASE", "platformSignerKeyId", "platformSignature", None, None),
+            (tenant_raw, "TENANT_LIVE_EXECUTION", "tenantSignerKeyId", "tenantSignature",
+             envelope["tenantId"], envelope["environmentId"])):
+        trust = require_canonical_document(raw)
+        key = _trust_key(trust, envelope[field], role, tenant, environment, instant)
+        record = next(item for item in trust["keys"] if item["keyId"] == envelope[field])
+        require(instant < require_time(record["validUntil"], "validUntil"), "REFERENCE_TRUST_EXPIRED")
+        require(verify(key, payload, b64url_decode(envelope[signature], expected_length=64)),
+                "REFERENCE_SIGNATURE_INVALID")
+        selected.append((key, record["owner"]))
+    require(selected[0][0] != selected[1][0] and selected[0][1] != selected[1][1], "SIGNER_ROLES_NOT_INDEPENDENT")
 
 
 class _Handle:
@@ -377,9 +407,10 @@ class NativeSupervisor(_Lifecycle):
             from .live import validate_envelope
             now = utc_now()
             envelope = validate_envelope(require_canonical_document(envelope_bytes), now=require_time(now, "now"))
-            capacity = read_owned(envelope["capacityAuthorizationFileReference"], expected_digest=envelope["capacityAuthorizationDigest"])
             release_trust = read_owned(str(FIXED_RELEASE_TRUST))
             tenant_trust = read_owned(str(FIXED_TENANT_TRUST))
+            _verify_reference_authority(envelope, release_trust, tenant_trust, now)
+            capacity = read_owned(envelope["capacityAuthorizationFileReference"], expected_digest=envelope["capacityAuthorizationDigest"])
             envelope, capacity_data, _, _ = verify_backend_authority(envelope_bytes, capacity, release_trust, tenant_trust,
                                                                   now=require_time(now, "now"))
             require(self._launcher_digest == envelope["launcherDigest"], "LAUNCHER_DIGEST_MISMATCH")

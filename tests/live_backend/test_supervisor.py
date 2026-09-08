@@ -279,6 +279,48 @@ class SupervisorTests(unittest.TestCase):
             supervisor.NativeSupervisor()
         syscalls.assert_not_called()
 
+    def test_forged_envelope_cannot_open_an_unverified_capacity_reference(self):
+        for changes in ({"capacityAuthorizationFileReference": "/unit-only/forged-path"},
+                        {"capacityAuthorizationDigest": "sha256:" + "f" * 64},
+                        {"nonce": "other-nonce"}):
+            shell = object.__new__(supervisor.NativeSupervisor)
+            shell._mutex, shell._closed, shell._context = threading.Lock(), False, None
+            envelope = {**self.fixture.envelope, **changes}
+            records = {str(supervisor.FIXED_RELEASE_TRUST): canonical_bytes(self.fixture.release_trust),
+                       str(supervisor.FIXED_TENANT_TRUST): canonical_bytes(self.fixture.tenant_trust)}
+            with patch.object(supervisor, "utc_now", return_value=NOW), patch.object(
+                    supervisor, "read_owned", side_effect=lambda path, **kwargs: records[path]) as reader:
+                with self.subTest(changes=changes), self.assertRaises(ConformanceError):
+                    shell.open_session(canonical_bytes(envelope))
+            self.assertEqual([call.args[0] for call in reader.call_args_list], list(records))
+
+    def test_only_valid_dual_signed_reference_reaches_capacity_read(self):
+        shell = object.__new__(supervisor.NativeSupervisor)
+        shell._mutex, shell._closed, shell._context = threading.Lock(), False, None
+        records = {str(supervisor.FIXED_RELEASE_TRUST): canonical_bytes(self.fixture.release_trust),
+                   str(supervisor.FIXED_TENANT_TRUST): canonical_bytes(self.fixture.tenant_trust)}
+        def read(path, **kwargs):
+            if path in records:
+                return records[path]
+            self.assertEqual(path, self.fixture.envelope["capacityAuthorizationFileReference"])
+            self.assertEqual(kwargs["expected_digest"], self.fixture.envelope["capacityAuthorizationDigest"])
+            raise ConformanceError("UNIT_CAPACITY_UNAVAILABLE", "no actual reference is opened")
+        with patch.object(supervisor, "utc_now", return_value=NOW), patch.object(
+                supervisor, "read_owned", side_effect=read) as reader, self.assertRaises(ConformanceError) as caught:
+            shell.open_session(canonical_bytes(self.fixture.envelope))
+        self.assertEqual(caught.exception.reason, "UNIT_CAPACITY_UNAVAILABLE")
+        self.assertEqual(reader.call_count, 3)
+
+    def test_reference_authority_expiry_wrong_packet_and_trust_substitution_fail(self):
+        release_raw, tenant_raw = canonical_bytes(self.fixture.release_trust), canonical_bytes(self.fixture.tenant_trust)
+        supervisor._verify_reference_authority(self.fixture.envelope, release_raw, tenant_raw, NOW)
+        for envelope, release, tenant, now in (
+                (self.fixture.envelope, release_raw, tenant_raw, END),
+                ({**self.fixture.envelope, "packetId": "CONF-LINUX-001"}, release_raw, tenant_raw, NOW),
+                (self.fixture.envelope, tenant_raw, release_raw, NOW)):
+            with self.assertRaises(ConformanceError):
+                supervisor._verify_reference_authority(envelope, release, tenant, now)
+
     def test_native_pre_fork_failure_closes_all_channels_and_gate_descriptors(self):
         # Exercise the native algorithm only with every OS operation replaced.
         channel = object.__new__(supervisor._NativeChannel)
