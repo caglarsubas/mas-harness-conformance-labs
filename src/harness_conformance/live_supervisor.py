@@ -496,7 +496,7 @@ def _cleanup_native(owner, directory):
         resource = getattr(owner, name, None)
         setattr(owner, name, None)
         if resource is not None:
-            operations.append(resource.close)
+            operations.append(lambda resource=resource: resource.close())
     fd = getattr(owner, "_lease_fd", None)
     owner._lease_fd = None
     if fd is not None:
@@ -568,7 +568,7 @@ def _check_retained_context(context, channel, now):
     owner = context._owner
     custody = _owned_custody(owner)
     require(owner._context is context and owner._custody is custody and context._custody is custody
-            and custody.sealed and type(channel) is _NativeChannel and owner._boundary is channel
+            and not owner._closed and custody.sealed and type(channel) is _NativeChannel and owner._boundary is channel
             and channel.context is context and not channel.cancelled
             and owner._active is not None and owner._active["reserved"], "CUSTODY_SESSION_INVALID")
     require(owner._active["binding"] == context._binding

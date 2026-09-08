@@ -505,6 +505,7 @@ class _CustodyRig:
         self.wall, self.mono, self.owner = NOW, 1, None
         self.journal = MemoryJournal()
         self.store = UnitReplayStore(self.journal)
+        self.store.close = Mock()  # Unit store has no OS descriptors to release.
         self.lease = Mock(owned=True, closed=False)
         self.syscalls = Mock()
         self.kernel_failure = None

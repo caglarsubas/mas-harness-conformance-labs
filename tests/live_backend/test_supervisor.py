@@ -822,6 +822,17 @@ class RetainedSupervisorTests(unittest.TestCase):
             self.assertFalse(rig.hook_calls)
 
 
+    def test_malformed_resource_cleanup_does_not_skip_other_owned_descriptors(self):
+        with self.rig() as rig:
+            custody = rig.owner._custody
+            del rig.store.close
+            with self.assertRaises(AttributeError):
+                rig.owner.close()
+            self.assertTrue(custody.closed)
+            self.assertFalse(rig.fs.fds)
+            rig.lease.close.assert_called_once()
+
+
 class CustodySourceProofTests(unittest.TestCase):
     def inputs(self):
         doc = SUCCESSOR.regular_bytes(ROOT, "docs/live-backend/linux-boundary.md")
