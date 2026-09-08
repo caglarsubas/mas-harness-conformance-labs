@@ -822,15 +822,60 @@ class RetainedSupervisorTests(unittest.TestCase):
             self.assertFalse(rig.hook_calls)
 
 
-    def test_malformed_resource_cleanup_does_not_skip_other_owned_descriptors(self):
+    def test_proxy_result_after_authority_mutation_is_not_accepted(self):
+        import sys
+        with self.rig() as rig:
+            handle = rig.open()
+            context = rig.owner._context
+            def hook(request, supplied_context, deadline):
+                result = rig.hook(request, supplied_context, deadline)
+                rig.fs.nodes[str(supervisor.FIXED_RELEASE_TRUST)].st_ctime_ns += 1
+                return result
+            with patch.dict(sys.modules, {"harness_conformance.live_proxy_client": SimpleNamespace(execute_protected=hook)}):
+                with self.assertRaises(ConformanceError):
+                    rig.owner.execute_fixed(handle, CASES[0], "amd64")
+            self.assertEqual(len(rig.hook_calls), 1)
+            self.assertIsNone(rig.owner._active)
+            self.assertTrue(context._custody.closed)
+            self.assertEqual(parse_journal(rig.journal.raw)[0][replay_key(context._binding)]["state"], "FAILED")
+
+    def test_journal_close_failure_does_not_skip_other_owned_descriptors(self):
         with self.rig() as rig:
             custody = rig.owner._custody
-            del rig.store.close
-            with self.assertRaises(AttributeError):
+            rig.fs.fail_close = "/unit-kernel/journal"
+            with self.assertRaises(OSError):
                 rig.owner.close()
             self.assertTrue(custody.closed)
             self.assertFalse(rig.fs.fds)
             rig.lease.close.assert_called_once()
+
+    def test_descriptor_injected_after_construction_or_during_io_is_not_admitted(self):
+        for timing in ("before-open", "before-operation", "during-io"):
+            with self.subTest(timing=timing), self.rig() as rig:
+                extra = None
+                if timing == "before-open":
+                    extra = rig.fs.kernel_fd("/unit-rogue")
+                    with self.assertRaises(ConformanceError):
+                        rig.open()
+                else:
+                    handle = rig.open()
+                    if timing == "before-operation":
+                        extra = rig.fs.kernel_fd("/unit-rogue")
+                    else:
+                        channel = rig.owner._boundary.channel
+                        original = channel.recvmsg
+                        def receive(*args):
+                            nonlocal extra
+                            value = original(*args)
+                            extra = rig.fs.kernel_fd("/unit-rogue")
+                            return value
+                        channel.recvmsg = receive
+                    with self.assertRaises(ConformanceError):
+                        rig.owner.execute_fixed(handle, CASES[0], "amd64")
+                self.assertFalse(rig.hook_calls)
+                # The registry must not close or adopt an unrelated descriptor.
+                self.assertIn(extra, rig.fs.fds)
+                rig.fs.close(extra)
 
 
 class CustodySourceProofTests(unittest.TestCase):

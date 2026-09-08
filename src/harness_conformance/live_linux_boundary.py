@@ -550,6 +550,8 @@ class _RetainedCustody:
         self.kit_root = self.kit_digest = None
         self.kit_sources = {}
         self.closed = self.sealed = False
+        self.runtime_handles = None
+        self.replay_handles = None
 
     def __reduce__(self):
         raise TypeError("retained custody is not serializable")
@@ -623,6 +625,58 @@ class _RetainedCustody:
     def checked_fds(self):
         self.check()
         return {row["fd"] for row in self.handles.values()}
+
+    def bind_runtime(self):
+        from .live_supervisor import NativeSupervisor
+        self.owner_check()
+        require(sys._getframe(1).f_code is NativeSupervisor.__init__.__code__
+                and self.runtime_handles is None, "CUSTODY_FACTORY_REQUIRED")
+        owner = self.owner
+        # Fixed factory-owned resources only, not an enumerated ambient list.
+        fds = (owner._lease_fd, owner._lease.fd, owner._journal._storage.fd,
+               owner._journal._storage.directory)
+        self.replay_handles = fds[2:]
+        require(all(type(fd) is int and 2 < fd < 1048576 for fd in fds)
+                and len(set(fds)) == 4 and not set(fds) & self.checked_fds(), "CUSTODY_RUNTIME_INVALID")
+        rows = {}
+        for fd in fds:
+            info = os.fstat(fd)
+            require(info.st_uid == info.st_gid == 0 and not stat.S_IMODE(info.st_mode) & 0o022
+                    and (stat.S_ISDIR(info.st_mode) or stat.S_ISREG(info.st_mode) and info.st_nlink == 1),
+                    "CUSTODY_RUNTIME_INVALID")
+            # Journal contents legitimately grow; type/owner/mode/inode do not.
+            rows[fd] = _custody_identity(info)[:6]
+        self.runtime_handles = rows
+        self.check_ambient(None)
+
+    def check_ambient(self, channel):
+        from .live_supervisor import _NativeChannel
+        owned = self.checked_fds()
+        require(type(self.runtime_handles) is dict and len(self.runtime_handles) == 4, "CUSTODY_RUNTIME_INVALID")
+        for fd, expected in self.runtime_handles.items():
+            require(_custody_identity(os.fstat(fd))[:6] == expected, "CUSTODY_RUNTIME_CHANGED")
+            owned.add(fd)
+        if channel is not None:
+            require(type(channel) is _NativeChannel and channel is self.owner._boundary
+                    and channel.context is self.owner._context and channel.peer is not None
+                    and not channel.cancelled, "CUSTODY_CHANNEL_INVALID")
+            socket_fd, pidfd = channel.channel.fileno(), channel.pidfd
+            require(type(socket_fd) is int and type(pidfd) is int and socket_fd != pidfd
+                    and socket_fd not in owned and pidfd not in owned
+                    and 2 < socket_fd < 1048576 and 2 < pidfd < 1048576
+                    and stat.S_ISSOCK(os.fstat(socket_fd).st_mode)
+                    and os.fstat(socket_fd).st_ino == channel.channel_identity, "CUSTODY_CHANNEL_INVALID")
+            owned.update((socket_fd, pidfd))
+        for name in os.listdir("/proc/self/fd"):
+            require(name.isdigit(), "AMBIENT_DESCRIPTOR_FORBIDDEN")
+            fd = int(name)
+            try:
+                info = os.fstat(fd)
+            except OSError as exc:
+                if exc.errno == errno.EBADF:
+                    continue
+                raise
+            require(fd in owned or fd <= 2 and not stat.S_ISSOCK(info.st_mode), "AMBIENT_DESCRIPTOR_FORBIDDEN")
 
     def read(self, path, maximum, expected_digest, expected_mode):
         try:

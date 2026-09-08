@@ -127,6 +127,8 @@ class _Lifecycle:
             active["reserved"] = True
             self._active = active
             self._now(active)
+            if type(self) is NativeSupervisor:
+                self._custody.check_ambient(None)
             self._boundary.establish(binding, plan, active["deadline"])
             self._boundary.check_peer()
             self._journal.running(binding, self._now(active))
@@ -363,6 +365,7 @@ class _NativeChannel:
                 and os.fstat(self.channel.fileno()).st_ino == self.channel_identity, "PEER_CHANNEL_CHANGED")
         require(not select.select([self.pidfd], [], [], 0)[0], "PEER_DIED")
         validate_peer(process_identity(self.peer["pid"]), self.peer, self.parent_namespaces)
+        self.context._custody.check_ambient(self)
 
     def request(self, case_id):
         self.check_peer()
@@ -449,6 +452,7 @@ class NativeSupervisor(_Lifecycle):
             os.close(retained_directory)
             self._lease = CgroupLease()
             super().__init__(ReplayStore(), None)
+            self._custody.bind_runtime()
         except BaseException:
             self._closed = True
             _cleanup_native(self, directory)
@@ -486,6 +490,7 @@ class NativeSupervisor(_Lifecycle):
 
 def _cleanup_native(owner, directory):
     operations = []
+    custody = getattr(owner, "_custody", None)
     if directory is not None:
         operations.append(lambda: os.close(directory))
     context = getattr(owner, "_context", None)
@@ -496,7 +501,10 @@ def _cleanup_native(owner, directory):
         resource = getattr(owner, name, None)
         setattr(owner, name, None)
         if resource is not None:
-            operations.append(lambda resource=resource: resource.close())
+            if name == "_journal":
+                operations.append(lambda resource=resource: _close_replay_handles(resource, custody))
+            else:
+                operations.append(lambda resource=resource: resource.close())
     fd = getattr(owner, "_lease_fd", None)
     owner._lease_fd = None
     if fd is not None:
@@ -505,6 +513,33 @@ def _cleanup_native(owner, directory):
     for operation in operations:
         try:
             operation()
+        except BaseException as exc:
+            if failure is None:
+                failure = exc
+    if failure is not None:
+        raise failure
+
+
+def _close_replay_handles(journal, custody):
+    # The fixed ReplayStore has two close-owned FDs. Its legacy close method
+    # stops after its first error; take both once so that directory custody is
+    # not leaked. No journal bytes/history or transaction logic is changed.
+    storage = journal._storage
+    fd, directory = storage.fd, storage.directory
+    storage.fd = storage.directory = None
+    retained = None if custody is None else custody.replay_handles
+    descriptors = (fd, directory) if retained is None else retained
+    failure = None
+    if descriptors != (fd, directory):
+        failure = ConformanceError("CUSTODY_RUNTIME_CHANGED", "replay descriptors changed")
+    for descriptor in descriptors:
+        try:
+            if custody is not None and custody.runtime_handles is not None:
+                expected = custody.runtime_handles[descriptor]
+                info = os.fstat(descriptor)
+                require((info.st_dev, info.st_ino, stat.S_IFMT(info.st_mode))
+                        == (expected[0], expected[1], stat.S_IFMT(expected[4])), "CUSTODY_DESCRIPTOR_REUSED")
+            os.close(descriptor)
         except BaseException as exc:
             if failure is None:
                 failure = exc
@@ -524,6 +559,7 @@ def _open_retained_session(owner, envelope_bytes):
     envelope, capacity_data, _, _ = verify_backend_authority(envelope_bytes, capacity, release_trust, tenant_trust,
                                                           now=require_time(now, "now"))
     custody = _owned_custody(owner)
+    custody.check_ambient(None)
     require(owner._custody is custody and owner._launcher_digest == envelope["launcherDigest"], "LAUNCHER_DIGEST_MISMATCH")
     expected = {str(FIXED_RELEASE_TRUST): release_trust, str(FIXED_TENANT_TRUST): tenant_trust,
                 envelope["capacityAuthorizationFileReference"]: capacity}

@@ -558,6 +558,16 @@ class _CustodyRig:
                 (env["bundleFileReference"], b"UNIT_ONLY_NOT_REAL_bundle")):
             self.fs.add(path, raw)
 
+    def lease_factory(self):
+        self.lease.fd = self.fs.kernel_fd("/unit-kernel/cgroup")
+        self.lease.close.side_effect = lambda: self.fs.close(self.lease.fd)
+        return self.lease
+
+    def journal_factory(self):
+        self.journal.fd = self.fs.kernel_fd("/unit-kernel/journal")
+        self.journal.directory = self.fs.kernel_fd("/unit-kernel/journal-directory")
+        return self.store
+
     def __enter__(self):
         import sys
         from contextlib import ExitStack
@@ -582,8 +592,8 @@ class _CustodyRig:
             patch.object(self.module.signal, "getsignal", return_value=self.module.signal.SIG_DFL),
             patch.object(self.module.fcntl, "flock"),
             patch.object(self.module, "LinuxSyscalls", return_value=self.syscalls),
-            patch.object(self.module, "CgroupLease", return_value=self.lease),
-            patch.object(self.module, "ReplayStore", return_value=self.store),
+            patch.object(self.module, "CgroupLease", side_effect=self.lease_factory),
+            patch.object(self.module, "ReplayStore", side_effect=self.journal_factory),
             patch.object(self.module, "utc_now", side_effect=lambda: self.wall),
             patch.object(self.module.time, "monotonic", side_effect=lambda: self.mono),
             patch.object(self.module.select, "select", return_value=([], [], [])),
