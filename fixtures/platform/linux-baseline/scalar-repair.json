@@ -1,0 +1,761 @@
+{
+  "schemaVersion": "harness.planeon.ai/packet-scalar-regression/v1alpha1",
+  "packetId": "CONF-FIX-002",
+  "packetSha256": "c8639e527496660b8211f5bdcdb8f7470129b7d00f938c061d34630c797d8af4",
+  "authority": {
+    "packetId": "MET-REPAIR-007",
+    "repository": "caglarsubas/harness-onion",
+    "commit": "c526ccaa293b2113032c5a5b4a037e35baacb196",
+    "recordSemanticSha256": "cc083e1bc1b1551ba88a85316074a09434e73d8271355b6011e8f11dbce6a8e0",
+    "ciRun": 34122702351,
+    "exactMainLogSha256": "1b4c47a23406390b60e7375a4d6a0dcedbf9a6a880c963a2c87e1aa2dd8c9ce2"
+  },
+  "evidenceClass": "UNIT_REGRESSION_INPUTS_ONLY",
+  "nativeAcceptance": false,
+  "baselineRaw": "{\n  \"schemaVersion\": \"harness.planeon.ai/packet-scalar-baseline/v1alpha1\",\n  \"commit\": \"88de1d9b7272a25678b01129e51d5756dbe608ed\",\n  \"tree\": \"71270ce85626c71680a42435423b7537870964cb\",\n  \"files\": {\n    \".github/workflows/verify.yml\": {\n      \"blob\": \"48af47e6d1ca5c5198d934c1dd10c3ba947c3192\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:91090dc69c12837e8b73eb41a868b3afca7dcb34b304c7b409ac716310ddd3a6\",\n      \"size\": 615\n    },\n    \".gitignore\": {\n      \"blob\": \"d9d863a13c2bfc70183b59f43ddfa236f7fa7e34\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:0672c3d34147eb3a4b4aa4298d4d88f647d6d28aa22cffdb705508df11bda33a\",\n      \"size\": 158\n    },\n    \"AGENTS.md\": {\n      \"blob\": \"3bef97c6f3d501a0b5528179880053f787147de2\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:0b8faaf320feae214a47000b924c9a9c717e73e6d220edf1d16f0ff14381e843\",\n      \"size\": 3064\n    },\n    \"CONTRIBUTING.md\": {\n      \"blob\": \"21f949ba69f148982b99313a6fc319ed5caf3527\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:d947eeaf23f47ad60e26bb2e0f236f08a8bd74ca7f8e80d378248ef4477d5964\",\n      \"size\": 460\n    },\n    \"LICENSE\": {\n      \"blob\": \"94f474d4d34ef439ac1bb0f1961d5cc9e9096c7e\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:2d3b806e6fd270f11819d0f797f721747adb0d497760e1b9053b6cd1fae4cf54\",\n      \"size\": 774\n    },\n    \"Makefile\": {\n      \"blob\": \"729893b50ddf19f0be9a3024f435af789a283897\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:bb652db371113bab5d9d8924f0b10b1f85793c0cc84178d447ab1095f4e7b981\",\n      \"size\": 661\n    },\n    \"NOTICE\": {\n      \"blob\": \"0c12f4d5afbb8d0b984d4e3b094735be11607cf5\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:a70fc36aa7b6f295c4a662b6443a0599c4c89e9b6e62feb29763967d79ce382f\",\n      \"size\": 169\n    },\n    \"PORTING.yaml\": {\n      \"blob\": \"cdd098dabfe545c4f513a6821d32cb6da17ee047\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:69af26b731e28920bb4cc5dd25f6d1d1c18aa75308d75517d6a61f214fa238c4\",\n      \"size\": 253\n    },\n    \"README.md\": {\n      \"blob\": \"f04615d13827a0412fa15e7f37f2ffea5c9e4a2d\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:652e3abc12e4cd6d405eb80018a7c29c68d7d3094c2858196d9b83ea7dd566ea\",\n      \"size\": 1228\n    },\n    \"SECURITY.md\": {\n      \"blob\": \"5d25e68338f66ca93863af7783affebc252ecc9f\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:1b5594cb9074fb98aa77768df57aeab45c469b60337ba9662e71367b92aa9cc7\",\n      \"size\": 555\n    },\n    \"campaigns/alpha1/campaign.json\": {\n      \"blob\": \"a68dd8467599be5349e9cbfb217a1930867ffc62\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:17ad9b40b5518e3432c926b5604073fb922df08be38055310dbc851d1a18cef6\",\n      \"size\": 702\n    },\n    \"campaigns/meta/campaign.json\": {\n      \"blob\": \"dadfca33c5ed23ceb111cbeae6c5289a364fafe0\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:22091f996b03eae43f8d00da3ec08c85ad12aef2cbb7d0d4ca8b79df8b705386\",\n      \"size\": 2341\n    },\n    \"campaigns/parity/campaign.json\": {\n      \"blob\": \"f5ae7920b55249d1c35a15dd167ce2bf94c8d653\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:cd2ce011470ffef7dc7a08a4fc994a81f3d2f58899276991e02efb1c431956f4\",\n      \"size\": 627\n    },\n    \"campaigns/platform/linux-baseline/campaign.json\": {\n      \"blob\": \"47ccd6bce2df7569eb2a9e2620e918a10e3b4949\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:3f4da90f48f61e3ee99b002b969eecbffbe60ac65d650abc82cdc6052df9e50e\",\n      \"size\": 5429\n    },\n    \"ci/acceptance_package_contract.py\": {\n      \"blob\": \"12e0ca1ddb11d6533ca5e30023c1afb660051c3f\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:e5872ce6a4af9ead7c1cf130e47ca028fb7dc85b63ef5801abae82151938df6d\",\n      \"size\": 1753\n    },\n    \"ci/build_live_launcher.py\": {\n      \"blob\": \"f5e37e0a02494893c4d4db356892a2c3f1dd9585\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:873dba7a314405a6ff7c446ee4c0333e34c7cc3400c01141f2c8929dc58c35ad\",\n      \"size\": 2425\n    },\n    \"ci/network_canary.py\": {\n      \"blob\": \"453da00b448d2514ac7070539444d7c55d19616c\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:8eb07e2c974fd4a5040869ef0eee43963826dc8b32f7dd93fa18a91931e56500\",\n      \"size\": 1499\n    },\n    \"ci/prefetch.py\": {\n      \"blob\": \"b38fb5d15a9cf6df2891c1da368f4db4d505fc04\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:341e6e102b93e74a0e7b3688ad88faacf4fd23dad2d6100884039d1a207947a1\",\n      \"size\": 3824\n    },\n    \"ci/run_make_target.py\": {\n      \"blob\": \"0e05e3879fbd2ad165adf2e7e54c4ec6d08052db\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:0a0f5c2d6305a1772848ba2e58b8c3d17321de3fe5fdc99377515e09c1138389\",\n      \"size\": 5807\n    },\n    \"ci/run_packet.py\": {\n      \"blob\": \"ba69b8da7ea06fc3917c67ca1e813d1cd8f13194\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:3128dd48c486d74c3a109eb0d6655c57033011d508afadce35756e485d94e83a\",\n      \"size\": 7964\n    },\n    \"ci/run_packet_argv.py\": {\n      \"blob\": \"9b76420194a17a92ccff6fa6e18d2e8c80f31a9f\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:523bda5db30faba4c027332a40f36c36e1efdb7e5bd39b68045bcdf817f94fdd\",\n      \"size\": 226\n    },\n    \"ci/targets/conf-001.json\": {\n      \"blob\": \"9082a2d49ba5dbe0cd8098274c597bee44da9d27\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:dc2d49619485436c5cf4540b60c5432e847f96433bc60aa3da88577ffa9887b7\",\n      \"size\": 692\n    },\n    \"ci/targets/conf-002.json\": {\n      \"blob\": \"ef49a2be8314bb16ee456cff30bce9ced734bf97\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:0e2d0b28b83567cd5cf8fd46f30a377d255995af4450f4675ae08bf27fd757c1\",\n      \"size\": 339\n    },\n    \"ci/trust/live-runner-root.pub\": {\n      \"blob\": \"e10a1ac95a5738f59b78c3f7aa999bed90d800a8\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:6b22a99cab70c60b7cc345962ae220e32b2dbc89c72b419c79a9c92ec5f6c012\",\n      \"size\": 82\n    },\n    \"ci/verify-live-campaign.py\": {\n      \"blob\": \"6d666e9cc402ed99b91cbf170a1ffc11da369922\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:ed7fa0f9a5d933c257a93f9be9ac5a3321c0b2451aa31e0f698a6053e8f46004\",\n      \"size\": 630\n    },\n    \"ci/verify-offline.sh\": {\n      \"blob\": \"6ceda876eb6e83d17c7ba48e962bc55bb81e905d\",\n      \"mode\": \"100755\",\n      \"sha256\": \"sha256:b058780b727d2e4c7b5f77d3c7f623a7dafdac621c5b505238297e2ea2524c47\",\n      \"size\": 912\n    },\n    \"ci/zero_bill.py\": {\n      \"blob\": \"6715ef0f0a9b4a1215ff4fd411a13affd6c4a321\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:6e9c7f5aa2ea527a1b1d9472bbab164be4ba051f27dae90005695ff3f04cda14\",\n      \"size\": 2177\n    },\n    \"docs/parity.md\": {\n      \"blob\": \"7a6e06eb12db130a3893360e5ef6bcb82d3e207f\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:70fb8b95ee95eb7219c3b9ed0eea4c00c280ecf93dba6765418fa559d92b8dc4\",\n      \"size\": 1083\n    },\n    \"docs/reports/alpha1-template.md\": {\n      \"blob\": \"857b5db337b41b07a1be30b10faa1a674fe3ac26\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:70f572dc3d3fef6d45e14c93c09352aea9b7bbdad189cc5167e3d57628c933a9\",\n      \"size\": 2179\n    },\n    \"docs/reports/linux-baseline.md\": {\n      \"blob\": \"8c20f40e9130f50e4a2e22488ca6f60671c72ba3\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:99096cc71b49d662cb3c1a71137724eb1748aa633a7a24c8b56fa4b467605919\",\n      \"size\": 10913\n    },\n    \"docs/reports/runner-boundary-repair.md\": {\n      \"blob\": \"a3484dd5932307bf1cc1cbaab05a4e937841b943\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:e5700f158b640364f15565cbbea8dee7e86e88c045c8cde07cfaa8fe77a525bf\",\n      \"size\": 6595\n    },\n    \"fixtures/alpha1/environment-unavailable.json\": {\n      \"blob\": \"da2bbfff05610ac26d574a49436d22e508ace7d4\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:71ae29d6bafffc062dcaa358929cdc5224d29f415b6a3a327714f9013dca345d\",\n      \"size\": 244\n    },\n    \"fixtures/alpha1/journey.json\": {\n      \"blob\": \"a1be9b330b42820803b572548d8a57edda7c95c0\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:0399a95811cafc48c8deae07b45fadb8082b3be99db838da8b09fbddc1614bd8\",\n      \"size\": 7677\n    },\n    \"fixtures/alpha1/overview.json\": {\n      \"blob\": \"bafa30410741034579954865f92aaad13c977b9c\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:c840c2f0c8e3094cdaaa08a10ea57d859d969c24546c3a23107189e63d7b626b\",\n      \"size\": 12726\n    },\n    \"fixtures/environments/meta-complete.json\": {\n      \"blob\": \"8fc90838acc3ee792146bd2251592d43882734d8\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:6ea4589266ff02ea3c42bf86d72ac5bca9c593203bf35177ecb7da4ab2df1cbe\",\n      \"size\": 225\n    },\n    \"fixtures/environments/meta-unavailable.json\": {\n      \"blob\": \"acca65615c5f77cbb97cd2abed3b7e210e27330b\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:3bec392601ed731f34f00dd55c835986b758a501d54a1ac0213d1e85eb8e2838\",\n      \"size\": 207\n    },\n    \"fixtures/platform/linux-baseline/environment-unavailable.json\": {\n      \"blob\": \"e85351d42f4894aebb45d158aba7ce1e0c070d4a\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:c79b375f07694835f616b51243b92305b96f29088424673457582103078307aa\",\n      \"size\": 219\n    },\n    \"fixtures/platform/linux-baseline/predecessor-inventory.json\": {\n      \"blob\": \"46236ffaaedffe326c703a88544e918671f1ede7\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:f47c088f150ce7c61a14707aad71c634001037fd423eb43ace3acb055be86a58\",\n      \"size\": 18630\n    },\n    \"fixtures/platform/linux-baseline/predecessor-sources.json\": {\n      \"blob\": \"4470b6fef50a58f626792abe83caa99fd712baa4\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:3fb88e3358c25fb65369e73a3decf9fe111797b1f44b2cc1deeabea8c5d8defc\",\n      \"size\": 23010\n    },\n    \"parity/adapters/run_parity.py\": {\n      \"blob\": \"d3de27cf2f33a1c74d746f12d5fb1cb7c3267e29\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:650c17312390ec0f4382dad3c9279be0bb50522374c7ec01a079d9a7db8eefac\",\n      \"size\": 4849\n    },\n    \"parity/adapters/validate_registry.py\": {\n      \"blob\": \"8f59afa4c1e14d9cd1a2f6ed5bb8942f541c027a\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:14d00741194d4de4bd3e14adb2829b3612217b9185905220ff8d6c0be39c12d9\",\n      \"size\": 6185\n    },\n    \"parity/registry.yaml\": {\n      \"blob\": \"1cad50d5d694df6dfc127b39025518601db54285\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:0fac00ae1575b5c86996d32f3a9f01a69f6d77743170df1ecf6aff7243569af5\",\n      \"size\": 5544\n    },\n    \"parity/vectors/data-batch-lineage.json\": {\n      \"blob\": \"70c82ac4d21e439139f47ae7aa4ee22e22e3d9f0\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:67c46555d13dd0b48f2e7fe8cbad9f09da7708baf816527f32ea9e96eb264d2d\",\n      \"size\": 239\n    },\n    \"parity/vectors/data-connector-closed-discovery.json\": {\n      \"blob\": \"34ec386fff24d08c70ff2ea3594c3830d953d0b0\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:86279c3564392e353ba8537c2cba9d11f4449fc140a02398a146fd6f73e47de0\",\n      \"size\": 240\n    },\n    \"parity/vectors/data-local-only-no-fallback.json\": {\n      \"blob\": \"d1e3f2a65cc5aa39244e2f1511aa8eca21541c81\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:fe3698e550940e90f71d497d0e0024ad99dbc8026684e77ebecb666b1577904f\",\n      \"size\": 207\n    },\n    \"parity/vectors/model-route-fail-closed.json\": {\n      \"blob\": \"3168f7be8c41152efe67924537d953a697002a56\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:6eb0342fea804721e30ed38657d44c1578d20b4f829b76a3215df635f504a5de\",\n      \"size\": 198\n    },\n    \"parity/vectors/model-upstream-bounded-retry.json\": {\n      \"blob\": \"be842691179449079ecb52c87fbcea7b8f4305df\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:f0a3cdf305e1f63f0edd05e074373cf6f98f09063bed101a100a74b3b920e854\",\n      \"size\": 192\n    },\n    \"parity/vectors/model-usage-tenant-neutral.json\": {\n      \"blob\": \"b596b1dc64bb2dca2128c9be1d7f74d65c19d06f\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:410f55e3e3453a19754c52cecb689349aba41a95b015aceca7d35ff2e4f9f1ce\",\n      \"size\": 299\n    },\n    \"parity/vectors/white-goods-foundation-boundary.json\": {\n      \"blob\": \"1265779205f37c842941abb201b8bf253f6f128f\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:49f3a5a70f32c00cebc69594832300939942dc6b80f8a57d60f2c577e728ac2d\",\n      \"size\": 277\n    },\n    \"pyproject.toml\": {\n      \"blob\": \"4b42959660c2d19e0190b5e5f885f826d84264e3\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:4180e069f0bfb7b38f99b367f9a6f29e914a61717bd0797343f3d2b99720409c\",\n      \"size\": 500\n    },\n    \"schemas/v1alpha1/campaign-release.schema.json\": {\n      \"blob\": \"310a5b6506656a547bacdd071a44a481654749fa\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:50053c212b0e9a40dcf4e7dd4c155c8c3da6a81a77a82ae7f59aadc2d6d0cfa9\",\n      \"size\": 1189\n    },\n    \"schemas/v1alpha1/campaign-report.schema.json\": {\n      \"blob\": \"3726b8f1298f85c5482ec5cf28a9d69512bd418b\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:3e775c55dbc5dff84fb5aab90525814ef03595a69583e8239640583cac7036a9\",\n      \"size\": 1073\n    },\n    \"schemas/v1alpha1/conformance-campaign.schema.json\": {\n      \"blob\": \"a9102ed14316481f18bc0936493b56cd469eaafe\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:dd4fb4f5fda756613d5f69056460abdbd05b675dbddb4c9606bc9324321bb89f\",\n      \"size\": 10324\n    },\n    \"schemas/v1alpha1/conformance-trust-bundle.schema.json\": {\n      \"blob\": \"25e5054c6fe449249419c76fded16a482bb339ba\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:587e9e4fcc48fa98cf316b73a3cccabd9713fa0cbae48067f5f43f181404c245\",\n      \"size\": 1151\n    },\n    \"schemas/v1alpha1/control-result.schema.json\": {\n      \"blob\": \"fcccd2c59e23ee4cdd003d09afe14cd6e8068eae\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:2113a19ec9e077dcb7ab6f2c299c4756d09b0d1e3d3a32195d2103ff8d54e182\",\n      \"size\": 1056\n    },\n    \"schemas/v1alpha1/environment-intake.schema.json\": {\n      \"blob\": \"b303695d6f954b95e218726db6d0fac6e519c8fd\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:b69ef4bda6fe209b0416ef1c250747a38179d4cef0cf9bc8c72b1f0de1e3d621\",\n      \"size\": 776\n    },\n    \"schemas/v1alpha1/linux-readiness-evidence.schema.json\": {\n      \"blob\": \"7032d8ada2da1ab7bc46f329505656b9b98562de\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:8f4cf17273b097e39420b2394be43259c9bea30b684a58bcdc739c60b5059c0e\",\n      \"size\": 61742\n    },\n    \"schemas/v1alpha1/live-campaign-execution-envelope.schema.json\": {\n      \"blob\": \"0276cd0438895d8874ea076262a6bb9071bfd3c5\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:d4720d28fd0cfb8f4979f8d1bb808c5244c6e8121c4a97b0303cfed033c4d1fd\",\n      \"size\": 4272\n    },\n    \"schemas/v1alpha1/live-capacity-authorization.schema.json\": {\n      \"blob\": \"4902a75d338b4242cf54642bc005b90cd40513a9\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:196cafdba0cc168b8dbab7cb02aeda003b1b0cb2f0ae8e9b233b883629949235\",\n      \"size\": 2177\n    },\n    \"schemas/v1alpha1/technical-evidence-bundle.schema.json\": {\n      \"blob\": \"8c66a359cd84085b4729cf8bae263bb523494cec\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:0d1e7ad8413733c63b18bb0b658a93f541800c604b2f56c8842fe4ac7760d513\",\n      \"size\": 1524\n    },\n    \"schemas/v1alpha1/tenant-acceptance-candidate.schema.json\": {\n      \"blob\": \"69c535c74b5dc71454fac60c066ac03c785ef75f\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:37c57329bb835d7aa091be9de41bcfaed9305b1e0359ec1289d114f31bbf426a\",\n      \"size\": 995\n    },\n    \"src/harness_conformance/__init__.py\": {\n      \"blob\": \"7d8e8ae786e942135fae50701e31ac25d700869e\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:748cd4a32689b1856ef53f51793e3f85303a25658846bb9a6965440ceeed769f\",\n      \"size\": 236\n    },\n    \"src/harness_conformance/__main__.py\": {\n      \"blob\": \"eb53e2f31b2f703ad32ef64b8a41faa3e7d18e08\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:935a1c1166b0c1ea35a82256345000bf2c73ded718d77773bc27a71ecce28f7d\",\n      \"size\": 48\n    },\n    \"src/harness_conformance/acceptance.py\": {\n      \"blob\": \"85fba5611d427772e8f0a4a71aaed3f13824b8cb\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:81a562a983f1d662e78d95d7e3e29f070471b3e304c13bac5162e0b05108c933\",\n      \"size\": 2613\n    },\n    \"src/harness_conformance/build_backend.py\": {\n      \"blob\": \"779090a50431f086f497e26319de9265d664666c\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:d7ed81b4e0ffd865093679ef51a033a7bc74024b20300b098520306a05243e99\",\n      \"size\": 2399\n    },\n    \"src/harness_conformance/campaign.py\": {\n      \"blob\": \"c07495f1c0df2532a2e37bd80d01f93b9a027b04\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:da0a25fba8336f658948ab1018a9db5c518bcc52849bdfcf295058906a26272a\",\n      \"size\": 7026\n    },\n    \"src/harness_conformance/canonical.py\": {\n      \"blob\": \"18ab1dd28aeea326c177748aa357e85d56df0086\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:eb16aee5dda8f512b78b637361f0a057c7e944cd1b9eb888c88182c867e7794d\",\n      \"size\": 5645\n    },\n    \"src/harness_conformance/cli.py\": {\n      \"blob\": \"f78f09f9845fd187107d45c3b2ddeb859702b848\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:c6fe0356d835db4bb0ae43d2484ca107f32bbf9046ff04c1a5a5ab47703ce8c1\",\n      \"size\": 4482\n    },\n    \"src/harness_conformance/crypto.py\": {\n      \"blob\": \"efda93c52fe47c15d4238676a0a2aede8e1ddda6\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:2684b08b73d0379b8bf09e90f70839f6bccb0e947f3f999f6fa2f0e71c873035\",\n      \"size\": 4787\n    },\n    \"src/harness_conformance/errors.py\": {\n      \"blob\": \"3c78aa2fd3f372fa45df8eba47c1958e70376ea8\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:c30216c02cfa449063b77ca922a3c7cd32e0c6a8010365e093d730e7bc37807a\",\n      \"size\": 308\n    },\n    \"src/harness_conformance/events.py\": {\n      \"blob\": \"c5294e469638af15d9616a08594c99b3ca48ecd2\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:2cc8855e5fe02c9874e3653b5f094b4095eed483e2446ba32735ddc57c6b422a\",\n      \"size\": 2197\n    },\n    \"src/harness_conformance/evidence.py\": {\n      \"blob\": \"cb5ac52a8cdab8f23cc3dee05d063c0eedada7cc\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:670a8c4f6b06caf8af7749b0fe5bf6210d746cd6a823430a387890add135b3e6\",\n      \"size\": 7683\n    },\n    \"src/harness_conformance/lifecycle.py\": {\n      \"blob\": \"0e3874da1b086941ec6319386ecb379238e25f42\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:86c7f62bea77d963e087d2b244f8479a5a81bd1dac8ab5ec5579ad9b0a35f69c\",\n      \"size\": 1582\n    },\n    \"src/harness_conformance/linux_readiness.py\": {\n      \"blob\": \"f0be4c7607bf66d993fe712bb6f2062787632d6c\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:1d40b52a05a85cf0d2179d5545bc8325b8035a24340c5a52b8b66f28e0476fc8\",\n      \"size\": 22629\n    },\n    \"src/harness_conformance/live.py\": {\n      \"blob\": \"cf510b0a5e9623e21a431c9b061c26311035ce38\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:8f6d033292801930cd280f3611aed3c6012cf4d39ec63d4324eb92590e44a022\",\n      \"size\": 23002\n    },\n    \"src/harness_conformance/live_launcher.py\": {\n      \"blob\": \"ad7ebd930586d383ce2b947a9c433c73f9b5baf6\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:0635ca7494e29c495fcf8188c167d82bb27f109102fc46f91052e1d509817d27\",\n      \"size\": 5281\n    },\n    \"src/harness_conformance/models.py\": {\n      \"blob\": \"e2e1d24ec4822b86d10efb8c864281a81730518b\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:3d095046632c640bd679b730cc76c90276a73c18263de227ad8a5692c34730dc\",\n      \"size\": 1430\n    },\n    \"src/harness_conformance/registry.py\": {\n      \"blob\": \"539cfbb0f1177dd9614f83e333e2a342a97fabf1\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:fa32c26a773a93d60c3f1cd512a99d1213258f944846e028bf7c92aca7049139\",\n      \"size\": 1595\n    },\n    \"src/harness_conformance/schema.py\": {\n      \"blob\": \"51e9e4a9e38278771979bc89e612a0371312f4dc\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:cd3fefc33833cf5fbccb97a0ac75524ecd967cfa10064a79f64a837f75397ee5\",\n      \"size\": 9908\n    },\n    \"tests/alpha1/__init__.py\": {\n      \"blob\": \"68a01f42298a8f26633b2142b6a0005197345c61\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:1c4b4913127e929661e104454b7900591e39681401eb19594436b1a860c49a6a\",\n      \"size\": 48\n    },\n    \"tests/alpha1/contract.py\": {\n      \"blob\": \"cab06a287c4bb3af9b46d6aad540463494572429\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:20034c14d493cac5f730440b27833c5fa87722fda0a1574ce0f81836764749a7\",\n      \"size\": 16927\n    },\n    \"tests/alpha1/test_alpha1.py\": {\n      \"blob\": \"27d0f87d11dd4db53c9b2ac0e96ff8c8e8ce08b7\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:b528290f311a5e41e2b163028bb5212a022d15319a7a9fb218fd7e272480e9c7\",\n      \"size\": 7371\n    },\n    \"tests/fixes/runner_boundary/_inventory.py\": {\n      \"blob\": \"fdf58c985872348225fcf9706890349dcceb8a2c\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:fb50aba04fe963a89b74ad1aca57b1242fa54481e01989ac18a189a080ade94c\",\n      \"size\": 2443\n    },\n    \"tests/fixes/runner_boundary/legacy-tests.json\": {\n      \"blob\": \"f0fd3094ae447ae25840d8a13d29d89fdaecbd26\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:9fff3fb6bd66789b18bc8f38885d2bfd287124f9a32b4f7a0d645c27ee500dbd\",\n      \"size\": 4603\n    },\n    \"tests/fixes/runner_boundary/test_boundaries.py\": {\n      \"blob\": \"ee6aaffe5e7a8b067f5051208f9fb7080f192400\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:2e33efe165cf46912a426285dabd0bbe98b17acdf18f3d7a8bf3cb56a71247e4\",\n      \"size\": 15192\n    },\n    \"tests/fixes/runner_boundary/test_inventory.py\": {\n      \"blob\": \"b32df3cf7b119502baa187661589145446fe317b\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:1fbacb25aea922a37fb552e91f6b95dded7c1774d1ba2a80f5989cd926cad5e6\",\n      \"size\": 3569\n    },\n    \"tests/meta/test_build_cli.py\": {\n      \"blob\": \"7b71afb1541acc77c25af4edd83e42807e9bad99\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:989c58c63a8cc5234e0396c4bee1c667da133c6893ca24dd96bd95822f43a4e6\",\n      \"size\": 2781\n    },\n    \"tests/meta/test_campaign.py\": {\n      \"blob\": \"01bbbfb3a347dc97562597744c3940e11cd67185\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:85fc9c47556fa0db78ed1948cba696cea0da9d895848169785d227a6e66efc8d\",\n      \"size\": 3007\n    },\n    \"tests/meta/test_canonical_schema.py\": {\n      \"blob\": \"e9f4e4ebab1d8ad8c4cbccd21f6f64684548faf1\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:f3c233226c5dc400f225eeb16bde754fd73b3e332a2cc85c7795571537845a35\",\n      \"size\": 3187\n    },\n    \"tests/meta/test_evidence_crypto.py\": {\n      \"blob\": \"deb7af4af91219aa7a688e67bd66cfb856897ed7\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:b0b87f6e4f726ebc7af82be7ab9b6b83a73ec130e1559cb5d9800396b91436c4\",\n      \"size\": 4501\n    },\n    \"tests/meta/test_live.py\": {\n      \"blob\": \"cd6f7ea911bd1fe55132723f30f9924b2dcdb63b\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:9ac39858b40468a10b2a20ae43e0aaa92f64fde6ab63d275143d654774ec10a3\",\n      \"size\": 11715\n    },\n    \"tests/meta/test_porting_zero_bill.py\": {\n      \"blob\": \"eef6f33647b7ef061616939b1f8c5a03472e9aee\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:f8ed0fdffc245541d332d78c66d6e9045c3bfc85e0683c3cb7e87b263c1bd448\",\n      \"size\": 4182\n    },\n    \"tests/meta/test_registry_dispatch.py\": {\n      \"blob\": \"c6283b1028a659c3d1ef48863280eb1c9a6349f8\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:b021ddeb2a7a534427edf7db594b0d9532711bec4fcfac76405dcded73adbc1d\",\n      \"size\": 3756\n    },\n    \"tests/parity/test_adapters.py\": {\n      \"blob\": \"bac9d9424411a7441f721f31c10b6e92992f67d9\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:9e4217daee3c0e6f5f7dc0a292c4ff55cb1a3b7259b477ee65dfc13315e49c4a\",\n      \"size\": 2337\n    },\n    \"tests/parity/test_packet_runner.py\": {\n      \"blob\": \"756551e665a844d2dcec790becb31a82c4a82cfd\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:0054ccd9312c59a77194a17152191a80bc82d98a5b27ee6e83183b2e62bf7d97\",\n      \"size\": 6066\n    },\n    \"tests/parity/test_registry.py\": {\n      \"blob\": \"50e8fc23c9bbf139b0eed861817977157316c03a\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:88d007d59c2da7dc45fdb4da0d7787725ff6a4d6d120a7f38d843a94baf2b5ff\",\n      \"size\": 2638\n    },\n    \"tests/platform/linux_baseline/_fixtures.py\": {\n      \"blob\": \"d1d152fffec06019d0501a982d2108e1e06eff06\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:579ff77d11e66776884ccf4a3343c417393767215b09abc5aacc1a19c10bcb7d\",\n      \"size\": 11573\n    },\n    \"tests/platform/linux_baseline/test_linux_campaign.py\": {\n      \"blob\": \"d14aa009675231ef49fbac95c9bcd9559a61e0f1\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:e4501ef5df6a3a1e9f3755aee40592f81ccdcab069d187215f612b97f9773094\",\n      \"size\": 8618\n    },\n    \"tests/platform/linux_baseline/test_linux_evidence.py\": {\n      \"blob\": \"85d3983ddf743dd5ed4bde41e81063bc6b32d525\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:b6e162808c471d3d2ed7caa2ed2c056af33819d91ae46a66ff5298da982912b3\",\n      \"size\": 14548\n    },\n    \"tests/platform/linux_baseline/test_linux_inventory.py\": {\n      \"blob\": \"bfbd9b4b6886a2f8f1646f613aa61b2d03c2ed5b\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:1f5587f857927ca645e1c79edd4b4cd560f0eb70a881fb670b5047739421b7ef\",\n      \"size\": 5259\n    },\n    \"tests/platform/linux_baseline/test_linux_protocol.py\": {\n      \"blob\": \"3f09672575ac51b8d979431adf058f11941b63df\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:2057b427ba366717c506d561978695e27b53208b4e3fbf318b00671fe672254d\",\n      \"size\": 8232\n    },\n    \"toolchain.lock\": {\n      \"blob\": \"1a9f18620f9d55bb5308b5a817ae671cf07a7246\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:40a0cbb9fc244a8484b22494b6bfa070fbc76aec0edd86ab690026f6a8027bfc\",\n      \"size\": 2153\n    },\n    \"uv.lock\": {\n      \"blob\": \"c9043e59c92f5861c567a815a866257459b1b409\",\n      \"mode\": \"100644\",\n      \"sha256\": \"sha256:bd9cb528f2c6ad6a74e3dc1998978e029144fcee2535387cc5ef3db7907dcfbc\",\n      \"size\": 150\n    }\n  },\n  \"tests\": {\n    \"tests/alpha1/test_alpha1.py\": [\n      \"Alpha1CampaignTests.test_campaign_and_evidence_are_reproducible\",\n      \"Alpha1CampaignTests.test_offline_campaign_is_honestly_unavailable\",\n      \"Alpha1CampaignTests.test_report_template_preserves_authority_boundaries\",\n      \"Alpha1ContractTests.test_complete_journey_and_overview_are_closed\",\n      \"Alpha1ContractTests.test_fixture_has_no_public_request_or_secret_material\",\n      \"Alpha1ContractTests.test_fixture_reads_and_canonical_outputs_are_deterministic\",\n      \"Alpha1ContractTests.test_journey_mutations_fail_closed\",\n      \"Alpha1ContractTests.test_navigation_and_evidence_axes_are_complete\",\n      \"Alpha1ContractTests.test_overview_mutations_fail_closed\"\n    ],\n    \"tests/fixes/runner_boundary/test_boundaries.py\": [\n      \"CanaryTests.test_absent_unknown_mismatched_marker_never_opens_socket\",\n      \"CanaryTests.test_backend_specific_permission_denials_pass\",\n      \"CanaryTests.test_route_dns_timeout_and_unsupported_family_are_not_isolation\",\n      \"CanaryTests.test_successful_socket_or_connect_is_not_isolation\",\n      \"CanaryTests.test_wrong_stage_permission_denials_fail\",\n      \"RetiredLiveTests.test_adapter_has_no_execution_or_io_imports\",\n      \"RetiredLiveTests.test_arbitrary_argv_invalid_descriptor_and_removed_ci_are_refused\",\n      \"RetiredLiveTests.test_caller_created_pipe_file_and_memfd_magic_are_not_authority\",\n      \"RunnerBoundaryTests.test_backend_os_mismatch_unknown_missing_or_warm_marker_stops_before_io\",\n      \"RunnerBoundaryTests.test_both_os_backends_keep_order_digest_rechecks_and_short_circuit\",\n      \"RunnerBoundaryTests.test_bridge_delegates_exact_argv_without_another_process\",\n      \"RunnerBoundaryTests.test_closed_child_environment_uses_only_local_source_imports\",\n      \"RunnerBoundaryTests.test_content_change_even_with_fixed_metadata_is_detected\",\n      \"RunnerBoundaryTests.test_packet_custody_refuses_user_file_symlink_hardlink_and_fifo\",\n      \"RunnerBoundaryTests.test_real_wrapper_rejects_missing_unknown_and_wrong_os_backend\",\n      \"RunnerBoundaryTests.test_wrapper_binds_os_and_executes_only_the_fixed_bridge\"\n    ],\n    \"tests/fixes/runner_boundary/test_inventory.py\": [\n      \"InventoryTests.test_added_file_is_collected_without_manual_registration\",\n      \"InventoryTests.test_all_four_suites_collect_every_module_and_keep_legacy_cases\",\n      \"InventoryTests.test_empty_or_import_broken_module_fails\",\n      \"InventoryTests.test_load_tests_cannot_hide_or_duplicate_a_case\",\n      \"InventoryTests.test_missing_or_empty_root_fails\",\n      \"InventoryTests.test_nested_unimportable_new_file_cannot_be_silently_omitted\",\n      \"InventoryTests.test_skipped_or_expected_failure_cannot_hide_a_case\"\n    ],\n    \"tests/meta/test_build_cli.py\": [\n      \"BuildCliTests.test_build_backend_wheel_is_reproducible\",\n      \"BuildCliTests.test_cli_report_and_evidence_are_deterministic\",\n      \"BuildCliTests.test_live_inner_adapter_refuses_direct_and_ci\",\n      \"BuildCliTests.test_reproducible_live_candidate\"\n    ],\n    \"tests/meta/test_campaign.py\": [\n      \"CampaignTests.test_all_handlers_and_non_failing_states_are_exercised\",\n      \"CampaignTests.test_illegal_lifecycle_and_event_fail\",\n      \"CampaignTests.test_required_failure_blocks\",\n      \"CampaignTests.test_required_unavailable_is_honest\",\n      \"CampaignTests.test_two_runs_are_byte_identical\",\n      \"CampaignTests.test_unknown_result_aliases_do_not_exist\"\n    ],\n    \"tests/meta/test_canonical_schema.py\": [\n      \"CanonicalSchemaTests.test_campaign_and_environment_are_closed\",\n      \"CanonicalSchemaTests.test_canonical_bytes_are_stable\",\n      \"CanonicalSchemaTests.test_closed_vocabularies\",\n      \"CanonicalSchemaTests.test_duplicate_and_noncanonical_numbers_are_rejected\",\n      \"CanonicalSchemaTests.test_every_published_schema_is_closed_and_valid_json\",\n      \"CanonicalSchemaTests.test_secure_read_refuses_symlink\"\n    ],\n    \"tests/meta/test_evidence_crypto.py\": [\n      \"EvidenceCryptoTests.test_candidate_is_unsigned_pending_and_digest_bound\",\n      \"EvidenceCryptoTests.test_cli_requires_private_key_mode\",\n      \"EvidenceCryptoTests.test_rfc8032_vector\",\n      \"EvidenceCryptoTests.test_tamper_revocation_scope_and_duplicate_key_fail\",\n      \"EvidenceCryptoTests.test_technical_evidence_sign_and_verify\",\n      \"EvidenceCryptoTests.test_tenant_acceptance_signing_is_forbidden\"\n    ],\n    \"tests/meta/test_live.py\": [\n      \"LiveContractTests.test_capacity_scope_and_window_are_exact\",\n      \"LiveContractTests.test_command_axis_signature_and_capacity_mismatches_fail\",\n      \"LiveContractTests.test_positive_preflight_verifies_every_authority_class\",\n      \"LiveContractTests.test_public_discovered_wildcard_and_metadata_endpoints_fail\",\n      \"LiveContractTests.test_repository_candidate_refuses_ci_and_direct_authority\"\n    ],\n    \"tests/meta/test_porting_zero_bill.py\": [\n      \"PortingZeroBillTests.test_every_copy_claim_is_rejected\",\n      \"PortingZeroBillTests.test_porting_ledger_is_exact_inert_sentinel\",\n      \"PortingZeroBillTests.test_workflow_and_toolchain_are_zero_bill\",\n      \"PortingZeroBillTests.test_zero_bill_scanner_rejects_each_declared_vector\"\n    ],\n    \"tests/meta/test_registry_dispatch.py\": [\n      \"RegistryDispatchTests.test_descriptor_is_closed_direct_argv\",\n      \"RegistryDispatchTests.test_duplicate_campaign_fails_closed\",\n      \"RegistryDispatchTests.test_generic_campaign_has_no_shell_injection\",\n      \"RegistryDispatchTests.test_makefile_never_interpolates_campaign\",\n      \"RegistryDispatchTests.test_packet_campaigns_resolve_additively\",\n      \"RegistryDispatchTests.test_unknown_and_undeclared_dispatch_fail\"\n    ],\n    \"tests/parity/test_adapters.py\": [\n      \"AdapterTests.test_altered_expectation_fails_exact\",\n      \"AdapterTests.test_every_vector_is_deterministic\",\n      \"AdapterTests.test_unknown_family_and_unbound_vector_fail\",\n      \"AdapterTests.test_vector_shape_rejects_command_url_and_credentials\"\n    ],\n    \"tests/parity/test_packet_runner.py\": [\n      \"PacketRunnerTests.test_alias_and_empty_acceptance_are_rejected\",\n      \"PacketRunnerTests.test_current_packet_inline_authority_parses\",\n      \"PacketRunnerTests.test_duplicate_inline_authority_is_rejected\",\n      \"PacketRunnerTests.test_main_preserves_phase_order_and_hides_authority\",\n      \"PacketRunnerTests.test_packet_replacement_is_detected\",\n      \"PacketRunnerTests.test_shell_download_recursive_and_strings_fail\",\n      \"PacketRunnerTests.test_wrong_execution_and_warm_access_fail\"\n    ],\n    \"tests/parity/test_registry.py\": [\n      \"RegistryTests.test_registry_and_vectors_pass_without_source_access\",\n      \"RegistryTests.test_registry_contains_no_content_or_copy_authority\",\n      \"RegistryTests.test_unknown_object_relation_and_binding_fail\"\n    ],\n    \"tests/platform/linux_baseline/test_linux_campaign.py\": [\n      \"LinuxCampaignTests.test_all_handler_views_keep_exact_order_and_no_aliases\",\n      \"LinuxCampaignTests.test_cli_keeps_unavailable_results_and_unsigned_acceptance\",\n      \"LinuxCampaignTests.test_environment_flags_and_session_variables_never_create_native_authority\",\n      \"LinuxCampaignTests.test_legacy_reports_evidence_and_candidates_are_byte_identical_to_predecessor\",\n      \"LinuxCampaignTests.test_twenty_required_cases_are_closed_in_runtime_and_published_schema\",\n      \"LinuxCampaignTests.test_validate_cli_is_explicitly_structural_not_signature_acceptance\"\n    ],\n    \"tests/platform/linux_baseline/test_linux_evidence.py\": [\n      \"LinuxEvidenceTests.test_all_cases_are_required_ordered_and_unique\",\n      \"LinuxEvidenceTests.test_both_native_architecture_vectors_are_unit_only\",\n      \"LinuxEvidenceTests.test_duplicate_json_floats_invalid_utf8_and_malformed_inputs_fail\",\n      \"LinuxEvidenceTests.test_duplicate_keys_changed_trust_bytes_and_same_signers_fail\",\n      \"LinuxEvidenceTests.test_each_missing_check_and_false_pass_is_rejected\",\n      \"LinuxEvidenceTests.test_each_probe_command_output_nonce_and_time_is_bound\",\n      \"LinuxEvidenceTests.test_emulated_cross_arch_and_non_linux_never_qualify\",\n      \"LinuxEvidenceTests.test_every_binding_is_compared_even_with_valid_record_signatures\",\n      \"LinuxEvidenceTests.test_every_record_field_is_mandatory\",\n      \"LinuxEvidenceTests.test_every_signature_is_independently_required\",\n      \"LinuxEvidenceTests.test_every_source_image_build_and_host_binding_is_exact\",\n      \"LinuxEvidenceTests.test_executed_failure_and_missing_environment_remain_distinct\",\n      \"LinuxEvidenceTests.test_expired_future_boundary_and_replay_inputs_fail\",\n      \"LinuxEvidenceTests.test_observation_and_expiration_fit_both_authorizations\",\n      \"LinuxEvidenceTests.test_only_precise_utc_rfc3339_timestamps_are_accepted\",\n      \"LinuxEvidenceTests.test_plan_rejects_missing_extra_or_incomplete_regression_fields\",\n      \"LinuxEvidenceTests.test_regression_inventory_counts_skips_and_hidden_deselection_fail\",\n      \"LinuxEvidenceTests.test_release_tree_paths_modes_sizes_and_baseline_pins_are_closed\",\n      \"LinuxEvidenceTests.test_role_scope_owner_revocation_and_validity_fail_closed\",\n      \"LinuxEvidenceTests.test_unknown_nested_fields_and_verification_booleans_are_rejected\"\n    ],\n    \"tests/platform/linux_baseline/test_linux_inventory.py\": [\n      \"LinuxInventoryTests.test_all_five_suites_collect_every_module_and_preserve_all_83_predecessors\",\n      \"LinuxInventoryTests.test_legacy_comparison_sources_are_pinned_owned_baseline_bytes\",\n      \"LinuxInventoryTests.test_legacy_three_file_edits_and_registry_addition_are_exact\",\n      \"LinuxInventoryTests.test_original_files_are_unchanged_except_ten_authorized_integrations\",\n      \"LinuxInventoryTests.test_pure_verifier_has_no_execution_network_or_signing_primitive\"\n    ],\n    \"tests/platform/linux_baseline/test_linux_protocol.py\": [\n      \"LinuxProtocolTests.test_dual_envelope_commands_axes_endpoint_and_capacity_mismatch_fail\",\n      \"LinuxProtocolTests.test_fake_proxy_is_unit_only_and_cannot_supply_runtime_authority\",\n      \"LinuxProtocolTests.test_proxy_operations_are_fixed_data_only_and_do_not_open_io\",\n      \"LinuxProtocolTests.test_published_schema_covers_all_nested_records_and_plans\",\n      \"LinuxProtocolTests.test_schema_and_runtime_both_reject_structural_mutations\",\n      \"LinuxProtocolTests.test_unknown_operations_and_scope_or_policy_expansion_fail\"\n    ]\n  },\n  \"suiteRoots\": [\n    \"tests/meta\",\n    \"tests/parity\",\n    \"tests/alpha1\",\n    \"tests/fixes/runner_boundary\",\n    \"tests/platform/linux_baseline\"\n  ],\n  \"suites\": {\n    \"tests/alpha1\": {\n      \"modules\": 1,\n      \"testCount\": 9\n    },\n    \"tests/fixes/runner_boundary\": {\n      \"modules\": 2,\n      \"testCount\": 23\n    },\n    \"tests/meta\": {\n      \"modules\": 7,\n      \"testCount\": 37\n    },\n    \"tests/parity\": {\n      \"modules\": 3,\n      \"testCount\": 14\n    },\n    \"tests/platform/linux_baseline\": {\n      \"modules\": 4,\n      \"testCount\": 37\n    }\n  },\n  \"originalTestCount\": 120,\n  \"evidenceClass\": \"SOURCE_INVENTORY_ONLY\",\n  \"nativeAcceptance\": false\n}\n",
+  "baselineRawSha256": "d88c8f22877cf7269135ef53c08ff3a4921edb0946db0d9c9c1d38209256bfb6",
+  "sourceBaseline": {
+    "repository": "mas-harness-conformance-labs",
+    "commit": "88de1d9b7272a25678b01129e51d5756dbe608ed",
+    "files": 103,
+    "tests": 120,
+    "skipped": 0,
+    "ciRun": 34076298942,
+    "exactMainLogSha256": "866b0eb26f2c1a97bc106de4f4bb2366251ae09de143233a6c973ae5647b3ac8",
+    "evidenceClass": "SOURCE_CI_MERGE_LOCAL_EXACT_MAIN_ONLY"
+  },
+  "changes": {
+    "ci/run_packet.py": {
+      "beforeSha256": "3128dd48c486d74c3a109eb0d6655c57033011d508afadce35756e485d94e83a",
+      "afterSha256": "397219b875c040d496edaecaca28bf68725c5338313f047a799235b451ca6de1",
+      "beforeBlock": "            if not raw or raw[0] in \"[{&*!|>\":\n                refuse(f\"packet {field} must be a scalar without YAML indirection\")\n            result[field] = raw\n",
+      "afterBlock": "            if raw.startswith('\"'):\n                try:\n                    value = json.loads(raw)\n                except json.JSONDecodeError:\n                    refuse(f\"packet {field} must be a valid JSON-quoted string\")\n            else:\n                value = raw\n            if type(value) is not str or re.fullmatch(r\"[A-Za-z][A-Za-z0-9_-]{0,127}\", value) is None:\n                refuse(f\"packet {field} must be a bounded identifier without indirection\")\n            result[field] = value\n",
+      "prefixSha256": "5d81bca82ad875db3c374fbacadba0bfc550d10ec2021b58a5a5cd2326941eb6",
+      "suffixSha256": "d691d55383e2de6b5c0d49287ddb510f3f64088ccbf69227404636306ddc8725",
+      "otherBytes": "UNCHANGED"
+    },
+    "tests/platform/linux_baseline/test_linux_inventory.py": {
+      "beforeSha256": "1f5587f857927ca645e1c79edd4b4cd560f0eb70a881fb670b5047739421b7ef",
+      "afterSha256": "9111de6b6e167c2eca41801bffc5430b1af8c85f7da696c11a20cce577a1bb29",
+      "beforeBlock": "                    self.assertEqual(blob(path.read_bytes()), expected[\"blob\"])\n",
+      "afterBlock": "                    actual = path.read_bytes()\n                    if file == \"ci/run_packet.py\":\n                        self.assertEqual(hashlib.sha256(actual).hexdigest(), \"397219b875c040d496edaecaca28bf68725c5338313f047a799235b451ca6de1\")\n                    else:\n                        self.assertEqual(blob(actual), expected[\"blob\"])\n",
+      "prefixSha256": "0c2fec2d1f7c1b84b103a236d91b867e4343bd547ea1fecb7aa7c9c2f72d49a9",
+      "suffixSha256": "8ed8f233d6a0c18cdb4954a4971a0211a164ba7d7d7491710b65f5be89762965",
+      "otherBytes": "UNCHANGED"
+    }
+  },
+  "beforeSources": {
+    "ci/run_packet.py": "from __future__ import annotations\n\nimport hashlib\nimport json\nimport os\nimport re\nimport stat\nimport subprocess\nimport sys\nfrom pathlib import Path\nfrom typing import Any\n\nFIELDS = (\"id\", \"repository\", \"warmSourceAccess\", \"prefetchCommands\", \"offlineAcceptanceCommands\", \"offlineExecution\")\nSHELLS = {\"sh\", \"bash\", \"zsh\", \"fish\", \"dash\", \"cmd\", \"powershell\", \"pwsh\"}\nDOWNLOAD_TOKENS = {\"fetch\", \"download\", \"install\", \"pull\", \"clone\", \"curl\", \"wget\", \"pip\", \"npm\", \"npx\"}\nROOT = Path(__file__).resolve().parents[1]\nCHILD_ENVIRONMENT = frozenset({\n    \"PATH\", \"HOME\", \"TMPDIR\", \"USER\", \"LOGNAME\", \"LANG\", \"LC_ALL\",\n    \"CI\", \"GITHUB_ACTIONS\", \"GITHUB_REPOSITORY\", \"GITHUB_SHA\", \"GITHUB_WORKSPACE\",\n    \"HARNESS_OFFLINE_ENFORCED\", \"HARNESS_OFFLINE_BACKEND\", \"HARNESS_OFFLINE_SESSION_ID\",\n    \"UV_CACHE_DIR\", \"UV_OFFLINE\", \"UV_FROZEN\", \"UV_NO_SYNC\", \"UV_PYTHON_DOWNLOADS\",\n})\n\n\ndef child_environment() -> dict[str, str]:\n    # Import only this checkout's own source; never inherit a caller import path.\n    environment = {name: os.environ[name] for name in CHILD_ENVIRONMENT if name in os.environ}\n    environment[\"PYTHONPATH\"] = str(ROOT / \"src\")\n    environment[\"PYTHONDONTWRITEBYTECODE\"] = \"1\"\n    return environment\n\n\ndef refuse(message: str) -> \"NoReturn\":\n    print(f\"packet runner refused: {message}\", file=sys.stderr)\n    raise SystemExit(2)\n\n\ndef read_once(path: Path) -> tuple[int, os.stat_result, bytes]:\n    if not path.is_absolute() or \"..\" in path.parts:\n        refuse(\"packet path must be absolute and canonical\")\n    flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC\n    try:\n        descriptor = os.open(path, flags)\n    except OSError:\n        refuse(\"packet path is unavailable\")\n    info = os.fstat(descriptor)\n    if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_gid != 0 or info.st_nlink != 1 or stat.S_IMODE(info.st_mode) != 0o444:\n        os.close(descriptor)\n        refuse(\"packet custody is invalid\")\n    data = b\"\"\n    while len(data) <= 4 * 1024 * 1024:\n        block = os.read(descriptor, 1024 * 1024)\n        if not block:\n            break\n        data += block\n    if len(data) != info.st_size or len(data) > 4 * 1024 * 1024:\n        os.close(descriptor)\n        refuse(\"packet size or read stability is invalid\")\n    return descriptor, info, data\n\n\ndef extract(text: str) -> dict[str, Any]:\n    result: dict[str, Any] = {}\n    for field in FIELDS:\n        matches = re.findall(rf\"(?m)^{re.escape(field)}:[ \\t]*(.*)$\", text)\n        if len(matches) != 1:\n            refuse(f\"packet has missing or duplicate {field}\")\n        raw = matches[0].strip()\n        if field in (\"prefetchCommands\", \"offlineAcceptanceCommands\", \"offlineExecution\"):\n            try:\n                result[field] = json.loads(raw)\n            except json.JSONDecodeError:\n                refuse(f\"packet {field} must be inline JSON\")\n        else:\n            if not raw or raw[0] in \"[{&*!|>\":\n                refuse(f\"packet {field} must be a scalar without YAML indirection\")\n            result[field] = raw\n    return result\n\n\ndef validate_commands(value: Any, *, allow_empty: bool, phase: str) -> list[list[str]]:\n    if not isinstance(value, list) or (not value and not allow_empty):\n        refuse(\"command phase is not a valid array\")\n    commands: list[list[str]] = []\n    for command in value:\n        if not isinstance(command, list) or not command or len(command) > 32:\n            refuse(\"command must be a bounded argv array\")\n        if any(not isinstance(item, str) or not item or len(item) > 4096 for item in command):\n            refuse(\"command arguments must be bounded strings\")\n        executable = Path(command[0]).name.lower()\n        tokens = {Path(item).name.lower() for item in command}\n        if executable in SHELLS or executable in DOWNLOAD_TOKENS or tokens & DOWNLOAD_TOKENS:\n            refuse(\"shell or download transport is forbidden\")\n        if command[:2] == [\"make\", \"verify-offline\"] or (\n            phase == \"offline\" and command[:2] == [\"make\", \"prefetch\"]\n        ):\n            refuse(\"recursive offline or hidden prefetch command is forbidden\")\n        commands.append(command)\n    return commands\n\n\ndef validate_packet(document: dict[str, Any]) -> tuple[list[list[str]], list[list[str]]]:\n    if document[\"repository\"] != \"mas-harness-conformance-labs\" or not re.fullmatch(r\"CONF-[A-Z0-9-]+\", document[\"id\"]):\n        refuse(\"packet repository or ID is invalid\")\n    if document[\"warmSourceAccess\"] != \"PROHIBITED_DURING_IMPLEMENTATION\":\n        refuse(\"warm-source prohibition is absent\")\n    expected = {\n        \"wrapperArgv\": [\"./ci/verify-offline.sh\"],\n        \"packetPathEnvironment\": \"HARNESS_TASK_PACKET\",\n        \"packetPathMode\": \"HASH_PINNED_READ_ONCE_NO_CHILD_PATH\",\n        \"commandTransport\": \"ARGV_ARRAY_V1\",\n        \"isolation\": \"OS_ENFORCED_DENY_ALL_OUTBOUND\",\n        \"sessionScope\": \"SINGLE_PROCESS_TREE\",\n        \"prefetchOutsideSession\": False,\n        \"offlineEnvironment\": {\"UV_OFFLINE\": \"1\", \"UV_FROZEN\": \"1\", \"UV_NO_SYNC\": \"1\"},\n    }\n    if document[\"offlineExecution\"] != expected:\n        refuse(\"offlineExecution contract mismatch\")\n    return (\n        validate_commands(document[\"prefetchCommands\"], allow_empty=True, phase=\"prefetch\"),\n        validate_commands(document[\"offlineAcceptanceCommands\"], allow_empty=False, phase=\"offline\"),\n    )\n\n\ndef still_same(path: Path, descriptor: int, original: os.stat_result, digest: str) -> None:\n    current_fd = os.fstat(descriptor)\n    try:\n        current_path = path.stat(follow_symlinks=False)\n    except OSError:\n        refuse(\"packet path disappeared\")\n    identity = lambda item: (item.st_dev, item.st_ino, item.st_size, item.st_mtime_ns, item.st_ctime_ns, item.st_mode, item.st_uid, item.st_gid, item.st_nlink)\n    if identity(current_fd) != identity(original) or identity(current_path) != identity(original):\n        refuse(\"packet changed during execution\")\n    if hashlib.sha256(os.pread(descriptor, original.st_size, 0)).hexdigest() != digest:\n        refuse(\"packet digest changed during execution\")\n\n\ndef main(argv: list[str]) -> int:\n    if len(argv) != 1:\n        refuse(\"one packet path is required\")\n    backend = {\"darwin\": \"darwin-sandbox\", \"linux\": \"linux-firejail\"}.get(sys.platform)\n    if backend is None or os.environ.get(\"HARNESS_OFFLINE_ENFORCED\") != \"1\" or os.environ.get(\"HARNESS_OFFLINE_BACKEND\") != backend or not os.environ.get(\"HARNESS_OFFLINE_SESSION_ID\"):\n        refuse(\"existing OS-isolated session is required\")\n    if os.environ.get(\"HARNESS_WARM_SOURCE_ROOTS\"):\n        refuse(\"warm-source roots reached the packet runner\")\n    path = Path(argv[0])\n    descriptor, info, data = read_once(path)\n    try:\n        try:\n            text = data.decode(\"utf-8\")\n        except UnicodeDecodeError:\n            refuse(\"packet is not UTF-8\")\n        packet = extract(text)\n        prefetch, acceptance = validate_packet(packet)\n        packet_digest = hashlib.sha256(data).hexdigest()\n        environment = child_environment()\n        network = subprocess.run([sys.executable, \"ci/network_canary.py\"], env=environment, check=False)\n        still_same(path, descriptor, info, packet_digest)\n        if network.returncode:\n            return network.returncode\n        for phase, commands in ((\"prefetch\", prefetch), (\"offline\", acceptance)):\n            for command in commands:\n                print(f\"{phase}-argv=\" + json.dumps(command, separators=(\",\", \":\")))\n                completed = subprocess.run(command, env=environment, check=False)\n                still_same(path, descriptor, info, packet_digest)\n                if completed.returncode:\n                    return completed.returncode\n        print(f\"packet={packet_digest} packetId={packet['id']} phases=prefetch,offline session={os.environ['HARNESS_OFFLINE_SESSION_ID']}\")\n        return 0\n    finally:\n        os.close(descriptor)\n\n\nif __name__ == \"__main__\":\n    raise SystemExit(main(sys.argv[1:]))\n",
+    "tests/platform/linux_baseline/test_linux_inventory.py": "import ast\nimport hashlib\nimport importlib.util\nimport unittest\n\nfrom _fixtures import ROOT\nfrom harness_conformance.canonical import load_json\n\n\ndef blob(data):\n    return hashlib.sha1(b\"blob \" + str(len(data)).encode() + b\"\\0\" + data).hexdigest()\n\n\nclass LinuxInventoryTests(unittest.TestCase):\n    def test_all_five_suites_collect_every_module_and_preserve_all_83_predecessors(self):\n        source = ROOT / \"tests/fixes/runner_boundary/_inventory.py\"\n        spec = importlib.util.spec_from_file_location(\"linux_predecessor_inventory\", source)\n        helper = importlib.util.module_from_spec(spec)\n        spec.loader.exec_module(helper)\n        legacy = load_json(ROOT / \"fixtures/platform/linux-baseline/predecessor-inventory.json\")[\"tests\"]\n        self.assertEqual(sum(map(len, legacy.values())), 83)\n        for root in (\"tests/meta\", \"tests/parity\", \"tests/alpha1\", \"tests/fixes/runner_boundary\", \"tests/platform/linux_baseline\"):\n            inventory = helper.discover_inventory(ROOT / root)\n            self.assertGreater(sum(map(len, inventory.values())), 0)\n            for file, methods in legacy.items():\n                if file.startswith(root + \"/\"):\n                    self.assertTrue(set(methods) <= set(inventory[file[len(root) + 1:]]))\n            print(f\"linux-test-inventory root={root} modules={len(inventory)} cases={sum(map(len, inventory.values()))} status=PASS\", flush=True)\n\n    def test_original_files_are_unchanged_except_ten_authorized_integrations(self):\n        baseline = load_json(ROOT / \"fixtures/platform/linux-baseline/predecessor-inventory.json\")\n        mutable = {\"src/harness_conformance/\" + name for name in (\"campaign.py\", \"cli.py\", \"live.py\", \"live_launcher.py\", \"models.py\", \"schema.py\")}\n        mutable |= {\"schemas/v1alpha1/\" + name + \".schema.json\" for name in (\"conformance-campaign\", \"control-result\")}\n        mutable |= {\"tests/meta/test_canonical_schema.py\", \"tests/meta/test_registry_dispatch.py\"}\n        self.assertEqual(len(baseline[\"files\"]), 91)\n        for file, expected in baseline[\"files\"].items():\n            path = ROOT / file\n            with self.subTest(file=file):\n                self.assertFalse(path.is_symlink())\n                self.assertEqual(bool(path.stat().st_mode & 0o111), expected[\"mode\"] == \"100755\")\n                if file not in mutable:\n                    self.assertEqual(blob(path.read_bytes()), expected[\"blob\"])\n\n    def test_legacy_three_file_edits_and_registry_addition_are_exact(self):\n        cases = (\n            (\"src/harness_conformance/models.py\", b'    \"LINUX_READINESS\",\\n', b\"\", \"f94ba09d491ce716875f259d81d17f38c1b7786d45db1ad700eaf9a0c7cf14a4\"),\n            (\"schemas/v1alpha1/control-result.schema.json\", b', \"LINUX_READINESS\"', b\"\", \"8dd30591c96d6d023d706336ceae630a838182dd0efa3e08e11e314f4594427b\"),\n            (\"tests/meta/test_canonical_schema.py\", b'self.assertEqual(HANDLERS, (\"STATIC_ASSERTION\", \"SCHEMA_ASSERTION\", \"LIFECYCLE_ASSERTION\", \"EVENT_ASSERTION\", \"ENVIRONMENT_CAPABILITY\", \"LINUX_READINESS\"))',\n             b\"self.assertEqual(len(HANDLERS), 5)\", \"4ff004974fc75c6ea15010eedb9d1596c002330b33596c64a888622f0bd02c8f\"),\n        )\n        for file, addition, original, digest in cases:\n            data = (ROOT / file).read_bytes()\n            self.assertEqual(data.count(addition), 1)\n            self.assertEqual(hashlib.sha256(data.replace(addition, original, 1)).hexdigest(), digest)\n        baseline = load_json(ROOT / \"fixtures/platform/linux-baseline/predecessor-inventory.json\")\n        file = \"tests/meta/test_registry_dispatch.py\"\n        data = (ROOT / file).read_bytes()\n        self.assertEqual(data.count(b', \"linux-baseline\"'), 1)\n        self.assertEqual(blob(data.replace(b', \"linux-baseline\"', b\"\", 1)), baseline[\"files\"][file][\"blob\"])\n\n    def test_legacy_comparison_sources_are_pinned_owned_baseline_bytes(self):\n        baseline = load_json(ROOT / \"fixtures/platform/linux-baseline/predecessor-inventory.json\")\n        snapshot = load_json(ROOT / \"fixtures/platform/linux-baseline/predecessor-sources.json\")\n        self.assertEqual(snapshot[\"commit\"], baseline[\"commit\"])\n        self.assertEqual(set(snapshot[\"sources\"]), {\"campaign.py\", \"cli.py\", \"schema.py\", \"models.py\"})\n        for name, content in snapshot[\"sources\"].items():\n            self.assertEqual(blob(content.encode()), baseline[\"files\"][\"src/harness_conformance/\" + name][\"blob\"])\n\n    def test_pure_verifier_has_no_execution_network_or_signing_primitive(self):\n        tree = ast.parse((ROOT / \"src/harness_conformance/linux_readiness.py\").read_bytes())\n        forbidden = {\"subprocess\", \"socket\", \"os\", \"pathlib\", \"requests\", \"urllib\", \"http\", \"ctypes\", \"multiprocessing\"}\n        for node in ast.walk(tree):\n            if isinstance(node, ast.Import):\n                self.assertFalse({name.name.split(\".\")[0] for name in node.names} & forbidden)\n            elif isinstance(node, ast.ImportFrom):\n                self.assertNotIn((node.module or \"\").split(\".\")[0], forbidden)\n                self.assertNotIn(\"sign\", {name.name for name in node.names})\n            elif isinstance(node, ast.Call) and isinstance(node.func, ast.Name):\n                self.assertNotIn(node.func.id, {\"open\", \"exec\", \"eval\", \"__import__\", \"compile\"})\n"
+  },
+  "publishedPackets": {
+    "CONF-LIVE-001": {
+      "raw": "id: \"CONF-LIVE-001\"\nrepository: \"mas-harness-conformance-labs\"\nbranch: \"codex/conf-live-001-session-contracts\"\nobjective: \"Session contracts and cumulative inventory under the approved trusted backend roadmap; source coding only.\"\npredecessors: [\"MET-LIVE-001\",\"CONF-LINUX-001\",\"CON-MODEL-001\"]\nallowedPaths: [\"src/harness_conformance/live_session.py\",\"src/harness_conformance/live_backend_authority.py\",\"schemas/v1alpha1/live-backend-session.schema.json\",\"fixtures/live-backend/session-vectors.json\",\"fixtures/live-backend/baseline.json\",\"tests/live_backend/_fixtures.py\",\"tests/live_backend/_inventory.py\",\"tests/live_backend/test_session.py\",\"tests/live_backend/test_inventory.py\",\"docs/live-backend/session.md\"]\nwarmSourceAccess: \"PROHIBITED_DURING_IMPLEMENTATION\"\nsourceReuse: []\ncontracts: [\"Consumes docs/alpha-2/LIVE_BACKEND_READINESS.md and architecture/live-backend-roadmap.json from the exact merged MET-LIVE-001 authority, the existing trusted live-runner contract and unchanged CONF-LINUX-001/CON-007 wire contracts. Pin exact merged predecessor SHA and complete source inventory before edits.\",\"Source-only enablement before the native gate is limited to these six packets. No installation or live execution occurs in a coding run. Missing authority, supported OS backend or native capacity fails closed; offline fakes remain UNIT_VERIFICATION_ONLY with nativeAcceptance=false.\",\"Preserve all 120 original test identities across tests/meta, tests/parity, tests/alpha1, tests/fixes/runner_boundary and tests/platform/linux_baseline. Add flat tests/live_backend discovery, run all six roots on every packet and prove no module/test omission, skip, xfail, deselection or test-only runtime shortcut.\",\"Python 3.12.14 standard library and existing pinned conformance crypto/canonical helpers only; no new dependency, public API/signature schema/role, Makefile/dispatcher, PORTING ledger, warm-source, workflow or toolchain change. Kernel primitives and fixed operator prerequisites are preinstalled, never downloaded.\"]\ndeliverables: [\"Implement closed internal session/request/receipt validation and pure state transition functions under the exact interface and state table in the approved guide. Preserve existing public envelope/capacity/Linux evidence formats; test canonical bytes, bounded sizes, expiry, duplicate fields, wrong nonce/scope/digests and every invalid transition.\",\"Seed baseline.json from the clean exact conformance source commit: 120 existing test IDs, every tracked path/hash and the original five-suite collection inventory. Pin authority and source-only model release manifest digests. All baseline data is non-executable; immutable test and helper files retain bytes.\",\"Implement additive inventory tests checking AST and actual unittest discovery for all six roots and the pinned predecessor identities. Allow later production changes only at the exact new packet paths and the final live_launcher.py hook; never amend old hash guard exceptions.\",\"Document that serialized session objects are not authority. API shape validate_session(value, expected_binding, now) returns validated data only; no token/env/header/verified flag unlocks execution. Protected supervisor ownership, channel peer/process binding and one-use transitions are prerequisites supplied by later packets.\",\"Implement a new pure authority adapter for CONF-LIVE-006 and its exact eight-command set. Do not call or monkeypatch verify_linux_authority, which is permanently pinned to CONF-LINUX-001/seven commands. Reuse existing canonical/crypto/capacity validation primitives, independently cover every legacy signature, purpose, validity/revocation, scope, command/envelope/release/endpoint binding and capacity check, and keep the legacy verifier unchanged. Pin the new packet digest from the approved meta packet, not caller input.\"]\nexcluded: [\"No administrator installation, provisioning, kernel/cluster policy modification on this workstation, live network/probe argv, emulation-based native PASS, paid API or third-party key, mutable artifact, warm-source access, external telemetry or source-to-runtime evidence promotion.\",\"No edits to predecessor tests, crypto.py, canonical.py, models.py, schema.py, registry.py, campaign.py, live.py, cli.py, linux_readiness.py, existing schemas, ci/build_live_launcher.py, Makefile, dispatcher, toolchain, workflow or PORTING.yaml. New tests independently preserve old source guards; no relaxing immutable baseline hashes.\"]\nprefetchCommands: []\nofflineAcceptanceCommands: [[\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests/meta\",\"-p\",\"test_*.py\"],[\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests/parity\",\"-p\",\"test_*.py\"],[\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests/alpha1\",\"-p\",\"test_*.py\"],[\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests/fixes/runner_boundary\",\"-p\",\"test_*.py\"],[\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests/platform/linux_baseline\",\"-p\",\"test_*.py\"],[\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests/live_backend\",\"-p\",\"test_*.py\"],[\"make\",\"campaign\",\"CAMPAIGN=linux-baseline\"],[\"make\",\"evidence-verify\",\"CAMPAIGN=linux-baseline\"]]\nofflineExecution: {\"wrapperArgv\":[\"./ci/verify-offline.sh\"],\"packetPathEnvironment\":\"HARNESS_TASK_PACKET\",\"packetPathMode\":\"HASH_PINNED_READ_ONCE_NO_CHILD_PATH\",\"commandTransport\":\"ARGV_ARRAY_V1\",\"isolation\":\"OS_ENFORCED_DENY_ALL_OUTBOUND\",\"sessionScope\":\"SINGLE_PROCESS_TREE\",\"prefetchOutsideSession\":false,\"offlineEnvironment\":{\"UV_OFFLINE\":\"1\",\"UV_FROZEN\":\"1\",\"UV_NO_SYNC\":\"1\"}}\nexpectedEvidence: [\"Closed-schema positives plus per-field/type/extra/missing/depth/duplicate/nonfinite/expiry mutations; transitions and all 120 predecessor identities; forged session data must not authorize any operation.\",\"All eight offline commands run in one signed deny-all process tree; all original 120 test identities and every predecessor backend test remain discovered and passing. New tests never replace real native qualification.\",\"Source/CI/merge/exact-main and unsigned candidate/package evidence are separate from installed preflight, native artifacts, runtime, assurance and tenant acceptance. Missing independent backend/target/authority is NOT_RUN_ENV_UNAVAILABLE; no phase completion claim.\"]\nrollback: \"Revert this unconsumed source increment before successors begin. After consumption use a reviewed corrective packet. Never modify installation, tenant data, trust/replay history or historical evidence.\"\n",
+      "sha256": "5c7ceb5094b1c5a29192b7bdea913b23f777698bd31224ca5d1958a793dba3b3",
+      "view": {
+        "id": "CONF-LIVE-001",
+        "repository": "mas-harness-conformance-labs",
+        "warmSourceAccess": "PROHIBITED_DURING_IMPLEMENTATION",
+        "prefetchCommands": [],
+        "offlineAcceptanceCommands": [
+          [
+            "python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "tests/meta",
+            "-p",
+            "test_*.py"
+          ],
+          [
+            "python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "tests/parity",
+            "-p",
+            "test_*.py"
+          ],
+          [
+            "python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "tests/alpha1",
+            "-p",
+            "test_*.py"
+          ],
+          [
+            "python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "tests/fixes/runner_boundary",
+            "-p",
+            "test_*.py"
+          ],
+          [
+            "python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "tests/platform/linux_baseline",
+            "-p",
+            "test_*.py"
+          ],
+          [
+            "python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "tests/live_backend",
+            "-p",
+            "test_*.py"
+          ],
+          [
+            "make",
+            "campaign",
+            "CAMPAIGN=linux-baseline"
+          ],
+          [
+            "make",
+            "evidence-verify",
+            "CAMPAIGN=linux-baseline"
+          ]
+        ],
+        "offlineExecution": {
+          "wrapperArgv": [
+            "./ci/verify-offline.sh"
+          ],
+          "packetPathEnvironment": "HARNESS_TASK_PACKET",
+          "packetPathMode": "HASH_PINNED_READ_ONCE_NO_CHILD_PATH",
+          "commandTransport": "ARGV_ARRAY_V1",
+          "isolation": "OS_ENFORCED_DENY_ALL_OUTBOUND",
+          "sessionScope": "SINGLE_PROCESS_TREE",
+          "prefetchOutsideSession": false,
+          "offlineEnvironment": {
+            "UV_OFFLINE": "1",
+            "UV_FROZEN": "1",
+            "UV_NO_SYNC": "1"
+          }
+        }
+      }
+    },
+    "CONF-LIVE-002": {
+      "raw": "id: \"CONF-LIVE-002\"\nrepository: \"mas-harness-conformance-labs\"\nbranch: \"codex/conf-live-002-linux-supervisor\"\nobjective: \"Protected Linux supervisor and isolation candidate under the approved trusted backend roadmap; source coding only.\"\npredecessors: [\"CONF-LIVE-001\"]\nallowedPaths: [\"src/harness_conformance/live_supervisor.py\",\"src/harness_conformance/live_linux_boundary.py\",\"src/harness_conformance/live_replay_store.py\",\"tests/live_backend/test_supervisor.py\",\"tests/live_backend/test_linux_boundary.py\",\"tests/live_backend/test_replay_store.py\",\"docs/live-backend/linux-boundary.md\"]\nwarmSourceAccess: \"PROHIBITED_DURING_IMPLEMENTATION\"\nsourceReuse: []\ncontracts: [\"Consumes docs/alpha-2/LIVE_BACKEND_READINESS.md and architecture/live-backend-roadmap.json from the exact merged MET-LIVE-001 authority, the existing trusted live-runner contract and unchanged CONF-LINUX-001/CON-007 wire contracts. Pin exact merged predecessor SHA and complete source inventory before edits.\",\"Source-only enablement before the native gate is limited to these six packets. No installation or live execution occurs in a coding run. Missing authority, supported OS backend or native capacity fails closed; offline fakes remain UNIT_VERIFICATION_ONLY with nativeAcceptance=false.\",\"Preserve all 120 original test identities across tests/meta, tests/parity, tests/alpha1, tests/fixes/runner_boundary and tests/platform/linux_baseline. Add flat tests/live_backend discovery, run all six roots on every packet and prove no module/test omission, skip, xfail, deselection or test-only runtime shortcut.\",\"Python 3.12.14 standard library and existing pinned conformance crypto/canonical helpers only; no new dependency, public API/signature schema/role, Makefile/dispatcher, PORTING ledger, warm-source, workflow or toolchain change. Kernel primitives and fixed operator prerequisites are preinstalled, never downloaded.\"]\ndeliverables: [\"Implement the protected pre-boundary supervisor candidate with direct Linux syscall boundaries via fixed ctypes declarations: user/mount/PID/network namespaces, cgroup-v2 process custody, no_new_privs, capability drop, read-only/no-follow trust and executable custody, and enforced outbound policy. The operator must separately grant exact native prerequisites; absence yields NOT_RUN_ENV_UNAVAILABLE, never a subprocess fallback outside isolation.\",\"Bind the inherited local channel to supervisor UID/custody, kernel peer credentials, child PID/start identity/cgroup, nonce, packet/source/command digest, endpoint/capacity scope and expiry. Validate before accepting requests; caller-owned FD, socket path, process flag, environment variable or memfd alone is never proof.\",\"Implement root-custodied atomic reserve-before-execute replay storage using existing nonce semantics, bounded durable journal, exclusive locking, fsync and no-follow ancestry. States are RESERVED then RUNNING then terminal; expired/crashed sessions remain consumed. Kill/reap the whole child process tree at expiry/cancellation/crash, including double-fork attempts.\",\"Expose injectable syscall/storage adapters for offline negative tests only. The production constructor binds fixed native implementations and has no caller-selected backend/module/command. Do not execute native isolation or change host policies during coding/CI.\"]\nexcluded: [\"No administrator installation, provisioning, kernel/cluster policy modification on this workstation, live network/probe argv, emulation-based native PASS, paid API or third-party key, mutable artifact, warm-source access, external telemetry or source-to-runtime evidence promotion.\",\"No edits to predecessor tests, crypto.py, canonical.py, models.py, schema.py, registry.py, campaign.py, live.py, cli.py, linux_readiness.py, existing schemas, ci/build_live_launcher.py, Makefile, dispatcher, toolchain, workflow or PORTING.yaml. New tests independently preserve old source guards; no relaxing immutable baseline hashes.\"]\nprefetchCommands: []\nofflineAcceptanceCommands: [[\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests/meta\",\"-p\",\"test_*.py\"],[\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests/parity\",\"-p\",\"test_*.py\"],[\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests/alpha1\",\"-p\",\"test_*.py\"],[\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests/fixes/runner_boundary\",\"-p\",\"test_*.py\"],[\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests/platform/linux_baseline\",\"-p\",\"test_*.py\"],[\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests/live_backend\",\"-p\",\"test_*.py\"],[\"make\",\"campaign\",\"CAMPAIGN=linux-baseline\"],[\"make\",\"evidence-verify\",\"CAMPAIGN=linux-baseline\"]]\nofflineExecution: {\"wrapperArgv\":[\"./ci/verify-offline.sh\"],\"packetPathEnvironment\":\"HARNESS_TASK_PACKET\",\"packetPathMode\":\"HASH_PINNED_READ_ONCE_NO_CHILD_PATH\",\"commandTransport\":\"ARGV_ARRAY_V1\",\"isolation\":\"OS_ENFORCED_DENY_ALL_OUTBOUND\",\"sessionScope\":\"SINGLE_PROCESS_TREE\",\"prefetchOutsideSession\":false,\"offlineEnvironment\":{\"UV_OFFLINE\":\"1\",\"UV_FROZEN\":\"1\",\"UV_NO_SYNC\":\"1\"}}\nexpectedEvidence: [\"Peer/FD spoofing, parent death, PID reuse, fork escape, nonce races, crash at each journal boundary, symlink/hardlink/owner/mode tampering, expiry during I/O, IPv4/IPv6/DNS/metadata endpoint denial; fake results labelled unit-only.\",\"All eight offline commands run in one signed deny-all process tree; all original 120 test identities and every predecessor backend test remain discovered and passing. New tests never replace real native qualification.\",\"Source/CI/merge/exact-main and unsigned candidate/package evidence are separate from installed preflight, native artifacts, runtime, assurance and tenant acceptance. Missing independent backend/target/authority is NOT_RUN_ENV_UNAVAILABLE; no phase completion claim.\"]\nrollback: \"Revert this unconsumed source increment before successors begin. After consumption use a reviewed corrective packet. Never modify installation, tenant data, trust/replay history or historical evidence.\"\n",
+      "sha256": "05a6f03d19a1e12fafe278e5ec72c8adc6304766697b8682bc8d63092d47427f",
+      "view": {
+        "id": "CONF-LIVE-002",
+        "repository": "mas-harness-conformance-labs",
+        "warmSourceAccess": "PROHIBITED_DURING_IMPLEMENTATION",
+        "prefetchCommands": [],
+        "offlineAcceptanceCommands": [
+          [
+            "python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "tests/meta",
+            "-p",
+            "test_*.py"
+          ],
+          [
+            "python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "tests/parity",
+            "-p",
+            "test_*.py"
+          ],
+          [
+            "python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "tests/alpha1",
+            "-p",
+            "test_*.py"
+          ],
+          [
+            "python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "tests/fixes/runner_boundary",
+            "-p",
+            "test_*.py"
+          ],
+          [
+            "python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "tests/platform/linux_baseline",
+            "-p",
+            "test_*.py"
+          ],
+          [
+            "python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "tests/live_backend",
+            "-p",
+            "test_*.py"
+          ],
+          [
+            "make",
+            "campaign",
+            "CAMPAIGN=linux-baseline"
+          ],
+          [
+            "make",
+            "evidence-verify",
+            "CAMPAIGN=linux-baseline"
+          ]
+        ],
+        "offlineExecution": {
+          "wrapperArgv": [
+            "./ci/verify-offline.sh"
+          ],
+          "packetPathEnvironment": "HARNESS_TASK_PACKET",
+          "packetPathMode": "HASH_PINNED_READ_ONCE_NO_CHILD_PATH",
+          "commandTransport": "ARGV_ARRAY_V1",
+          "isolation": "OS_ENFORCED_DENY_ALL_OUTBOUND",
+          "sessionScope": "SINGLE_PROCESS_TREE",
+          "prefetchOutsideSession": false,
+          "offlineEnvironment": {
+            "UV_OFFLINE": "1",
+            "UV_FROZEN": "1",
+            "UV_NO_SYNC": "1"
+          }
+        }
+      }
+    },
+    "CONF-LIVE-003": {
+      "raw": "id: \"CONF-LIVE-003\"\nrepository: \"mas-harness-conformance-labs\"\nbranch: \"codex/conf-live-003-proxy-admission\"\nobjective: \"Fixed proxy transport and zero-cost admission under the approved trusted backend roadmap; source coding only.\"\npredecessors: [\"CONF-LIVE-002\"]\nallowedPaths: [\"src/harness_conformance/live_proxy_client.py\",\"src/harness_conformance/live_proxy_server.py\",\"src/harness_conformance/live_mutation_admission.py\",\"tests/live_backend/test_proxy_client.py\",\"tests/live_backend/test_proxy_server.py\",\"tests/live_backend/test_mutation_admission.py\",\"fixtures/live-backend/proxy-vectors.json\",\"docs/live-backend/proxy.md\"]\nwarmSourceAccess: \"PROHIBITED_DURING_IMPLEMENTATION\"\nsourceReuse: []\ncontracts: [\"Consumes docs/alpha-2/LIVE_BACKEND_READINESS.md and architecture/live-backend-roadmap.json from the exact merged MET-LIVE-001 authority, the existing trusted live-runner contract and unchanged CONF-LINUX-001/CON-007 wire contracts. Pin exact merged predecessor SHA and complete source inventory before edits.\",\"Source-only enablement before the native gate is limited to these six packets. No installation or live execution occurs in a coding run. Missing authority, supported OS backend or native capacity fails closed; offline fakes remain UNIT_VERIFICATION_ONLY with nativeAcceptance=false.\",\"Preserve all 120 original test identities across tests/meta, tests/parity, tests/alpha1, tests/fixes/runner_boundary and tests/platform/linux_baseline. Add flat tests/live_backend discovery, run all six roots on every packet and prove no module/test omission, skip, xfail, deselection or test-only runtime shortcut.\",\"Python 3.12.14 standard library and existing pinned conformance crypto/canonical helpers only; no new dependency, public API/signature schema/role, Makefile/dispatcher, PORTING ledger, warm-source, workflow or toolchain change. Kernel primitives and fixed operator prerequisites are preinstalled, never downloaded.\"]\ndeliverables: [\"Implement only the existing signed CAMPAIGN_PROXY endpoint mode for this release. Pin origin/address/TLS identity and all response sizes/deadlines to the signed endpoint; never resolve dynamic URLs, redirect, discover Pod IPs or accept proxy environment settings. Fixed stdlib transport runs only after the protected boundary, using short-lived tenant-local credential references under original custody rules.\",\"Implement the bounded server-side service in the same repository but separate deployment/custody from the campaign. Independently verify capacity/signatures, namespace and nonce, pin quota/admission policy digests and resource identities, and maintain atomic reservations across concurrent requests. Client approval alone never authorizes a mutation.\",\"Accept only the ten fixed operation paths from build_probe_request and validate binding through the authenticated protected session. Reject request-supplied argv, URL, GVK, namespace, artifact digest or credential scope. Server adapters use only preinstalled fixed probes and approved existing capacity; no generic Kubernetes or Docker/containerd socket exposure to the campaign.\",\"Constrain mutations to run-labelled resources and exact signed manifests inside existing namespace/quota; require immutable server-enforced admission and scoped RBAC. Forbid new capacity/PVC provisioning, load balancers, autoscaling, cluster-scoped/unknown resources and cloud/billing APIs. Preserve tenant data; failed cleanup is an explicit remaining resource receipt, not permission to broaden deletion.\"]\nexcluded: [\"No administrator installation, provisioning, kernel/cluster policy modification on this workstation, live network/probe argv, emulation-based native PASS, paid API or third-party key, mutable artifact, warm-source access, external telemetry or source-to-runtime evidence promotion.\",\"No edits to predecessor tests, crypto.py, canonical.py, models.py, schema.py, registry.py, campaign.py, live.py, cli.py, linux_readiness.py, existing schemas, ci/build_live_launcher.py, Makefile, dispatcher, toolchain, workflow or PORTING.yaml. New tests independently preserve old source guards; no relaxing immutable baseline hashes.\"]\nprefetchCommands: []\nofflineAcceptanceCommands: [[\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests/meta\",\"-p\",\"test_*.py\"],[\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests/parity\",\"-p\",\"test_*.py\"],[\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests/alpha1\",\"-p\",\"test_*.py\"],[\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests/fixes/runner_boundary\",\"-p\",\"test_*.py\"],[\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests/platform/linux_baseline\",\"-p\",\"test_*.py\"],[\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests/live_backend\",\"-p\",\"test_*.py\"],[\"make\",\"campaign\",\"CAMPAIGN=linux-baseline\"],[\"make\",\"evidence-verify\",\"CAMPAIGN=linux-baseline\"]]\nofflineExecution: {\"wrapperArgv\":[\"./ci/verify-offline.sh\"],\"packetPathEnvironment\":\"HARNESS_TASK_PACKET\",\"packetPathMode\":\"HASH_PINNED_READ_ONCE_NO_CHILD_PATH\",\"commandTransport\":\"ARGV_ARRAY_V1\",\"isolation\":\"OS_ENFORCED_DENY_ALL_OUTBOUND\",\"sessionScope\":\"SINGLE_PROCESS_TREE\",\"prefetchOutsideSession\":false,\"offlineEnvironment\":{\"UV_OFFLINE\":\"1\",\"UV_FROZEN\":\"1\",\"UV_NO_SYNC\":\"1\"}}\nexpectedEvidence: [\"Cross-tenant/namespace/nonce attempts, DNS rebind/redirect/IPv6 fallback, TLS identity, late/oversize bodies, quota races, forged capacity, revoked keys, substituted images, replayed receipts, out-of-scope cleanup and unavailable server-side policy.\",\"All eight offline commands run in one signed deny-all process tree; all original 120 test identities and every predecessor backend test remain discovered and passing. New tests never replace real native qualification.\",\"Source/CI/merge/exact-main and unsigned candidate/package evidence are separate from installed preflight, native artifacts, runtime, assurance and tenant acceptance. Missing independent backend/target/authority is NOT_RUN_ENV_UNAVAILABLE; no phase completion claim.\"]\nrollback: \"Revert this unconsumed source increment before successors begin. After consumption use a reviewed corrective packet. Never modify installation, tenant data, trust/replay history or historical evidence.\"\n",
+      "sha256": "15d13434edf833d4803618a7aa73ccc5e93baa29596e08903e623dbee338bba5",
+      "view": {
+        "id": "CONF-LIVE-003",
+        "repository": "mas-harness-conformance-labs",
+        "warmSourceAccess": "PROHIBITED_DURING_IMPLEMENTATION",
+        "prefetchCommands": [],
+        "offlineAcceptanceCommands": [
+          [
+            "python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "tests/meta",
+            "-p",
+            "test_*.py"
+          ],
+          [
+            "python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "tests/parity",
+            "-p",
+            "test_*.py"
+          ],
+          [
+            "python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "tests/alpha1",
+            "-p",
+            "test_*.py"
+          ],
+          [
+            "python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "tests/fixes/runner_boundary",
+            "-p",
+            "test_*.py"
+          ],
+          [
+            "python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "tests/platform/linux_baseline",
+            "-p",
+            "test_*.py"
+          ],
+          [
+            "python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "tests/live_backend",
+            "-p",
+            "test_*.py"
+          ],
+          [
+            "make",
+            "campaign",
+            "CAMPAIGN=linux-baseline"
+          ],
+          [
+            "make",
+            "evidence-verify",
+            "CAMPAIGN=linux-baseline"
+          ]
+        ],
+        "offlineExecution": {
+          "wrapperArgv": [
+            "./ci/verify-offline.sh"
+          ],
+          "packetPathEnvironment": "HARNESS_TASK_PACKET",
+          "packetPathMode": "HASH_PINNED_READ_ONCE_NO_CHILD_PATH",
+          "commandTransport": "ARGV_ARRAY_V1",
+          "isolation": "OS_ENFORCED_DENY_ALL_OUTBOUND",
+          "sessionScope": "SINGLE_PROCESS_TREE",
+          "prefetchOutsideSession": false,
+          "offlineEnvironment": {
+            "UV_OFFLINE": "1",
+            "UV_FROZEN": "1",
+            "UV_NO_SYNC": "1"
+          }
+        }
+      }
+    },
+    "CONF-LIVE-004": {
+      "raw": "id: \"CONF-LIVE-004\"\nrepository: \"mas-harness-conformance-labs\"\nbranch: \"codex/conf-live-004-fixed-probes\"\nobjective: \"Native Linux build and ten fixed probes under the approved trusted backend roadmap; source coding only.\"\npredecessors: [\"CONF-LIVE-003\"]\nallowedPaths: [\"src/harness_conformance/live_fixed_probes.py\",\"src/harness_conformance/live_probe_receipts.py\",\"fixtures/live-backend/probe-vectors.json\",\"tests/live_backend/test_fixed_probes.py\",\"tests/live_backend/test_probe_receipts.py\",\"docs/live-backend/probes.md\"]\nwarmSourceAccess: \"PROHIBITED_DURING_IMPLEMENTATION\"\nsourceReuse: []\ncontracts: [\"Consumes docs/alpha-2/LIVE_BACKEND_READINESS.md and architecture/live-backend-roadmap.json from the exact merged MET-LIVE-001 authority, the existing trusted live-runner contract and unchanged CONF-LINUX-001/CON-007 wire contracts. Pin exact merged predecessor SHA and complete source inventory before edits.\",\"Source-only enablement before the native gate is limited to these six packets. No installation or live execution occurs in a coding run. Missing authority, supported OS backend or native capacity fails closed; offline fakes remain UNIT_VERIFICATION_ONLY with nativeAcceptance=false.\",\"Preserve all 120 original test identities across tests/meta, tests/parity, tests/alpha1, tests/fixes/runner_boundary and tests/platform/linux_baseline. Add flat tests/live_backend discovery, run all six roots on every packet and prove no module/test omission, skip, xfail, deselection or test-only runtime shortcut.\",\"Python 3.12.14 standard library and existing pinned conformance crypto/canonical helpers only; no new dependency, public API/signature schema/role, Makefile/dispatcher, PORTING ledger, warm-source, workflow or toolchain change. Kernel primitives and fixed operator prerequisites are preinstalled, never downloaded.\"]\ndeliverables: [\"Implement exactly the ten existing Linux case IDs per architecture; obtain identifiers and request paths from pinned CONF-LINUX-001 contracts, never invent a parallel matrix. Fixed compiled-in adapters cover native facts, Linux build/provenance, deny-all isolation, cumulative offline regression, standalone control startup, migrations, RLS, restart durability, arbitrary non-root UID/read-only filesystem and Kubernetes default deny according to the actual existing case grouping.\",\"Define direct-argv recipes in reviewed code, with typed closed parameters resolved only from signed pinned release inputs. No request-selected executable/shell, arbitrary Python import, template interpolation or run-time package/image acquisition. Builder/probe tools and all images/caches must already exist on independently approved native capacity.\",\"Produce bounded receipt candidates binding source/packet/commands, image/SBOM, OS/arch/libc, toolchain/cache/probe and sanitized output digests, nonce/scope, start/end and exact assertion result. Only the independently protected release/operator mechanism signs; unit keys/fixtures never produce accepted native evidence.\",\"Keep AMD64 and ARM64 separate; reject translated/emulated facts, missing mandatory case, partial log, stale inputs, architecture mismatch and consumer-image substitution. Destructive migration reversal and existing tenant-data mutation are excluded; isolated run-labelled test fixtures only.\"]\nexcluded: [\"No administrator installation, provisioning, kernel/cluster policy modification on this workstation, live network/probe argv, emulation-based native PASS, paid API or third-party key, mutable artifact, warm-source access, external telemetry or source-to-runtime evidence promotion.\",\"No edits to predecessor tests, crypto.py, canonical.py, models.py, schema.py, registry.py, campaign.py, live.py, cli.py, linux_readiness.py, existing schemas, ci/build_live_launcher.py, Makefile, dispatcher, toolchain, workflow or PORTING.yaml. New tests independently preserve old source guards; no relaxing immutable baseline hashes.\"]\nprefetchCommands: []\nofflineAcceptanceCommands: [[\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests/meta\",\"-p\",\"test_*.py\"],[\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests/parity\",\"-p\",\"test_*.py\"],[\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests/alpha1\",\"-p\",\"test_*.py\"],[\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests/fixes/runner_boundary\",\"-p\",\"test_*.py\"],[\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests/platform/linux_baseline\",\"-p\",\"test_*.py\"],[\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests/live_backend\",\"-p\",\"test_*.py\"],[\"make\",\"campaign\",\"CAMPAIGN=linux-baseline\"],[\"make\",\"evidence-verify\",\"CAMPAIGN=linux-baseline\"]]\nofflineExecution: {\"wrapperArgv\":[\"./ci/verify-offline.sh\"],\"packetPathEnvironment\":\"HARNESS_TASK_PACKET\",\"packetPathMode\":\"HASH_PINNED_READ_ONCE_NO_CHILD_PATH\",\"commandTransport\":\"ARGV_ARRAY_V1\",\"isolation\":\"OS_ENFORCED_DENY_ALL_OUTBOUND\",\"sessionScope\":\"SINGLE_PROCESS_TREE\",\"prefetchOutsideSession\":false,\"offlineEnvironment\":{\"UV_OFFLINE\":\"1\",\"UV_FROZEN\":\"1\",\"UV_NO_SYNC\":\"1\"}}\nexpectedEvidence: [\"Every ten-case result in both architectures; wrong platform, emulation, missing inputs, truncated logs, failed/skipped probes, invocation injection, source/image/cache mismatch and unsigned candidate rejection.\",\"All eight offline commands run in one signed deny-all process tree; all original 120 test identities and every predecessor backend test remain discovered and passing. New tests never replace real native qualification.\",\"Source/CI/merge/exact-main and unsigned candidate/package evidence are separate from installed preflight, native artifacts, runtime, assurance and tenant acceptance. Missing independent backend/target/authority is NOT_RUN_ENV_UNAVAILABLE; no phase completion claim.\"]\nrollback: \"Revert this unconsumed source increment before successors begin. After consumption use a reviewed corrective packet. Never modify installation, tenant data, trust/replay history or historical evidence.\"\n",
+      "sha256": "3cb0e1f7d163d7a420fbf2134b7ca5a7c70174acfca8646c341be83e6c23ff23",
+      "view": {
+        "id": "CONF-LIVE-004",
+        "repository": "mas-harness-conformance-labs",
+        "warmSourceAccess": "PROHIBITED_DURING_IMPLEMENTATION",
+        "prefetchCommands": [],
+        "offlineAcceptanceCommands": [
+          [
+            "python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "tests/meta",
+            "-p",
+            "test_*.py"
+          ],
+          [
+            "python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "tests/parity",
+            "-p",
+            "test_*.py"
+          ],
+          [
+            "python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "tests/alpha1",
+            "-p",
+            "test_*.py"
+          ],
+          [
+            "python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "tests/fixes/runner_boundary",
+            "-p",
+            "test_*.py"
+          ],
+          [
+            "python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "tests/platform/linux_baseline",
+            "-p",
+            "test_*.py"
+          ],
+          [
+            "python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "tests/live_backend",
+            "-p",
+            "test_*.py"
+          ],
+          [
+            "make",
+            "campaign",
+            "CAMPAIGN=linux-baseline"
+          ],
+          [
+            "make",
+            "evidence-verify",
+            "CAMPAIGN=linux-baseline"
+          ]
+        ],
+        "offlineExecution": {
+          "wrapperArgv": [
+            "./ci/verify-offline.sh"
+          ],
+          "packetPathEnvironment": "HARNESS_TASK_PACKET",
+          "packetPathMode": "HASH_PINNED_READ_ONCE_NO_CHILD_PATH",
+          "commandTransport": "ARGV_ARRAY_V1",
+          "isolation": "OS_ENFORCED_DENY_ALL_OUTBOUND",
+          "sessionScope": "SINGLE_PROCESS_TREE",
+          "prefetchOutsideSession": false,
+          "offlineEnvironment": {
+            "UV_OFFLINE": "1",
+            "UV_FROZEN": "1",
+            "UV_NO_SYNC": "1"
+          }
+        }
+      }
+    },
+    "CONF-LIVE-005": {
+      "raw": "id: \"CONF-LIVE-005\"\nrepository: \"mas-harness-conformance-labs\"\nbranch: \"codex/conf-live-005-release-candidate\"\nobjective: \"Reproducible packaging and operator handoff under the approved trusted backend roadmap; source coding only.\"\npredecessors: [\"CONF-LIVE-004\"]\nallowedPaths: [\"ci/build_live_backend.py\",\"src/harness_conformance/live_backend_package.py\",\"tests/live_backend/test_package.py\",\"fixtures/live-backend/package-vectors.json\",\"docs/live-backend/operator-handoff.md\"]\nwarmSourceAccess: \"PROHIBITED_DURING_IMPLEMENTATION\"\nsourceReuse: []\ncontracts: [\"Consumes docs/alpha-2/LIVE_BACKEND_READINESS.md and architecture/live-backend-roadmap.json from the exact merged MET-LIVE-001 authority, the existing trusted live-runner contract and unchanged CONF-LINUX-001/CON-007 wire contracts. Pin exact merged predecessor SHA and complete source inventory before edits.\",\"Source-only enablement before the native gate is limited to these six packets. No installation or live execution occurs in a coding run. Missing authority, supported OS backend or native capacity fails closed; offline fakes remain UNIT_VERIFICATION_ONLY with nativeAcceptance=false.\",\"Preserve all 120 original test identities across tests/meta, tests/parity, tests/alpha1, tests/fixes/runner_boundary and tests/platform/linux_baseline. Add flat tests/live_backend discovery, run all six roots on every packet and prove no module/test omission, skip, xfail, deselection or test-only runtime shortcut.\",\"Python 3.12.14 standard library and existing pinned conformance crypto/canonical helpers only; no new dependency, public API/signature schema/role, Makefile/dispatcher, PORTING ledger, warm-source, workflow or toolchain change. Kernel primitives and fixed operator prerequisites are preinstalled, never downloaded.\"]\ndeliverables: [\"Implement a separate deterministic candidate builder; preserve ci/build_live_launcher.py bytes. Package only the allowlisted source/modules/public trust anchors and fixed recipes, sorted paths and fixed metadata. Reject symlinks, hardlinks, traversal, unknown extras, missing inputs, embedded credentials and mutable references.\",\"Generate unsigned SOURCE_PACKAGE_ONLY inventory/SBOM-input manifests and reproducibility hashes from actual bytes. Do not invent Linux image digests or claim a Python archive is a Linux release. A --verify-reproducible mode builds twice under temporary output without host installation or downloads; tests invoke it inside declared offline acceptance.\",\"Document the independent operator transaction: preexisting native host and cluster capacity, reviewed artifact/signature verification, root-owned install/custody and kernel prerequisites, fresh preflight evidence, exact versioned manifest, rollback retaining trust/replay history and no available-target fallback. Installation is manual external authority, not a product Make target or coding command.\",\"Pin a complete candidate inventory covering supervisor, proxy server, fixed probes and integration hook. Final CONF-LIVE-006 rebuilds the candidate after its hook is present; publication of this source builder is not the final installed artifact.\"]\nexcluded: [\"No administrator installation, provisioning, kernel/cluster policy modification on this workstation, live network/probe argv, emulation-based native PASS, paid API or third-party key, mutable artifact, warm-source access, external telemetry or source-to-runtime evidence promotion.\",\"No edits to predecessor tests, crypto.py, canonical.py, models.py, schema.py, registry.py, campaign.py, live.py, cli.py, linux_readiness.py, existing schemas, ci/build_live_launcher.py, Makefile, dispatcher, toolchain, workflow or PORTING.yaml. New tests independently preserve old source guards; no relaxing immutable baseline hashes.\"]\nprefetchCommands: []\nofflineAcceptanceCommands: [[\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests/meta\",\"-p\",\"test_*.py\"],[\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests/parity\",\"-p\",\"test_*.py\"],[\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests/alpha1\",\"-p\",\"test_*.py\"],[\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests/fixes/runner_boundary\",\"-p\",\"test_*.py\"],[\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests/platform/linux_baseline\",\"-p\",\"test_*.py\"],[\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests/live_backend\",\"-p\",\"test_*.py\"],[\"make\",\"campaign\",\"CAMPAIGN=linux-baseline\"],[\"make\",\"evidence-verify\",\"CAMPAIGN=linux-baseline\"]]\nofflineExecution: {\"wrapperArgv\":[\"./ci/verify-offline.sh\"],\"packetPathEnvironment\":\"HARNESS_TASK_PACKET\",\"packetPathMode\":\"HASH_PINNED_READ_ONCE_NO_CHILD_PATH\",\"commandTransport\":\"ARGV_ARRAY_V1\",\"isolation\":\"OS_ENFORCED_DENY_ALL_OUTBOUND\",\"sessionScope\":\"SINGLE_PROCESS_TREE\",\"prefetchOutsideSession\":false,\"offlineEnvironment\":{\"UV_OFFLINE\":\"1\",\"UV_FROZEN\":\"1\",\"UV_NO_SYNC\":\"1\"}}\nexpectedEvidence: [\"Byte-for-byte reproducibility, exact package closure, altered source/public key, absent integration candidate, symlink/hardlink/traversal, archive metadata, secrets scan and rollback fail-closed custody checks.\",\"All eight offline commands run in one signed deny-all process tree; all original 120 test identities and every predecessor backend test remain discovered and passing. New tests never replace real native qualification.\",\"Source/CI/merge/exact-main and unsigned candidate/package evidence are separate from installed preflight, native artifacts, runtime, assurance and tenant acceptance. Missing independent backend/target/authority is NOT_RUN_ENV_UNAVAILABLE; no phase completion claim.\"]\nrollback: \"Revert this unconsumed source increment before successors begin. After consumption use a reviewed corrective packet. Never modify installation, tenant data, trust/replay history or historical evidence.\"\n",
+      "sha256": "b25b9a828907a25d46fea9ccce74d3f05f30cfb9623acd0b21e8dd359e1d9623",
+      "view": {
+        "id": "CONF-LIVE-005",
+        "repository": "mas-harness-conformance-labs",
+        "warmSourceAccess": "PROHIBITED_DURING_IMPLEMENTATION",
+        "prefetchCommands": [],
+        "offlineAcceptanceCommands": [
+          [
+            "python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "tests/meta",
+            "-p",
+            "test_*.py"
+          ],
+          [
+            "python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "tests/parity",
+            "-p",
+            "test_*.py"
+          ],
+          [
+            "python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "tests/alpha1",
+            "-p",
+            "test_*.py"
+          ],
+          [
+            "python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "tests/fixes/runner_boundary",
+            "-p",
+            "test_*.py"
+          ],
+          [
+            "python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "tests/platform/linux_baseline",
+            "-p",
+            "test_*.py"
+          ],
+          [
+            "python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "tests/live_backend",
+            "-p",
+            "test_*.py"
+          ],
+          [
+            "make",
+            "campaign",
+            "CAMPAIGN=linux-baseline"
+          ],
+          [
+            "make",
+            "evidence-verify",
+            "CAMPAIGN=linux-baseline"
+          ]
+        ],
+        "offlineExecution": {
+          "wrapperArgv": [
+            "./ci/verify-offline.sh"
+          ],
+          "packetPathEnvironment": "HARNESS_TASK_PACKET",
+          "packetPathMode": "HASH_PINNED_READ_ONCE_NO_CHILD_PATH",
+          "commandTransport": "ARGV_ARRAY_V1",
+          "isolation": "OS_ENFORCED_DENY_ALL_OUTBOUND",
+          "sessionScope": "SINGLE_PROCESS_TREE",
+          "prefetchOutsideSession": false,
+          "offlineEnvironment": {
+            "UV_OFFLINE": "1",
+            "UV_FROZEN": "1",
+            "UV_NO_SYNC": "1"
+          }
+        }
+      }
+    },
+    "CONF-LIVE-006": {
+      "raw": "id: \"CONF-LIVE-006\"\nrepository: \"mas-harness-conformance-labs\"\nbranch: \"codex/conf-live-006-campaign-integration\"\nobjective: \"Trusted campaign integration and manual qualification declaration under the approved trusted backend roadmap; source coding only.\"\npredecessors: [\"CONF-LIVE-005\"]\nallowedPaths: [\"src/harness_conformance/live_launcher.py\",\"src/harness_conformance/live_backend_campaign.py\",\"src/harness_conformance/live_backend_evidence.py\",\"tests/live_backend/test_campaign_integration.py\",\"tests/live_backend/test_cumulative_release.py\",\"docs/live-backend/qualification.md\"]\nwarmSourceAccess: \"PROHIBITED_DURING_IMPLEMENTATION\"\nsourceReuse: []\ncontracts: [\"Consumes docs/alpha-2/LIVE_BACKEND_READINESS.md and architecture/live-backend-roadmap.json from the exact merged MET-LIVE-001 authority, the existing trusted live-runner contract and unchanged CONF-LINUX-001/CON-007 wire contracts. Pin exact merged predecessor SHA and complete source inventory before edits.\",\"Source-only enablement before the native gate is limited to these six packets. No installation or live execution occurs in a coding run. Missing authority, supported OS backend or native capacity fails closed; offline fakes remain UNIT_VERIFICATION_ONLY with nativeAcceptance=false.\",\"Preserve all 120 original test identities across tests/meta, tests/parity, tests/alpha1, tests/fixes/runner_boundary and tests/platform/linux_baseline. Add flat tests/live_backend discovery, run all six roots on every packet and prove no module/test omission, skip, xfail, deselection or test-only runtime shortcut.\",\"Python 3.12.14 standard library and existing pinned conformance crypto/canonical helpers only; no new dependency, public API/signature schema/role, Makefile/dispatcher, PORTING ledger, warm-source, workflow or toolchain change. Kernel primitives and fixed operator prerequisites are preinstalled, never downloaded.\"]\ndeliverables: [\"Add the sole existing-file integration hook in live_launcher.py, after independent installed-manifest/signature/custody checks and before any checked-out code/credential access. Delegate to the fixed installed supervisor implementation, never import checkout-selected modules. Preserve the direct/unauthorized CLI refusal and pure linux_readiness.py UNIT_VERIFICATION_ONLY behavior.\",\"Implement the authenticated external campaign context path in live_backend_campaign.py. Reuse the existing pure validators and data-only request builder, but obtain all transport/session authority and signed receipts from the protected channel. The offline campaign API and its three predecessor campaign outputs remain byte-identical; environment flags and fixture evidence never enter the live path.\",\"Run all eight cumulative commands and inventory checks, rebuild the complete candidate via the new builder from tests, and prove every original test and all newly added packet tests are discovered. Bind all six source increments, final release inputs and current packet/command digests; never reuse a seven-command historical envelope.\",\"Declare the future manual post-merge linux-baseline run through only the external root-owned launcher with an independent installed candidate, dual-signed exact eight-command envelope, capacity authorization and existing native target. This declaration does not perform or authorize an installation, network call or live run in coding/CI. Missing prerequisites remain NOT_RUN_ENV_UNAVAILABLE.\",\"Publish per-architecture/per-case runtime evidence references separately from source/head/CI/merge/exact-main/package/preflight. Ten fresh mandatory AMD64 cases plus all original gate conditions are required before runtime product dispatch; ARM64 remains separate. No campaign signature becomes tenant acceptance.\",\"Implement the separate pure live_backend_evidence verifier using the new authority adapter and the existing Linux evidence shape/plan/request primitives. Bind authority.packetDigest to the exact CONF-LIVE-006 packet and eight commands, not the old hardcoded digest. Preserve all three independent evidence signatures, every release/plan/case/freshness check and UNIT_VERIFICATION_ONLY/nativeAcceptance=false for pure verification. Only the protected installed supervisor plus independently verified real receipts can support a separate native qualification decision; no substitution or monkeypatch of old constants.\"]\nexcluded: [\"No administrator installation, provisioning, kernel/cluster policy modification on this workstation, live network/probe argv, emulation-based native PASS, paid API or third-party key, mutable artifact, warm-source access, external telemetry or source-to-runtime evidence promotion.\",\"No edits to predecessor tests, crypto.py, canonical.py, models.py, schema.py, registry.py, campaign.py, live.py, cli.py, linux_readiness.py, existing schemas, ci/build_live_launcher.py, Makefile, dispatcher, toolchain, workflow or PORTING.yaml. New tests independently preserve old source guards; no relaxing immutable baseline hashes. The sole permitted existing-file exception is live_launcher.py as specified above.\"]\nprefetchCommands: []\nofflineAcceptanceCommands: [[\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests/meta\",\"-p\",\"test_*.py\"],[\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests/parity\",\"-p\",\"test_*.py\"],[\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests/alpha1\",\"-p\",\"test_*.py\"],[\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests/fixes/runner_boundary\",\"-p\",\"test_*.py\"],[\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests/platform/linux_baseline\",\"-p\",\"test_*.py\"],[\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests/live_backend\",\"-p\",\"test_*.py\"],[\"make\",\"campaign\",\"CAMPAIGN=linux-baseline\"],[\"make\",\"evidence-verify\",\"CAMPAIGN=linux-baseline\"]]\nofflineExecution: {\"wrapperArgv\":[\"./ci/verify-offline.sh\"],\"packetPathEnvironment\":\"HARNESS_TASK_PACKET\",\"packetPathMode\":\"HASH_PINNED_READ_ONCE_NO_CHILD_PATH\",\"commandTransport\":\"ARGV_ARRAY_V1\",\"isolation\":\"OS_ENFORCED_DENY_ALL_OUTBOUND\",\"sessionScope\":\"SINGLE_PROCESS_TREE\",\"prefetchOutsideSession\":false,\"offlineEnvironment\":{\"UV_OFFLINE\":\"1\",\"UV_FROZEN\":\"1\",\"UV_NO_SYNC\":\"1\"}}\nliveCampaignExecution: {\"launcherArgv\":[\"/opt/planeon/bin/harness-live-campaign-launch\"],\"commandTransport\":\"ARGV_ARRAY_V1\",\"executionPlacement\":\"PREINSTALLED_TARGET_LOCAL_EPHEMERAL_RUNNER\",\"executionEnvelopeEnvironment\":\"HARNESS_LIVE_EXECUTION_ENVELOPE\",\"executionEnvelopeMode\":\"DUAL_SIGNED_PACKET_COMMAND_CAMPAIGN_ENDPOINT_BINDING_V1\",\"releaseTrustStoreMount\":\"/etc/planeon/trust/release-trust-bundle.json\",\"tenantTrustStoreMount\":\"/etc/planeon/trust/tenant-trust-bundle.json\",\"trustStoreMode\":\"HASH_PINNED_LOCAL_PUBLIC_KEYS_VALIDITY_PURPOSE_AND_REVOCATION_V1\",\"revocationRequired\":true,\"networkIsolation\":\"OS_ENFORCED_DENY_ALL_EXCEPT_SIGNED_ENDPOINTS\",\"endpointAuthority\":\"TENANT_CONTROLLED_PREEXISTING_CAPACITY_ONLY\",\"dynamicEndpointTransport\":\"PREAUTHORIZED_API_OR_CAMPAIGN_PROXY_ONLY\",\"mutationAdmission\":\"SERVER_SIDE_SIGNED_ZERO_INCREMENTAL_COST_POLICY_AND_RBAC_REQUIRED\",\"capacityAuthorization\":\"INDEPENDENT_OPERATOR_SIGNED_FIXED_PREEXISTING_CAPACITY\",\"publicInternetDiscovery\":\"DENIED\",\"cloudManagementApis\":\"DENIED\",\"billingApis\":\"DENIED\",\"thirdPartyApiKeys\":\"DENIED\",\"credentialMode\":\"TENANT_LOCAL_SHORT_LIVED_FILE_REFERENCE\",\"unavailableResult\":\"NOT_RUN_ENV_UNAVAILABLE\",\"ciEvidenceUse\":\"FORBIDDEN\",\"allowedEvidenceAxes\":[\"DEPLOYMENT\",\"RUNTIME\",\"SECURITY\",\"ASSURANCE\"],\"commands\":[[\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests/meta\",\"-p\",\"test_*.py\"],[\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests/parity\",\"-p\",\"test_*.py\"],[\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests/alpha1\",\"-p\",\"test_*.py\"],[\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests/fixes/runner_boundary\",\"-p\",\"test_*.py\"],[\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests/platform/linux_baseline\",\"-p\",\"test_*.py\"],[\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests/live_backend\",\"-p\",\"test_*.py\"],[\"make\",\"campaign\",\"CAMPAIGN=linux-baseline\"],[\"make\",\"evidence-verify\",\"CAMPAIGN=linux-baseline\"]]}\nexpectedEvidence: [\"Direct inner-launcher invocation, forged context, unsigned/mismatched/expired/revoked/replayed envelopes, wrong command count, credential-open ordering, source/native conflation, regression output drift, integration bypass and incomplete final-package inventory.\",\"All eight offline commands run in one signed deny-all process tree; all original 120 test identities and every predecessor backend test remain discovered and passing. New tests never replace real native qualification.\",\"Source/CI/merge/exact-main and unsigned candidate/package evidence are separate from installed preflight, native artifacts, runtime, assurance and tenant acceptance. Missing independent backend/target/authority is NOT_RUN_ENV_UNAVAILABLE; no phase completion claim.\"]\nrollback: \"Revert unconsumed integration source only. Independently installed artifacts require operator-reviewed rollback retaining replay/trust history; no tenant data or capacity destruction. Preserve completed evidence and mark mismatched native qualification stale.\"\n",
+      "sha256": "f95c277cffdfb622f45a1b4b91a5292d9d9a5bfabc8f9388b3899cbb20c5213d",
+      "view": {
+        "id": "CONF-LIVE-006",
+        "repository": "mas-harness-conformance-labs",
+        "warmSourceAccess": "PROHIBITED_DURING_IMPLEMENTATION",
+        "prefetchCommands": [],
+        "offlineAcceptanceCommands": [
+          [
+            "python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "tests/meta",
+            "-p",
+            "test_*.py"
+          ],
+          [
+            "python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "tests/parity",
+            "-p",
+            "test_*.py"
+          ],
+          [
+            "python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "tests/alpha1",
+            "-p",
+            "test_*.py"
+          ],
+          [
+            "python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "tests/fixes/runner_boundary",
+            "-p",
+            "test_*.py"
+          ],
+          [
+            "python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "tests/platform/linux_baseline",
+            "-p",
+            "test_*.py"
+          ],
+          [
+            "python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "tests/live_backend",
+            "-p",
+            "test_*.py"
+          ],
+          [
+            "make",
+            "campaign",
+            "CAMPAIGN=linux-baseline"
+          ],
+          [
+            "make",
+            "evidence-verify",
+            "CAMPAIGN=linux-baseline"
+          ]
+        ],
+        "offlineExecution": {
+          "wrapperArgv": [
+            "./ci/verify-offline.sh"
+          ],
+          "packetPathEnvironment": "HARNESS_TASK_PACKET",
+          "packetPathMode": "HASH_PINNED_READ_ONCE_NO_CHILD_PATH",
+          "commandTransport": "ARGV_ARRAY_V1",
+          "isolation": "OS_ENFORCED_DENY_ALL_OUTBOUND",
+          "sessionScope": "SINGLE_PROCESS_TREE",
+          "prefetchOutsideSession": false,
+          "offlineEnvironment": {
+            "UV_OFFLINE": "1",
+            "UV_FROZEN": "1",
+            "UV_NO_SYNC": "1"
+          }
+        }
+      }
+    }
+  },
+  "correctionView": {
+    "id": "CONF-FIX-002",
+    "repository": "mas-harness-conformance-labs",
+    "warmSourceAccess": "PROHIBITED_DURING_IMPLEMENTATION",
+    "prefetchCommands": [],
+    "offlineAcceptanceCommands": [
+      [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "tests/meta",
+        "-p",
+        "test_*.py"
+      ],
+      [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "tests/parity",
+        "-p",
+        "test_*.py"
+      ],
+      [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "tests/alpha1",
+        "-p",
+        "test_*.py"
+      ],
+      [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "tests/fixes/runner_boundary",
+        "-p",
+        "test_*.py"
+      ],
+      [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "tests/platform/linux_baseline",
+        "-p",
+        "test_*.py"
+      ],
+      [
+        "make",
+        "campaign",
+        "CAMPAIGN=linux-baseline"
+      ],
+      [
+        "make",
+        "evidence-verify",
+        "CAMPAIGN=linux-baseline"
+      ]
+    ],
+    "offlineExecution": {
+      "wrapperArgv": [
+        "./ci/verify-offline.sh"
+      ],
+      "packetPathEnvironment": "HARNESS_TASK_PACKET",
+      "packetPathMode": "HASH_PINNED_READ_ONCE_NO_CHILD_PATH",
+      "commandTransport": "ARGV_ARRAY_V1",
+      "isolation": "OS_ENFORCED_DENY_ALL_OUTBOUND",
+      "sessionScope": "SINGLE_PROCESS_TREE",
+      "prefetchOutsideSession": false,
+      "offlineEnvironment": {
+        "UV_OFFLINE": "1",
+        "UV_FROZEN": "1",
+        "UV_NO_SYNC": "1"
+      }
+    }
+  },
+  "failedDraft": {
+    "commit": "57ee9668e029b08310c57f502990e419b4a1c797",
+    "pr": 6,
+    "packetSha256": "5c7ceb5094b1c5a29192b7bdea913b23f777698bd31224ca5d1958a793dba3b3",
+    "activationSequence": 53,
+    "osIsolation": "ESTABLISHED",
+    "exitCode": 2,
+    "commandsExecuted": 0,
+    "testsExecuted": 0,
+    "reason": "packet runner refused: packet repository or ID is invalid",
+    "logSha256": "604f1ae0a94ed058d0243fd43e0268c5e524ad6a7259e9aa5f0b0b788aa02d39",
+    "ciRun": 34115040866,
+    "ciJob": 101719758135,
+    "ciStatus": "CANCELLED_NOT_PASS",
+    "runnerAssigned": false,
+    "accepted": false
+  },
+  "dispatchGate": {
+    "blockedPacket": "CONF-LIVE-001",
+    "requiresCompletedPacket": "CONF-FIX-002",
+    "requiredEvidence": [
+      "SOURCE",
+      "LOCAL_OFFLINE",
+      "REQUIRED_PR_CI",
+      "MERGE",
+      "LOCAL_EXACT_MAIN"
+    ],
+    "rewritePacketYaml": false,
+    "additionalAllowedPaths": [],
+    "originalBaselineHistory": "PRESERVE_ALL_103_FILE_HASHES_AND_120_TEST_IDS",
+    "consumerReconciliation": "ADDITIVE_CORRECTIVE_PREDECESSOR_COMMIT_HASHES_TEST_INVENTORY_ONLY",
+    "consumerRoots": 6,
+    "consumerCommands": 8,
+    "nativeAcceptance": false,
+    "runtimeCodingRequires": "FRESH_NATIVE_LINUX_AMD64_PASS"
+  }
+}

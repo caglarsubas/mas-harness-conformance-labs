@@ -72,9 +72,16 @@ def extract(text: str) -> dict[str, Any]:
             except json.JSONDecodeError:
                 refuse(f"packet {field} must be inline JSON")
         else:
-            if not raw or raw[0] in "[{&*!|>":
-                refuse(f"packet {field} must be a scalar without YAML indirection")
-            result[field] = raw
+            if raw.startswith('"'):
+                try:
+                    value = json.loads(raw)
+                except json.JSONDecodeError:
+                    refuse(f"packet {field} must be a valid JSON-quoted string")
+            else:
+                value = raw
+            if type(value) is not str or re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]{0,127}", value) is None:
+                refuse(f"packet {field} must be a bounded identifier without indirection")
+            result[field] = value
     return result
 
 
