@@ -347,15 +347,11 @@ class ScalarIntegrityTests(unittest.TestCase):
             check_edit("ci/arbitrary.py", b"", b"")
 
     def test_all_103_original_files_and_only_three_additions_remain(self):
-        observed = {}
-        for path in BASELINE["files"]:
-            file = regular(path)
-            observed[path] = {"mode": "100755" if file.stat().st_mode & 0o111 else "100644", "sha256": "sha256:" + sha(file.read_bytes())}
-        check_original_files(observed)
-        files = subprocess.run(["git", "ls-files", "-z"], cwd=ROOT, check=True, capture_output=True).stdout.decode().rstrip("\0").split("\0")
-        self.assertEqual(set(files), set(BASELINE["files"]) | ADDED_PATHS)
-        for path in ADDED_PATHS:
-            self.assertTrue(stat.S_ISREG(regular(path).stat().st_mode))
+        helper = load_local("scalar_successor_inventory", "tests/platform/linux_baseline/_successor_inventory.py")
+        result = helper.verify_repository(ROOT)
+        self.assertEqual(result["baselineFiles"], 106)
+        self.assertEqual(result["evidenceClass"], "SOURCE_INVENTORY_ONLY")
+        self.assertIs(result["nativeAcceptance"], False)
 
     def test_missing_extra_or_modified_original_inventory_refuses(self):
         good = expected_original_files()
@@ -379,10 +375,32 @@ class ScalarIntegrityTests(unittest.TestCase):
             observed.update({root + "/" + path: ids for path, ids in helper.discover_inventory(ROOT / root).items()})
         expected = deepcopy(BASELINE["tests"])
         expected[TEST_PATH] = sorted(NEW_TEST_IDS)
+        expected["tests/platform/linux_baseline/test_successor_inventory.py"] = [
+            "SuccessorInventoryTests.test_all_seven_complete_stage_vectors",
+            "SuccessorInventoryTests.test_current_repository",
+            "SuccessorInventoryTests.test_current_test_guard_not_exempt",
+            "SuccessorInventoryTests.test_every_missing_stage_path_refuses",
+            "SuccessorInventoryTests.test_exact_scalar_test_patch",
+            "SuccessorInventoryTests.test_fixture_tamper_and_duplicate_json_refuse",
+            "SuccessorInventoryTests.test_hook_prefix_suffix_and_replacement_tamper_refuse",
+            "SuccessorInventoryTests.test_hook_proof_identity_digest_type_and_scope_refuse",
+            "SuccessorInventoryTests.test_old_guard_rejects_legitimate_stage_one",
+            "SuccessorInventoryTests.test_original_106_file_and_150_test_history",
+            "SuccessorInventoryTests.test_original_test_ids_and_new_tests_collected",
+            "SuccessorInventoryTests.test_out_of_order_and_partial_stages_refuse",
+            "SuccessorInventoryTests.test_predecessor_hash_size_and_mode_tampering_refuses",
+            "SuccessorInventoryTests.test_premature_hook_or_proof_refuses",
+            "SuccessorInventoryTests.test_presence_or_environment_does_not_authorize",
+            "SuccessorInventoryTests.test_source_evidence_is_never_native_acceptance",
+            "SuccessorInventoryTests.test_stage_six_requires_exact_hook_proof",
+            "SuccessorInventoryTests.test_symlinks_hardlinks_and_nonregular_files_refuse",
+            "SuccessorInventoryTests.test_test_omissions_skips_and_xfails_refuse",
+            "SuccessorInventoryTests.test_unknown_duplicate_and_traversal_paths_refuse",
+        ]
         self.assertEqual(len(NEW_TEST_IDS), 30)
         self.assertEqual(len(set(NEW_TEST_IDS)), 30)
         self.assertEqual(observed, expected)
-        print("scalar-test-inventory roots=5 predecessor=120 added=30 skipped=0 status=PASS", flush=True)
+        print("scalar-test-inventory roots=5 predecessor=150 added=20 skipped=0 status=PASS", flush=True)
 
     def test_baseline_history_and_failed_draft_are_not_promoted(self):
         self.assertEqual(BASELINE["commit"], "88de1d9b7272a25678b01129e51d5756dbe608ed")
