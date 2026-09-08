@@ -20,10 +20,10 @@ import time
 from .canonical import canonical_bytes, canonical_digest, require_canonical_document
 from .errors import ConformanceError
 from .linux_readiness import ARCHITECTURES, CASES, build_probe_request, require_time
-from .live import EXPECTED_LAUNCHER, FIXED_RELEASE_TRUST, FIXED_TENANT_TRUST
+from .live import FIXED_RELEASE_TRUST, FIXED_TENANT_TRUST
 from .live_backend_authority import binding_from_authority, verify_backend_authority
 from .live_linux_boundary import (CHILD_UID, CHILD_GID, CgroupLease, LinuxSyscalls, credentials,
-    installed_process, process_identity, read_owned, read_owned_kit, require, validate_peer)
+    ambient_custody, installed_process, process_identity, read_owned, read_owned_kit, require, validate_peer)
 from .live_replay_store import ReplayStore, UnitReplayStore, open_directory
 from .live_session import SCHEMA, validate_binding, validate_receipt, validate_session
 
@@ -205,6 +205,7 @@ class _NativeChannel:
             raise
         if pid == 0:
             try:
+                os.environ.clear()
                 parent.close()
                 os.close(gate_w)
                 self.syscalls.protect_parent(supervisor_pid)
@@ -340,7 +341,8 @@ class NativeSupervisor(_Lifecycle):
     evidence_class = "UNSIGNED_PROTECTED_RECEIPT_CANDIDATE"
 
     def __init__(self):
-        installed_process()
+        self._launcher_digest = installed_process()
+        ambient_custody()
         self._syscalls = LinuxSyscalls()
         directory = open_directory("/var/lib/planeon/live-backend", private=True)
         try:
@@ -380,7 +382,7 @@ class NativeSupervisor(_Lifecycle):
             tenant_trust = read_owned(str(FIXED_TENANT_TRUST))
             envelope, capacity_data, _, _ = verify_backend_authority(envelope_bytes, capacity, release_trust, tenant_trust,
                                                                   now=require_time(now, "now"))
-            read_owned(str(EXPECTED_LAUNCHER), expected_digest=envelope["launcherDigest"])
+            require(self._launcher_digest == envelope["launcherDigest"], "LAUNCHER_DIGEST_MISMATCH")
             release_raw = read_owned(envelope["campaignReleaseFileReference"], expected_digest=envelope["campaignReleaseDigest"])
             release = require_canonical_document(release_raw)
             architecture = {"x86_64": "amd64", "aarch64": "arm64"}.get(os.uname().machine)

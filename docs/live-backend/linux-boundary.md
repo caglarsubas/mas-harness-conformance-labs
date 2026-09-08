@@ -62,6 +62,15 @@ independently signed root manifest must verify. The unchanged legacy launcher
 continues to refuse live execution until the separately owned CONF-LIVE-006
 bridge and external installation gates are complete.
 
+The native entry also rejects ambient credentials, proxy/import variables and
+open descriptors beyond nonsocket stdio. Only PATH, HOME, USER, LOGNAME, LANG,
+LC_ALL, TZ and the fixed HARNESS_LIVE_EXECUTION_ENVELOPE input may be present;
+none is an authorization flag. The child clears that remaining environment.
+Manifest/public-key/signature/launcher bytes are read once under no-follow
+custody, verified with the unchanged signature/key contract, and retained by
+the dedicated process. Repeated internal native constructors use that verified
+snapshot; the envelope's launcher digest must equal it.
+
 Authority references use retained no-follow directory/file descriptors, exact
 root ownership, no write bits, single-link regular files, bounded reads and
 inode/metadata rechecks. The signed kit is enumerated independently, with each

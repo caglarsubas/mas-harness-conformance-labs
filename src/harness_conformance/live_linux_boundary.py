@@ -19,8 +19,11 @@ import sys
 import time
 
 from .canonical import byte_digest, canonical_digest
+from .canonical import load_json_bytes
+from .crypto import b64url_decode, verify
 from .errors import ConformanceError
 from .live_replay_store import open_directory
+from .schema import closed
 
 CHILD_UID = CHILD_GID = 65532
 CGROUP = "/sys/fs/cgroup/planeon-live/session"
@@ -31,6 +34,7 @@ MS_PRIVATE, MS_REC, MS_BIND = 1 << 18, 16384, 4096
 ARCHES = {"x86_64": (0xC000003E, 56, (41, 42, 49, 50, 101, 165, 166, 272, 308, 321, 323, 425, 426, 427, 435, 438)),
           "aarch64": (0xC00000B7, 220, (198, 203, 200, 201, 117, 40, 39, 97, 268, 280, 282, 425, 426, 427, 435, 438))}
 NAMESPACE_MASK = CLONE_NEWUSER | CLONE_NEWNS | CLONE_NEWPID | CLONE_NEWNET | 0x04000000 | 0x08000000 | 0x02000000
+_VERIFIED_MANIFEST = None
 
 
 def require(condition, reason):
@@ -45,17 +49,71 @@ def installed_process():
     require(not any(os.environ.get(k) for k in ("CI", "GITHUB_ACTIONS", "GITHUB_EVENT_NAME", "BUILDKITE", "JENKINS_URL")),
             "CI_EXECUTION_FORBIDDEN")
     from .live import EXPECTED_LAUNCHER
-    from .live_launcher import _verify_root_manifest
     loader = globals().get("__loader__")
     require(type(getattr(loader, "archive", None)) is str and loader.archive == str(EXPECTED_LAUNCHER)
             and sys.argv[0] == str(EXPECTED_LAUNCHER), "INSTALLED_CODE_CUSTODY_REQUIRED")
-    _verify_root_manifest()
     require(len(os.listdir("/proc/self/task")) == 1, "SINGLE_THREAD_SUPERVISOR_REQUIRED")
     require(not Path(f"/proc/self/task/{os.getpid()}/children").read_text().strip()
             and signal.getsignal(signal.SIGCHLD) == signal.SIG_DFL, "DEDICATED_SUPERVISOR_REQUIRED")
+    return _installed_manifest_digest()
 
 
-def read_owned(path, maximum=4194304, expected_digest=None):
+def _installed_manifest_digest():
+    """Retain independently verified installed bytes; never re-open to execute.
+
+    Same closed manifest/key contract as the immutable predecessor launcher.
+    Internal per-process custody is not a caller-supplied verified flag.
+    """
+    global _VERIFIED_MANIFEST
+    if _VERIFIED_MANIFEST is not None and _VERIFIED_MANIFEST[0] == os.getpid():
+        return _VERIFIED_MANIFEST[1]
+    from .live import (EXPECTED_LAUNCHER, FIXED_MANIFEST, FIXED_MANIFEST_PUBLIC,
+                      FIXED_MANIFEST_SIGNATURE, PINNED_ROOT_PUBLIC_KEY_SHA256)
+    public_raw = read_owned(str(FIXED_MANIFEST_PUBLIC), expected_digest=PINNED_ROOT_PUBLIC_KEY_SHA256)
+    public_record = load_json_bytes(public_raw)
+    closed(public_record, ("algorithm", "publicKey"))
+    require(public_record["algorithm"] == "ED25519", "ROOT_KEY_ALGORITHM")
+    raw = read_owned(str(FIXED_MANIFEST))
+    signature = b64url_decode(read_owned(str(FIXED_MANIFEST_SIGNATURE)).decode("ascii").strip(), expected_length=64)
+    public = b64url_decode(public_record["publicKey"], expected_length=32)
+    require(verify(public, raw, signature), "ROOT_MANIFEST_SIGNATURE_INVALID")
+    manifest = load_json_bytes(raw)
+    closed(manifest, ("schemaVersion", "launcher", "fixedTrustMounts", "isolation", "preflightEvidenceDigest"))
+    require(manifest["schemaVersion"] == "harness.planeon.ai/live-runner-manifest/v1alpha1", "ROOT_MANIFEST_SCHEMA")
+    launcher_raw = read_owned(str(EXPECTED_LAUNCHER), expected_mode=0o555)
+    digest = byte_digest(launcher_raw)
+    require(manifest["launcher"] == {"path": str(EXPECTED_LAUNCHER), "version": "0.1.0", "sha256": digest,
+            "ownerUid": 0, "ownerGid": 0, "mode": "0555"}, "LAUNCHER_CUSTODY_INVALID")
+    # read_owned checked actual owner/mode custody. Retain the source digest;
+    # no later pathname becomes authority.
+    require(manifest["fixedTrustMounts"] == ["/etc/planeon/trust/release-trust-bundle.json",
+            "/etc/planeon/trust/tenant-trust-bundle.json"], "TRUST_MOUNTS_INVALID")
+    require(manifest["isolation"] == {"backend": "PREINSTALLED_OS_ENDPOINT_ALLOWLIST_V1",
+            "networkPolicy": "DENY_ALL_EXCEPT_DUAL_SIGNED_ENDPOINTS", "credentialSocketsDenied": True,
+            "ciDenied": True}, "ISOLATION_MANIFEST_INVALID")
+    _VERIFIED_MANIFEST = (os.getpid(), digest)
+    return digest
+
+
+def ambient_custody():
+    # Only fixed launcher input plus non-authorizing locale/stdio metadata.
+    # Short-lived credentials are opened later from signed references, never env.
+    allowed = {"PATH", "HOME", "USER", "LOGNAME", "LANG", "LC_ALL", "TZ", "HARNESS_LIVE_EXECUTION_ENVELOPE"}
+    require(not set(os.environ) - allowed, "AMBIENT_ENVIRONMENT_FORBIDDEN")
+    for name in os.listdir("/proc/self/fd"):
+        require(name.isdigit(), "AMBIENT_DESCRIPTOR_FORBIDDEN")
+        fd = int(name)
+        try:
+            info = os.fstat(fd)
+        except OSError as exc:
+            # listdir's transient descriptor has already been closed.
+            if exc.errno == errno.EBADF:
+                continue
+            raise
+        require(fd <= 2 and not stat.S_ISSOCK(info.st_mode), "AMBIENT_DESCRIPTOR_FORBIDDEN")
+
+
+def read_owned(path, maximum=4194304, expected_digest=None, expected_mode=None):
     """Retained no-follow ancestry and exact inode/metadata/read-only custody."""
     require(type(path) is str and path.startswith("/") and "\\" not in path
             and all(p not in ("", ".", "..") for p in path[1:].split("/")),
@@ -68,6 +126,7 @@ def read_owned(path, maximum=4194304, expected_digest=None):
         require(stat.S_ISREG(before.st_mode) and before.st_uid == before.st_gid == 0
                 and before.st_nlink == 1 and not stat.S_IMODE(before.st_mode) & 0o222
                 and before.st_size <= maximum, "CUSTODY_FILE_INVALID")
+        require(expected_mode is None or stat.S_IMODE(before.st_mode) == expected_mode, "CUSTODY_MODE_INVALID")
         raw = bytearray()
         while len(raw) <= maximum:
             chunk = os.read(fd, min(65536, maximum + 1 - len(raw)))

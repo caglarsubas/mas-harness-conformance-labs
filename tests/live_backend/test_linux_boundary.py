@@ -14,7 +14,9 @@ import unittest
 from unittest.mock import Mock, patch
 
 from harness_conformance.errors import ConformanceError
-from harness_conformance.canonical import byte_digest, canonical_digest
+from harness_conformance.canonical import byte_digest, canonical_bytes, canonical_digest
+from harness_conformance.crypto import b64url_encode, public_key, sign
+from harness_conformance import live
 from harness_conformance import live_linux_boundary as linux
 
 
@@ -62,6 +64,57 @@ def unit_file_custody(root):
 
 
 class LinuxBoundaryTests(unittest.TestCase):
+    def test_ambient_environment_credentials_proxy_and_import_paths_are_rejected(self):
+        for name in ("AWS_ACCESS_KEY_ID", "GOOGLE_APPLICATION_CREDENTIALS", "SSH_AUTH_SOCK", "KUBECONFIG",
+                     "HTTP_PROXY", "HTTPS_PROXY", "PYTHONPATH", "HARNESS_LIVE_BACKEND", "VERIFIED"):
+            with self.subTest(name=name), patch.dict(os.environ, {name: "unit-only"}, clear=True), patch.object(
+                    linux.os, "listdir") as listing, self.assertRaises(ConformanceError):
+                linux.ambient_custody()
+            listing.assert_not_called()
+
+    def test_ambient_extra_fd_or_socket_stdio_refuse_but_closed_listdir_fd_is_ignored(self):
+        file_info = SimpleNamespace(st_mode=stat.S_IFREG | 0o600)
+        with patch.dict(os.environ, {"LANG": "C", "HARNESS_LIVE_EXECUTION_ENVELOPE": "/unit-only/envelope"}, clear=True):
+            for names, information in ((["0", "3"], file_info), (["0"], SimpleNamespace(st_mode=stat.S_IFSOCK))):
+                with patch.object(linux.os, "listdir", return_value=names), patch.object(
+                        linux.os, "fstat", return_value=information), self.assertRaises(ConformanceError):
+                    linux.ambient_custody()
+            with patch.object(linux.os, "listdir", return_value=["0", "1", "2", "3"]), patch.object(
+                    linux.os, "fstat", side_effect=[file_info] * 3 + [OSError(errno.EBADF, "unit closed directory fd")]):
+                linux.ambient_custody()
+
+    def test_root_manifest_bytes_are_read_once_verified_and_retained_not_path_reopened(self):
+        seed = bytes([31]) * 32  # Public deterministic UNIT fixture, not an operator key.
+        public = canonical_bytes({"algorithm": "ED25519", "publicKey": b64url_encode(public_key(seed))})
+        launcher = b"UNIT_ONLY_NOT_AN_EXECUTABLE"
+        manifest = dict(schemaVersion="harness.planeon.ai/live-runner-manifest/v1alpha1",
+            launcher=dict(path=str(live.EXPECTED_LAUNCHER), version="0.1.0", sha256=byte_digest(launcher),
+                          ownerUid=0, ownerGid=0, mode="0555"),
+            fixedTrustMounts=[str(live.FIXED_RELEASE_TRUST), str(live.FIXED_TENANT_TRUST)],
+            isolation=dict(backend="PREINSTALLED_OS_ENDPOINT_ALLOWLIST_V1",
+                networkPolicy="DENY_ALL_EXCEPT_DUAL_SIGNED_ENDPOINTS", credentialSocketsDenied=True, ciDenied=True),
+            preflightEvidenceDigest="sha256:" + "a" * 64)
+        raw = canonical_bytes(manifest)
+        records = {str(live.FIXED_MANIFEST_PUBLIC): public, str(live.FIXED_MANIFEST): raw,
+                   str(live.FIXED_MANIFEST_SIGNATURE): b64url_encode(sign(seed, raw)).encode(),
+                   str(live.EXPECTED_LAUNCHER): launcher}
+        def read(path, **kwargs):
+            if "expected_digest" in kwargs:
+                self.assertEqual(byte_digest(records[path]), kwargs["expected_digest"])
+            if path == str(live.EXPECTED_LAUNCHER):
+                self.assertEqual(kwargs["expected_mode"], 0o555)
+            return records[path]
+        with patch.object(linux, "_VERIFIED_MANIFEST", None), patch.object(
+                live, "PINNED_ROOT_PUBLIC_KEY_SHA256", byte_digest(public)), patch.object(linux, "read_owned", side_effect=read) as reader:
+            self.assertEqual(linux._installed_manifest_digest(), byte_digest(launcher))
+            self.assertEqual(reader.call_count, 4)
+            self.assertEqual(linux._installed_manifest_digest(), byte_digest(launcher))
+            self.assertEqual(reader.call_count, 4)
+        records[str(live.FIXED_MANIFEST_SIGNATURE)] = b64url_encode(bytes(64)).encode()
+        with patch.object(linux, "_VERIFIED_MANIFEST", None), patch.object(
+                live, "PINNED_ROOT_PUBLIC_KEY_SHA256", byte_digest(public)), patch.object(linux, "read_owned", side_effect=read), self.assertRaises(ConformanceError):
+            linux._installed_manifest_digest()
+
     def test_owned_file_and_kit_use_single_read_content_and_exact_digest(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder).resolve()
