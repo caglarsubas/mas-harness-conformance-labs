@@ -750,9 +750,11 @@ def _credential_rig():
     """OS-mocked custody exercise; the proxy/policy adapter is NOT live proof."""
     import sys
     import json
+    from time import perf_counter
     from contextlib import contextmanager, ExitStack
     from types import ModuleType
     from _fixtures import NOW, receipt_from
+    started = perf_counter()
     rig = _CustodyRig()
     fixture = rig.fixture
     expiry = "2026-09-07T01:10:00Z"
@@ -875,7 +877,11 @@ def _credential_rig():
                 try:
                     yield rig
                 finally:
-                    rig.owner.close()
+                    try:
+                        rig.owner.close()
+                    finally:
+                        print("credential-unit-scenario elapsed={:.3f}s policy_checks={} evidence=OS_MOCKED_ONLY".format(
+                            perf_counter() - started, rig.events.count("unit-policy-check")), flush=True)
     return managed()
 
 

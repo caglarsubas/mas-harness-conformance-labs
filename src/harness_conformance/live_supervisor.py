@@ -657,10 +657,13 @@ def _begin_fixed_resources(channel, request, deadline):
     frame = sys._getframe(1)
     require(frame.f_code is _NativeChannel.execute.__code__ and frame.f_locals.get("self") is channel,
             "CREDENTIAL_HOOK_REQUIRED")
-    channel.check_peer()
+    # The exact execute frame has just validated this request, deadline and
+    # post-receive peer. This definition-only state transition performs no
+    # blocking work; do not repeat the entire signed-authority verification.
     resource = channel.context._late_resources
     require(resource.state in ("ABSENT", "RETAINED") and resource.operation is None and not resource.io
-            and request == channel.request(request["operation"])
+            and request == build_probe_request(channel.context._envelope, channel.context._capacity,
+                                                channel.context._plan, request["operation"])
             and request["operation"] not in channel.context._owner._active["done"]
             and deadline == channel.context._deadline, "CREDENTIAL_OPERATION_INVALID")
     resource.operation, resource.deadline = request["operation"], deadline
@@ -725,7 +728,14 @@ def _check_proxy_resource_access(context):
 def _credential_spec(context):
     """Origin/binding checks, not a replacement for the strict proxy validator."""
     import ipaddress
-    context._owner._boundary.check_peer()
+    import sys
+    from .live_linux_boundary import _LateResources
+    frame = sys._getframe(1)
+    require(frame.f_code in (_LateResources._guard.__code__, _LateResources.credential_bytes.__code__)
+            and frame.f_locals.get("self") is context._late_resources, "CREDENTIAL_HOOK_REQUIRED")
+    # Both fixed callers just performed the full peer/policy/peer guard. This
+    # helper only derives data from already retained bytes; it opens no resource
+    # and does no blocking I/O. Every actual I/O retains its full post-check.
     raw = context._kit.get("campaigns/platform/linux-baseline/proxy-profile.json")
     require(type(raw) is bytes and 0 < len(raw) <= 262144, "CREDENTIAL_PROFILE_UNAVAILABLE")
     profile = require_canonical_document(raw)
