@@ -552,6 +552,8 @@ class _RetainedCustody:
         self.closed = self.sealed = False
         self.runtime_handles = None
         self.replay_handles = None
+        # Separate lifecycle; never add late credentials to sealed authority.
+        self.late_resources = None
 
     def __reduce__(self):
         raise TypeError("retained custody is not serializable")
@@ -667,6 +669,13 @@ class _RetainedCustody:
                     and stat.S_ISSOCK(os.fstat(socket_fd).st_mode)
                     and os.fstat(socket_fd).st_ino == channel.channel_identity, "CUSTODY_CHANNEL_INVALID")
             owned.update((socket_fd, pidfd))
+        late = self.late_resources
+        if late is not None:
+            require(type(late) is _LateResources and late.context._custody is self
+                    and late.context._late_resources is late, "CREDENTIAL_OWNER_INVALID")
+            extra = late.checked_fds()
+            require(not owned & extra, "CREDENTIAL_DESCRIPTOR_ALIAS")
+            owned.update(extra)
         for name in os.listdir("/proc/self/fd"):
             require(name.isdigit(), "AMBIENT_DESCRIPTOR_FORBIDDEN")
             fd = int(name)
@@ -792,6 +801,12 @@ class _RetainedCustody:
         rows, self.handles = self.handles, {}
         self.files, self.kit_sources = {}, {}
         failure = None
+        late, self.late_resources = self.late_resources, None
+        if late is not None:
+            try:
+                late.close()
+            except BaseException as exc:
+                failure = exc
         for row in reversed(tuple(rows.values())):
             try:
                 expected = row["identity"]
@@ -804,4 +819,248 @@ class _RetainedCustody:
                 if failure is None:
                     failure = exc
         if failure is not None:
+            raise failure
+
+
+class _LateResources:
+    """One native session's late custody, not a public resource registry.
+
+    The fixed proxy must independently verify present policy before acquisition.
+    Raw bytes/handles are not authentication, admission or execution authority.
+    Only the factory below constructs this object; no path/FD/backend argument.
+    """
+    def __new__(cls, *args, **kwargs):
+        raise TypeError("only the retained native session creates late resources")
+
+    def __reduce__(self):
+        raise TypeError("late resources are not serializable")
+
+    def check(self):
+        import threading
+        from .live_supervisor import InstalledContext, NativeSupervisor, _NativeChannel
+        context = self.context
+        owner = context._owner
+        require(type(self) is _LateResources and type(context) is InstalledContext
+                and type(owner) is NativeSupervisor and owner is self.owner
+                and self.pid == os.getpid() and self.thread == threading.get_ident()
+                and owner._context is context and context._late_resources is self
+                and context._custody.late_resources is self and not owner._closed
+                and context._snapshot == self.scope and context._pid == self.pid
+                and self.state not in ("CLOSED", "FAILED"), "CREDENTIAL_OWNER_INVALID")
+        if self.operation is not None:
+            require(type(owner._boundary) is _NativeChannel and owner._active is not None
+                    and owner._active["reserved"] and owner._active["session"]["state"] == "RUNNING"
+                    and owner._active["deadline"] == self.deadline == context._deadline
+                    and self.operation not in owner._active["done"], "CREDENTIAL_OPERATION_INVALID")
+        for row in self.handles:
+            expected = row["identity"]
+            require(expected is not None and _custody_identity(os.fstat(row["fd"])) == expected
+                    and _custody_identity(os.stat(row["name"], dir_fd=row["parent"], follow_symlinks=False)) == expected
+                    and not os.get_inheritable(row["fd"]), "CREDENTIAL_CUSTODY_CHANGED")
+        for kind, row in self.io.items():
+            info = os.fstat(row["fd"])
+            require(_custody_identity(info)[:6] == row["identity"][:6]
+                    and not os.get_inheritable(row["fd"]), "CREDENTIAL_IO_CHANGED")
+            if kind == "transport":
+                require(row["socket"].fileno() == row["fd"] and stat.S_ISSOCK(info.st_mode),
+                        "CREDENTIAL_TRANSPORT_CHANGED")
+            else:
+                import fcntl
+                require(kind == "memfd" and stat.S_ISREG(info.st_mode)
+                        and 0 <= info.st_size <= len(self.raw)
+                        and (not row["ready"] or info.st_size == len(self.raw)
+                             and fcntl.fcntl(row["fd"], fcntl.F_GET_SEALS) & row["seals"] == row["seals"]),
+                        "CREDENTIAL_MEMFD_CHANGED")
+
+    def checked_fds(self):
+        self.check()
+        fds = [row["fd"] for row in self.handles] + [row["fd"] for row in self.io.values()]
+        require(len(self.handles) <= 66 and len(self.io) <= 2 and len(fds) == len(set(fds)),
+                "CREDENTIAL_DESCRIPTOR_LIMIT")
+        return set(fds)
+
+    def _guard(self):
+        from .live_supervisor import _check_proxy_resource_access
+        self.check()
+        require(self.state == "IO_ACTIVE" and self.operation is not None, "CREDENTIAL_HOOK_REQUIRED")
+        _check_proxy_resource_access(self.context)
+
+    def credential_bytes(self):
+        """Fixed proxy only; retain one read and ancestry across distinct hooks."""
+        try:
+            self._guard()
+            if self.raw is not None:
+                return self.raw
+            from .live_supervisor import _credential_spec
+            path, self.endpoint = _credential_spec(self.context)
+            parts = self.context._custody.path(path)
+            require(path not in self.context._custody.handles
+                    and not path.startswith(self.context._custody.kit_root + "/"), "CREDENTIAL_EARLY_CAPTURE")
+            self.state = "ACQUIRING"
+            parent = None
+            for index, name in enumerate(["/"] + parts):
+                directory = index < len(parts)
+                flags = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_NONBLOCK
+                if directory:
+                    flags |= os.O_DIRECTORY
+                require(len(self.handles) < 66, "CREDENTIAL_DESCRIPTOR_LIMIT")
+                fd = os.open(name, flags, dir_fd=parent)
+                row = dict(fd=fd, parent=parent, name=name, identity=None)
+                self.handles.append(row)  # own cleanup even when fstat fails
+                require(type(fd) is int and 2 < fd < 1048576, "CREDENTIAL_DESCRIPTOR_RANGE")
+                info = os.fstat(fd)
+                row["identity"] = _custody_identity(info)
+                require(info.st_uid == info.st_gid == 0 and
+                        (stat.S_ISDIR(info.st_mode) and not stat.S_IMODE(info.st_mode) & 0o022 if directory
+                         else stat.S_ISREG(info.st_mode) and info.st_nlink == 1
+                         and stat.S_IMODE(info.st_mode) == 0o400 and 0 < info.st_size <= 262144),
+                        "CREDENTIAL_CUSTODY_INVALID")
+                self.check()
+                self.context._owner._boundary.check_peer()
+                parent = fd
+            require(not any((row["identity"][0], row["identity"][1]) == (item["identity"][0], item["identity"][1])
+                            for item in self.context._custody.handles.values()), "CREDENTIAL_EARLY_CAPTURE")
+            size, data = row["identity"][6], bytearray()
+            while len(data) <= size:
+                chunk = os.read(fd, min(65536, size + 1 - len(data)))
+                self.context._owner._boundary.check_peer()
+                if not chunk:
+                    break
+                data.extend(chunk)
+            require(len(data) == size, "CREDENTIAL_READ_CHANGED")
+            self.raw = bytes(data)
+            self.state = "IO_ACTIVE"
+            self._guard()
+            return self.raw
+        except BaseException:
+            self._fail()
+            raise
+
+    def transport(self):
+        """Create one unconnected numeric-family TCP socket; no DNS/connect/TLS."""
+        try:
+            self._guard()
+            require(self.raw is not None and not self.io.get("transport"), "CREDENTIAL_TRANSPORT_LIMIT")
+            import ipaddress
+            address = ipaddress.ip_address(self.endpoint["ipAddress"])
+            family = socket.AF_INET if address.version == 4 else socket.AF_INET6
+            sock = socket.socket(family, socket.SOCK_STREAM, socket.IPPROTO_TCP)
+            row = dict(socket=sock, fd=sock.fileno(), identity=None)
+            self.io["transport"] = row
+            sock.set_inheritable(False)
+            row["identity"] = _custody_identity(os.fstat(row["fd"]))
+            require(2 < row["fd"] < 1048576, "CREDENTIAL_DESCRIPTOR_RANGE")
+            self._guard()
+            return sock
+        except BaseException:
+            self._fail()
+            raise
+
+    def tls_memfd(self):
+        """Sealed transient bytes only. The proxy owns certificate/TLS validation."""
+        try:
+            self._guard()
+            require(self.raw is not None and "memfd" not in self.io, "CREDENTIAL_MEMFD_LIMIT")
+            import fcntl
+            fd = os.memfd_create("planeon-client-credential", os.MFD_CLOEXEC | os.MFD_ALLOW_SEALING)
+            row = dict(fd=fd, identity=None, seals=0, ready=False)
+            self.io["memfd"] = row
+            require(2 < fd < 1048576, "CREDENTIAL_DESCRIPTOR_RANGE")
+            row["identity"] = _custody_identity(os.fstat(fd))
+            self._guard()
+            offset = 0
+            while offset < len(self.raw):
+                # Never retry an ambiguous write/failed operation.
+                count = os.write(fd, self.raw[offset:])
+                require(type(count) is int and 0 < count <= len(self.raw) - offset, "CREDENTIAL_MEMFD_WRITE")
+                offset += count
+                self._guard()
+            seals = fcntl.F_SEAL_SEAL | fcntl.F_SEAL_SHRINK | fcntl.F_SEAL_GROW | fcntl.F_SEAL_WRITE
+            fcntl.fcntl(fd, fcntl.F_ADD_SEALS, seals)
+            row["seals"] = seals
+            row["ready"] = True
+            row["identity"] = _custody_identity(os.fstat(fd))
+            self._guard()
+            return fd
+        except BaseException:
+            self._fail()
+            raise
+
+    def close_memfd(self):
+        try:
+            self._guard()
+            require("memfd" in self.io, "CREDENTIAL_MEMFD_MISSING")
+            self._close_io("memfd")
+            self._guard()
+        except BaseException:
+            self._fail()
+            raise
+
+    def _close_io(self, kind):
+        row = self.io.pop(kind, None)
+        if row is None:
+            return
+        expected = row["identity"]
+        if expected is not None:
+            info = os.fstat(row["fd"])
+            require((info.st_dev, info.st_ino, stat.S_IFMT(info.st_mode)) ==
+                    (expected[0], expected[1], stat.S_IFMT(expected[4])), "CREDENTIAL_DESCRIPTOR_REUSED")
+        if kind == "transport":
+            require(row["socket"].fileno() == row["fd"], "CREDENTIAL_TRANSPORT_CHANGED")
+            row["socket"].close()
+        else:
+            os.close(row["fd"])
+
+    def finish(self):
+        require(self.operation is not None and self.state == "IO_ACTIVE", "CREDENTIAL_HOOK_REQUIRED")
+        failure = None
+        for kind in tuple(self.io):
+            try:
+                self._close_io(kind)
+            except BaseException as exc:
+                if failure is None:
+                    failure = exc
+        if failure is not None:
+            try:
+                self.close()
+            except BaseException:
+                pass  # first cleanup failure remains authoritative
+            raise failure
+        self.check()
+        self.operation = None
+        self.state = "RETAINED" if self.raw is not None else "ABSENT"
+
+    def _fail(self):
+        # Called only while propagating a failure; cleanup cannot replace it.
+        try:
+            self.close()
+        except BaseException:
+            pass
+        self.state = "FAILED"
+
+    def close(self):
+        if self.state in ("CLOSED", "FAILED"):
+            return
+        self.state, self.operation, self.raw = "CLOSED", None, None
+        failure = None
+        for kind in tuple(self.io):
+            try:
+                self._close_io(kind)
+            except BaseException as exc:
+                if failure is None:
+                    failure = exc
+        rows, self.handles = self.handles, []
+        for row in reversed(rows):
+            try:
+                expected = row["identity"]
+                if expected is not None:
+                    info = os.fstat(row["fd"])
+                    require((info.st_dev, info.st_ino, stat.S_IFMT(info.st_mode)) ==
+                            (expected[0], expected[1], stat.S_IFMT(expected[4])), "CREDENTIAL_DESCRIPTOR_REUSED")
+                os.close(row["fd"])
+            except BaseException as exc:
+                if failure is None:
+                    failure = exc
+        if failure is not None:
+            self.state = "FAILED"
             raise failure
