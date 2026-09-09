@@ -1235,7 +1235,7 @@ class CredentialSourceProofTests(unittest.TestCase):
 
     def test_exact_five_paths_and_all_prior_and_added_methods_are_checked(self):
         result = _credential_repository()
-        self.assertEqual(result["stage"], 2)
+        self.assertGreaterEqual(result["stage"], 2)
         self.assertEqual(result["priorTestCount"], 305)
         self.assertGreater(result["testCount"], 305)
 
@@ -1263,3 +1263,75 @@ class CredentialSourceProofTests(unittest.TestCase):
         changed = deepcopy(proof)
         changed["tests"]["tests/live_backend/test_supervisor.py"]["regions"]["SupervisorTests.test_all_ten_operations_complete_once_with_only_unsigned_unit_receipts"] = "    def test_all_ten_operations_complete_once_with_only_unsigned_unit_receipts(self):\n        pass\n"
         self.assertTrue(validate(after, changed, record, proof["before"].encode(), proof["checkpoint"].encode()))
+
+    def test_current_inventory_rejects_unrelated_file_mutation_and_partial_future_stage(self):
+        rows, sources = SUCCESSOR.tracked_inventory(ROOT)
+        changed = dict(sources)
+        changed["README.md"] += b"\nunreviewed\n"
+        with patch.object(SUCCESSOR, "tracked_inventory", return_value=(rows, changed)), self.assertRaises(ValueError):
+            _credential_repository()
+        extra = dict(path="src/harness_conformance/live_proxy_client.py", mode="100644", size=0,
+                     sha256=hashlib.sha256(b"").hexdigest())
+        with patch.object(SUCCESSOR, "tracked_inventory", return_value=(rows + [extra], sources)), self.assertRaises(ValueError):
+            _credential_repository()
+
+
+class CredentialCleanupTests(unittest.TestCase):
+    def test_retained_credential_expires_before_the_outer_session_deadline(self):
+        from test_linux_boundary import _credential_rig
+        with _credential_rig() as rig:
+            handle = rig.open()
+            rig.owner.execute_fixed(handle, CASES[0], "amd64")
+            rig.wall = "2026-09-07T01:10:00Z"
+            with self.assertRaises(ConformanceError):
+                rig.owner.execute_fixed(handle, CASES[1], "amd64")
+            self.assertEqual(len(rig.hook_calls), 1)
+            self.assertIsNone(rig.owner._active)
+
+    def test_io_failure_preserves_first_error_and_unproven_cleanup_never_claims_terminal(self):
+        from test_linux_boundary import _credential_rig
+        with _credential_rig() as rig:
+            handle = rig.open()
+            context = rig.owner._context
+            original = RuntimeError("unit first I/O error")
+            def fail():
+                rig.fs.fail_close = rig.credential_path
+                raise original
+            rig.after_io = fail
+            with self.assertRaises(RuntimeError) as raised:
+                rig.owner.execute_fixed(handle, CASES[0], "amd64")
+            self.assertIs(raised.exception, original)
+            self.assertIsNone(rig.owner._active)
+            self.assertEqual(parse_journal(rig.journal.raw)[0][replay_key(context._binding)]["state"], "RUNNING")
+            self.assertIsNotNone(context._late_resources.cleanup_failure)
+        self.assertFalse(rig.fs.fds)
+
+    def test_truthy_policy_return_value_is_not_an_observation_capability(self):
+        from test_linux_boundary import _credential_rig
+        with _credential_rig() as rig:
+            handle = rig.open()
+            rig.proxy._require_current_credential_policy = lambda *args: True
+            with self.assertRaises(ConformanceError):
+                rig.owner.execute_fixed(handle, CASES[0], "amd64")
+            self.assertNotIn(rig.credential_path, [p for p, _, _ in rig.fs.opens])
+
+    def test_recycled_socket_detaches_stale_owner_without_closing_foreign_fd(self):
+        from test_linux_boundary import _credential_rig
+        with _credential_rig() as rig:
+            handle = rig.open()
+            rig.io_enabled = True
+            replaced = []
+            def replace():
+                row = rig.owner._context._late_resources.io["transport"]
+                node = rig.fs.add("/unit-recycled-socket-fd", b"not-owned")
+                replaced.append((row["fd"], row["socket"]))
+                rig.fs.fds[row["fd"]] = ("/unit-recycled-socket-fd", node)
+            rig.after_io = replace
+            with self.assertRaises(ConformanceError):
+                rig.owner.execute_fixed(handle, CASES[0], "amd64")
+            fd, sock = replaced[0]
+            self.assertIsNone(sock.fd)
+            self.assertIn(fd, rig.fs.fds)
+            self.assertNotIn(fd, rig.fs.closes)
+            self.assertIsNotNone(rig.owner._context._late_resources.cleanup_failure)
+            rig.fs.close(fd)

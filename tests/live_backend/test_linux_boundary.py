@@ -825,6 +825,10 @@ def _credential_rig():
         rig.transports.append((family, kind, protocol))
         sock = _CustodySocket(rig.fs, "/unit-transport-" + str(len(rig.transports)), False)
         sock.set_inheritable = lambda value: None if value is False else (_ for _ in ()).throw(AssertionError("inherited"))
+        def detach():
+            fd, sock.fd = sock.fd, None
+            return fd
+        sock.detach = detach
         return sock
 
     def memfd(name, flags):

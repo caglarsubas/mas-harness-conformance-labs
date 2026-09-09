@@ -179,6 +179,8 @@ class _Lifecycle:
             self._mutex.release()
 
     def _terminate(self, state):
+        import sys
+        original_failure = sys.exc_info()[1]
         active = self._active
         if active is None:
             return
@@ -205,7 +207,7 @@ class _Lifecycle:
                 failure = exc
         if failure is not None:
             # Consumed nonce, no terminal claim when time or cleanup is unproven.
-            raise failure
+            raise original_failure if original_failure is not None else failure
         self._journal.terminal(active["binding"], state, now, canonical_digest(
             {"state": state, "receipts": active["done"], "nativeAcceptance": False}))
 
@@ -645,6 +647,8 @@ def _new_late_resources(context):
     resource.state, resource.operation, resource.deadline = "ABSENT", None, None
     resource.handles, resource.io = [], {}
     resource.raw, resource.endpoint = None, None
+    resource.credential_path = None
+    resource.cleanup_failure = None
     context._late_resources = context._custody.late_resources = resource
 
 
@@ -738,7 +742,11 @@ def _credential_spec(context):
                  and e["endpointId"] == binding["endpointId"]]
     require(len(endpoints) == 1, "CREDENTIAL_ENDPOINT_INVALID")
     endpoint = endpoints[0]
-    require(context._binding["endpointDigest"] == canonical_digest(endpoint), "CREDENTIAL_ENDPOINT_CHANGED")
+    # The unchanged session wire binding carries endpointId, not a per-endpoint
+    # digest. Exact endpoint bytes remain bound by the verified envelope and
+    # immutable context snapshot checked above; do not invent a wire field.
+    require(context._binding["endpointId"] == endpoint["endpointId"] == context._plan["endpointId"],
+            "CREDENTIAL_ENDPOINT_CHANGED")
     identities = [e for e in capacity["credentialIdentities"] if e["endpointId"] == endpoint["endpointId"]]
     require(len(identities) == 1 and identities[0]["purpose"] == "CAMPAIGN_PROXY_CLIENT_MTLS"
             and identities[0]["subject"] == binding["serviceAccountSubject"]

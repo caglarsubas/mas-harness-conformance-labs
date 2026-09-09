@@ -847,6 +847,13 @@ class _LateResources:
                 and context._custody.late_resources is self and not owner._closed
                 and context._snapshot == self.scope and context._pid == self.pid
                 and self.state not in ("CLOSED", "FAILED"), "CREDENTIAL_OWNER_INVALID")
+        if self.endpoint is not None:
+            from .canonical import require_canonical_document
+            from .linux_readiness import require_time
+            profile = require_canonical_document(context._kit["campaigns/platform/linux-baseline/proxy-profile.json"])
+            instant = require_time(owner._clock(), "now")
+            require(require_time(profile["binding"]["validFrom"], "validFrom") <= instant
+                    < require_time(profile["binding"]["expiresAt"], "expiresAt"), "CREDENTIAL_EXPIRED")
         if self.operation is not None:
             require(type(owner._boundary) is _NativeChannel and owner._active is not None
                     and owner._active["reserved"] and owner._active["session"]["state"] == "RUNNING"
@@ -880,10 +887,13 @@ class _LateResources:
         return set(fds)
 
     def _guard(self):
-        from .live_supervisor import _check_proxy_resource_access
+        from .live_supervisor import _check_proxy_resource_access, _credential_spec
         self.check()
         require(self.state == "IO_ACTIVE" and self.operation is not None, "CREDENTIAL_HOOK_REQUIRED")
         _check_proxy_resource_access(self.context)
+        if self.endpoint is not None:
+            path, endpoint = _credential_spec(self.context)
+            require(path == self.credential_path and endpoint == self.endpoint, "CREDENTIAL_ENDPOINT_CHANGED")
 
     def credential_bytes(self):
         """Fixed proxy only; retain one read and ancestry across distinct hooks."""
@@ -893,6 +903,7 @@ class _LateResources:
                 return self.raw
             from .live_supervisor import _credential_spec
             path, self.endpoint = _credential_spec(self.context)
+            self.credential_path = path
             parts = self.context._custody.path(path)
             require(path not in self.context._custody.handles
                     and not path.startswith(self.context._custody.kit_root + "/"), "CREDENTIAL_EARLY_CAPTURE")
@@ -1001,10 +1012,17 @@ class _LateResources:
         if row is None:
             return
         expected = row["identity"]
-        if expected is not None:
-            info = os.fstat(row["fd"])
-            require((info.st_dev, info.st_ino, stat.S_IFMT(info.st_mode)) ==
-                    (expected[0], expected[1], stat.S_IFMT(expected[4])), "CREDENTIAL_DESCRIPTOR_REUSED")
+        try:
+            if expected is not None:
+                info = os.fstat(row["fd"])
+                require((info.st_dev, info.st_ino, stat.S_IFMT(info.st_mode)) ==
+                        (expected[0], expected[1], stat.S_IFMT(expected[4])), "CREDENTIAL_DESCRIPTOR_REUSED")
+        except BaseException:
+            if kind == "transport" and row["socket"].fileno() == row["fd"]:
+                # Disable the stale socket object's destructor without closing
+                # the reused number. Cleanup remains explicitly unproven.
+                row["socket"].detach()
+            raise
         if kind == "transport":
             require(row["socket"].fileno() == row["fd"], "CREDENTIAL_TRANSPORT_CHANGED")
             row["socket"].close()
@@ -1021,6 +1039,7 @@ class _LateResources:
                 if failure is None:
                     failure = exc
         if failure is not None:
+            self.cleanup_failure = failure
             try:
                 self.close()
             except BaseException:
@@ -1040,9 +1059,11 @@ class _LateResources:
 
     def close(self):
         if self.state in ("CLOSED", "FAILED"):
+            if self.cleanup_failure is not None:
+                raise self.cleanup_failure
             return
         self.state, self.operation, self.raw = "CLOSED", None, None
-        failure = None
+        failure = self.cleanup_failure
         for kind in tuple(self.io):
             try:
                 self._close_io(kind)
@@ -1063,4 +1084,5 @@ class _LateResources:
                     failure = exc
         if failure is not None:
             self.state = "FAILED"
+            self.cleanup_failure = failure
             raise failure
