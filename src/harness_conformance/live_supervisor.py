@@ -179,6 +179,8 @@ class _Lifecycle:
             self._mutex.release()
 
     def _terminate(self, state):
+        import sys
+        original_failure = sys.exc_info()[1]
         active = self._active
         if active is None:
             return
@@ -205,7 +207,7 @@ class _Lifecycle:
                 failure = exc
         if failure is not None:
             # Consumed nonce, no terminal claim when time or cleanup is unproven.
-            raise failure
+            raise original_failure if original_failure is not None else failure
         self._journal.terminal(active["binding"], state, now, canonical_digest(
             {"state": state, "receipts": active["done"], "nativeAcceptance": False}))
 
@@ -234,7 +236,7 @@ class UnitSupervisor(_Lifecycle):
 class InstalledContext:
     """Factory-owned custody, not a dict or caller-provided FD/verified flag."""
     __slots__ = ("_owner", "_binding", "_plan", "_envelope", "_capacity", "_source_digest", "_root_fd",
-                 "_custody", "_bytes", "_kit", "_authority", "_snapshot", "_pid", "_deadline")
+                 "_custody", "_bytes", "_kit", "_authority", "_snapshot", "_pid", "_deadline", "_late_resources")
 
     def __new__(cls, *args, **kwargs):
         raise TypeError("only NativeSupervisor.open_session may construct installed context")
@@ -387,9 +389,19 @@ class _NativeChannel:
             from .live_proxy_client import execute_protected
         except ImportError as exc:
             raise ConformanceError("PROTECTED_PROXY_UNAVAILABLE", "CONF-LIVE-003 is not installed") from exc
-        result = execute_protected(request, self.context, deadline)
-        self.check_peer()
-        return result
+        resources = _begin_fixed_resources(self, request, deadline)
+        try:
+            result = execute_protected(request, self.context, deadline)
+            self.check_peer()
+            if resources.raw is not None:
+                _require_current_credential_policy(self.context)
+            # No transport or secret memfd survives a returned receipt.
+            resources.finish()
+            self.check_peer()
+            return result
+        except BaseException:
+            resources._fail()
+            raise
 
     def interrupt(self):
         self.cancelled = True
@@ -592,7 +604,9 @@ def _open_retained_session(owner, envelope_bytes):
     context._pid = os.getpid()
     context._deadline = None
     context._snapshot = canonical_bytes([binding, context._plan, envelope, capacity_data])
+    context._late_resources = None
     owner._context = context
+    _new_late_resources(context)
     owner._boundary = _NativeChannel(context, owner._syscalls, owner._lease)
     return owner._open(binding, context._plan)
 
@@ -616,3 +630,141 @@ def _check_retained_context(context, channel, now):
     custody.check()
     envelope, capacity, _, _ = verify_backend_authority(*context._authority, now=require_time(now, "now"))
     require(envelope == context._envelope and capacity == context._capacity, "CUSTODY_AUTHORITY_CHANGED")
+    context._late_resources.check()
+
+
+def _new_late_resources(context):
+    import sys
+    from .live_linux_boundary import _LateResources
+    require(sys._getframe(1).f_code is _open_retained_session.__code__
+            and type(context) is InstalledContext and context._owner._context is context
+            and context._late_resources is None and context._custody.late_resources is None,
+            "CREDENTIAL_FACTORY_REQUIRED")
+    resource = object.__new__(_LateResources)
+    resource.context, resource.owner = context, context._owner
+    resource.pid, resource.thread = os.getpid(), threading.get_ident()
+    resource.scope = context._snapshot
+    resource.state, resource.operation, resource.deadline = "ABSENT", None, None
+    resource.handles, resource.io = [], {}
+    resource.raw, resource.endpoint = None, None
+    resource.credential_path = None
+    resource.cleanup_failure = None
+    context._late_resources = context._custody.late_resources = resource
+
+
+def _begin_fixed_resources(channel, request, deadline):
+    import sys
+    frame = sys._getframe(1)
+    require(frame.f_code is _NativeChannel.execute.__code__ and frame.f_locals.get("self") is channel,
+            "CREDENTIAL_HOOK_REQUIRED")
+    # The exact execute frame has just validated this request, deadline and
+    # post-receive peer. This definition-only state transition performs no
+    # blocking work; do not repeat the entire signed-authority verification.
+    resource = channel.context._late_resources
+    require(resource.state in ("ABSENT", "RETAINED") and resource.operation is None and not resource.io
+            and request == build_probe_request(channel.context._envelope, channel.context._capacity,
+                                                channel.context._plan, request["operation"])
+            and request["operation"] not in channel.context._owner._active["done"]
+            and deadline == channel.context._deadline, "CREDENTIAL_OPERATION_INVALID")
+    resource.operation, resource.deadline = request["operation"], deadline
+    resource.state = "IO_ACTIVE"
+    resource.check()
+    return resource
+
+
+def _fixed_credential_proxy(context):
+    """Only the installed fixed module, never a caller callback or import name."""
+    from types import ModuleType, FunctionType
+    from .live import EXPECTED_LAUNCHER
+    try:
+        from . import live_proxy_client as proxy
+    except ImportError as exc:
+        raise ConformanceError("PROTECTED_PROXY_UNAVAILABLE", "CONF-LIVE-003 is not installed") from exc
+    require(type(proxy) is ModuleType and proxy.__name__ == "harness_conformance.live_proxy_client"
+            and getattr(getattr(proxy, "__loader__", None), "archive", None) == str(EXPECTED_LAUNCHER)
+            and type(getattr(proxy, "execute_protected", None)) is FunctionType,
+            "CREDENTIAL_PROXY_CUSTODY_REQUIRED")
+    return proxy
+
+
+def _require_current_credential_policy(context):
+    # CONF-LIVE-003 owns actual independently current observation/admission and
+    # strict profile/TLS checks. It must implement this fixed private guard;
+    # absence is unavailable. Neither data, a callback nor a truthy token is
+    # accepted here as a substitute for that installed verification path.
+    from types import FunctionType
+    proxy = _fixed_credential_proxy(context)
+    guard = getattr(proxy, "_require_current_credential_policy", None)
+    require(type(guard) is FunctionType, "CREDENTIAL_POLICY_UNAVAILABLE")
+    channel = context._owner._boundary
+    channel.check_peer()
+    require(guard(context, context._deadline) is None, "CREDENTIAL_POLICY_RESULT_INVALID")
+    channel.check_peer()
+
+
+def _check_proxy_resource_access(context):
+    import sys
+    proxy = _fixed_credential_proxy(context)
+    # Anchor both ends of the active call stack. A copied context, direct
+    # helper call or invocation after the hook returned grants nothing.
+    frame, proxy_seen, owner_seen = sys._getframe(1), False, False
+    for _ in range(32):
+        if frame is None:
+            break
+        if frame.f_code is proxy.execute_protected.__code__:
+            require(frame.f_locals.get("context") is context, "CREDENTIAL_HOOK_REQUIRED")
+            proxy_seen = True
+        if frame.f_code is _NativeChannel.execute.__code__:
+            require(proxy_seen and frame.f_locals.get("self") is context._owner._boundary
+                    and frame.f_locals.get("deadline") == context._deadline, "CREDENTIAL_HOOK_REQUIRED")
+            owner_seen = True
+            break
+        frame = frame.f_back
+    require(proxy_seen and owner_seen and context._late_resources.operation is not None,
+            "CREDENTIAL_HOOK_REQUIRED")
+    _require_current_credential_policy(context)
+
+
+def _credential_spec(context):
+    """Origin/binding checks, not a replacement for the strict proxy validator."""
+    import ipaddress
+    import sys
+    from .live_linux_boundary import _LateResources
+    frame = sys._getframe(1)
+    require(frame.f_code in (_LateResources._guard.__code__, _LateResources.credential_bytes.__code__)
+            and frame.f_locals.get("self") is context._late_resources, "CREDENTIAL_HOOK_REQUIRED")
+    # Both fixed callers just performed the full peer/policy/peer guard. This
+    # helper only derives data from already retained bytes; it opens no resource
+    # and does no blocking I/O. Every actual I/O retains its full post-check.
+    raw = context._kit.get("campaigns/platform/linux-baseline/proxy-profile.json")
+    require(type(raw) is bytes and 0 < len(raw) <= 262144, "CREDENTIAL_PROFILE_UNAVAILABLE")
+    profile = require_canonical_document(raw)
+    require(profile.get("profileId") == "CAMPAIGN_PROXY_MTLS_ZERO_COST_V1", "CREDENTIAL_PROFILE_UNAVAILABLE")
+    envelope, capacity, binding = context._envelope, context._capacity, profile["binding"]
+    for field, expected in (("tenantId", envelope["tenantId"]), ("environmentId", envelope["environmentId"]),
+            ("runNonce", envelope["nonce"]), ("capacityNonce", capacity["nonce"]),
+            ("namespace", context._plan["namespace"])):
+        require(binding[field] == expected, "CREDENTIAL_PROFILE_SCOPE")
+    entries = profile["capacityEntries"]
+    require(type(entries) is dict and entries and all(capacity.get(k) == v for k, v in entries.items()),
+            "CREDENTIAL_CAPACITY_CHANGED")
+    endpoints = [e for e in envelope["endpoints"] if e["kind"] == "CAMPAIGN_PROXY"
+                 and e["endpointId"] == binding["endpointId"]]
+    require(len(endpoints) == 1, "CREDENTIAL_ENDPOINT_INVALID")
+    endpoint = endpoints[0]
+    # The unchanged session wire binding carries endpointId, not a per-endpoint
+    # digest. Exact endpoint bytes remain bound by the verified envelope and
+    # immutable context snapshot checked above; do not invent a wire field.
+    require(context._binding["endpointId"] == endpoint["endpointId"] == context._plan["endpointId"],
+            "CREDENTIAL_ENDPOINT_CHANGED")
+    identities = [e for e in capacity["credentialIdentities"] if e["endpointId"] == endpoint["endpointId"]]
+    require(len(identities) == 1 and identities[0]["purpose"] == "CAMPAIGN_PROXY_CLIENT_MTLS"
+            and identities[0]["subject"] == binding["serviceAccountSubject"]
+            and identities[0]["expiresAt"] == binding["expiresAt"], "CREDENTIAL_IDENTITY_INVALID")
+    instant = require_time(context._owner._clock(), "now")
+    require(require_time(binding["validFrom"], "validFrom") <= instant
+            < require_time(binding["expiresAt"], "expiresAt"), "CREDENTIAL_EXPIRED")
+    address = ipaddress.ip_address(endpoint["ipAddress"])
+    require(str(address) == endpoint["ipAddress"] and type(endpoint["port"]) is int
+            and 0 < endpoint["port"] < 65536, "CREDENTIAL_ENDPOINT_INVALID")
+    return endpoint["credentialFileReference"], endpoint

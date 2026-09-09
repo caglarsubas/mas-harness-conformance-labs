@@ -744,3 +744,262 @@ class RetainedBoundaryTests(unittest.TestCase):
             rig.owner.execute_fixed(handle, rig.module.CASES[0], "amd64")
             self.assertEqual(len(rig.fs.opens), before)
             self.assertEqual(len(rig.hook_calls), 1)
+
+
+def _credential_rig():
+    """OS-mocked custody exercise; the proxy/policy adapter is NOT live proof."""
+    import sys
+    import json
+    from time import perf_counter
+    from contextlib import contextmanager, ExitStack
+    from types import ModuleType
+    from _fixtures import NOW, receipt_from
+    started = perf_counter()
+    rig = _CustodyRig()
+    fixture = rig.fixture
+    expiry = "2026-09-07T01:10:00Z"
+    identity = dict(endpointId="unit-proxy", purpose="CAMPAIGN_PROXY_CLIENT_MTLS",
+                    subject=fixture.plan["serviceAccountSubject"], expiresAt=expiry,
+                    certificateDigest="sha256:" + "1" * 64, clientSpkiDigest="sha256:" + "2" * 64)
+    fixture.capacity["credentialIdentities"] = [identity]
+    fields = ("kubernetesApiRules", "campaignProxyRules", "permittedGvksAndVerbs", "preexistingResourceRefs",
+              "preallocatedStorageRefs", "preallocatedAcceleratorRefs", "credentialIdentities")
+    profile = dict(profileId="CAMPAIGN_PROXY_MTLS_ZERO_COST_V1", binding=dict(
+        tenantId=fixture.envelope["tenantId"], environmentId=fixture.envelope["environmentId"],
+        runNonce=fixture.envelope["nonce"], capacityNonce=fixture.capacity["nonce"],
+        namespace=fixture.plan["namespace"], endpointId="unit-proxy", apiEndpointId=None,
+        serviceAccountSubject=fixture.plan["serviceAccountSubject"], validFrom=NOW, expiresAt=expiry),
+        capacityEntries={key: deepcopy(fixture.capacity[key]) for key in fields})
+    # Only origin/binding data for the ownership unit tests. This deliberately
+    # is not a complete strict proxy profile or a policy-observation producer.
+    rig.kit["campaigns/platform/linux-baseline/proxy-profile.json"] = canonical_bytes(profile)
+    kit_root = fixture.envelope["conformanceKitRoot"]
+    for path, raw in rig.kit.items():
+        rig.fs.add(kit_root + "/" + path, raw)
+    rows = [dict(path=p, mode="0444", size=len(raw), sha256=byte_digest(raw)) for p, raw in sorted(rig.kit.items())]
+    fixture.release["tree"] = rows
+    fixture.release["kitDigest"] = canonical_digest(rows, "planeon.harness-live-tree/v1alpha1")
+    fixture.envelope["conformanceKitDigest"] = fixture.release["kitDigest"]
+    fixture.envelope["campaignReleaseDigest"] = byte_digest(canonical_bytes(fixture.release))
+    rig.refresh()
+    rig.credential_path = fixture.endpoint["credentialFileReference"]
+    rig.credential_raw = b"UNIT_ONLY_NO_PRIVATE_KEY_OR_CERTIFICATE"
+    rig.fs.add(rig.credential_path, rig.credential_raw, 0o400)
+    rig.events, rig.seals, rig.transports = [], {}, []
+    rig.policy_available, rig.io_enabled, rig.before_io, rig.after_io = True, False, None, None
+    rig.fail_write = False
+
+    def policy(context, deadline):
+        # Explicit non-authorizing unit adapter at the missing successor seam;
+        # never installed, never selected by an environment flag in product.
+        if (not rig.policy_available or context is not rig.owner._context
+                or not rig.owner._active["reserved"] or rig.owner._active["session"]["state"] != "RUNNING"
+                or rig.owner._boundary.peer is None or deadline != context._deadline):
+            raise ConformanceError("CREDENTIAL_POLICY_UNAVAILABLE", "unit unavailable observation")
+        rig.events.append("unit-policy-check")
+
+    def execute_protected(request, context, deadline):
+        rig.events.append("unit-hook")
+        if rig.before_io is not None:
+            rig.before_io()
+        resources = context._late_resources
+        data = resources.credential_bytes()
+        if data != rig.credential_raw:
+            raise AssertionError("unit custody bytes differ")
+        if rig.io_enabled:
+            resources.transport()
+            memfd = resources.tls_memfd()
+            if rig.fs.fstat(memfd).st_size != len(data):
+                raise AssertionError("unit secret transport size differs")
+            resources.close_memfd()
+        if rig.after_io is not None:
+            rig.after_io()
+        rig.hook_calls.append((request, context, deadline))
+        return canonical_bytes(receipt_from(fixture, request["operation"]))
+
+    proxy = ModuleType("harness_conformance.live_proxy_client")
+    proxy.__loader__ = SimpleNamespace(archive=str(live.EXPECTED_LAUNCHER))
+    proxy.execute_protected = execute_protected
+    proxy._require_current_credential_policy = policy
+    rig.proxy = proxy
+
+    def transport(family, kind, protocol):
+        rig.transports.append((family, kind, protocol))
+        sock = _CustodySocket(rig.fs, "/unit-transport-" + str(len(rig.transports)), False)
+        sock.set_inheritable = lambda value: None if value is False else (_ for _ in ()).throw(AssertionError("inherited"))
+        def detach():
+            fd, sock.fd = sock.fd, None
+            return fd
+        sock.detach = detach
+        return sock
+
+    def memfd(name, flags):
+        if name != "planeon-client-credential" or flags != 3:
+            raise AssertionError("unbounded memfd selection")
+        fd = rig.fs.kernel_fd("/unit-memfd-" + str(len(rig.seals)))
+        rig.seals[fd] = 0
+        return fd
+
+    def write(fd, raw):
+        if fd not in rig.seals:
+            return len(raw)
+        if rig.fail_write:
+            return 0
+        node = rig.fs.fds[fd][1]
+        node.raw += raw
+        node.st_size = len(node.raw)
+        return len(raw)
+
+    def seal(fd, operation, argument=0):
+        if operation == 1033:
+            rig.seals[fd] |= argument
+            return 0
+        if operation == 1034:
+            return rig.seals[fd]
+        raise AssertionError("unreviewed memfd operation")
+
+    @contextmanager
+    def managed():
+        with rig:
+            with ExitStack() as stack:
+                for patcher in (patch.dict(sys.modules, {proxy.__name__: proxy}),
+                        patch.object(os, "get_inheritable", return_value=False),
+                        patch.object(socket, "socket", side_effect=transport),
+                        patch.object(os, "memfd_create", side_effect=memfd, create=True),
+                        patch.object(os, "MFD_CLOEXEC", 1, create=True),
+                        patch.object(os, "MFD_ALLOW_SEALING", 2, create=True),
+                        patch.object(os, "write", side_effect=write),
+                        patch.object(rig.module.fcntl, "fcntl", side_effect=seal)):
+                    stack.enter_context(patcher)
+                for name, value in dict(F_ADD_SEALS=1033, F_GET_SEALS=1034, F_SEAL_SEAL=1,
+                                        F_SEAL_SHRINK=2, F_SEAL_GROW=4, F_SEAL_WRITE=8).items():
+                    stack.enter_context(patch.object(rig.module.fcntl, name, value, create=True))
+                try:
+                    yield rig
+                finally:
+                    try:
+                        rig.owner.close()
+                    finally:
+                        print("credential-unit-scenario elapsed={:.3f}s policy_checks={} evidence=OS_MOCKED_ONLY".format(
+                            perf_counter() - started, rig.events.count("unit-policy-check")), flush=True)
+    return managed()
+
+
+class CredentialBoundaryTests(unittest.TestCase):
+    def test_two_operations_retain_one_credential_without_unsealing_authority(self):
+        with _credential_rig() as rig:
+            handle = rig.open()
+            context = rig.owner._context
+            initial = dict(context._custody.handles)
+            self.assertNotIn(rig.credential_path, context._custody.files)
+            for case in rig.module.CASES[:2]:
+                self.assertFalse(rig.owner.execute_fixed(handle, case, "amd64")["nativeAcceptance"])
+                self.assertEqual(context._late_resources.state, "RETAINED")
+                self.assertEqual(context._late_resources.io, {})
+            self.assertEqual(sum(p == rig.credential_path for p, _, _ in rig.fs.opens), 1)
+            self.assertEqual(context._custody.handles, initial)
+            self.assertTrue(context._custody.sealed)
+            self.assertNotIn(rig.credential_path, context._bytes)
+            self.assertEqual(len(rig.hook_calls), 2)
+        self.assertFalse(rig.fs.fds)
+        self.assertEqual(len(rig.fs.closes), len(set(rig.fs.closes)))
+
+    def test_temporary_socket_and_sealed_memfd_close_before_receipt(self):
+        with _credential_rig() as rig:
+            rig.io_enabled = True
+            handle = rig.open()
+            for case in rig.module.CASES[:2]:
+                rig.owner.execute_fixed(handle, case, "amd64")
+                self.assertFalse(rig.owner._context._late_resources.io)
+                self.assertFalse(any(p.startswith(("/unit-transport-", "/unit-memfd-")) for p, n in rig.fs.fds.values()))
+            self.assertEqual(rig.transports, [(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP)] * 2)
+            self.assertTrue(all(value == 15 for value in rig.seals.values()))
+
+    def test_missing_policy_or_fixed_module_identity_opens_no_credential(self):
+        for fault in ("policy", "missing-guard", "boolean", "loader"):
+            with self.subTest(fault=fault), _credential_rig() as rig:
+                handle = rig.open()
+                if fault == "policy":
+                    rig.policy_available = False
+                elif fault == "missing-guard":
+                    del rig.proxy._require_current_credential_policy
+                elif fault == "boolean":
+                    rig.proxy._require_current_credential_policy = True
+                else:
+                    rig.proxy.__loader__.archive = "/unit-foreign"
+                with self.assertRaises(ConformanceError):
+                    rig.owner.execute_fixed(handle, rig.module.CASES[0], "amd64")
+                self.assertNotIn(rig.credential_path, [p for p, _, _ in rig.fs.opens])
+                self.assertIsNone(rig.owner._active)
+
+    def test_credential_wrong_mode_symlink_hardlink_size_and_metadata_refuse(self):
+        for fault in ("mode", "symlink", "hardlink", "oversize", "short", "substitution"):
+            with self.subTest(fault=fault), _credential_rig() as rig:
+                handle = rig.open()
+                node = rig.fs.nodes[rig.credential_path]
+                if fault == "mode":
+                    node.st_mode = stat.S_IFREG | 0o600
+                elif fault == "symlink":
+                    node.st_mode = stat.S_IFLNK | 0o400
+                elif fault == "hardlink":
+                    node.st_nlink = 2
+                elif fault == "oversize":
+                    node.st_size = 262145
+                elif fault == "short":
+                    node.st_size += 1
+                else:
+                    rig.fs.after_read = lambda path: setattr(node, "st_ctime_ns", 2) if path == rig.credential_path else None
+                with self.assertRaises((OSError, ConformanceError)):
+                    rig.owner.execute_fixed(handle, rig.module.CASES[0], "amd64")
+                self.assertFalse(rig.hook_calls)
+            self.assertFalse(rig.fs.fds)
+
+    def test_partial_acquisition_exhaustion_and_write_failure_release_all(self):
+        for fault in ("open", "limit", "read", "memfd-write"):
+            with self.subTest(fault=fault), _credential_rig() as rig:
+                handle = rig.open()
+                if fault == "open":
+                    rig.fs.fail_open = rig.credential_path
+                elif fault == "limit":
+                    rig.fs.max_open = len(rig.fs.fds) + 2
+                elif fault == "read":
+                    rig.fs.fail_read = rig.credential_path
+                else:
+                    rig.io_enabled = rig.fail_write = True
+                with self.assertRaises((OSError, ConformanceError)):
+                    rig.owner.execute_fixed(handle, rig.module.CASES[0], "amd64")
+                self.assertIsNone(rig.owner._active)
+            self.assertFalse(rig.fs.fds)
+
+    def test_retained_credential_and_ancestry_mutation_refuse_without_reopening(self):
+        with _credential_rig() as rig:
+            handle = rig.open()
+            rig.owner.execute_fixed(handle, rig.module.CASES[0], "amd64")
+            resource = rig.owner._context._late_resources
+            before = list(rig.fs.opens)
+            for row in resource.handles:
+                node = rig.fs.fds[row["fd"]][1]
+                old = node.st_ctime_ns
+                node.st_ctime_ns += 1
+                with self.assertRaises(ConformanceError):
+                    rig.owner._boundary.check_peer()
+                node.st_ctime_ns = old
+            rig.fs.nodes[rig.credential_path].st_ctime_ns += 1
+            with self.assertRaises(ConformanceError):
+                rig.owner.execute_fixed(handle, rig.module.CASES[1], "amd64")
+            self.assertEqual(rig.fs.opens, before)
+            self.assertEqual(len(rig.hook_calls), 1)
+
+    def test_direct_constructor_caller_path_and_foreign_hook_are_not_authority(self):
+        with self.assertRaises(TypeError):
+            linux._LateResources()
+        with _credential_rig() as rig:
+            rig.open()
+            resources = rig.owner._context._late_resources
+            with self.assertRaises(TypeError):
+                resources.credential_bytes("/unit-caller-path")
+            with self.assertRaises(ConformanceError):
+                resources.credential_bytes()
+            self.assertNotIn(rig.credential_path, [p for p, _, _ in rig.fs.opens])
+            with self.assertRaises(TypeError):
+                __import__("pickle").dumps(resources)
