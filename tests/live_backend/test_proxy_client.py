@@ -7,6 +7,7 @@ import ssl
 import sys
 from types import SimpleNamespace
 import unittest
+from time import perf_counter as _wall_clock
 from unittest.mock import Mock, patch
 
 from _fixtures import ROOT
@@ -15,6 +16,17 @@ from harness_conformance.canonical import byte_digest
 from harness_conformance.errors import ConformanceError
 
 VECTORS = json.loads((ROOT / "fixtures/live-backend/proxy-vectors.json").read_bytes())
+
+
+def setUpModule():
+    # Diagnostic only: do not intercept TestCase.run, discovery or any guard.
+    global _module_started
+    _module_started = _wall_clock()
+
+
+def tearDownModule():
+    print(f"CONF-LIVE-003 module-timing module={__name__} "
+          f"elapsedSeconds={_wall_clock() - _module_started:.6f} evidenceClass=DIAGNOSTIC_ONLY", flush=True)
 
 
 def load_proxy_modules():

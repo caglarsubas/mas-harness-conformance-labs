@@ -58,11 +58,35 @@ importing the real client left a parent-package attribute behind, while accepted
 credential fixtures substitute the missing-successor seam through sys.modules.
 The new tests now restore both import surfaces after loading their real subjects.
 No predecessor fixture, runtime verification, loader metadata or test selection
-is changed. The full six-root replay must demonstrate the correction.
+is changed. The complete eight-command replay of exact head
+`4175299368fffd15bc9e67153cdf4d81ce8ef6a3` passed all385 tests (327 predecessor
+plus58 new), without skips. That is a historical local result, not acceptance
+of later changes or completion of the packet.
 
 Review also corrected mutable aliasing between returned broker frames and retained
 parser state, and made descriptor-cleanup failures sticky without retrying a
 recycled descriptor. Dedicated regression cases cover both corrections.
+
+## Timing investigation
+
+Required PR CI run34436974320 was cancelled in both attempts. Attempt1 emitted
+all385 passing test summaries and structural output but did not receive a green
+job conclusion. Attempt2 reached the trusted launcher's900-second timeout before
+the backend suite completed. Neither attempt establishes green required CI.
+
+The accepted earlier CONF-FIX-005 exact-main log already records222.471 seconds
+for87 Linux-baseline tests and635.330 seconds for157 backend tests. These are
+historical timings, not a controlled comparison with this candidate. Static
+inspection identifies repeated signature construction/verification in inherited
+fixtures as a candidate bottleneck, not yet a measured attribution.
+
+This continuation adds diagnostic-only elapsed time around each of the three
+packet-owned test modules using standard unittest module setup/teardown. It
+does not replace TestCase.run, alter discovery, intercept runtime verification,
+cache signature outcomes, omit tests or change acceptance argv/timeouts. New
+timings must come from the full eight-command signed isolated recipe. Shared
+crypto.py and predecessor fixtures remain outside this packet's allowedPaths;
+they may not be optimized through monkeypatches or edits here.
 
 ## Integration remaining before packet completion
 
@@ -113,9 +137,11 @@ probe, live launcher, runtime download or cloud/billable service is authorized.
 |---|---|---|---|
 | Phase 0 / Alpha 1 | Foundations | DONE_RECORDED | Historical source/offline closure; no new live evidence |
 | Alpha 2 | MET-REPAIR-014 / 015 | DONE_SOURCE_GATES_RECORDED | Broker and qualification authority merged |
-| Alpha 2 | CONF-LIVE-003 data/codecs | IMPLEMENTED_NOT_YET_VERIFIED | Qualification parser and regression tests added |
+| Alpha 2 | CONF-LIVE-003 data/codecs | LOCAL_PASS_RECORDED | Head4175299 passed385 tests; subsequent changes require fresh replay |
+| Alpha 2 | CONF-LIVE-003 timing investigation | ONGOING | Diagnostic module timings; no relaxed timeout or inherited-code edit |
 | Alpha 2 | CONF-LIVE-003 native inspector / broker / API | ONGOING | Required implementation listed above |
-| Alpha 2 | CONF-LIVE-003 source acceptance / CI / merge / exact-main | NOT_RUN | Packet is incomplete; no completion claim |
+| Alpha 2 | CONF-LIVE-003 required CI | NOT_GREEN | Both previous attempts cancelled at the fixed time boundary |
+| Alpha 2 | CONF-LIVE-003 source completion / merge / exact-main | NOT_RUN | Packet is incomplete; no completion claim |
 | Alpha 2 | CONF-LIVE-004 | WAITING | Fixed worker and ten native probes |
 | Alpha 2 | CONF-LIVE-005 | WAITING | Reproducible candidates and operator handoff |
 | Alpha 2 | CONF-LIVE-006 | WAITING | Trusted campaign integration |
