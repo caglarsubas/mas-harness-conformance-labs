@@ -14,12 +14,13 @@ from unittest.mock import Mock, patch
 from _fixtures import ROOT
 from _inventory import BASELINE, SUCCESSOR, isolated_inventory, validate_checkpoint
 from harness_conformance import live_mutation_admission as admission
-from harness_conformance import live_proxy_server as server
+from test_proxy_client import load_proxy_modules
 from harness_conformance.canonical import byte_digest, canonical_bytes
 from harness_conformance.errors import ConformanceError
 from harness_conformance.live_backend_authority import SUITE_ROOTS
 
 VECTORS = json.loads((ROOT / "fixtures/live-backend/proxy-vectors.json").read_bytes())
+_client_module, server = load_proxy_modules()
 
 
 def sample(index=0):
@@ -270,7 +271,8 @@ class ProxyServerCustodyTests(unittest.TestCase):
             with self.assertRaises(ConformanceError):
                 files.close()
             close.assert_called_once_with(71)
-            files.close()
+            with self.assertRaises(ConformanceError):
+                files.close()
             self.assertEqual(close.call_count, 1)
 
 

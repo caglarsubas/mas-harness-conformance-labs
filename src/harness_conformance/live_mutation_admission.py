@@ -570,7 +570,7 @@ class BrokerTranscript:
                         and payload["actionId"] not in self.actions
                         and payload["manifestDigest"] in self.binding["caseResourceDigests"][self.dispatch["caseId"]],
                         "BROKER_RESOURCE_ACTION_INVALID")
-                self.pending = payload
+                self.pending = document(payload, 16384)
                 self.actions.add(payload["actionId"])
             elif kind == "RESOURCE_RESULT":
                 require(self.pending is not None and payload["actionId"] == self.pending["actionId"],
@@ -604,7 +604,7 @@ class BrokerTranscript:
                             and (row["uid"] is not None or row["reasonCode"] == "IO_AMBIGUOUS"),
                             "BROKER_CLEANUP_SCOPE")
                     seen.add(key)
-                self.cleanup = payload
+                self.cleanup = document(payload, 16384)
             elif kind == "TERMINAL":
                 require(self.pending is None and self.cleanup is not None
                         and payload["receiptSize"] == self.receipt_size
@@ -614,7 +614,7 @@ class BrokerTranscript:
                 require(payload["status"] != "COMPLETED" or
                         self.cleanup["state"] == "CLEAN" and not self.failed_action,
                         "BROKER_FALSE_COMPLETION")
-                self.terminal = payload
+                self.terminal = document(payload, 16384)
             elif kind != "STARTED":
                 raise ConformanceError("BROKER_ABORTED", "execution refused; no success receipt")
             self.sequence, self.previous = frame["sequence"], canonical_digest(frame)

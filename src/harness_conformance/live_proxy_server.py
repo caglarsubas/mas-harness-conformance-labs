@@ -67,6 +67,7 @@ class _Files:
     def __init__(self, owner):
         self.owner, self.rows, self.raw = owner, {}, {}
         self.sealed, self.closed, self.total = False, False, 0
+        self.cleanup_failure = None
 
     def check(self):
         self.owner._owner_check()
@@ -157,6 +158,8 @@ class _Files:
 
     def close(self):
         if self.closed:
+            if self.cleanup_failure is not None:
+                raise self.cleanup_failure
             return
         self.closed = True
         rows, self.rows, self.raw = self.rows, {}, {}
@@ -172,6 +175,7 @@ class _Files:
                 if failure is None:
                     failure = exc
         if failure is not None:
+            self.cleanup_failure = failure
             raise failure
 
 

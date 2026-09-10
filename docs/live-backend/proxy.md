@@ -53,6 +53,17 @@ also honor the already-approved future141/146/151 stages and the exact final
 launcher-delta proof; they do not introduce a successor-blocking scalar135 check.
 The original120 and historical279/305 counts remain separate evidence histories.
 
+The first replay exposed discovery-state contamination in the new tests: eagerly
+importing the real client left a parent-package attribute behind, while accepted
+credential fixtures substitute the missing-successor seam through sys.modules.
+The new tests now restore both import surfaces after loading their real subjects.
+No predecessor fixture, runtime verification, loader metadata or test selection
+is changed. The full six-root replay must demonstrate the correction.
+
+Review also corrected mutable aliasing between returned broker frames and retained
+parser state, and made descriptor-cleanup failures sticky without retrying a
+recycled descriptor. Dedicated regression cases cover both corrections.
+
 ## Integration remaining before packet completion
 
 1. Implement the real fixed factory-owned `_KernelQualification` reader in
@@ -78,8 +89,10 @@ The original120 and historical279/305 counts remain separate evidence histories.
 
 ## Verification boundary
 
-Status before the first continuation replay: **NOT_RUN**. No product command is
-allowed outside the signed host launcher. The complete fixed recipe is:
+This is an in-progress source snapshot, not a self-attested run result. Exact
+commit-pinned local/CI logs are retained outside the product repository. The
+first candidate's replay is not acceptance of subsequent source changes. No
+product command is allowed outside the signed host launcher. The recipe is:
 
 1. unittest discovery: tests/meta
 2. unittest discovery: tests/parity

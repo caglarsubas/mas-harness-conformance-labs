@@ -128,6 +128,19 @@ class ProxyAdmissionTests(unittest.TestCase):
             with self.assertRaises(ConformanceError):
                 subject.accept(sample["frames"][0], "BROKER")
 
+    def test_returned_frames_do_not_alias_retained_actions_cleanup_or_terminal(self):
+        sample, subject = transcript_sample(1)
+        for frame in sample["frames"]:
+            returned = subject.accept(frame, sender(frame))
+            original = deepcopy(returned["payload"])
+            returned["payload"].clear()
+            if frame["kind"] == "RESOURCE_ACTION":
+                self.assertEqual(subject.pending, original)
+            elif frame["kind"] == "CLEANUP_RECORDED":
+                self.assertEqual(subject.cleanup, original)
+            elif frame["kind"] == "TERMINAL":
+                self.assertEqual(subject.terminal, original)
+
     def test_each_frame_wrong_direction_and_replay_refused(self):
         original = VECTORS["broker"]["positive"][1]
         for index, frame in enumerate(original["frames"]):

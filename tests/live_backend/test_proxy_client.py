@@ -1,18 +1,50 @@
 """Codec and refused-entry tests. No certificates issued or live TLS attempted."""
 from copy import deepcopy
 import base64
+import importlib
 import json
 import ssl
+import sys
 from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 
 from _fixtures import ROOT
-from harness_conformance import live_proxy_client as client
+import harness_conformance
 from harness_conformance.canonical import byte_digest
 from harness_conformance.errors import ConformanceError
 
 VECTORS = json.loads((ROOT / "fixtures/live-backend/proxy-vectors.json").read_bytes())
+
+
+def load_proxy_modules():
+    """Load real code without leaking discovery state into predecessor fixtures.
+
+    The accepted custody tests install their own explicit module-seam adapters.
+    Python also caches a submodule as a parent-package attribute; restoring only
+    sys.modules would leave those historical fixtures observing our real module
+    instead of their adapter. Restore both surfaces, never any runtime guard,
+    predecessor test, test selection, loader metadata or verification result.
+    """
+    names = ("live_proxy_client", "live_proxy_server")
+    absent = object()
+    previous_modules = {name: sys.modules.get("harness_conformance." + name, absent) for name in names}
+    previous_attributes = {name: vars(harness_conformance).get(name, absent) for name in names}
+    try:
+        return tuple(importlib.import_module("harness_conformance." + name) for name in names)
+    finally:
+        for name in names:
+            if previous_modules[name] is absent:
+                sys.modules.pop("harness_conformance." + name, None)
+            else:
+                sys.modules["harness_conformance." + name] = previous_modules[name]
+            if previous_attributes[name] is absent:
+                vars(harness_conformance).pop(name, None)
+            else:
+                setattr(harness_conformance, name, previous_attributes[name])
+
+
+client, _server_module = load_proxy_modules()
 
 
 def der(tag, value):
@@ -44,6 +76,13 @@ def identity_data(client_identity=True):
 
 
 class ProxyClientTests(unittest.TestCase):
+    def test_discovery_import_restores_both_package_attributes_and_module_cache(self):
+        names = ("live_proxy_client", "live_proxy_server")
+        previous = [(vars(harness_conformance).get(name), sys.modules.get("harness_conformance." + name)) for name in names]
+        modules = load_proxy_modules()
+        self.assertEqual([module.__name__ for module in modules], ["harness_conformance." + name for name in names])
+        self.assertEqual(previous, [(vars(harness_conformance).get(name), sys.modules.get("harness_conformance." + name)) for name in names])
+
     def test_foreign_context_refused_before_any_resource_or_transport(self):
         for context in (None, {}, SimpleNamespace(_owner=object()), Mock()):
             with self.subTest(context=type(context).__name__), patch.object(client.socket, "socket") as socket_factory:
