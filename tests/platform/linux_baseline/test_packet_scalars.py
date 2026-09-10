@@ -326,10 +326,12 @@ class ScalarIntegrityTests(unittest.TestCase):
                 load_fixture(changed)
 
     def test_two_exact_source_transformations_preserve_all_other_bytes(self):
+        helper = load_local("performance_historical_consumer", "tests/platform/linux_baseline/_successor_inventory.py")
+        _, historical_sources, _ = helper.performance_current(ROOT)
         for path, change in FIXTURE["changes"].items():
             before = FIXTURE["beforeSources"][path].encode()
             with self.subTest(path=path):
-                check_edit(path, before, regular(path).read_bytes())
+                check_edit(path, before, historical_sources[path])
                 self.assertEqual(BASELINE["files"][path]["sha256"], "sha256:" + sha(before))
 
     def test_unapproved_source_mutations_and_unknown_paths_refuse(self):

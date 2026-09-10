@@ -164,6 +164,7 @@ class SuccessorInventoryTests(unittest.TestCase):
         self.assertEqual(RECORD["diagnosis"]["testsExecuted"], 0)
 
     def test_original_106_file_and_150_test_history(self):
+        _, historical_sources, _ = HELPER.performance_current(ROOT)
         historical = json.loads(BASELINE["historical103Raw"])
         self.assertEqual(sha(BASELINE["historical103Raw"].encode()), BASELINE["historical103Sha256"])
         self.assertEqual((len(historical["files"]), sum(map(len, historical["tests"].values()))), (103, 120))
@@ -175,7 +176,7 @@ class SuccessorInventoryTests(unittest.TestCase):
         self.assertEqual(RECORD["checkpoint"]["ci"]["runId"], 34137197794)
         self.assertEqual(RECORD["checkpoint"]["mainReplay"]["tests"], 150)
         for path, checksum in RECORD["checkpoint"]["inventory"]["exactEdits"].items():
-            self.assertEqual(sha((ROOT / path).read_bytes()), checksum)
+            self.assertEqual(sha(historical_sources[path]), checksum)
 
     def test_original_test_ids_and_new_tests_collected(self):
         observed = HELPER.verify_tests(ROOT)
