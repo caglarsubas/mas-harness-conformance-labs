@@ -366,13 +366,14 @@ class SupervisorPredecessorTests(unittest.TestCase):
         result = verify_repository(ROOT)
         self.assertGreaterEqual(result["stage"], 2)
         rows, sources = SUCCESSOR.tracked_inventory(ROOT)
+        _, historical_sources, _ = SUCCESSOR.performance_history(rows, sources)
         actual = {row["path"]: row for row in rows}
         for path, expected in baseline["files"].items():
             # Only the already accepted exact final-hook proof permits the
             # closed CONF-LIVE-006 launcher delta; presence alone never does.
             if result["stage"] == 6 and path == SUCCESSOR.RECORD["hook"]["path"]:
                 continue
-            raw, observed = sources[path], actual[path]
+            raw, observed = historical_sources[path], actual[path]
             self.assertEqual(observed["mode"], expected["mode"], path)
             self.assertEqual(len(raw), expected["size"], path)
             self.assertEqual("sha256:" + hashlib.sha256(raw).hexdigest(), expected["sha256"], path)
@@ -1042,7 +1043,8 @@ def _credential_record():
 
 
 def _credential_inputs():
-    doc = SUCCESSOR.regular_bytes(ROOT, "docs/live-backend/linux-boundary.md")
+    _, performance_history, _ = SUCCESSOR.performance_current(ROOT)
+    doc = performance_history["docs/live-backend/linux-boundary.md"]
     marker = b"```harness-credential-source-proof\n"
     if doc.count(marker) != 1:
         raise ValueError("unique credential proof required")
@@ -1052,7 +1054,7 @@ def _credential_inputs():
         raise ValueError("canonical credential proof required")
     record = _credential_record()
     paths = set(record["change"]["sourceRegions"]) | set(record["change"]["testRegions"]) | {record["change"]["documentPath"]}
-    after = {p: SUCCESSOR.regular_bytes(ROOT, p) for p in paths}
+    after = {p: performance_history[p] for p in paths}  # exact validated 9df history, inert only
     validate, _ = _credential_oracle()
     if validate(after, proof, record, proof["before"].encode(), proof["checkpoint"].encode()):
         raise ValueError("actual credential correction is not the declared delta")
@@ -1076,12 +1078,14 @@ def _credential_repository():
     rows, sources = SUCCESSOR.tracked_inventory(ROOT)
     hook = SUCCESSOR.RECORD["hook"]
     hook_proof = SUCCESSOR.parse_hook_proof(sources[hook["proofPath"]]) if hook["proofPath"] in sources else None
-    result = SUCCESSOR.validate_composition(rows, sources[hook["path"]], hook_proof)
+    result = SUCCESSOR.validate_composition(rows, sources[hook["path"]], {"performanceSources": sources, "hookProof": hook_proof})
+    history_rows, history_sources, performance = SUCCESSOR.performance_history(rows, sources)
+    history_comparisons = {r["path"]: r for r in history_rows}
     if result["stage"] < 2:
         raise ValueError("credential correction requires stage two or later")
     current = {r["path"]: r for r in rows}
     for path, expected in checkpoint["files"].items():
-        raw = sources[path]
+        raw = history_sources[path]
         digest, size, blob = expected["sha256"], expected["size"], expected["blob"]
         if path in after or path == hook["path"] and result["stage"] == 6:
             # Exact five-file proof or the independently checked final-hook
@@ -1090,7 +1094,7 @@ def _credential_repository():
                 raise ValueError("inventory and proof bytes differ")
             digest, size = "sha256:" + hashlib.sha256(raw).hexdigest(), len(raw)
             blob = hashlib.sha1(b"blob " + str(len(raw)).encode() + b"\0" + raw).hexdigest()
-        observed = current[path]
+        observed = history_comparisons[path]
         if ((observed["mode"], observed["size"], "sha256:" + observed["sha256"])
                 != (expected["mode"], size, digest)
                 or "sha256:" + hashlib.sha256(raw).hexdigest() != digest
@@ -1108,6 +1112,16 @@ def _credential_repository():
         if not found or not set(expected.get(path, [])) <= set(found):
             raise ValueError("prior or new test identity lost")
         expected[path] = found
+    # The historical oracle above never supplies current test collection.
+    exact = {p: SUCCESSOR.performance_ids(history_sources[p]) for p in SUCCESSOR.PERFORMANCE_PINS
+             if p.startswith("tests/") and p.rsplit("/", 1)[-1].startswith("test_") and p.endswith(".py")}
+    if sum(map(len, exact.values())) != SUCCESSOR.PERFORMANCE_TEST_COUNT:
+        raise ValueError("exact historical 327 test identities required")
+    test_path = SUCCESSOR.PERFORMANCE_TEST
+    exact[test_path] = sorted(exact[test_path] + performance["newTestIds"])
+    for path, methods in exact.items():
+        if sorted(expected.get(path, [])) != methods:
+            raise ValueError("all 327 old and exact new test identities required")
     observed = {}
     for root in SUITE_ROOTS:
         observed.update({root + "/" + p: methods for p, methods in isolated_inventory(ROOT / root).items()})
@@ -1335,3 +1349,481 @@ class CredentialCleanupTests(unittest.TestCase):
             self.assertNotIn(fd, rig.fs.closes)
             self.assertIsNotNone(rig.owner._context._late_resources.cleanup_failure)
             rig.fs.close(fd)
+
+
+# Observational profiling only: full module, no production patch or result cache.
+_PERFORMANCE_PROFILE = None
+_PERFORMANCE_PREVIOUS = None
+_PERFORMANCE_STARTED = None
+_PERFORMANCE_OBSERVER = "cProfile.Profile(subcalls=False,builtins=True);default-timer;supervisor-module-v2"
+
+
+def setUpModule():
+    import cProfile
+    import sys
+    import time
+    global _PERFORMANCE_PROFILE, _PERFORMANCE_PREVIOUS, _PERFORMANCE_STARTED
+    _PERFORMANCE_PREVIOUS = sys.getprofile()
+    if _PERFORMANCE_PREVIOUS is not None:
+        raise RuntimeError("unsupported prior profiler; measurement unavailable")
+    profile = cProfile.Profile(subcalls=False, builtins=True)
+    _PERFORMANCE_PROFILE = profile
+    _PERFORMANCE_STARTED = time.perf_counter()
+    unittest.addModuleCleanup(_performance_finish_profile)
+    profile.enable()
+
+
+def tearDownModule():
+    _performance_finish_profile()
+
+
+def _performance_profile_report(profile, complete, elapsed):
+    import platform
+    import sys
+    # getstats is non-disabling. Only final teardown stops this one observer.
+    rows, processing = [], []
+    for entry in profile.getstats():
+        code = entry.code
+        name = code if isinstance(code, str) else code.co_name
+        filename = "" if isinstance(code, str) else code.co_filename
+        row = dict(function=name, calls=entry.callcount,
+                   primitiveCalls=entry.callcount - entry.reccallcount,
+                   selfSeconds=entry.inlinetime, cumulativeSeconds=entry.totaltime)
+        if filename.endswith("harness_conformance/crypto.py") and name in {"_add", "_scalar_mult", "sign", "verify"} or name == "<built-in method builtins.pow>":
+            rows.append(row)
+        if filename.endswith(("_successor_inventory.py", "ast.py")) or name in {"_credential_inputs", "_credential_repository", "_credential_oracle", "_custody_oracle"}:
+            processing.append(row)
+    return dict(evidenceClass="OBSERVATION_ONLY" if complete else "PARTIAL_DIAGNOSTIC_ONLY",
+                complete=complete, observerIdentity=_PERFORMANCE_OBSERVER,
+                subcalls=False, builtins=True, timer="default",
+                moduleWallSeconds=elapsed, interpreter=sys.version, platform=platform.platform(),
+                functions=sorted(rows, key=lambda r: r["function"]),
+                proofProcessing=sorted(processing, key=lambda r: (-r["selfSeconds"], r["function"])))
+
+
+def _performance_finish_profile():
+    import sys
+    import time
+    global _PERFORMANCE_PROFILE
+    profile = _PERFORMANCE_PROFILE
+    if profile is None:
+        return
+    _PERFORMANCE_PROFILE = None
+    try:
+        profile.disable()
+    finally:
+        sys.setprofile(_PERFORMANCE_PREVIOUS)
+    report = _performance_profile_report(profile, True, time.perf_counter() - _PERFORMANCE_STARTED)
+    print("PERFORMANCE_PROFILE " + json.dumps(report, sort_keys=True), flush=True)
+
+
+def _performance_reference_add(left, right):
+    # Independently stated affine Edwards formula; never evaluates a snapshot.
+    from harness_conformance.crypto import D, Q
+    a, b = left
+    c, d = right
+    product = D * a * b * c * d % Q
+    def reciprocal(value):
+        reduced = value % Q
+        return 0 if reduced == 0 else pow(reduced, -1, Q)
+    return ((a * d + b * c) * reciprocal(1 + product) % Q,
+            (b * d + a * c) * reciprocal(1 - product) % Q)
+
+
+class PerformanceArithmeticTests(unittest.TestCase):
+    def test_published_rfc8032_vectors_and_mutations(self):
+        from harness_conformance import crypto
+        # Public RFC8032 fixtures already present in accepted meta authority
+        # tests/linux_runner/test_authority.py; no downloaded vector or service.
+        vectors = (
+            ("d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a", "",
+             "e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e065224901555fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b"),
+            ("3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c", "72",
+             "92a009a9f0d4cab8720e820b5f642540a2b27b5416503f8fb3762223ebdb69da085ac1e43e15996e458f3613d0f11d8c387b2eaeb4302aeeb00d291612bb0c00"),
+        )
+        seed = bytes.fromhex("9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60")
+        self.assertEqual(crypto.public_key(seed).hex(), vectors[0][0])
+        self.assertEqual(crypto.sign(seed, b"").hex(), vectors[0][2])
+        for public, message, signature in vectors:
+            pub, msg, sig = bytes.fromhex(public), bytes.fromhex(message), bytes.fromhex(signature)
+            with self.subTest(public=public):
+                self.assertTrue(crypto.verify(pub, msg, sig))
+                self.assertFalse(crypto.verify(pub, msg + b"!", sig))
+                for index in (0, 31, 32, 63):
+                    altered = bytearray(sig)
+                    altered[index] ^= 1
+                    self.assertFalse(crypto.verify(pub, msg, bytes(altered)))
+
+    def test_independent_affine_points_extremes_and_unreduced_coordinates(self):
+        from harness_conformance import crypto
+        q = crypto.Q
+        points = [crypto.IDENTITY, crypto.BASE, (0, 0), (q - 1, q - 1), (-1, -1),
+                  (-crypto.BX, crypto.BY), (crypto.BX + q * 3, crypto.BY - q * 4), (2**512, -(2**511))]
+        for left in points:
+            for right in points:
+                with self.subTest(left=left, right=right):
+                    self.assertEqual(crypto._add(left, right), _performance_reference_add(left, right))
+        point = crypto.IDENTITY
+        for _ in range(8):
+            expected = _performance_reference_add(point, crypto.BASE)
+            point = crypto._add(point, crypto.BASE)
+            self.assertEqual(point, expected)
+
+    def test_both_zero_denominator_branches_preserve_total_integer_behavior(self):
+        from harness_conformance import crypto
+        inverse_d = pow(crypto.D, -1, crypto.Q)
+        for sign in (-1, 1):
+            left, right = (1, 1), (1, sign * inverse_d)
+            result = crypto._add(left, right)
+            self.assertEqual(result, _performance_reference_add(left, right))
+            self.assertEqual(result[0 if sign == -1 else 1], 0)
+
+    def test_scalar_extremes_match_independent_addition_reference(self):
+        from harness_conformance import crypto
+        for scalar in (0, 1, 2, 7, crypto.L - 1, crypto.L, crypto.L + 1, 2**255 - 1):
+            point = crypto.IDENTITY
+            # Left-to-right reference, independent of production's right-to-left loop.
+            for bit in bin(scalar)[2:]:
+                point = _performance_reference_add(point, point)
+                if bit == "1":
+                    point = _performance_reference_add(point, crypto.BASE)
+            self.assertEqual(crypto._scalar_mult(scalar, crypto.BASE), point)
+
+    def test_invalid_lengths_scalar_and_point_encodings_refuse(self):
+        from harness_conformance import crypto
+        pub = bytes.fromhex("d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a")
+        sig = bytes.fromhex("e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e065224901555fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b")
+        for length in (0, 1, 31, 33, 63, 65):
+            self.assertFalse(crypto.verify(b"x" * length, b"", sig))
+            self.assertFalse(crypto.verify(pub, b"", b"x" * length))
+        for scalar in (crypto.L, crypto.L + 1, 2**256 - 1):
+            self.assertFalse(crypto.verify(pub, b"", sig[:32] + scalar.to_bytes(32, "little")))
+        for encoded in (crypto.Q, crypto.Q + 1, 2**255 - 1, 1, 1 + 2**255, 0):
+            point = encoded.to_bytes(32, "little")
+            self.assertFalse(crypto.verify(point, b"", sig))
+            self.assertFalse(crypto.verify(pub, b"", point + sig[32:]))
+
+    def test_canonical_payload_fields_remain_order_independent_and_domain_bound(self):
+        from harness_conformance.crypto import signature_payload
+        one = {"tenant": "fixture", "operation": "read", "signature": "ignored"}
+        two = {"operation": "read", "signature": "different", "tenant": "fixture"}
+        self.assertEqual(signature_payload("role-one", one, ("signature",)), signature_payload("role-one", two, ("signature",)))
+        self.assertNotEqual(signature_payload("role-one", one, ("signature",)), signature_payload("role-two", two, ("signature",)))
+        self.assertNotEqual(signature_payload("role-one", one, ()), signature_payload("role-one", two, ()))
+
+    def test_fixed_three_sample_workload(self):
+        import platform
+        import sys
+        import time
+        from harness_conformance import crypto
+        seed = bytes.fromhex("9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60")
+        samples, checksums = [], []
+        for _ in range(3):
+            results = []
+            start = time.perf_counter()
+            for length in (0, 1, 32, 1024):
+                message = b"a" * length
+                for repetition in range(2):
+                    public = crypto.public_key(seed)
+                    signature = crypto.sign(seed, message)
+                    valid = crypto.verify(public, message, signature)
+                    tampered = crypto.verify(public, message + b"!", signature)
+                    self.assertTrue(valid)
+                    self.assertFalse(tampered)
+                    self.assertEqual(public.hex(), "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a")
+                    results.append([length, repetition, public.hex(), signature.hex(), valid, tampered])
+            samples.append(time.perf_counter() - start)
+            checksums.append(hashlib.sha256(canonical_bytes(results)).hexdigest())
+        self.assertEqual(len(set(checksums)), 1)
+        print("PERFORMANCE_WORKLOAD " + json.dumps(dict(evidenceClass="OBSERVATION_ONLY",
+              sampleIdentity="rfc8032-seed1-a-lengths-0-1-32-1024-repetitions2-samples3-v1",
+              warmColdDefinition="same fresh suite process; imported module warm; no result cache; consecutive full samples",
+              interpreter=sys.version, platform=platform.platform(), sourceSha256=hashlib.sha256(SUCCESSOR.regular_bytes(ROOT, "src/harness_conformance/crypto.py")).hexdigest(),
+              recipeSha256="4d1cd821689a7c5855d5cf9fd94a9d1042974e04be65304ab05639581037f9b1", observerIdentity=_PERFORMANCE_OBSERVER,
+              samplesSeconds=samples, resultDigests=checksums), sort_keys=True), flush=True)
+        if _PERFORMANCE_PROFILE is not None:
+            partial = _performance_profile_report(_PERFORMANCE_PROFILE, False, time.perf_counter() - _PERFORMANCE_STARTED)
+            print("PERFORMANCE_PARTIAL " + json.dumps(partial, sort_keys=True), flush=True)
+
+
+class PerformanceSourceProofTests(unittest.TestCase):
+    def inputs(self):
+        rows, sources = SUCCESSOR.tracked_inventory(ROOT)
+        historical, proof = SUCCESSOR.performance_proof(sources)
+        return rows, sources, historical, proof
+
+    def assemble(self, sources, historical, proof):
+        changed = dict(sources)
+        changed[SUCCESSOR.PERFORMANCE_DOC] = (historical[SUCCESSOR.PERFORMANCE_DOC] + proof["documentSuffix"].encode()
+            + b"\n```harness-performance-source-proof\n" + SUCCESSOR.canonical(proof) + b"\n```\n")
+        return changed
+
+    def reseal(self, sources, historical, proof, outside=None):
+        # Independent byte assembler: no call to the production reconstruction
+        # or proof oracle. Resealing means source hashes, not credentials.
+        import ast
+        import re
+        changed = dict(sources)
+        for path, row in proof["sources"].items():
+            original = proof["beforeSources"][path].encode()
+            tree, lines = ast.parse(original), original.splitlines(keepends=True)
+            replacements = []
+            for name, replacement in row["regions"].items():
+                nodes = tree.body
+                for part in name.split("."):
+                    found = [n for n in nodes if isinstance(n, (ast.ClassDef, ast.FunctionDef)) and n.name == part]
+                    self.assertEqual(len(found), 1)
+                    node = found[0]
+                    nodes = node.body
+                start, end = sum(map(len, lines[:node.lineno - 1])), sum(map(len, lines[:node.end_lineno]))
+                replacements.append((start, end, replacement.encode()))
+            current = original
+            for start, end, replacement in sorted(replacements, reverse=True):
+                current = current[:start] + replacement + current[end:]
+            if row["constant"] is not None:
+                current, count = re.subn(rb'^HELPER_SHA256 = "[0-9a-f]{64}"$',
+                    ('HELPER_SHA256 = "' + row["constant"] + '"').encode(), current, flags=re.M)
+                self.assertEqual(count, 1)
+            current += row["append"].encode()
+            if outside and path == outside[0]:
+                self.assertEqual(current.count(outside[1]), 1)
+                current = current.replace(outside[1], outside[2])
+            changed[path] = current
+            row["afterSha256"] = hashlib.sha256(current).hexdigest()
+        return self.assemble(changed, historical, proof)
+
+    def test_exact_checkpoint_scope_and_all_fresh_test_roots(self):
+        rows, sources, historical, proof = self.inputs()
+        self.assertEqual(len(rows), 127)
+        self.assertEqual(len(historical), 8)
+        self.assertEqual(SUCCESSOR.PERFORMANCE_TEST_COUNT, 327)
+        history_rows, history_sources, found = SUCCESSOR.performance_history(rows, sources)
+        self.assertEqual(found, proof)
+        self.assertEqual(len(history_rows), len(rows))
+        self.assertEqual(set(history_sources), set(sources))
+        expected = {p: SUCCESSOR.performance_ids(history_sources[p]) for p in SUCCESSOR.PERFORMANCE_PINS
+                    if p.startswith("tests/") and p.rsplit("/", 1)[-1].startswith("test_") and p.endswith(".py")}
+        self.assertEqual(sum(map(len, expected.values())), 327)
+        expected[SUCCESSOR.PERFORMANCE_TEST] = sorted(expected[SUCCESSOR.PERFORMANCE_TEST] + proof["newTestIds"])
+        observed = {}
+        for root in SUITE_ROOTS:
+            observed.update({root + "/" + p: methods for p, methods in isolated_inventory(ROOT / root).items()})
+        self.assertEqual(observed, expected)
+
+    def test_unrelated_bytes_and_current_hashes_are_not_exempt(self):
+        rows, sources, _, _ = self.inputs()
+        for path in ("README.md", "src/harness_conformance/crypto.py", SUCCESSOR.PERFORMANCE_DOC):
+            changed = dict(sources)
+            changed[path] += b"\nunreviewed\n"
+            changed_rows = [dict(row, size=len(changed[path]), sha256=hashlib.sha256(changed[path]).hexdigest())
+                            if row["path"] == path else row for row in rows]
+            with self.subTest(path=path), self.assertRaises(ValueError):
+                SUCCESSOR.performance_history(changed_rows, changed)
+
+    def test_proof_identity_scope_and_before_after_pins_are_closed(self):
+        _, sources, historical, proof = self.inputs()
+        for key, value in (("extra", True), ("authorityDigest", "0" * 64), ("baseCommit", "0" * 40),
+                           ("packetId", "CONF-LIVE-003"), ("evidenceClass", "PASS"), ("sources", {}), ("beforeSources", {})):
+            changed = deepcopy(proof)
+            changed[key] = value
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                SUCCESSOR.performance_proof(self.assemble(sources, historical, changed))
+        for path in proof["sources"]:
+            changed = deepcopy(proof)
+            changed["sources"][path]["afterSha256"] = "0" * 64
+            with self.subTest(path=path), self.assertRaises(ValueError):
+                SUCCESSOR.performance_proof(self.assemble(sources, historical, changed))
+
+    def test_document_prefix_suffix_duplicate_keys_and_oversize_refuse(self):
+        _, sources, historical, proof = self.inputs()
+        path = SUCCESSOR.PERFORMANCE_DOC
+        for document in (b"!" + sources[path][1:], sources[path] + b"!", sources[path] + sources[path],
+                         sources[path].replace(b'"packetId":"CONF-PERF-003"', b'"packetId":"CONF-PERF-003","packetId":"CONF-PERF-003"'),
+                         sources[path].replace(b'"newTestIds":', b'"newTestIds" :')):
+            with self.assertRaises(ValueError):
+                SUCCESSOR.performance_proof(dict(sources, **{path: document}))
+        changed = deepcopy(proof)
+        changed["documentSuffix"] = "x" * 65537
+        with self.assertRaises(ValueError):
+            SUCCESSOR.performance_proof(self.assemble(sources, historical, changed))
+
+    def test_wrong_helper_pin_and_unknown_region_refuse(self):
+        _, sources, historical, proof = self.inputs()
+        for path in proof["sources"]:
+            row = deepcopy(proof["sources"][path])
+            row["regions"]["unknown"] = "def unknown():\n    return None\n"
+            with self.subTest(path=path), self.assertRaises(ValueError):
+                SUCCESSOR.performance_reconstruct(path, historical[path], row)
+        changed = deepcopy(proof)
+        changed["sources"]["tests/live_backend/_inventory.py"]["constant"] = "0" * 64
+        resealed = self.reseal(sources, historical, changed)
+        backend = "tests/live_backend/_inventory.py"
+        self.assertEqual(hashlib.sha256(resealed[backend]).hexdigest(), changed["sources"][backend]["afterSha256"])
+        with self.assertRaisesRegex(ValueError, "current helper pin"):
+            SUCCESSOR.performance_proof(resealed)
+
+    def test_missing_extra_duplicate_test_identity_refuse(self):
+        _, sources, historical, proof = self.inputs()
+        for ids in ([], proof["newTestIds"][:-1], proof["newTestIds"] + ["Extra.test_hidden"], proof["newTestIds"] * 2):
+            changed = deepcopy(proof)
+            changed["newTestIds"] = ids
+            with self.assertRaises(ValueError):
+                SUCCESSOR.performance_proof(self.assemble(sources, historical, changed))
+
+    def test_collection_overrides_shadowing_and_oversize_append_refuse(self):
+        _, sources, historical, proof = self.inputs()
+        path = SUCCESSOR.PERFORMANCE_TEST
+        for addition, reason in (
+            ("\ndef load_tests(a, b, c):\n    return b\n", "collection override"),
+            ("\ndef run():\n    pass\n", "collection override"),
+            ("\nclass Omitted:\n    @unittest.skip('hidden')\n    def test_hidden(self):\n        pass\n", "omitted test"),
+            ("\nclass Omitted:\n    @unittest.expectedFailure\n    def test_hidden(self):\n        pass\n", "omitted test"),
+            ("\ndef _credential_inputs():\n    pass\n", "shadowed definition"),
+            ("\n" * 131073, "bounded regions")):
+            changed = deepcopy(proof)
+            changed["sources"][path]["append"] += addition
+            resealed = self.reseal(sources, historical, changed)
+            self.assertEqual(hashlib.sha256(resealed[path]).hexdigest(), changed["sources"][path]["afterSha256"])
+            with self.subTest(reason=reason), self.assertRaisesRegex(ValueError, reason):
+                SUCCESSOR.performance_proof(resealed)
+
+    def test_resealed_fixed_bridges_and_old_assertions_refuse(self):
+        _, sources, historical, proof = self.inputs()
+        for path in ("tests/platform/linux_baseline/test_packet_scalars.py",
+                     "tests/platform/linux_baseline/test_successor_inventory.py"):
+            changed = deepcopy(proof)
+            name = next(iter(changed["sources"][path]["regions"]))
+            changed["sources"][path]["regions"][name] += "        pass\n"
+            resealed = self.reseal(sources, historical, changed)
+            with self.subTest(path=path), self.assertRaisesRegex(ValueError, "exact historical-consumer bridge"):
+                SUCCESSOR.performance_proof(resealed)
+        path = SUCCESSOR.PERFORMANCE_TEST
+        name = "SupervisorPredecessorTests.test_immediate_120_file_216_id_checkpoint_and_older_stages_are_immutable"
+        changed = deepcopy(proof)
+        region = changed["sources"][path]["regions"][name]
+        self.assertEqual(region.count("(120, 216)"), 1)
+        changed["sources"][path]["regions"][name] = region.replace("(120, 216)", "(120, 215)")
+        resealed = self.reseal(sources, historical, changed)
+        with self.assertRaisesRegex(ValueError, "old comparisons preserved"):
+            SUCCESSOR.performance_proof(resealed)
+
+    def test_resealed_outside_region_and_forged_before_refuse(self):
+        _, sources, historical, proof = self.inputs()
+        path = "src/harness_conformance/crypto.py"
+        changed = deepcopy(proof)
+        resealed = self.reseal(sources, historical, changed,
+                              (path, b"Q = 2**255 - 19", b"Q = 2**255 - 20"))
+        self.assertEqual(hashlib.sha256(resealed[path]).hexdigest(), changed["sources"][path]["afterSha256"])
+        with self.assertRaisesRegex(ValueError, "after hash"):
+            SUCCESSOR.performance_proof(resealed)
+        changed = deepcopy(proof)
+        changed["beforeSources"][path] += "\n# forged historical bytes\n"
+        resealed = self.reseal(sources, historical, changed)
+        self.assertEqual(hashlib.sha256(resealed[path]).hexdigest(), changed["sources"][path]["afterSha256"])
+        with self.assertRaisesRegex(ValueError, "before pin"):
+            SUCCESSOR.performance_proof(resealed)
+
+    def test_mode_link_duplicate_partial_and_future_inventory_refuse(self):
+        rows, sources, _, _ = self.inputs()
+        for key, value in (("mode", "100755"), ("nlink", 2), ("linkedAncestry", True), ("kind", "symlink"), ("size", -1)):
+            changed = deepcopy(rows)
+            row = next(r for r in changed if r["path"] == "src/harness_conformance/crypto.py")
+            row[key] = value
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                SUCCESSOR.performance_history(changed, sources)
+        for changed in (rows[:-1], rows + [rows[0]]):
+            with self.assertRaises(ValueError):
+                SUCCESSOR.performance_history(changed, sources)
+        path = "src/harness_conformance/live_proxy_client.py"
+        extra = dict(path=path, mode="100644", size=0, sha256=hashlib.sha256(b"").hexdigest(), kind="file", nlink=1, linkedAncestry=False)
+        with self.assertRaises(ValueError):
+            SUCCESSOR.performance_history(rows + [extra], dict(sources, **{path: b""}))
+
+    def test_regular_reader_rejects_symlink_hardlink_and_nonregular_sources(self):
+        import os
+        from pathlib import Path
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            (root / "target").write_bytes(b"fixture")
+            (root / "link").symlink_to(root / "target")
+            with self.assertRaises(ValueError):
+                SUCCESSOR.regular_bytes(root, "link")
+            os.link(root / "target", root / "hard")
+            with self.assertRaises(ValueError):
+                SUCCESSOR.regular_bytes(root, "hard")
+            (root / "folder").mkdir()
+            with self.assertRaises(ValueError):
+                SUCCESSOR.regular_bytes(root, "folder")
+
+    def _assert_new_bridge_mutations(self, method, changes):
+        import ast
+        _, sources, historical, proof = self.inputs()
+        path = "tests/platform/linux_baseline/test_successor_inventory.py"
+        name = "SuccessorInventoryTests." + method
+        original = proof["sources"][path]["regions"][name]
+        validation = "        _, historical_sources, _ = HELPER.performance_current(ROOT)\n"
+        self.assertEqual(original.count(validation), 1)
+        before = historical[path]
+        old_class = next(n for n in ast.parse(before).body
+                         if isinstance(n, ast.ClassDef) and n.name == "SuccessorInventoryTests")
+        old_method = next(n for n in old_class.body
+                          if isinstance(n, ast.FunctionDef) and n.name == method)
+        old_lines = before.splitlines(keepends=True)
+        historical_method = b"".join(old_lines[old_method.lineno - 1:old_method.end_lineno]).decode()
+        variants = {"missing-current-validation": original.replace(validation, ""),
+                    "extra-statement": original + "        pass\n",
+                    "original-direct-reader": historical_method,
+                    "wrong-method": original.replace("def " + method + "(", "def unauthorized_method(")}
+        for fault, old, new in changes:
+            self.assertEqual(original.count(old), 1, fault)
+            variants[fault] = original.replace(old, new)
+        for fault, replacement in variants.items():
+            changed = deepcopy(proof)
+            changed["sources"][path]["regions"][name] = replacement
+            resealed = self.reseal(sources, historical, changed)
+            self.assertEqual(hashlib.sha256(resealed[path]).hexdigest(), changed["sources"][path]["afterSha256"])
+            with self.subTest(method=method, fault=fault), self.assertRaisesRegex(ValueError, "exact historical-consumer bridge"):
+                SUCCESSOR.performance_proof(resealed)
+
+    def test_current_scalar_hash_bridge_rejects_independently_resealed_mutations(self):
+        self._assert_new_bridge_mutations("test_current_test_guard_not_exempt", (
+            ("current-disk", "sha(historical_sources[path])", "sha((ROOT / path).read_bytes())"),
+            ("expected-hash", "e1491e4407ff6d221871b45bbd775beb28afba11d418ae001847a512bb4b6fe6", "0" * 64),
+            ("lost-stage", "range(7)", "range(6)"),
+        ))
+
+    def test_exact_scalar_patch_bridge_rejects_independently_resealed_mutations(self):
+        self._assert_new_bridge_mutations("test_exact_scalar_test_patch", (
+            ("current-disk", 'historical_sources[RECORD["change"]["path"]]', '(ROOT / RECORD["change"]["path"]).read_bytes()'),
+            ("lost-hunk", 'len(RECORD["change"]["hunks"]), 3', 'len(RECORD["change"]["hunks"]), 2'),
+            ("lost-id", "len(methods(after)), 30", "len(methods(after)), 29"),
+            ("changed-oracle-operand", "HELPER.corrected_test(before)", 'HELPER.corrected_test(b"")'),
+        ))
+
+    def test_all_python_sources_and_four_current_before_historical_consumers_are_bound(self):
+        import ast
+        rows, sources, _, proof = self.inputs()
+        _, historical_sources, _ = SUCCESSOR.performance_history(rows, sources)
+        python_paths = {path for path in SUCCESSOR.PERFORMANCE_PINS if path.endswith(".py")}
+        self.assertEqual(len(python_paths), 65)
+        historical_ids = 0
+        for path in sorted(python_paths):
+            raw, pin = historical_sources[path], SUCCESSOR.PERFORMANCE_PINS[path]
+            self.assertEqual(len(raw), pin["size"], path)
+            self.assertEqual("sha256:" + hashlib.sha256(raw).hexdigest(), pin["sha256"], path)
+            self.assertEqual(hashlib.sha1(b"blob " + str(len(raw)).encode() + b"\0" + raw).hexdigest(), pin["blob"], path)
+            if path.startswith("tests/") and path.rsplit("/", 1)[-1].startswith("test_"):
+                historical_ids += len(SUCCESSOR.performance_ids(raw))
+        self.assertEqual(historical_ids, 327)
+        fixed = [(path, name, replacement) for path, spec in SUCCESSOR.PERFORMANCE_SPECS.items()
+                 for name, replacement in spec.get("fixedRegions", {}).items()]
+        self.assertEqual(len(fixed), 4)
+        for path, name, replacement in fixed:
+            self.assertEqual(proof["sources"][path]["regions"][name], replacement)
+            tree = ast.parse("\n".join(line[4:] if line else line for line in replacement.splitlines()))
+            calls = [node for node in ast.walk(tree) if isinstance(node, ast.Call)]
+            self.assertEqual(sum(isinstance(node.func, ast.Attribute) and node.func.attr == "performance_current"
+                                 for node in calls), 1, name)
+            self.assertFalse(any(isinstance(node.func, ast.Attribute) and node.func.attr in ("read_bytes", "read_text")
+                                 for node in calls), name)
