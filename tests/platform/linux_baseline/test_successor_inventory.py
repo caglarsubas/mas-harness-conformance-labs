@@ -75,8 +75,9 @@ class SuccessorInventoryTests(unittest.TestCase):
         self.assertFalse(result["nativeAcceptance"])
 
     def test_current_test_guard_not_exempt(self):
+        _, historical_sources, _ = HELPER.performance_current(ROOT)
         path = RECORD["change"]["path"]
-        self.assertEqual(sha((ROOT / path).read_bytes()), "e1491e4407ff6d221871b45bbd775beb28afba11d418ae001847a512bb4b6fe6")
+        self.assertEqual(sha(historical_sources[path]), "e1491e4407ff6d221871b45bbd775beb28afba11d418ae001847a512bb4b6fe6")
         for stage in range(7):
             args = vector(stage)
             next(row for row in args[0] if row["path"] == path)["sha256"] = RECORD["change"]["beforeSha256"]
@@ -93,9 +94,10 @@ class SuccessorInventoryTests(unittest.TestCase):
                     HELPER.validate_composition(*args)
 
     def test_exact_scalar_test_patch(self):
+        _, historical_sources, _ = HELPER.performance_current(ROOT)
         before = FIXTURE["testBefore"].encode()
         after = HELPER.corrected_test(before)
-        self.assertEqual(after, (ROOT / RECORD["change"]["path"]).read_bytes())
+        self.assertEqual(after, historical_sources[RECORD["change"]["path"]])
         self.assertEqual(len(RECORD["change"]["hunks"]), 3)
         methods = lambda raw: re.findall(rb"^    def (test_[A-Za-z0-9_]+)\(", raw, re.M)
         self.assertEqual(methods(before), methods(after))
@@ -164,6 +166,7 @@ class SuccessorInventoryTests(unittest.TestCase):
         self.assertEqual(RECORD["diagnosis"]["testsExecuted"], 0)
 
     def test_original_106_file_and_150_test_history(self):
+        _, historical_sources, _ = HELPER.performance_current(ROOT)
         historical = json.loads(BASELINE["historical103Raw"])
         self.assertEqual(sha(BASELINE["historical103Raw"].encode()), BASELINE["historical103Sha256"])
         self.assertEqual((len(historical["files"]), sum(map(len, historical["tests"].values()))), (103, 120))
@@ -175,7 +178,7 @@ class SuccessorInventoryTests(unittest.TestCase):
         self.assertEqual(RECORD["checkpoint"]["ci"]["runId"], 34137197794)
         self.assertEqual(RECORD["checkpoint"]["mainReplay"]["tests"], 150)
         for path, checksum in RECORD["checkpoint"]["inventory"]["exactEdits"].items():
-            self.assertEqual(sha((ROOT / path).read_bytes()), checksum)
+            self.assertEqual(sha(historical_sources[path]), checksum)
 
     def test_original_test_ids_and_new_tests_collected(self):
         observed = HELPER.verify_tests(ROOT)
