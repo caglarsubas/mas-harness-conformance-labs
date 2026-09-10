@@ -13,7 +13,7 @@ import stat
 
 ROOT = Path(__file__).resolve().parents[2]
 HELPER_PATH = "tests/platform/linux_baseline/_successor_inventory.py"
-HELPER_SHA256 = "a50f5702345b69957878d520693934f0a1ded3d322c34d549305792b0484d20c"
+HELPER_SHA256 = "b6a8b2591a5a3fe3abbaf5bb246a212efe666e9e442c34321f5ca1f0a0a9f773"
 BASELINE_PATH = "fixtures/live-backend/baseline.json"
 BASELINE_SHA256 = "c3dd610a748e018c9e015668567fbea9820a050022dc33375912f8f4aaa51a00"
 
@@ -79,16 +79,17 @@ def validate_checkpoint(rows, sources):
     load_baseline(sources.get(BASELINE_PATH))
     hook = SUCCESSOR.RECORD["hook"]
     proof = SUCCESSOR.parse_hook_proof(sources[hook["proofPath"]]) if hook["proofPath"] in sources else None
-    result = SUCCESSOR.validate_composition(rows, sources.get(hook["path"]), proof)
+    result = SUCCESSOR.validate_composition(rows, sources.get(hook["path"]), {"performanceSources": sources, "hookProof": proof})
+    history_rows, history_sources, _ = SUCCESSOR.performance_history(rows, sources)
     if result["stage"] < 1:
         raise ValueError("complete session packet required")
-    actual = {row["path"]: row for row in rows}
+    actual = {row["path"]: row for row in history_rows}  # verified historical comparisons only
     for path, expected in CURRENT["files"].items():
         # Only the accepted exact proof can account for the final launcher delta.
         if path == hook["path"] and result["stage"] == 6:
             continue
         row = actual[path]
-        raw = sources[path]
+        raw = history_sources[path]
         if ((row["mode"], row["size"], "sha256:" + row["sha256"]) !=
                 (expected["mode"], expected["size"], expected["sha256"])
                 or row["sha256"] != hashlib.sha256(raw).hexdigest()
