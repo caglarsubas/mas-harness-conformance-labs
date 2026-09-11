@@ -467,7 +467,11 @@ class _KernelNativeReads:
             require(filesystem["kind"] == 0xf97cff8c, "KERNEL_STATUS_FILESYSTEM")
             mapping = None
             try:
-                mapping = mmap.mmap(fd, 4096, flags=mmap.MAP_SHARED, prot=mmap.PROT_READ)
+                page_size = os.sysconf("SC_PAGESIZE")
+                self._tick()
+                require(type(page_size) is int and page_size in (4096, 16384, 65536),
+                        "KERNEL_STATUS_PAGE_SIZE")
+                mapping = mmap.mmap(fd, page_size, flags=mmap.MAP_SHARED, prot=mmap.PROT_READ)
                 self._tick()
                 sequence = bytes(mapping[4:8])
                 require(len(sequence) == 4 and struct.unpack("<I", sequence)[0] % 2 == 0,
@@ -874,6 +878,216 @@ class _KernelProcessView:
             rows.insert(0, self.pidfd)
             self.pidfd = [None, None]
             self._close_rows(rows)
+        if self.cleanup_failure is not None:
+            raise self.cleanup_failure
+
+
+class _KernelPolicyView:
+    """Fresh kernel/boot/policy observations; matching expected data grants nothing.
+
+    The installed qualifier must still authenticate these pins, retain process,
+    code and filter ownership, and enforce the independent execution fence.
+    Policy is a fresh-open kernel snapshot, never a retained or cached image.
+    This component neither opens credentials nor changes host policy.
+    """
+    def __init__(self, roots, host, selinux):
+        require(type(roots) is _KernelRootViews, "KERNEL_POLICY_ROOTS")
+        host, selinux = document(host), document(selinux)
+        require(type(host) is dict and set(host) == {"machine", "kernelRelease", "kernelNotesDigest", "bootId"}
+                and type(selinux) is dict and set(selinux) == {"policyDigest", "status"}, "KERNEL_POLICY_PINS")
+        require(host["machine"] in ("x86_64", "aarch64") and type(host["kernelRelease"]) is str
+                and 1 <= len(host["kernelRelease"]) <= 128
+                and all(32 <= ord(c) <= 126 for c in host["kernelRelease"])
+                and type(host["bootId"]) is str
+                and re.fullmatch(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", host["bootId"]),
+                "KERNEL_POLICY_HOST_PINS")
+        require_digest(host["kernelNotesDigest"], "kernel notes")
+        require_digest(selinux["policyDigest"], "kernel policy")
+        epoch = selinux["status"]
+        require(type(epoch) is dict and set(epoch) == {"version", "sequence", "enforcing", "policyload", "denyUnknown"}
+                and all(type(v) is int and 0 <= v < 2 ** 32 for v in epoch.values()), "KERNEL_POLICY_EPOCH_PINS")
+        require(_selinux_status_fields(struct.pack("<5I", *(epoch[key] for key in
+                ("version", "sequence", "enforcing", "policyload", "denyUnknown")))) == epoch,
+                "KERNEL_POLICY_EPOCH_PINS")
+        self.roots, self.host, self.selinux = roots, host, selinux
+        self.pid, self.thread = os.getpid(), threading.get_ident()
+        self.rows, self.policy_identity = [], None
+        self.closed = self.failed = self.busy = False
+        self.cleanup_failure, self.last = None, time.monotonic()
+        try:
+            with self._phase():
+                self._acquire(self.rows)
+                self._observe()
+        except BaseException:
+            try:
+                self.close()
+            except BaseException:
+                pass  # cleanup uncertainty is retained; no qualification granted
+            raise
+
+    def _tick(self):
+        require(type(self) is _KernelPolicyView and not self.closed and not self.failed and self.busy
+                and self.pid == os.getpid() and self.thread == threading.get_ident(), "KERNEL_POLICY_CUSTODY")
+        now = time.monotonic()
+        require(self.last <= now < self.end, "KERNEL_POLICY_DEADLINE")
+        self.last = now
+
+    def _io(self, function, *args, **kwargs):
+        self._tick()
+        try:
+            return function(*args, **kwargs)
+        finally:
+            self._tick()
+
+    @contextmanager
+    def _phase(self):
+        require(not self.closed and not self.failed and not self.busy, "KERNEL_POLICY_UNAVAILABLE")
+        self.busy = True
+        self.end = time.monotonic() + 2
+        try:
+            self._io(self.roots.check)
+            yield
+            self._io(self.roots.check)
+        except BaseException:
+            self.failed = True
+            raise
+        finally:
+            self.busy = False
+
+    def _open(self, rows, name, parent, root_index, directory=False):
+        row = [None, None, None]
+        rows.append(row)
+        flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK
+        if directory:
+            flags |= os.O_DIRECTORY
+        self._tick()
+        try:
+            row[0] = os.open(name, flags, dir_fd=parent)
+        finally:
+            self._tick()
+        row[1] = self._io(_KernelProcessView._close_identity, row[0])
+        reader = self.roots.native.directory_identity if directory else self.roots.native.proc_file_identity
+        row[2] = self._io(reader, row[0])
+        root = self.roots.rows[root_index][2]
+        require(row[2]["mountId"] == root["mountId"] and row[2]["filesystem"] == root["filesystem"]
+                and row[2]["identity"][2:4] == (0, 0)
+                and not stat.S_IMODE(row[2]["identity"][4]) & 0o022, "KERNEL_POLICY_FILE_CUSTODY")
+        return row[0]
+
+    def _acquire(self, rows):
+        # Fixed proc ancestry and exact kernel interfaces, no caller paths.
+        parent = self.roots.rows[1][0]
+        for name in ("sys", "kernel", "random"):
+            parent = self._open(rows, name, parent, 1, True)
+        self._open(rows, "boot_id", parent, 1)
+        self._open(rows, "notes", self.roots.rows[3][0], 3)
+        for name in ("status", "enforce", "deny_unknown"):
+            self._open(rows, name, self.roots.rows[5][0], 5)
+
+    def _retained(self):
+        for index, (fd, _, expected) in enumerate(self.rows):
+            reader = self.roots.native.directory_identity if index < 3 else self.roots.native.proc_file_identity
+            require(self._io(reader, fd) == expected, "KERNEL_POLICY_RETAINED_CHANGED")
+
+    def _epoch(self):
+        fd, _, identity = self.rows[5]
+        require(self._io(self.roots.native.proc_file_identity, fd) == identity, "KERNEL_POLICY_STATUS_CHANGED")
+        observed = self._io(self.roots.native.status_epoch, fd)
+        require(observed == self.selinux["status"], "KERNEL_POLICY_EPOCH_CHANGED")
+        named = self._io(os.stat, "status", dir_fd=self.roots.rows[5][0], follow_symlinks=False)
+        require((named.st_dev, named.st_ino, named.st_uid, named.st_gid, named.st_mode) == identity["identity"],
+                "KERNEL_POLICY_STATUS_CHANGED")
+
+    def _read(self, name, parent, root_index, maximum, expected=None):
+        temporary = []
+        try:
+            self._epoch()
+            fd = self._open(temporary, name, parent, root_index)
+            self._epoch()  # includes the fresh policy open and any kernel wait
+            require(expected is None or temporary[0][2] == expected, "KERNEL_POLICY_PATH_CHANGED")
+            chunks, size = [], 0
+            while size <= maximum:
+                self._epoch()
+                limit = min(65536, maximum + 1 - size)
+                chunk = self._io(os.read, fd, limit)
+                self._epoch()
+                require(type(chunk) is bytes and len(chunk) <= limit, "KERNEL_POLICY_READ")
+                if not chunk:
+                    break
+                chunks.append(chunk)
+                size += len(chunk)
+            require(0 < size <= maximum, "KERNEL_POLICY_READ_SIZE")
+            require(self._io(self.roots.native.proc_file_identity, fd) == temporary[0][2],
+                    "KERNEL_POLICY_FILE_CHANGED")
+            named = self._io(os.stat, name, dir_fd=parent, follow_symlinks=False)
+            require((named.st_dev, named.st_ino, named.st_uid, named.st_gid, named.st_mode) ==
+                    temporary[0][2]["identity"], "KERNEL_POLICY_FILE_CHANGED")
+            self._epoch()
+            return b"".join(chunks), temporary[0][2]
+        finally:
+            self._close_rows(temporary)  # release the policy snapshot promptly, once
+            self._tick()
+
+    def _host(self):
+        native = self._io(os.uname)
+        require(native.sysname == "Linux" and native.machine == self.host["machine"] == self.roots.native.machine
+                and native.release == self.host["kernelRelease"], "KERNEL_POLICY_KERNEL_CHANGED")
+        boot, _ = self._read("boot_id", self.rows[2][0], 1, 37, self.rows[3][2])
+        notes, _ = self._read("notes", self.roots.rows[3][0], 3, 67108864, self.rows[4][2])
+        require(boot == (self.host["bootId"] + "\n").encode("ascii")
+                and byte_digest(notes) == self.host["kernelNotesDigest"], "KERNEL_POLICY_HOST_CHANGED")
+
+    def _controls(self):
+        for name, index in (("enforce", 6), ("deny_unknown", 7)):
+            raw, _ = self._read(name, self.roots.rows[5][0], 5, 2, self.rows[index][2])
+            require(raw == b"1", "KERNEL_POLICY_CONTROLS_CHANGED")
+
+    def _observe(self):
+        temporary = []
+        try:
+            self._retained()
+            self._acquire(temporary)
+            require([r[2] for r in temporary] == [r[2] for r in self.rows], "KERNEL_POLICY_PATH_CHANGED")
+        finally:
+            self._close_rows(temporary)
+            self._tick()
+        self._epoch()
+        self._host()
+        self._controls()
+        policy, identity = self._read("policy", self.roots.rows[5][0], 5, 67108864, self.policy_identity)
+        require(byte_digest(policy) == self.selinux["policyDigest"], "KERNEL_POLICY_DIGEST_CHANGED")
+        self.policy_identity = identity  # inode/mount only; never cache policy bytes
+        del policy
+        self._epoch()
+        self._controls()
+        self._host()
+        self._retained()
+        self._epoch()
+
+    def check(self):
+        with self._phase():
+            self._observe()
+
+    def _close_rows(self, rows):
+        failure = None
+        while rows:
+            fd, identity, *_ = rows.pop()
+            if fd is None:
+                continue
+            try:
+                require(identity is None or _KernelProcessView._close_identity(fd) == identity,
+                        "KERNEL_POLICY_FD_REUSED")
+                os.close(fd)  # uncertain close is not retried on a recycled fd
+            except BaseException as exc:
+                failure = failure or exc
+        if failure is not None:
+            self.cleanup_failure = self.cleanup_failure or failure
+            raise failure
+
+    def close(self):
+        if not self.closed:
+            self.closed = True
+            self._close_rows(self.rows)
         if self.cleanup_failure is not None:
             raise self.cleanup_failure
 

@@ -336,6 +336,49 @@ These snapshots detect changes across observations, not between-check ABA or
 hostile kernel/operator behavior. Full `_KernelQualification` and its production
 server/observer/broker integration remain unfinished.
 
+### Fresh kernel-policy custody — 2026-09-12
+
+The preceding process increment at `6dcd8e72859037839915c2f928e0fb55641e458a`
+passed all eight commands and509 tests, zero skips, in signed LOCAL activation181
+and required localhost CI34588680815 / activation182. Runner44 retired with
+zero registered runners and artifacts. That evidence is historical, not acceptance
+of the new source below. Current meta main `451cfc708bd6e708d20d905ca44165ae896a647b`
+adds the provider adoption roadmap; packet003 and the native qualification contract
+remain unchanged. Product predecessor remains accepted127-file/362-methodf988c78.
+
+The private `_KernelPolicyView` owns retained fixed proc ancestry, boot ID,
+kernel notes and SELinux status/control descriptors. Each complete check freshly
+opens the active kernel policy, reads/hashes its full bounded image, and promptly
+closes that snapshot. It does not reuse an open policy image or cached digest.
+Actual boot/kernel identity and enforcing/deny-unknown controls are compared
+before and after. The real fenced status reader checks the same enrolled epoch
+around the policy open and every read; unexpected sequence/policyload changes,
+missing permission, busy policy snapshots, changed inode/mount/path, malformed or
+oversize bytes and late reads refuse without retry or a copied-policy fallback.
+
+There is one two-second inspection budget across all children and chunks, with
+process/thread custody and monotonic ordering retained between checks. All opens
+are read-only/no-follow/non-inheritable and on the original verified kernel
+mounts. Partial resources are closed once; uncertain cleanup remains sticky and
+never widens ownership or retries a potentially recycled descriptor. Borrowed
+root handles are not closed. The status mapping explicitly uses the supported
+native page size (4/16/64KiB), with unknown or unavailable sizes refused.
+
+The fresh-open snapshot, enforcing-control bytes and read-only status-page
+behavior follow the [Linux6.12 SELinux interface](https://raw.githubusercontent.com/torvalds/linux/v6.12/security/selinux/selinuxfs.c).
+This independently authored component does not import upstream implementation.
+Tests drive actual policy/root/native-reader methods with only OS edges mocked;
+no native filesystem, policy, syscall, socket, credential or installation runs.
+All509 previous methods and127 accepted files remain preserved. Exact candidate
+counts and local/CI results are recorded externally after the complete recipe.
+
+Expected policy data is detached but is not independently authenticated by this
+component. Successful comparisons return no qualification handle. The full
+installed qualifier must still bind signed authority and the original peer,
+code/verity/mappings, cgroup/BPF enforcement and operator execution fence. Native
+ordering, between-check ABA exclusion and hostile-kernel behavior are not proved
+by snapshots or unit tests. No existing server credential gate is enabled here.
+
 PR12 remains DRAFT/unmerged while the native integration below is unfinished.
 The predecessor blocker is resolved; no new operator decision or phase
 completion is claimed.
@@ -394,7 +437,8 @@ probe, live launcher, runtime download or cloud/billable service is authorized.
 | Alpha 2 | CONF-LIVE-003 checkpoint / kernel byte parsers | LOCAL_AND_CI_PASS_RECORDED | Head1792452 passed448 tests and all8 commands; packet still incomplete |
 | Alpha 2 | CONF-LIVE-003 native read primitives | LOCAL_AND_CI_PASS_RECORDED | Head22de588 passed466 tests and all8 commands |
 | Alpha 2 | CONF-LIVE-003 fixed kernel-root custody | LOCAL_AND_CI_PASS_RECORDED | Headc435f7c passed486 tests and all8 commands; runner43 retired |
-| Alpha 2 | CONF-LIVE-003 retained process / namespace component | IMPLEMENTED_NOT_ACCEPTED | Twenty-three OS-mocked regressions; fresh full-recipe evidence required |
+| Alpha 2 | CONF-LIVE-003 retained process / namespace component | LOCAL_AND_CI_PASS_RECORDED | Head6dcd8e7,509 tests,all8 commands; runner44 retired |
+| Alpha 2 | CONF-LIVE-003 fresh kernel-policy custody | IMPLEMENTED_NOT_ACCEPTED | OS-mocked active-policy/boot/epoch checks; fresh exact-commit full recipe required |
 | Alpha 2 | CONF-LIVE-003 native inspector / broker / API | ONGOING | Required implementation listed above |
 | Alpha 2 | CONF-LIVE-003 required CI | WAITING | Fresh exact-head localhost evidence required; prior failures retained |
 | Alpha 2 | CONF-LIVE-003 source completion / merge / exact-main | NOT_RUN | Packet is incomplete; no completion claim |

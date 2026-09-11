@@ -211,6 +211,7 @@ class KernelNativeReadTests(unittest.TestCase):
         self.stack = ExitStack()
         self.addCleanup(self.stack.close)
         self.now = 100.0
+        self.page_size = 4096
         self.info = SimpleNamespace(st_dev=1, st_ino=2, st_uid=0, st_gid=0,
             st_mode=stat.S_IFREG | 0o444, st_nlink=1, st_size=4096, st_mtime_ns=1, st_ctime_ns=1)
         self.fs = dict(kind=0xf97cff8c, block_size=4096, name_length=255, flags=1)
@@ -221,6 +222,7 @@ class KernelNativeReadTests(unittest.TestCase):
         patched(server.sys, "platform", new="linux")
         patched(server.sys, "byteorder", new="little")
         patched(server.os, "uname", return_value=SimpleNamespace(machine="x86_64"))
+        patched(server.os, "sysconf", side_effect=lambda name: self.page_size if name == "SC_PAGESIZE" else None)
         patched(server.os, "getpid", return_value=411)
         patched(server.threading, "get_ident", return_value=721)
         patched(server.time, "monotonic", side_effect=lambda: self.now)
@@ -259,7 +261,7 @@ class KernelNativeReadTests(unittest.TestCase):
         return 0
 
     def mapping(self, fd, length, *, flags, prot):
-        self.assertEqual((fd, length, flags, prot), (71, 4096, server.mmap.MAP_SHARED, server.mmap.PROT_READ))
+        self.assertEqual((fd, length, flags, prot), (71, self.page_size, server.mmap.MAP_SHARED, server.mmap.PROT_READ))
         owner = self
         class Mapping:
             def __init__(self):
@@ -514,6 +516,30 @@ class KernelNativeReadTests(unittest.TestCase):
                 with self.assertRaises(ConformanceError):
                     self.fresh().status_epoch(71)
                 self.assertEqual(self.maps[-1].closes, 1)
+
+
+    def test_status_maps_one_native_page_for_both_supported_abis(self):
+        for machine in ("x86_64", "aarch64"):
+            for size in (4096, 16384, 65536):
+                self.page_size = size
+                with self.subTest(machine=machine, page=size), patch.object(
+                        server.os, "uname", return_value=SimpleNamespace(machine=machine)):
+                    self.fresh()
+                    self.assertEqual(self.reader.status_epoch(71)["sequence"], 2)
+                    self.assertEqual(self.maps[-1].closes, 1)
+
+    def test_status_rejects_unknown_or_late_page_size_before_mapping(self):
+        for size in (True, 0, 8192, 131072, "4096"):
+            self.page_size = size
+            with self.subTest(size=size), self.assertRaisesRegex(ConformanceError, "PAGE_SIZE"):
+                self.fresh().status_epoch(71)
+        self.mapper.assert_not_called()
+        def late(name):
+            self.now += 2
+            return 4096
+        with patch.object(server.os, "sysconf", side_effect=late), self.assertRaises(ConformanceError):
+            self.fresh().status_epoch(71)
+        self.mapper.assert_not_called()
 
 
 class KernelRootCustodyTests(unittest.TestCase):
@@ -1309,6 +1335,431 @@ class KernelProcessCustodyTests(unittest.TestCase):
         with patch.object(server.os, "open", Mock(side_effect=changed)), self.assertRaisesRegex(ConformanceError, "NAMESPACE_PIN"):
             self.view()
         self.assertEqual(set(self.handles), self.root_fds)
+
+
+class KernelPolicyCustodyTests(unittest.TestCase):
+    """Real policy/root/status factories with only synthetic OS edges."""
+    stat_fd = KernelRootCustodyTests.stat_fd
+    statfs = KernelRootCustodyTests.statfs
+    statx = KernelRootCustodyTests.statx
+    close_fd = KernelRootCustodyTests.close_fd
+
+    def setUp(self):
+        KernelRootCustodyTests.setUp(self)
+        self.host = deepcopy(sample()["record"]["host"])
+        self.selinux = deepcopy(sample()["record"]["selinux"])
+        self.machine, self.release, self.page_size = self.host["machine"], self.host["kernelRelease"], 4096
+        self.raw_status = server.struct.pack("<5I", *(self.selinux["status"][key] for key in
+            ("version", "sequence", "enforcing", "policyload", "denyUnknown")))
+        self.contents = {"/proc/sys/kernel/random/boot_id": (self.host["bootId"] + "\n").encode(),
+            "/sys/kernel/notes": b"independent kernel note bytes",
+            "/sys/fs/selinux/enforce": b"1", "/sys/fs/selinux/deny_unknown": b"1",
+            "/sys/fs/selinux/policy": b"independent unit-only policy image"}
+        self.host["kernelNotesDigest"] = byte_digest(self.contents["/sys/kernel/notes"])
+        self.selinux["policyDigest"] = byte_digest(self.contents["/sys/fs/selinux/policy"])
+        self.offsets, self.snapshots, self.views, self.events, self.maps = {}, {}, [], [], []
+        for index, path in enumerate(("/proc/sys", "/proc/sys/kernel", "/proc/sys/kernel/random",
+                "/proc/sys/kernel/random/boot_id", "/sys/kernel/notes", "/sys/fs/selinux/status",
+                "/sys/fs/selinux/enforce", "/sys/fs/selinux/deny_unknown", "/sys/fs/selinux/policy")):
+            root = self.nodes["/proc" if path.startswith("/proc/") else
+                              "/sys/fs/selinux" if path.startswith("/sys/fs/") else "/sys/kernel"]
+            self.nodes[path] = {**root, "st_ino": 200 + index,
+                "st_mode": stat.S_IFDIR | 0o555 if index < 3 else stat.S_IFREG | (0o644 if index == 6 else 0o444),
+                "st_size": 4096 if index == 5 else 0}
+        def patched(obj, name, **kwargs):
+            return self.stack.enter_context(patch.object(obj, name, **kwargs))
+        patched(server.os, "uname", side_effect=lambda: SimpleNamespace(
+            sysname="Linux", machine=self.machine, release=self.release))
+        patched(server.os, "sysconf", side_effect=lambda name: self.page_size if name == "SC_PAGESIZE" else None)
+        self.read_fd = patched(server.os, "read", side_effect=self.read)
+        self.named = patched(server.os, "stat", side_effect=self.named_stat)
+        self.lib.syscall = Mock(side_effect=self.barrier)
+        self.mapper.side_effect = self.mapping
+        patched(server.os, "write", side_effect=AssertionError("no policy writes"))
+        patched(server.os, "execve", side_effect=AssertionError("no execution"))
+        self.roots = server._KernelRootViews()
+        self.addCleanup(self.roots.close)
+        self.addCleanup(self.close_views)
+        self.root_fds = set(self.handles)
+
+    def open_fd(self, name, flags, *, dir_fd):
+        path = "/" if dir_fd is None else self.handles[dir_fd][0].rstrip("/") + "/" + name
+        self.assertIn(path, self.nodes)
+        self.assertTrue(name == "/" or "/" not in name)
+        expected = server.os.O_RDONLY | server.os.O_NOFOLLOW | server.os.O_CLOEXEC | server.os.O_NONBLOCK
+        if stat.S_ISDIR(self.nodes[path]["st_mode"]):
+            expected |= server.os.O_DIRECTORY
+        self.assertEqual(flags, expected)
+        if path == "/sys/fs/selinux/policy":
+            self.assertFalse(any(p == path for p, _ in self.handles.values()), "policy snapshot retained across opens")
+        fd, self.next_fd = self.next_fd, self.next_fd + 1
+        self.handles[fd] = (path, self.nodes[path])
+        self.opens.append((path, fd, dir_fd))
+        self.offsets[fd] = 0
+        if path in self.contents:
+            self.snapshots[fd] = self.contents[path]  # kernel policy is snapshotted on open
+        self.events.append(("open", path, fd))
+        return fd
+
+    def named_stat(self, name, *, dir_fd, follow_symlinks):
+        self.assertFalse(follow_symlinks)
+        node = self.nodes[self.handles[dir_fd][0].rstrip("/") + "/" + name]
+        return SimpleNamespace(**{key: value for key, value in node.items() if key.startswith("st_")})
+
+    def read(self, fd, limit):
+        self.assertTrue(0 < limit <= 65536)
+        self.events.append(("read", self.handles[fd][0], fd))
+        offset = self.offsets[fd]
+        chunk = self.snapshots[fd][offset:offset + limit]
+        self.offsets[fd] += len(chunk)
+        return chunk
+
+    def barrier(self, number, command, flags, cpu):
+        self.assertEqual(number.value, 324 if self.machine == "x86_64" else 283)
+        self.assertEqual((flags.value, cpu.value), (0, 0))
+        self.assertIn(command.value, (0, 16, 8))
+        return 24 if command.value == 0 else 0
+
+    def mapping(self, fd, length, *, flags, prot):
+        self.assertEqual(self.handles[fd][0], "/sys/fs/selinux/status")
+        self.assertEqual((length, flags, prot), (self.page_size, server.mmap.MAP_SHARED, server.mmap.PROT_READ))
+        owner = self
+        class Mapping:
+            closes = 0
+            def __getitem__(self, key):
+                return owner.raw_status[key]
+            def close(self):
+                self.closes += 1
+        value = Mapping()
+        self.maps.append(value)
+        self.events.append(("epoch", "status", fd))
+        return value
+
+    def close_views(self):
+        for value in self.views:
+            if not value.closed:
+                value.close()
+
+    def view(self, host=None, selinux=None):
+        value = server._KernelPolicyView(self.roots, self.host if host is None else host,
+                                          self.selinux if selinux is None else selinux)
+        self.views.append(value)
+        return value
+
+    def test_fresh_policy_open_each_check_retains_only_fixed_kernel_views(self):
+        value = self.view()
+        self.assertEqual(len(value.rows), 8)
+        self.assertEqual(len(self.handles), len(self.root_fds) + 8)
+        self.assertIsNone(value.check())
+        policy_fds = [fd for path, fd, _ in self.opens if path == "/sys/fs/selinux/policy"]
+        self.assertEqual(len(policy_fds), 2)
+        self.assertEqual(len(set(policy_fds)), 2)
+        self.assertTrue(all(fd in self.closed for fd in policy_fds))
+        self.assertFalse(any(p == "/sys/fs/selinux/policy" for p, _ in self.handles.values()))
+        self.assertTrue(all(item.closes == 1 for item in self.maps))
+        self.assertFalse(any(type(item) is bytes for item in vars(value).values()))
+        value.close()
+        value.close()
+        self.assertEqual(set(self.handles), self.root_fds)
+        self.assertIsNone(self.roots.check())
+
+    def test_factory_has_no_backend_path_descriptor_or_qualified_selector(self):
+        before = len(self.opens)
+        for extra in ({"backend": Mock()}, {"path": "/tmp/policy"}, {"fd": 77}, {"qualified": True}):
+            with self.subTest(extra=extra), self.assertRaises(TypeError):
+                server._KernelPolicyView(self.roots, self.host, self.selinux, **extra)
+        with self.assertRaises(ConformanceError):
+            server._KernelPolicyView(Mock(), self.host, self.selinux)
+        self.assertEqual(len(self.opens), before)
+
+    def test_closed_host_policy_pins_refuse_before_kernel_access(self):
+        changes = [("host", "bootId", "not-a-uuid"), ("host", "machine", "emulated"),
+            ("host", "kernelRelease", "bad\nrelease"), ("host", "kernelNotesDigest", "mutable"),
+            ("selinux", "policyDigest", "latest"), ("selinux", "status", {"sequence": 2})]
+        before = len(self.opens)
+        for target, key, bad in changes:
+            host, selinux = deepcopy(self.host), deepcopy(self.selinux)
+            (host if target == "host" else selinux)[key] = bad
+            with self.subTest(key=key), self.assertRaises(ConformanceError):
+                self.view(host, selinux)
+        for target in ("host", "selinux"):
+            host, selinux = deepcopy(self.host), deepcopy(self.selinux)
+            (host if target == "host" else selinux)["verified"] = True
+            with self.assertRaises(ConformanceError):
+                self.view(host, selinux)
+        for key, bad in (("sequence", True), ("sequence", 3), ("sequence", 2 ** 32), ("policyload", 0)):
+            selinux = deepcopy(self.selinux)
+            selinux["status"][key] = bad
+            with self.assertRaises(ConformanceError):
+                self.view(selinux=selinux)
+        self.assertEqual(len(self.opens), before)
+
+    def test_expected_pins_are_detached_without_authenticating_them(self):
+        value = self.view()
+        self.host["bootId"] = "00000000-0000-0000-0000-000000000000"
+        self.selinux["status"]["sequence"] += 2
+        self.selinux["policyDigest"] = admission.ZERO
+        self.assertIsNone(value.check())
+        self.assertFalse(hasattr(value, "qualified"))
+
+    def test_boot_kernel_release_machine_and_notes_mismatches_refuse(self):
+        for fault in ("boot", "release", "machine", "notes"):
+            host = deepcopy(self.host)
+            if fault == "boot":
+                host["bootId"] = "00000000-0000-0000-0000-000000000000"
+            elif fault == "release":
+                host["kernelRelease"] += "-other"
+            elif fault == "machine":
+                host["machine"] = "aarch64"
+            else:
+                host["kernelNotesDigest"] = admission.ZERO
+            with self.subTest(fault=fault), self.assertRaises(ConformanceError):
+                self.view(host=host)
+            self.assertEqual(set(self.handles), self.root_fds)
+
+    def test_policy_digest_change_is_not_hidden_by_retained_snapshot(self):
+        value = self.view()
+        self.contents["/sys/fs/selinux/policy"] += b"changed"
+        with self.assertRaisesRegex(ConformanceError, "POLICY_DIGEST_CHANGED"):
+            value.check()
+        self.assertTrue(value.failed)
+        before = len(self.opens)
+        with self.assertRaises(ConformanceError):
+            value.check()
+        self.assertEqual(len(self.opens), before)
+
+    def test_policy_epoch_change_during_read_refuses_even_if_hash_would_match(self):
+        value = self.view()
+        def changed(fd, limit):
+            raw = self.read(fd, limit)
+            if self.handles[fd][0] == "/sys/fs/selinux/policy":
+                fields = list(server.struct.unpack("<5I", self.raw_status))
+                fields[1] += 2
+                self.raw_status = server.struct.pack("<5I", *fields)
+            return raw
+        with patch.object(server.os, "read", side_effect=changed), self.assertRaisesRegex(ConformanceError, "EPOCH_CHANGED"):
+            value.check()
+        self.assertFalse(any(p == "/sys/fs/selinux/policy" for p, _ in self.handles.values()))
+
+    def test_policy_read_is_bracketed_by_real_status_reader(self):
+        self.view()
+        indexes = [i for i, event in enumerate(self.events) if event[:2] == ("read", "/sys/fs/selinux/policy")]
+        self.assertGreaterEqual(len(indexes), 2)
+        for index in indexes:
+            self.assertEqual(self.events[index - 1][:2], ("epoch", "status"))
+            self.assertEqual(self.events[index + 1][:2], ("epoch", "status"))
+        self.assertGreater(self.lib.syscall.call_count, 4)
+
+    def test_enforce_deny_unknown_and_status_controls_refuse(self):
+        for name in ("enforce", "deny_unknown"):
+            for raw in (b"0", b"1\n", b"", b"11"):
+                self.contents["/sys/fs/selinux/" + name] = raw
+                with self.subTest(name=name, raw=raw), self.assertRaises(ConformanceError):
+                    self.view()
+                self.assertEqual(set(self.handles), self.root_fds)
+            self.contents["/sys/fs/selinux/" + name] = b"1"
+        for index in (1, 2, 3, 4):
+            original = self.raw_status
+            fields = list(server.struct.unpack("<5I", original))
+            fields[index] = fields[index] + 1 if index in (1, 3) else 0
+            self.raw_status = server.struct.pack("<5I", *fields)
+            with self.subTest(field=index), self.assertRaises(ConformanceError):
+                self.view()
+            self.raw_status = original
+
+    def test_boot_change_during_policy_read_is_detected_after_read(self):
+        value = self.view()
+        def changed(fd, limit):
+            raw = self.read(fd, limit)
+            if self.handles[fd][0] == "/sys/fs/selinux/policy":
+                self.contents["/proc/sys/kernel/random/boot_id"] = b"00000000-0000-0000-0000-000000000000\n"
+            return raw
+        with patch.object(server.os, "read", side_effect=changed), self.assertRaisesRegex(ConformanceError, "HOST_CHANGED"):
+            value.check()
+
+    def test_busy_policy_open_is_unavailable_without_cache_retry_or_write(self):
+        value = self.view()
+        attempts = []
+        def busy(name, flags, *, dir_fd):
+            if name == "policy":
+                attempts.append(name)
+                raise BlockingIOError(16, "unit policy busy")
+            return self.open_fd(name, flags, dir_fd=dir_fd)
+        with patch.object(server.os, "open", side_effect=busy), self.assertRaises(BlockingIOError):
+            value.check()
+        self.assertEqual(attempts, ["policy"])
+        self.assertTrue(value.failed)
+        self.assertEqual(len(self.handles), len(self.root_fds) + 8)
+
+    def test_policy_permission_or_read_error_never_uses_old_digest(self):
+        for error in (PermissionError("unit read denied"), OSError("unit read unavailable")):
+            value = self.view()
+            def refused(fd, limit):
+                if self.handles[fd][0] == "/sys/fs/selinux/policy":
+                    raise error
+                return self.read(fd, limit)
+            with patch.object(server.os, "read", side_effect=refused), self.assertRaises(OSError):
+                value.check()
+            value.close()
+            self.assertEqual(set(self.handles), self.root_fds)
+
+    def test_empty_oversize_and_wrong_type_policy_reads_refuse(self):
+        for fault in ("empty", "oversize", "type"):
+            value = self.view()
+            def invalid(fd, limit):
+                if self.handles[fd][0] != "/sys/fs/selinux/policy":
+                    return self.read(fd, limit)
+                if fault == "empty":
+                    return b""
+                if fault == "type":
+                    return bytearray(b"unit")
+                return b"x" * limit  # stream crosses the fixed64MiB bound
+            with patch.object(server.os, "read", side_effect=invalid), self.assertRaises(ConformanceError):
+                value.check()
+            value.close()
+            self.assertEqual(set(self.handles), self.root_fds)
+
+    def test_partial_reads_hash_complete_fresh_policy(self):
+        def partial(fd, limit):
+            return self.read(fd, min(limit, 3))
+        with patch.object(server.os, "read", side_effect=partial):
+            value = self.view()
+            self.assertIsNone(value.check())
+
+    def test_substituted_kernel_file_mount_owner_or_mode_refuses(self):
+        for path, field, bad in (("/proc/sys", "mountId", 900), ("/sys/kernel/notes", "st_uid", 1),
+            ("/sys/fs/selinux/policy", "st_gid", 1), ("/sys/fs/selinux/enforce", "st_mode", stat.S_IFREG | 0o666)):
+            old = self.nodes[path][field]
+            self.nodes[path][field] = bad
+            with self.subTest(path=path), self.assertRaises(ConformanceError):
+                self.view()
+            self.nodes[path][field] = old
+            self.assertEqual(set(self.handles), self.root_fds)
+
+    def test_named_file_replacement_and_retained_fd_replacement_refuse(self):
+        for fault in ("path", "fd"):
+            value = self.view()
+            path = "/proc/sys/kernel/random/boot_id"
+            old = self.nodes[path]
+            if fault == "path":
+                self.nodes[path] = {**old, "st_ino": old["st_ino"] + 1}
+            else:
+                fd = value.rows[3][0]
+                self.handles[fd] = (path, {**old, "st_ino": old["st_ino"] + 1})
+            with self.assertRaises(ConformanceError):
+                value.check()
+            if fault == "path":
+                self.nodes[path] = old
+                value.close()
+            else:
+                with self.assertRaisesRegex(ConformanceError, "FD_REUSED"):
+                    value.close()
+                self.assertIn(fd, self.handles)
+                self.close_fd(fd)  # synthetic foreign owner, not the product
+            self.assertEqual(set(self.handles), self.root_fds)
+
+    def test_status_path_replacement_during_fence_is_detected(self):
+        value = self.view()
+        changed = False
+        def fence(*args):
+            nonlocal changed
+            result = self.barrier(*args)
+            if args[1].value == 8 and not changed:
+                path = "/sys/fs/selinux/status"
+                self.nodes[path] = {**self.nodes[path], "st_ino": 999}
+                changed = True
+            return result
+        with patch.object(self.lib, "syscall", Mock(side_effect=fence)), self.assertRaisesRegex(ConformanceError, "STATUS_CHANGED"):
+            value.check()
+
+    def test_policy_path_replacement_between_checks_refuses_even_same_bytes(self):
+        value = self.view()
+        path = "/sys/fs/selinux/policy"
+        self.nodes[path] = {**self.nodes[path], "st_ino": 999}
+        with self.assertRaisesRegex(ConformanceError, "PATH_CHANGED"):
+            value.check()
+
+    def test_late_partial_acquisition_closes_just_owned_handles(self):
+        def slow(name, flags, *, dir_fd):
+            fd = self.open_fd(name, flags, dir_fd=dir_fd)
+            if name == "random":
+                self.now += 2
+            return fd
+        with patch.object(server.os, "open", side_effect=slow), self.assertRaisesRegex(ConformanceError, "DEADLINE"):
+            self.view()
+        self.assertEqual(set(self.handles), self.root_fds)
+
+    def test_complete_policy_phase_has_one_budget_not_per_chunk(self):
+        value = self.view()
+        def slow(fd, limit):
+            raw = self.read(fd, min(limit, 4))
+            self.now += 0.25
+            return raw
+        with patch.object(server.os, "read", side_effect=slow), self.assertRaisesRegex(ConformanceError, "DEADLINE"):
+            value.check()
+        value.close()
+        self.assertEqual(set(self.handles), self.root_fds)
+
+    def test_wrong_process_thread_backward_clock_and_closed_state_refuse(self):
+        for obj, name in ((server.os, "getpid"), (server.threading, "get_ident")):
+            value = self.view()
+            before = len(self.opens)
+            with patch.object(obj, name, return_value=999), self.assertRaises(ConformanceError):
+                value.check()
+            self.assertEqual(len(self.opens), before)
+            value.close()
+        value = self.view()
+        self.now -= 1
+        with self.assertRaises(ConformanceError):
+            value.check()
+        self.now += 1
+        value.close()
+        with self.assertRaises(ConformanceError):
+            value.check()
+
+    def test_cleanup_uncertainty_is_sticky_and_never_retries_close(self):
+        value = self.view()
+        closed = []
+        def uncertain(fd):
+            self.close_fd(fd)
+            closed.append(fd)
+            if len(closed) == 1:
+                raise OSError("unit close uncertain")
+        with patch.object(server.os, "close", side_effect=uncertain), self.assertRaises(OSError):
+            value.close()
+        self.assertEqual(len(closed), 8)
+        self.assertEqual(set(self.handles), self.root_fds)
+        with self.assertRaises(OSError):
+            value.close()
+        self.assertEqual(len(closed), 8)
+
+    def test_temporary_policy_close_failure_invalidates_reader_and_keeps_roots(self):
+        value = self.view()
+        failed = []
+        def uncertain(fd):
+            path = self.handles[fd][0]
+            self.close_fd(fd)
+            if path == "/sys/fs/selinux/policy":
+                failed.append(fd)
+                raise OSError("unit policy close uncertain")
+        with patch.object(server.os, "close", side_effect=uncertain), self.assertRaises(OSError):
+            value.check()
+        with self.assertRaises(OSError):
+            value.close()
+        self.assertEqual(len(failed), 1)
+        self.assertEqual(self.closed.count(failed[0]), 1)
+        self.assertEqual(set(self.handles), self.root_fds)
+
+    def test_arm64_kernel_policy_uses_actual_page_and_private_fences(self):
+        self.roots.close()
+        self.machine = self.host["machine"] = "aarch64"
+        self.page_size = 65536
+        self.roots = server._KernelRootViews()
+        self.addCleanup(self.roots.close)
+        self.root_fds = set(self.handles)
+        self.assertIsNone(self.view().check())
+        self.assertTrue(all(item.closes == 1 for item in self.maps))
+        self.ioctl.assert_not_called()
 
 
 class ProxyQualificationTests(unittest.TestCase):
