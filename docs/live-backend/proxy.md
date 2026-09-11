@@ -1,6 +1,6 @@
 # CONF-LIVE-003 — Proxy source implementation
 
-## Alpha 2: ONGOING / SOURCE_IMPLEMENTATION_INCOMPLETE
+## Alpha 2: ONGOING / BLOCKED_PREDECESSOR_INVENTORY
 
 This packet has not completed acceptance. Do not package, install or merge this
 work in progress. Source tests and data consistency do not establish native
@@ -131,6 +131,34 @@ and PR12; this source document alone is not acceptance of its own bytes.
 
 ## Integration remaining before packet completion
 
+### Reproduced predecessor blocker — exact head e5cecc6
+
+Signed LOCAL replay of `e5cecc64b237f3f06f17e1178258aae017bc05ea`
+(activation166) ran all six full test roots: 425 methods, 424 passing,
+one failure, no skips, 143.499375 seconds through the trusted launcher.
+Log SHA256 `88adb4db5c35bc08ef67b088875b7ec61d0839c625493d294032a011ff2f5de9`.
+The recipe stopped after command6; campaign/evidence commands7/8 were NOT_RUN.
+This is FAILED acceptance, not a partial PASS or acceptance of later doc edits.
+
+The unchanged accepted predecessor method
+`PerformanceSourceProofTests.test_exact_checkpoint_scope_and_all_fresh_test_roots`
+in `tests/live_backend/test_supervisor.py` asserts `len(rows) == 127` and fails
+on the approved135-file CONF-LIVE-003 stage. Source inspection also shows its
+later exact test-map equality excludes the new approved test modules; execution
+did not reach that second assertion. The cumulative source validator itself
+accepts the ordered stage; the failing test's assumptions are narrower.
+
+That file and its source-proof bindings are outside003 ownership. No existing
+unconsumed corrective packet authorizes this accepted-main repair. Do not edit
+the predecessor here, filter the inventory, monkeypatch collection, drop tests,
+revert the accepted performance repair or relabel native evidence. A separately
+reviewed successor must preserve both accepted histories and exact future-stage
+path/test closure, including negative tests for omitted or unapproved paths/IDs.
+Then reconcile this draft with the newly accepted checkpoint and rerun all8.
+
+PR12 remains DRAFT/unmerged. Further native integration work below is unfinished,
+independent of this new acceptance blocker. No phase completion is claimed.
+
 1. Implement the real fixed factory-owned `_KernelQualification` reader in
    live_proxy_server.py. Actual procfs/sysfs/SELinux/cgroup/BPF/fs-verity/ELF and
    retained peer inspections must be OS-mocked through production factories in
@@ -180,9 +208,10 @@ probe, live launcher, runtime download or cloud/billable service is authorized.
 | Alpha 2 | MET-REPAIR-014 / 015 | DONE_SOURCE_GATES_RECORDED | Broker and qualification authority merged |
 | Alpha 2 | CONF-LIVE-003 data/codecs | LOCAL_PASS_RECORDED | Head4175299 passed385 tests; subsequent changes require fresh replay |
 | Alpha 2 | CONF-PERF-004 | DONE_SOURCE_GATES_RECORDED | PR16/main b7586c4; current127/354 checkpoint, earlier failures retained |
-| Alpha 2 | CONF-LIVE-003 checkpoint / transport | ONGOING | Scoped reconciliation plus13 regressions; fresh full local/CI evidence required |
+| Alpha 2 | CONF-LIVE-003 checkpoint / transport | IMPLEMENTED_NOT_ACCEPTED |13 new methods pass in425-method replay; one inherited stage-scalar failure |
+| Alpha 2 | Successor-inventory corrective authority | WAITING_DECISION | Repair inherited127-file/test-map assumptions and exact proof bindings in a separate packet |
 | Alpha 2 | CONF-LIVE-003 native inspector / broker / API | ONGOING | Required implementation listed above |
-| Alpha 2 | CONF-LIVE-003 required CI | FRESH_RUN_REQUIRED | Old attempts cancelled; current exact-head outcome recorded externally |
+| Alpha 2 | CONF-LIVE-003 required CI | BLOCKED_PREDECESSOR | Local acceptance failed; no green or merge claim |
 | Alpha 2 | CONF-LIVE-003 source completion / merge / exact-main | NOT_RUN | Packet is incomplete; no completion claim |
 | Alpha 2 | CONF-LIVE-004 | WAITING | Fixed worker and ten native probes |
 | Alpha 2 | CONF-LIVE-005 | WAITING | Reproducible candidates and operator handoff |
