@@ -32,11 +32,17 @@ BASE = (BX, BY)
 def _add(left: tuple[int, int], right: tuple[int, int]) -> tuple[int, int]:
     x1, y1 = left
     x2, y2 = right
-    denominator_x = pow(1 + D * x1 * x2 * y1 * y2, Q - 2, Q)
-    denominator_y = pow(1 - D * x1 * x2 * y1 * y2, Q - 2, Q)
+    product = D * x1 * x2 * y1 * y2 % Q
+    denominator_x = (1 + product) % Q
+    denominator_y = (1 - product) % Q
+    # Q is prime: inverse and Fermat exponentiation agree for nonzero residues.
+    # Preserve the original zero result for either singular denominator, including
+    # off-curve and unreduced integer inputs. No validation or signature cache.
+    inverse_x = pow(denominator_x, -1, Q) if denominator_x else 0
+    inverse_y = pow(denominator_y, -1, Q) if denominator_y else 0
     return (
-        (x1 * y2 + x2 * y1) * denominator_x % Q,
-        (y1 * y2 + x1 * x2) * denominator_y % Q,
+        (x1 * y2 + x2 * y1) * inverse_x % Q,
+        (y1 * y2 + x1 * x2) * inverse_y % Q,
     )
 
 

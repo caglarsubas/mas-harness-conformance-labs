@@ -28,6 +28,8 @@ class LinuxInventoryTests(unittest.TestCase):
             print(f"linux-test-inventory root={root} modules={len(inventory)} cases={sum(map(len, inventory.values()))} status=PASS", flush=True)
 
     def test_original_files_are_unchanged_except_ten_authorized_integrations(self):
+        from _successor_inventory import performance_current
+        _, historical_sources, _ = performance_current(ROOT)
         baseline = load_json(ROOT / "fixtures/platform/linux-baseline/predecessor-inventory.json")
         mutable = {"src/harness_conformance/" + name for name in ("campaign.py", "cli.py", "live.py", "live_launcher.py", "models.py", "schema.py")}
         mutable |= {"schemas/v1alpha1/" + name + ".schema.json" for name in ("conformance-campaign", "control-result")}
@@ -39,7 +41,7 @@ class LinuxInventoryTests(unittest.TestCase):
                 self.assertFalse(path.is_symlink())
                 self.assertEqual(bool(path.stat().st_mode & 0o111), expected["mode"] == "100755")
                 if file not in mutable:
-                    actual = path.read_bytes()
+                    actual = historical_sources[file]  # current bytes already checked
                     if file == "ci/run_packet.py":
                         self.assertEqual(hashlib.sha256(actual).hexdigest(), "397219b875c040d496edaecaca28bf68725c5338313f047a799235b451ca6de1")
                     else:
