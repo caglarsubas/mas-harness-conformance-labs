@@ -12,12 +12,19 @@ are closed **in authority**, not yet in the product integration.
 
 ## Exact consumed authority and ownership
 
-- Meta main: `3f52d53c39b2565cb74d527fdcb4215ff0e37b76` (MET-REPAIR-015).
-- Product predecessor: `9df7dd7f2df8ac64096ef37d8df259761947d552`.
-- Product predecessor tree: `1310cc74cc0ed39cfeb1068e998a0f78502a4be4`.
-- Immutable baseline: 127 files and 327 test identities. The complete hashes,
-  Git blobs, modes and methods are in `proxy-vectors.json`, independently pinned
-  to the accepted credential-ordering checkpoint.
+- Current consumed meta main: `2e882d0a4e8288c124bce0a7f9fef315d78c5147`
+  (MET-PERF-005), including the unchanged MET-REPAIR-015 qualification authority
+  at `3f52d53c39b2565cb74d527fdcb4215ff0e37b76`.
+- Current product predecessor: `b7586c4b8315dc92051f0b5445b2a9a0204a97bf`
+  (CONF-PERF-004 / PR16), tree `ef7e5afc04c31651bd3f29acc03f59c6c901c130`.
+- Current immutable baseline: 127 files / 354 test identities, separately pinned
+  as `currentCheckpoint` in `proxy-vectors.json`, including complete hashes,
+  Git blobs, modes and method identities.
+- Historical credential checkpoint remains unchanged in `acceptedCheckpoint`:
+  `9df7dd7f2df8ac64096ef37d8df259761947d552`, tree
+  `1310cc74cc0ed39cfeb1068e998a0f78502a4be4`, 127 files / 327 identities.
+  The accepted performance proof must verify actual source before returning
+  historical bytes. A historical reconstruction is not the current checkpoint.
 - Packet YAML SHA256:
   `15d13434edf833d4803618a7aa73ccc5e93baa29596e08903e623dbee338bba5`.
 - Exactly the eight CONF-LIVE-003 paths; no predecessor, meta, workflow,
@@ -48,7 +55,8 @@ DER identity extraction, TLS configuration, refused native entry and mocked
 descriptor cleanup. Unsigned DER-shaped codec inputs contain no usable key or
 signature; no certificates are issued, trust files read or network calls made.
 
-Fresh inventory tests preserve all327 old methods and all127 old files. They
+Fresh inventory tests preserve all354 current methods and all127 current files,
+as well as the separately verified historical327 identity set and source bytes. They
 also honor the already-approved future141/146/151 stages and the exact final
 launcher-delta proof; they do not introduce a successor-blocking scalar135 check.
 The original120 and historical279/305 counts remain separate evidence histories.
@@ -88,6 +96,39 @@ timings must come from the full eight-command signed isolated recipe. Shared
 crypto.py and predecessor fixtures remain outside this packet's allowedPaths;
 they may not be optimized through monkeypatches or edits here.
 
+## Checkpoint and transport continuation — 2026-09-11
+
+Accepted CONF-PERF-004 source/local/required localhost CI/merge/LOCAL exact-main
+closure supersedes the timing blocker above; the cancelled PR12 attempts remain
+historical failures. This draft merges accepted main without rebasing or rewriting
+its history. No inherited crypto/helper/test/proof bytes are edited by this packet.
+
+The source-owned transport now caps each socket wait at two seconds and checks
+custody after exceptions as well as successful I/O. Only a raw receive timeout
+may poll the same retained stream again; policy-check timeouts propagate. Sends,
+connects, requests and ambiguous mutations are never retried. The original
+absolute session and ten-second connect/handshake/header bounds remain; a slow
+probe can still finish within its signed lifetime. Listener polling likewise
+keeps one ten-second phase, retains any accepted connection before post-I/O
+checks and closes it on partial acquisition failure.
+
+Request framing rejects encrypted data already buffered in the input MemoryBIO
+after the complete request, in addition to decrypted surplus. It does not wait
+for client EOF before responding. This is an already-received-byte check, not a
+claim to predict future network input or prove native enforcement. One request
+per connection and no connection reuse remain mandatory. The distinction between
+decrypted SSL pending bytes and encrypted MemoryBIO bytes follows the
+[Python 3.12 SSL interfaces](https://docs.python.org/3.12/library/ssl.html#memory-bio-support).
+
+Thirteen added regression methods cover exact checkpoint substitution, poll
+budgets, no replay, policy failure versus read timeout, post-I/O rollback/refusal,
+partial writes, raw EOF/size limits, buffered records and partial accept ownership.
+All tests use OS/SSL mocks inside the full signed offline recipe. No real socket,
+credential, certificate issuance, installation or native qualification is run.
+This continuation targets 425 methods: 354 accepted + 58 existing draft + 13 new.
+Actual pass/failure and exact commits are recorded in external operator evidence
+and PR12; this source document alone is not acceptance of its own bytes.
+
 ## Integration remaining before packet completion
 
 1. Implement the real fixed factory-owned `_KernelQualification` reader in
@@ -101,8 +142,8 @@ they may not be optimized through monkeypatches or edits here.
    observed UID/version ledger, exact signed manifest dispatch, no-adoption
    handling, lost-response accounting and independent UID-scoped cleanup.
    Broker-returned empty resource lists are not evidence of CLEAN.
-4. Complete pre/post-blocking-I/O custody checks, <=2-second observation checks,
-   TLS/HTTP surplus/timeout cases, all partial-acquisition cleanup, and credentials
+4. Finish native-inspection, observer and broker pre/post-I/O integration,
+   remaining TLS/HTTP factory-level cases, all partial-acquisition cleanup, and credentials
    gated behind real self/peer qualification, observation and durable admission.
 5. Add end-to-end OS-mocked tests through the actual completed server, client and
    original supervisor factories; prove no credential/effect occurs on any failed
@@ -138,9 +179,10 @@ probe, live launcher, runtime download or cloud/billable service is authorized.
 | Phase 0 / Alpha 1 | Foundations | DONE_RECORDED | Historical source/offline closure; no new live evidence |
 | Alpha 2 | MET-REPAIR-014 / 015 | DONE_SOURCE_GATES_RECORDED | Broker and qualification authority merged |
 | Alpha 2 | CONF-LIVE-003 data/codecs | LOCAL_PASS_RECORDED | Head4175299 passed385 tests; subsequent changes require fresh replay |
-| Alpha 2 | CONF-LIVE-003 timing investigation | ONGOING | Diagnostic module timings; no relaxed timeout or inherited-code edit |
+| Alpha 2 | CONF-PERF-004 | DONE_SOURCE_GATES_RECORDED | PR16/main b7586c4; current127/354 checkpoint, earlier failures retained |
+| Alpha 2 | CONF-LIVE-003 checkpoint / transport | ONGOING | Scoped reconciliation plus13 regressions; fresh full local/CI evidence required |
 | Alpha 2 | CONF-LIVE-003 native inspector / broker / API | ONGOING | Required implementation listed above |
-| Alpha 2 | CONF-LIVE-003 required CI | NOT_GREEN | Both previous attempts cancelled at the fixed time boundary |
+| Alpha 2 | CONF-LIVE-003 required CI | FRESH_RUN_REQUIRED | Old attempts cancelled; current exact-head outcome recorded externally |
 | Alpha 2 | CONF-LIVE-003 source completion / merge / exact-main | NOT_RUN | Packet is incomplete; no completion claim |
 | Alpha 2 | CONF-LIVE-004 | WAITING | Fixed worker and ten native probes |
 | Alpha 2 | CONF-LIVE-005 | WAITING | Reproducible candidates and operator handoff |

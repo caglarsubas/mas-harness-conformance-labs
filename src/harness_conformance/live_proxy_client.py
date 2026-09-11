@@ -207,15 +207,37 @@ class _TLS:
         now = time.monotonic()
         require(now >= self.last and now < min(deadline, self.deadline), "TLS_DEADLINE")
         self.last = now
-        self.sock.settimeout(min(deadline, self.deadline) - now)
+        # Poll retained transport at most every two seconds, without renewing
+        # the absolute phase/session budget. A slow probe may still run for its
+        # full signed lifetime; only a read timeout is safe to poll again.
+        self.sock.settimeout(min(2, min(deadline, self.deadline) - now))
+
+    def network_call(self, function, deadline, *args):
+        self.check(deadline)
+        try:
+            return function(*args)
+        finally:
+            # Revalidate even when the OS raises, not only after successful I/O.
+            # The raw socket remains the native owner's responsibility.
+            self.check(deadline)
+
+    def receive(self, deadline):
+        self.check(deadline)
+        try:
+            try:
+                return self.sock.recv(65536)
+            except TimeoutError:
+                return None  # only the raw receive may request another poll
+        finally:
+            # A timeout in custody/policy verification must propagate; it is
+            # not a socket-read timeout and must never restart the read loop.
+            self.check(deadline)
 
     def flush(self, deadline):
         while self.outgoing.pending:
             data = self.outgoing.read()
             while data:
-                self.check(deadline)
-                n = self.sock.send(data)
-                self.check(deadline)
+                n = self.network_call(self.sock.send, deadline, data)
                 require(type(n) is int and 0 < n <= len(data), "TLS_SHORT_WRITE")
                 data = data[n:]
 
@@ -231,9 +253,11 @@ class _TLS:
                 self.flush(deadline)
             except ssl.SSLWantReadError:
                 self.flush(deadline)
-                self.check(deadline)
-                data = self.sock.recv(65536)
-                self.check(deadline)
+                data = self.receive(deadline)
+                if data is None:
+                    # No request, connection, send or ambiguous mutation retry.
+                    # Stay on this same stream and preserve the original budget.
+                    continue
                 require(data and self.network_bytes + len(data) <= 8388608, "TLS_EOF_OR_SIZE")
                 self.network_bytes += len(data)
                 self.incoming.write(data)
@@ -315,6 +339,11 @@ def read_http(tls, response, host=None):
         body += part
         require(len(body) <= size, "HTTP_SURPLUS")
     require(tls.ssl.pending() == 0, "HTTP_PIPELINING")
+    if not response:
+        # SSL.pending covers decrypted application bytes, not encrypted records
+        # still queued in the input BIO. Reject an already-received second or
+        # partial record without another network read (client awaits response).
+        require(tls.incoming.pending == 0, "HTTP_BUFFERED_RECORD_SURPLUS")
     if response:
         require(tls.read(1) == b"", "HTTP_SURPLUS")
     return first, body
@@ -347,12 +376,10 @@ def execute_protected(request, context, deadline):
     owner._transport_check()
     address = ipaddress.ip_address(endpoint["ipAddress"])
     target = (str(address), endpoint["port"]) if address.version == 4 else (str(address), endpoint["port"], 0, 0)
-    connect_deadline = min(deadline, time.monotonic() + 10)
-    sock.settimeout(connect_deadline - time.monotonic())
-    sock.connect(target)
-    owner._transport_check()
-    require(time.monotonic() < connect_deadline and sock.getpeername() == target, "CLIENT_PEER_MISMATCH")
     tls = _TLS(sock, tls_config, endpoint, owner, deadline)
+    connect_deadline = min(deadline, time.monotonic() + 10)
+    tls.network_call(sock.connect, connect_deadline, target)
+    require(time.monotonic() < connect_deadline and sock.getpeername() == target, "CLIENT_PEER_MISMATCH")
     tls.handshake(profile, endpoint)
     tls.write(http_message("POST " + request["path"] + " HTTP/1.1", canonical_bytes(request), endpoint["tls"]["serverName"]))
     _, receipt = read_http(tls, response=True)

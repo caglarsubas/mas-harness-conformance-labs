@@ -490,14 +490,31 @@ class NativeProxyServer:
         self.storage.check()
         self.observer.observe()
 
+    def _accept(self):
+        require(self.connection is None, "PROXY_CONNECTION_ALREADY_OWNED")
+        deadline = min(self.deadline, time.monotonic() + 10)
+        while self.connection is None:
+            self._transport_check()
+            before = time.monotonic()
+            require(before < deadline, "PROXY_ACCEPT_DEADLINE")
+            self.listener.settimeout(min(2, deadline - before))
+            try:
+                # Retain ownership before any post-I/O guard can fail.
+                self.connection, _ = self.listener.accept()
+                self.connection.set_inheritable(False)
+            except TimeoutError:
+                if self.connection is not None:
+                    raise  # an acquired connection must never be overwritten
+            finally:
+                self._transport_check()
+                now = time.monotonic()
+                require(before <= now < deadline, "PROXY_ACCEPT_DEADLINE")
+
     def serve(self):
         from .live_session import SCHEMA, validate_receipt
         for _ in CASES:
-            self._transport_check()
-            self.listener.settimeout(min(10, self.deadline - time.monotonic()))
-            self.connection, _ = self.listener.accept()
-            self.connection.set_inheritable(False)
             try:
+                self._accept()
                 self._transport_check()
                 require(self.listener.getsockname() == self.target, "PROXY_LISTENER_CHANGED")
                 tls = _TLS(self.connection, self.tls, self.endpoint, self, self.deadline, server=True)
@@ -534,7 +551,8 @@ class NativeProxyServer:
                     return
             finally:
                 connection, self.connection = self.connection, None
-                connection.close()
+                if connection is not None:
+                    connection.close()
 
     def close(self):
         global _ACTIVE

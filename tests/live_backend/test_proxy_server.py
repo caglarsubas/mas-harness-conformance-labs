@@ -23,6 +23,12 @@ from harness_conformance.live_backend_authority import SUITE_ROOTS
 VECTORS = json.loads((ROOT / "fixtures/live-backend/proxy-vectors.json").read_bytes())
 
 
+def current_checkpoint(value):
+    if byte_digest(canonical_bytes(value)) != "sha256:bbec5245350891df2207cd4b885908106f0d0ded7274c67873d0cf5396889506":
+        raise ValueError("exact accepted performance checkpoint required")
+    return value
+
+
 def setUpModule():
     # Diagnostic only: do not intercept TestCase.run, discovery or any guard.
     global _module_started
@@ -239,6 +245,51 @@ class ProxyQualificationTests(unittest.TestCase):
 
 
 class ProxyServerCustodyTests(unittest.TestCase):
+    def accept_owner(self):
+        owner = object.__new__(server.NativeProxyServer)
+        owner.connection = None
+        owner.deadline = 100
+        owner.listener = Mock()
+        owner._transport_check = Mock()
+        return owner
+
+    def test_accept_polls_same_listener_without_renewing_phase(self):
+        owner = self.accept_owner()
+        connection = Mock()
+        owner.listener.accept.side_effect = [TimeoutError(), (connection, ("127.0.0.1", 1))]
+        with patch.object(server.time, "monotonic", side_effect=[0, 0, 2, 2, 3]):
+            owner._accept()
+        self.assertIs(owner.connection, connection)
+        self.assertEqual(owner.listener.settimeout.call_args_list, [unittest.mock.call(2)] * 2)
+        self.assertEqual(owner._transport_check.call_count, 4)
+        connection.set_inheritable.assert_called_once_with(False)
+
+    def test_accept_slow_trickle_cannot_extend_ten_second_phase(self):
+        owner = self.accept_owner()
+        owner.listener.accept.side_effect = TimeoutError()
+        with patch.object(server.time, "monotonic", side_effect=[0, 0, 2, 2, 4, 4, 6, 6, 8, 8, 10]):
+            with self.assertRaises(ConformanceError):
+                owner._accept()
+        self.assertEqual(owner.listener.accept.call_count, 5)
+        self.assertEqual(owner._transport_check.call_count, 10)
+        self.assertIsNone(owner.connection)
+
+    def test_accept_retains_connection_when_post_io_policy_fails(self):
+        owner = self.accept_owner()
+        connection = Mock()
+        owner.listener.accept.return_value = connection, ("127.0.0.1", 1)
+        owner._transport_check.side_effect = [None, TimeoutError("unit policy failure")]
+        with patch.object(server.time, "monotonic", return_value=0), self.assertRaises(TimeoutError):
+            owner._accept()
+        self.assertIs(owner.connection, connection)
+        owner.listener.accept.assert_called_once()
+        # The actual serve-finally path, not a mock cleanup, owns the connection.
+        owner._transport_check.side_effect = None
+        with self.assertRaises(ConformanceError):
+            owner.serve()
+        connection.close.assert_called_once()
+        self.assertIsNone(owner.connection)
+
     def test_real_factory_refuses_uninstalled_nonlinux_before_credentials_or_socket(self):
         with patch.object(server.sys, "platform", "darwin"), patch.object(server.os, "open") as opened, patch.object(server.socket, "socket") as sockets:
             with self.assertRaises(ConformanceError):
@@ -296,6 +347,7 @@ class ProxyPredecessorTests(unittest.TestCase):
         self.assertEqual(baseline["fileCount"], 127)
         rows, sources = SUCCESSOR.tracked_inventory(ROOT)
         result = validate_checkpoint(rows, sources)
+        _, historical_sources, _ = SUCCESSOR.performance_history(rows, sources)
         self.assertIn(result["stage"], (3, 4, 5, 6))
         self.assertEqual(len(rows), (135, 141, 146, 151)[result["stage"] - 3])
         indexed = {row["path"]: row for row in rows}
@@ -304,8 +356,20 @@ class ProxyPredecessorTests(unittest.TestCase):
                 # The accepted validator above has already checked the exact
                 # final hook delta proof. Mere filename presence grants nothing.
                 continue
-            raw = sources[path]
+            raw = historical_sources[path]
             with self.subTest(path=path):
+                self.assertEqual(byte_digest(raw), expected["sha256"])
+                self.assertEqual(len(raw), expected["size"])
+                self.assertEqual(hashlib.sha1(b"blob " + str(len(raw)).encode() + b"\0" + raw).hexdigest(), expected["blob"])
+                self.assertEqual(indexed[path]["mode"], expected["mode"])
+        current = current_checkpoint(VECTORS["currentCheckpoint"])
+        self.assertEqual((current["commit"], current["tree"], current["fileCount"], current["testCount"]),
+                         ("b7586c4b8315dc92051f0b5445b2a9a0204a97bf", "ef7e5afc04c31651bd3f29acc03f59c6c901c130", 127, 354))
+        for path, expected in current["files"].items():
+            if result["stage"] == 6 and path == SUCCESSOR.RECORD["hook"]["path"]:
+                continue  # validate_checkpoint already verifies the exact hook proof
+            raw = sources[path]
+            with self.subTest(currentPath=path):
                 self.assertEqual(byte_digest(raw), expected["sha256"])
                 self.assertEqual(len(raw), expected["size"])
                 self.assertEqual(hashlib.sha1(b"blob " + str(len(raw)).encode() + b"\0" + raw).hexdigest(), expected["blob"])
@@ -319,6 +383,10 @@ class ProxyPredecessorTests(unittest.TestCase):
             observed.update({root + "/" + path: methods for path, methods in modules.items()})
         self.assertEqual(sum(map(len, baseline["tests"].values())), 327)
         for path, methods in baseline["tests"].items():
+            self.assertTrue(set(methods) <= set(observed[path]), path)
+        current = current_checkpoint(VECTORS["currentCheckpoint"])
+        self.assertEqual(sum(map(len, current["tests"].values())), 354)
+        for path, methods in current["tests"].items():
             self.assertEqual(observed[path], methods, path)
         additions = set(observed) - set(baseline["tests"])
         rows, sources = SUCCESSOR.tracked_inventory(ROOT)
@@ -327,4 +395,17 @@ class ProxyPredecessorTests(unittest.TestCase):
                     for path in BASELINE["packetPaths"][f"CONF-LIVE-{number:03d}"]
                     if path.startswith("tests/live_backend/test_") and path.endswith(".py")}
         self.assertEqual(additions, expected)
-        print("CONF-LIVE-003 predecessor inventory: 127 files / 327 methods preserved; nativeAcceptance=false", flush=True)
+        print("CONF-LIVE-003 predecessor inventory: current 127 files / 354 methods; historical 327 retained; nativeAcceptance=false", flush=True)
+
+    def test_current_checkpoint_pin_rejects_relabelled_history_and_altered_inventory(self):
+        for field, value in (("commit", "9df7dd7f2df8ac64096ef37d8df259761947d552"),
+                             ("testCount", 327), ("nativeAcceptance", True), ("tree", "0" * 40)):
+            changed = deepcopy(VECTORS["currentCheckpoint"])
+            changed[field] = value
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                current_checkpoint(changed)
+        for field in ("files", "tests"):
+            changed = deepcopy(VECTORS["currentCheckpoint"])
+            changed[field].pop(next(iter(changed[field])))
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                current_checkpoint(changed)

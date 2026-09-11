@@ -245,3 +245,129 @@ class ProxyClientTests(unittest.TestCase):
                 with self.subTest(field=field), self.assertRaises(ConformanceError):
                     tls.handshake({}, {})
             engine.getpeercert.assert_not_called()
+
+    def test_request_rejects_buffered_encrypted_records_without_waiting_for_eof(self):
+        first = "POST /v1/linux-baseline/host-isolation-negatives HTTP/1.1"
+        good = client.http_message(first, b"{}", "proxy.unit")
+        for pending in (0, 1, 65536):
+            tls = SimpleNamespace(deadline=100, ssl=Mock(), incoming=SimpleNamespace(pending=pending),
+                                  read=Mock(return_value=good))
+            tls.ssl.pending.return_value = 0
+            with self.subTest(pending=pending), patch.object(client.time, "monotonic", return_value=1):
+                if pending:
+                    with self.assertRaises(ConformanceError):
+                        client.read_http(tls, False, "proxy.unit")
+                else:
+                    self.assertEqual(client.read_http(tls, False, "proxy.unit"), (first.encode(), b"{}"))
+            tls.read.assert_called_once()  # do not deadlock waiting for client EOF
+
+    def make_transport(self, clock, deadline=100):
+        context, sock, owner = Mock(), Mock(), Mock()
+        with patch.object(client.time, "monotonic", side_effect=lambda: clock[0]):
+            tls = client._TLS(sock, context, {"tls": {"serverName": "proxy.unit"}}, owner, deadline)
+        return tls, context.wrap_bio.return_value, sock, owner
+
+    def test_tls_receive_timeouts_poll_same_stream_without_retrying_request(self):
+        clock = [0]
+        tls, engine, sock, owner = self.make_transport(clock)
+        engine.read.side_effect = [ssl.SSLWantReadError()] * 4 + [b"receipt"]
+        reads = []
+        def receive(maximum):
+            reads.append(maximum)
+            clock[0] += 2
+            if len(reads) < 4:
+                raise TimeoutError()
+            return b"unit ciphertext; SSL engine mocked"
+        sock.recv.side_effect = receive
+        with patch.object(client.time, "monotonic", side_effect=lambda: clock[0]):
+            self.assertEqual(tls.read(100), b"receipt")
+        self.assertEqual(reads, [65536] * 4)
+        self.assertEqual(tls.deadline, 100)
+        self.assertTrue(all(0 < call.args[0] <= 2 for call in sock.settimeout.call_args_list))
+        self.assertGreaterEqual(owner._transport_check.call_count, 8)
+        sock.connect.assert_not_called()
+        sock.send.assert_not_called()
+        sock.close.assert_not_called()
+
+    def test_tls_receive_poll_cannot_extend_absolute_budget(self):
+        clock = [0]
+        tls, engine, sock, owner = self.make_transport(clock, deadline=5)
+        engine.read.side_effect = ssl.SSLWantReadError()
+        def receive(maximum):
+            clock[0] += 2
+            raise TimeoutError()
+        sock.recv.side_effect = receive
+        with patch.object(client.time, "monotonic", side_effect=lambda: clock[0]), self.assertRaises(ConformanceError):
+            tls.read(10)
+        self.assertEqual(sock.recv.call_count, 3)
+        self.assertEqual(tls.deadline, 5)
+        self.assertEqual(sock.settimeout.call_args_list[-1].args, (1,))
+
+    def test_tls_post_io_policy_timeout_is_not_a_read_poll(self):
+        clock = [0]
+        tls, engine, sock, owner = self.make_transport(clock)
+        sock.recv.return_value = b"data"
+        owner._transport_check.side_effect = [None, TimeoutError("unit observer timeout")]
+        with patch.object(client.time, "monotonic", return_value=0), self.assertRaises(TimeoutError):
+            tls.receive(100)
+        sock.recv.assert_called_once_with(65536)
+        self.assertEqual(tls.incoming.pending, 0)
+
+    def test_tls_failed_send_and_connect_still_check_custody_and_never_retry(self):
+        for operation in ("send", "connect"):
+            clock = [0]
+            tls, engine, sock, owner = self.make_transport(clock)
+            function = getattr(sock, operation)
+            function.side_effect = TimeoutError()
+            argument = b"request" if operation == "send" else ("127.0.0.1", 443)
+            with self.subTest(operation=operation), patch.object(client.time, "monotonic", return_value=0):
+                with self.assertRaises(TimeoutError):
+                    tls.network_call(function, 10, argument)
+            function.assert_called_once_with(argument)
+            self.assertEqual(owner._transport_check.call_count, 2)
+            sock.close.assert_not_called()
+
+    def test_tls_guard_refusal_prevents_network_and_post_read_refusal_discards_bytes(self):
+        for post in (False, True):
+            clock = [0]
+            tls, engine, sock, owner = self.make_transport(clock)
+            owner._transport_check.side_effect = [None, ConformanceError("UNIT", "revoked")] if post else ConformanceError("UNIT", "revoked")
+            sock.recv.return_value = b"not accepted"
+            with self.subTest(post=post), patch.object(client.time, "monotonic", return_value=0), self.assertRaises(ConformanceError):
+                tls.receive(100)
+            self.assertEqual(sock.recv.call_count, int(post))
+            self.assertEqual(tls.incoming.pending, 0)
+
+    def test_tls_receive_detects_clock_rollback_after_socket_returns(self):
+        clock = [10]
+        tls, engine, sock, owner = self.make_transport(clock)
+        def receive(maximum):
+            clock[0] = 9
+            return b"discard"
+        sock.recv.side_effect = receive
+        with patch.object(client.time, "monotonic", side_effect=lambda: clock[0]), self.assertRaises(ConformanceError):
+            tls.receive(100)
+        self.assertEqual(tls.incoming.pending, 0)
+
+    def test_tls_raw_eof_and_ciphertext_budget_refuse_before_bio_input(self):
+        for received, already in ((b"", 0), (b"x", 8388608)):
+            clock = [0]
+            tls, engine, sock, owner = self.make_transport(clock)
+            engine.read.side_effect = ssl.SSLWantReadError()
+            tls.network_bytes = already
+            sock.recv.return_value = received
+            with self.subTest(already=already), patch.object(client.time, "monotonic", return_value=0), self.assertRaises(ConformanceError):
+                tls.read(10)
+            self.assertEqual(tls.incoming.pending, 0)
+            sock.recv.assert_called_once()
+
+    def test_tls_partial_writes_keep_exact_suffix_and_guard_each_send(self):
+        clock = [0]
+        tls, engine, sock, owner = self.make_transport(clock)
+        tls.outgoing.write(b"abc")
+        sock.send.side_effect = [1, 2]
+        with patch.object(client.time, "monotonic", return_value=0):
+            tls.flush(100)
+        self.assertEqual(sock.send.call_args_list, [unittest.mock.call(b"abc"), unittest.mock.call(b"bc")])
+        self.assertEqual(owner._transport_check.call_count, 4)
+        self.assertEqual(tls.outgoing.pending, 0)
