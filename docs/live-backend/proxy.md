@@ -193,8 +193,49 @@ The interim source inventory targets448 methods:362 accepted +71 preserved draft
 +14 codec +1 checkpoint regression. Full-recipe results must be recorded for the
 exact commit externally; these source claims alone are not acceptance.
 
-PR12 remains DRAFT/unmerged. Further native integration work below is unfinished,
-independent of this new acceptance blocker. No phase completion is claimed.
+Head `179245275258b0d895d5170009e12deeac42b701` subsequently passed all eight
+commands and all 448 tests, zero skips, in signed LOCAL activation174 and required
+localhost CI run34570861429 (activation175). Runner41 was retired with zero
+registered runners and zero uploaded artifacts. These are historical interim
+source/CI results, not full packet completion or acceptance of later edits.
+
+### Fixed native read primitives — 2026-09-11
+
+The private `_KernelNativeReads` constructor accepts no backend, library path,
+function or context. It binds only the current process's libc and the two native
+Linux LP64 little-endian ABIs. Its filesystem reader uses the explicit 120-byte
+statfs layout; fs-verity uses only the measure ioctl with a 32-byte capacity.
+Read-only/non-inheritable descriptors and retained metadata are rechecked around
+reads. Unknown layouts, writable code, descriptor replacement, OS errors and
+results outside a two-second phase poison the reader; no retry or fallback.
+
+The status reader maps only read-only shared kernel status bytes, verifies
+selinuxfs, and uses sequence/fence/fields/fence/sequence ordering. Only private
+membarrier QUERY, REGISTER_PRIVATE_EXPEDITED and PRIVATE_EXPEDITED are reachable,
+with flags/cpu zero and fixed architecture syscall numbers. A mapping acquired
+before failure is closed once; the caller's descriptor is never closed. A reused
+reader is bound to its original process/thread and never renews a failed phase.
+
+Layout references are [Linux 6.12 statfs](https://raw.githubusercontent.com/torvalds/linux/v6.12/include/uapi/asm-generic/statfs.h),
+[membarrier](https://raw.githubusercontent.com/torvalds/linux/v6.12/include/uapi/linux/membarrier.h)
+and [fs-verity UAPI](https://raw.githubusercontent.com/torvalds/linux/v6.12/include/uapi/linux/fsverity.h).
+These are independently authored stdlib adapters, not imported implementations.
+Eighteen new OS-mocked methods exercise the real primitive methods, including both
+ABI selections, refusing missing permissions, changed epochs/FDs, late results
+and partial mapping/cleanup failures. All 448 prior tests remain; the new target
+is 466 methods. Full exact-commit evidence is retained externally after replay.
+
+This is still only an inspector component. A matching filesystem magic or status
+epoch is not qualification. Canonical root/mount/namespace ancestry, retained
+peer and code ownership, fresh active-policy reads under the same boot/epoch,
+BPF queries, whole-operation custody/deadline checks and the fixed factory
+integration below remain required. No server gate or credential path is enabled
+by these primitives. Tests mock every OS entry point and perform no native read,
+policy registration, credential access, socket operation or installation.
+
+PR12 remains DRAFT/unmerged while the native integration below is unfinished.
+The predecessor blocker is resolved; no new operator decision or phase
+completion is claimed.
 
 1. Implement the real fixed factory-owned `_KernelQualification` reader in
    live_proxy_server.py. Actual procfs/sysfs/SELinux/cgroup/BPF/fs-verity/ELF and
@@ -247,7 +288,8 @@ probe, live launcher, runtime download or cloud/billable service is authorized.
 | Alpha 2 | CONF-PERF-004 | DONE_SOURCE_GATES_RECORDED | PR16/main b7586c4; current127/354 checkpoint, earlier failures retained |
 | Alpha 2 | CONF-LIVE-003 checkpoint / transport | IMPLEMENTED_NOT_ACCEPTED |13 new methods pass in425-method replay; one inherited stage-scalar failure |
 | Alpha 2 | MET-REPAIR-016 / CONF-FIX-006 | DONE_SOURCE_GATES_RECORDED | PR115 / PR17; corrected127-file/362-method checkpoint accepted |
-| Alpha 2 | CONF-LIVE-003 checkpoint / kernel byte parsers | IMPLEMENTED_NOT_ACCEPTED | Current checkpoint reconciled; fifteen new regressions await exact full-recipe evidence |
+| Alpha 2 | CONF-LIVE-003 checkpoint / kernel byte parsers | LOCAL_AND_CI_PASS_RECORDED | Head1792452 passed448 tests and all8 commands; packet still incomplete |
+| Alpha 2 | CONF-LIVE-003 native read primitives | IMPLEMENTED_NOT_ACCEPTED | Eighteen OS-mocked regressions; fresh exact full-recipe evidence required |
 | Alpha 2 | CONF-LIVE-003 native inspector / broker / API | ONGOING | Required implementation listed above |
 | Alpha 2 | CONF-LIVE-003 required CI | WAITING | Fresh exact-head localhost evidence required; prior failures retained |
 | Alpha 2 | CONF-LIVE-003 source completion / merge / exact-main | NOT_RUN | Packet is incomplete; no completion claim |

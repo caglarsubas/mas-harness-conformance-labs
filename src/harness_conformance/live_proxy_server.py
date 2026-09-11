@@ -7,9 +7,11 @@ This source packet does not install them or qualify a native architecture.
 from __future__ import annotations
 
 from contextlib import contextmanager
+import ctypes
 import fcntl
 import importlib
 import ipaddress
+import mmap
 import os
 from pathlib import Path
 import re
@@ -182,6 +184,183 @@ def _proc_code_maps(raw, machine, auxv):
                          offset=offset, deviceMajor=major, deviceMinor=minor, inode=inode))
     require(bool(maps) and "[vdso]" in special, "KERNEL_MAPS_CODE_MISSING")
     return dict(files=maps, kernel=special, pageSize=page_size)
+
+
+class _KernelStatfs(ctypes.Structure):
+    """Linux 6.12 native LP64 layout on the two explicitly supported ABIs."""
+    _fields_ = [(name, ctypes.c_long) for name in
+                ("kind", "block_size", "blocks", "free_blocks", "available_blocks", "files", "free_files")]
+    _fields_ += [("fsid", ctypes.c_int * 2)]
+    _fields_ += [(name, ctypes.c_long) for name in ("name_length", "fragment_size", "flags")]
+    _fields_ += [("spare", ctypes.c_long * 4)]
+
+
+class _KernelNativeReads:
+    """Fixed read primitives, not a qualification factory or authority handle.
+
+    Only an eventual installed inspector may interpret these observations after
+    retaining canonical ancestry, mount/namespace identity and signed custody.
+    A caller's fd, a matching filesystem magic or a valid epoch grants nothing.
+    No library discovery, command runner, injected adapter or privilege repair.
+    """
+    def __init__(self):
+        require(sys.platform == "linux" and sys.byteorder == "little"
+                and ctypes.sizeof(ctypes.c_void_p) == ctypes.sizeof(ctypes.c_long) == 8
+                and ctypes.sizeof(_KernelStatfs) == 120 and _KernelStatfs.fsid.offset == 56
+                and _KernelStatfs.flags.offset == 80, "KERNEL_NATIVE_ABI_UNAVAILABLE")
+        self.machine = os.uname().machine
+        require(self.machine in ("x86_64", "aarch64"), "KERNEL_NATIVE_ABI_UNAVAILABLE")
+        self.pid, self.thread = os.getpid(), threading.get_ident()
+        self.closed = self.failed = self.busy = self.registered = False
+        self.lib = ctypes.CDLL(None, use_errno=True)
+        self.lib.fstatfs.argtypes = (ctypes.c_int, ctypes.POINTER(_KernelStatfs))
+        self.lib.fstatfs.restype = ctypes.c_int
+        # syscall is variadic: every fixed argument below is explicitly typed.
+        self.lib.syscall.restype = ctypes.c_long
+        self.number = {"x86_64": 324, "aarch64": 283}[self.machine]
+
+    def _tick(self):
+        require(type(self) is _KernelNativeReads and not self.closed and not self.failed
+                and self.busy and self.pid == os.getpid() and self.thread == threading.get_ident(),
+                "KERNEL_READER_CUSTODY")
+        now = time.monotonic()
+        require(self.last <= now < self.end, "KERNEL_INSPECTION_DEADLINE")
+        self.last = now
+
+    @contextmanager
+    def _phase(self):
+        require(not self.busy and not self.closed and not self.failed, "KERNEL_READER_UNAVAILABLE")
+        self.busy = True
+        self.last = time.monotonic()
+        self.end = self.last + 2
+        try:
+            self._tick()
+            yield
+            self._tick()
+        except BaseException:
+            self.failed = True
+            raise
+        finally:
+            self.busy = False
+
+    def _descriptor(self, fd):
+        self._tick()
+        require(type(fd) is int and 2 < fd < 1048576, "KERNEL_DESCRIPTOR_INVALID")
+        try:
+            info = os.fstat(fd)
+        finally:
+            self._tick()
+        try:
+            flags = fcntl.fcntl(fd, fcntl.F_GETFL)
+        finally:
+            self._tick()
+        try:
+            inherited = os.get_inheritable(fd)
+        finally:
+            self._tick()
+        # O_PATH is deliberately excluded: inspection uses retained readable fds.
+        require(not inherited and flags & os.O_ACCMODE == os.O_RDONLY and not flags & 0o10000000,
+                "KERNEL_DESCRIPTOR_ACCESS")
+        return info, _custody_identity(info)
+
+    def _same(self, fd, identity):
+        _, current = self._descriptor(fd)
+        require(current == identity, "KERNEL_DESCRIPTOR_CHANGED")
+
+    def _filesystem(self, fd):
+        self._tick()
+        value = _KernelStatfs()  # including reserved tail, initially all zero
+        try:
+            result = self.lib.fstatfs(ctypes.c_int(fd), ctypes.byref(value))
+        finally:
+            self._tick()
+        require(result == 0, "KERNEL_FILESYSTEM_UNAVAILABLE")
+        require(not any(value.spare) and 512 <= value.block_size <= 65536
+                and value.block_size & (value.block_size - 1) == 0
+                and 0 < value.name_length <= 4096, "KERNEL_FILESYSTEM_LAYOUT")
+        # Dynamic allocation counters are not stable filesystem identity.
+        return dict(kind=value.kind & (2 ** 64 - 1), fsid=list(value.fsid),
+                    blockSize=value.block_size, flags=value.flags)
+
+    def filesystem(self, fd):
+        with self._phase():
+            _, identity = self._descriptor(fd)
+            value = self._filesystem(fd)
+            self._same(fd, identity)
+            return value
+
+    def measure_verity(self, fd):
+        with self._phase():
+            info, identity = self._descriptor(fd)
+            require(stat.S_ISREG(info.st_mode) and info.st_uid == info.st_gid == 0
+                    and info.st_nlink == 1 and not stat.S_IMODE(info.st_mode) & 0o222
+                    and 0 < info.st_size <= 67108864, "KERNEL_CODE_FILE_CUSTODY")
+            output = bytearray(struct.pack("<HH", 0, 32) + b"\0" * 32)
+            try:
+                result = fcntl.ioctl(fd, 0xc0046686, output, True)
+            finally:
+                self._tick()
+            require(type(result) is int and result == 0, "KERNEL_VERITY_UNAVAILABLE")
+            digest = _verity_measurement(bytes(output))
+            self._same(fd, identity)
+            return digest
+
+    def _barrier(self, command):
+        self._tick()
+        require(type(command) is int and command in (0, 16, 8), "KERNEL_BARRIER_COMMAND")
+        try:
+            result = self.lib.syscall(ctypes.c_long(self.number), ctypes.c_int(command),
+                                      ctypes.c_int(0), ctypes.c_int(0))
+        finally:
+            self._tick()
+        require(type(result) is int and result >= 0, "KERNEL_BARRIER_UNAVAILABLE")
+        return result
+
+    def _fence(self):
+        if not self.registered:
+            require(self._barrier(0) & 24 == 24, "KERNEL_PRIVATE_BARRIER_UNAVAILABLE")
+            require(self._barrier(16) == 0, "KERNEL_PRIVATE_BARRIER_REGISTRATION")
+            self.registered = True
+        require(self._barrier(8) == 0, "KERNEL_PRIVATE_BARRIER_FAILED")
+
+    def status_epoch(self, fd):
+        """One fenced kernel status observation; a policy digest is still required.
+
+        The inspector must retain this exact epoch across fresh policy opens and
+        all I/O. This method neither validates a policy nor authorizes a peer.
+        """
+        with self._phase():
+            info, identity = self._descriptor(fd)
+            require(stat.S_ISREG(info.st_mode) and info.st_uid == info.st_gid == 0
+                    and not stat.S_IMODE(info.st_mode) & 0o222, "KERNEL_STATUS_CUSTODY")
+            filesystem = self._filesystem(fd)
+            require(filesystem["kind"] == 0xf97cff8c, "KERNEL_STATUS_FILESYSTEM")
+            mapping = None
+            try:
+                mapping = mmap.mmap(fd, 4096, flags=mmap.MAP_SHARED, prot=mmap.PROT_READ)
+                self._tick()
+                sequence = bytes(mapping[4:8])
+                require(len(sequence) == 4 and struct.unpack("<I", sequence)[0] % 2 == 0,
+                        "KERNEL_STATUS_UNSTABLE")
+                self._fence()
+                fields = _selinux_status_fields(bytes(mapping[:20]))
+                self._fence()
+                require(bytes(mapping[4:8]) == sequence
+                        and fields["sequence"] == struct.unpack("<I", sequence)[0],
+                        "KERNEL_STATUS_UNSTABLE")
+                self._same(fd, identity)
+                require(self._filesystem(fd) == filesystem, "KERNEL_STATUS_FILESYSTEM_CHANGED")
+                return fields
+            finally:
+                if mapping is not None:
+                    # This mapping owns its internal duplicate; the input fd
+                    # remains exclusively owned by the installed inspector.
+                    mapping.close()
+                    self._tick()
+
+    def close(self):
+        # No caller-owned fd is closed and no process registration is undone.
+        self.closed = True
 
 
 def _installed_entry():

@@ -4,6 +4,7 @@ These tests do not substitute for the pending fixed native inspector and server
 broker/API integration. Matching fixture data is explicitly not qualification.
 """
 from copy import deepcopy
+from contextlib import ExitStack
 import hashlib
 import json
 import stat
@@ -202,6 +203,317 @@ class KernelInputCodecTests(unittest.TestCase):
             maps = server._proc_code_maps(self.maps(), "x86_64", self.auxv())
         self.assertEqual(set(decoded), {"kind", "interpreter", "segments"})
         self.assertEqual(set(maps), {"files", "kernel", "pageSize"})
+
+
+class KernelNativeReadTests(unittest.TestCase):
+    """Real read-primitive methods with all native entry points OS-mocked."""
+    def setUp(self):
+        self.stack = ExitStack()
+        self.addCleanup(self.stack.close)
+        self.now = 100.0
+        self.info = SimpleNamespace(st_dev=1, st_ino=2, st_uid=0, st_gid=0,
+            st_mode=stat.S_IFREG | 0o444, st_nlink=1, st_size=4096, st_mtime_ns=1, st_ctime_ns=1)
+        self.fs = dict(kind=0xf97cff8c, block_size=4096, name_length=255, flags=1)
+        self.raw = server.struct.pack("<5I", 1, 2, 1, 9, 1)
+        self.lib = SimpleNamespace(fstatfs=Mock(side_effect=self.filesystem), syscall=Mock(side_effect=self.barrier))
+        def patched(obj, name, **kwargs):
+            return self.stack.enter_context(patch.object(obj, name, **kwargs))
+        patched(server.sys, "platform", new="linux")
+        patched(server.sys, "byteorder", new="little")
+        patched(server.os, "uname", return_value=SimpleNamespace(machine="x86_64"))
+        patched(server.os, "getpid", return_value=411)
+        patched(server.threading, "get_ident", return_value=721)
+        patched(server.time, "monotonic", side_effect=lambda: self.now)
+        self.load = patched(server.ctypes, "CDLL", return_value=self.lib)
+        self.fstat = patched(server.os, "fstat", side_effect=lambda fd: self.info)
+        self.flags = patched(server.fcntl, "fcntl", return_value=server.os.O_RDONLY)
+        self.inheritable = patched(server.os, "get_inheritable", return_value=False)
+        self.ioctl = patched(server.fcntl, "ioctl", side_effect=self.verity)
+        self.maps = []
+        self.mapper = patched(server.mmap, "mmap", side_effect=self.mapping)
+        self.opened = patched(server.os, "open", side_effect=AssertionError("unexpected open"))
+        self.closed_fd = patched(server.os, "close", side_effect=AssertionError("caller fd closed"))
+        self.sockets = patched(server.socket, "socket", side_effect=AssertionError("unexpected network"))
+        self.reader = server._KernelNativeReads()
+
+    def filesystem(self, fd, pointer):
+        self.assertEqual(fd.value, 71)
+        value = pointer._obj
+        self.assertEqual(bytes(value), b"\0" * 120)
+        for key, item in self.fs.items():
+            setattr(value, key, item)
+        value.fsid[:] = (17, -9)
+        return 0
+
+    def barrier(self, number, command, flags, cpu):
+        self.assertEqual(number.value, 324 if self.reader.machine == "x86_64" else 283)
+        self.assertEqual((flags.value, cpu.value), (0, 0))
+        self.assertIn(command.value, (0, 16, 8))
+        return 24 if command.value == 0 else 0
+
+    def verity(self, fd, command, output, mutate):
+        self.assertEqual((fd, command, mutate), (71, 0xc0046686, True))
+        self.assertIs(type(output), bytearray)
+        self.assertEqual(bytes(output), bytes.fromhex("00002000") + b"\0" * 32)
+        output[:] = bytes.fromhex("01002000") + b"v" * 32
+        return 0
+
+    def mapping(self, fd, length, *, flags, prot):
+        self.assertEqual((fd, length, flags, prot), (71, 4096, server.mmap.MAP_SHARED, server.mmap.PROT_READ))
+        owner = self
+        class Mapping:
+            def __init__(self):
+                self.slices, self.closes = [], 0
+
+            def __getitem__(self, key):
+                self.slices.append((key.start, key.stop))
+                return owner.raw[key]
+
+            def close(self):
+                self.closes += 1
+        value = Mapping()
+        self.maps.append(value)
+        return value
+
+    def fresh(self):
+        self.reader = server._KernelNativeReads()
+        return self.reader
+
+    def test_fixed_constructor_and_native_lp64_layout(self):
+        self.load.assert_called_once_with(None, use_errno=True)
+        self.assertEqual(server.ctypes.sizeof(server._KernelStatfs), 120)
+        self.assertEqual((server._KernelStatfs.fsid.offset, server._KernelStatfs.flags.offset), (56, 80))
+        self.assertEqual(self.lib.fstatfs.argtypes[0], server.ctypes.c_int)
+        self.assertEqual(self.lib.syscall.restype, server.ctypes.c_long)
+        for kwargs in ({"backend": Mock()}, {"lib": self.lib}, {"fd": 71}, {"qualified": True}):
+            with self.subTest(kwargs=kwargs), self.assertRaises(TypeError):
+                server._KernelNativeReads(**kwargs)
+        self.lib.syscall.assert_not_called()
+
+    def test_unsupported_os_endianness_machine_and_word_size_never_load_library(self):
+        cases = [(server.sys, "platform", "darwin"), (server.sys, "byteorder", "big")]
+        for obj, name, value in cases:
+            with self.subTest(name=name), patch.object(obj, name, value):
+                self.load.reset_mock()
+                with self.assertRaises(ConformanceError):
+                    self.fresh()
+                self.load.assert_not_called()
+        with patch.object(server.os, "uname", return_value=SimpleNamespace(machine="i686")):
+            self.load.reset_mock()
+            with self.assertRaises(ConformanceError):
+                self.fresh()
+            self.load.assert_not_called()
+        with patch.object(server.ctypes, "sizeof", return_value=4):
+            self.load.reset_mock()
+            with self.assertRaises(ConformanceError):
+                self.fresh()
+            self.load.assert_not_called()
+
+    def test_filesystem_returns_stable_data_not_dynamic_counters_or_a_grant(self):
+        self.fs.update(blocks=10, free_blocks=5)
+        expected = dict(kind=0xf97cff8c, fsid=[17, -9], blockSize=4096, flags=1)
+        self.assertEqual(self.reader.filesystem(71), expected)
+        self.fs.update(blocks=20, free_blocks=1)
+        self.assertEqual(self.reader.filesystem(71), expected)
+        self.ioctl.assert_not_called()
+        self.closed_fd.assert_not_called()
+
+    def test_filesystem_rejects_error_unknown_layout_and_reserved_tail(self):
+        for values in ({"block_size": 0}, {"block_size": 513}, {"block_size": 131072}, {"name_length": 0}, {"name_length": 4097}):
+            with self.subTest(values=values), patch.dict(self.fs, values):
+                with self.assertRaises(ConformanceError):
+                    self.fresh().filesystem(71)
+                self.assertTrue(self.reader.failed)
+        for result in (-1, 1):
+            with patch.object(self.lib.fstatfs, "side_effect", None), patch.object(self.lib.fstatfs, "return_value", result):
+                with self.assertRaises(ConformanceError):
+                    self.fresh().filesystem(71)
+        def spare(fd, pointer):
+            self.filesystem(fd, pointer)
+            pointer._obj.spare[3] = 1
+            return 0
+        with patch.object(self.lib.fstatfs, "side_effect", spare), self.assertRaises(ConformanceError):
+            self.fresh().filesystem(71)
+
+    def test_descriptor_type_range_access_and_inheritance_before_native_reads(self):
+        class Descriptor(int):
+            pass
+        for fd in (True, None, "71", Descriptor(71), 2, 1048576):
+            with self.subTest(fd=fd), self.assertRaises(ConformanceError):
+                self.fresh().filesystem(fd)
+        self.lib.fstatfs.assert_not_called()
+        for flags in (server.os.O_WRONLY, server.os.O_RDWR, 0o10000000):
+            self.flags.return_value = flags
+            with self.subTest(flags=flags), self.assertRaises(ConformanceError):
+                self.fresh().filesystem(71)
+        self.flags.return_value = server.os.O_RDONLY
+        self.inheritable.return_value = True
+        with self.assertRaises(ConformanceError):
+            self.fresh().filesystem(71)
+        self.lib.fstatfs.assert_not_called()
+
+    def test_changed_descriptor_refuses_result_without_closing_reused_fd(self):
+        def replace(fd, pointer):
+            result = self.filesystem(fd, pointer)
+            self.info.st_ino += 1
+            return result
+        self.lib.fstatfs.side_effect = replace
+        with self.assertRaises(ConformanceError):
+            self.reader.filesystem(71)
+        self.reader.close()
+        self.reader.close()
+        self.closed_fd.assert_not_called()
+
+    def test_verity_uses_exact_measure_ioctl_and_distinct_kernel_digest(self):
+        result = self.reader.measure_verity(71)
+        self.assertEqual(result, "sha256:" + (b"v" * 32).hex())
+        self.assertNotEqual(result, byte_digest(b"v" * 32))
+        self.ioctl.assert_called_once()
+        self.lib.syscall.assert_not_called()
+        self.mapper.assert_not_called()
+
+    def test_verity_refuses_unowned_mutable_linked_or_unbounded_code(self):
+        for values in ({"st_mode": stat.S_IFDIR | 0o555}, {"st_mode": stat.S_IFREG | 0o644},
+                       {"st_uid": 1}, {"st_gid": 1}, {"st_nlink": 2}, {"st_size": 0}, {"st_size": 67108865}):
+            original = self.info
+            self.info = SimpleNamespace(**{**vars(original), **values})
+            with self.subTest(values=values), self.assertRaises(ConformanceError):
+                self.fresh().measure_verity(71)
+            self.info = original
+        self.ioctl.assert_not_called()
+
+    def test_verity_errors_and_wrong_measurement_never_fallback_or_enable(self):
+        for result in (-1, 1, b"digest", True):
+            with self.subTest(result=result), patch.object(self.ioctl, "side_effect", None), patch.object(self.ioctl, "return_value", result):
+                with self.assertRaises(ConformanceError):
+                    self.fresh().measure_verity(71)
+        for raw in (bytes.fromhex("02002000") + b"v" * 32, bytes.fromhex("01004000") + b"v" * 32):
+            def wrong(fd, command, output, mutate):
+                output[:] = raw
+                return 0
+            with patch.object(self.ioctl, "side_effect", wrong), self.assertRaises(ConformanceError):
+                self.fresh().measure_verity(71)
+        with patch.object(self.ioctl, "side_effect", PermissionError("unit")), self.assertRaises(PermissionError):
+            self.fresh().measure_verity(71)
+        self.assertTrue(self.reader.failed)
+        self.opened.assert_not_called()
+
+    def test_verity_changed_metadata_and_late_result_are_refused(self):
+        for change in ("metadata", "deadline"):
+            def mutated(fd, command, output, mutate):
+                result = self.verity(fd, command, output, mutate)
+                if change == "metadata":
+                    self.info.st_ctime_ns += 1
+                else:
+                    self.now += 2
+                return result
+            with self.subTest(change=change), patch.object(self.ioctl, "side_effect", mutated):
+                with self.assertRaises(ConformanceError):
+                    self.fresh().measure_verity(71)
+
+    def test_status_uses_shared_readonly_mapping_and_private_fences_only(self):
+        expected = dict(version=1, sequence=2, enforcing=1, policyload=9, denyUnknown=1)
+        self.assertEqual(self.reader.status_epoch(71), expected)
+        self.assertEqual([call.args[1].value for call in self.lib.syscall.call_args_list], [0, 16, 8, 8])
+        self.assertEqual(self.maps[0].slices, [(4, 8), (None, 20), (4, 8)])
+        self.assertEqual(self.maps[0].closes, 1)
+        self.assertEqual(self.reader.status_epoch(71), expected)
+        self.assertEqual([call.args[1].value for call in self.lib.syscall.call_args_list], [0, 16, 8, 8, 8, 8])
+        self.assertEqual(len(self.maps), 2)
+        self.assertEqual(self.maps[1].closes, 1)
+        self.ioctl.assert_not_called()
+
+    def test_status_both_native_machines_use_exact_syscall_numbers(self):
+        for machine, number in (("x86_64", 324), ("aarch64", 283)):
+            with self.subTest(machine=machine), patch.object(server.os, "uname", return_value=SimpleNamespace(machine=machine)):
+                self.lib.syscall.reset_mock()
+                self.fresh().status_epoch(71)
+                self.assertEqual({call.args[0].value for call in self.lib.syscall.call_args_list}, {number})
+
+    def test_status_wrong_filesystem_and_custody_refuse_before_mapping(self):
+        for magic in (0x9fa0, 0x62656572, 0):
+            with patch.dict(self.fs, kind=magic), self.assertRaises(ConformanceError):
+                self.fresh().status_epoch(71)
+        original = self.info
+        for values in ({"st_uid": 1}, {"st_gid": 1}, {"st_mode": stat.S_IFREG | 0o644}, {"st_mode": stat.S_IFDIR | 0o555}):
+            self.info = SimpleNamespace(**{**vars(original), **values})
+            with self.subTest(values=values), self.assertRaises(ConformanceError):
+                self.fresh().status_epoch(71)
+        self.mapper.assert_not_called()
+        self.lib.syscall.assert_not_called()
+
+    def test_status_odd_changed_epoch_and_invalid_fields_always_unmap(self):
+        for fields in ((1, 3, 1, 9, 1), (2, 2, 1, 9, 1), (1, 2, 0, 9, 1), (1, 2, 1, 9, 0), (1, 2, 1, 0, 1)):
+            self.raw = server.struct.pack("<5I", *fields)
+            with self.subTest(fields=fields), self.assertRaises(ConformanceError):
+                self.fresh().status_epoch(71)
+            self.assertEqual(self.maps[-1].closes, 1)
+        self.raw = server.struct.pack("<5I", 1, 2, 1, 9, 1)
+        def change(number, command, flags, cpu):
+            result = self.barrier(number, command, flags, cpu)
+            if command.value == 8:
+                self.raw = server.struct.pack("<5I", 1, 4, 1, 10, 1)
+            return result
+        with patch.object(self.lib.syscall, "side_effect", change), self.assertRaises(ConformanceError):
+            self.fresh().status_epoch(71)
+        self.assertEqual(self.maps[-1].closes, 1)
+
+    def test_private_barrier_missing_permissions_and_commands_poison_reader(self):
+        for responses in ([0], [8], [-1], [24, -1], [24, 1], [24, 0, -1], [24, 0, 1]):
+            with self.subTest(responses=responses), patch.object(self.lib.syscall, "side_effect", responses):
+                with self.assertRaises(ConformanceError):
+                    self.fresh().status_epoch(71)
+                self.assertTrue(self.reader.failed)
+                self.assertEqual(self.maps[-1].closes, 1)
+        with patch.object(self.lib.syscall, "side_effect", OSError("unit")), self.assertRaises(OSError):
+            self.fresh().status_epoch(71)
+        self.assertEqual(self.maps[-1].closes, 1)
+
+    def test_status_mapping_partial_failure_and_close_failure_are_not_retried(self):
+        with patch.object(self.mapper, "side_effect", OSError("unit")), self.assertRaises(OSError):
+            self.reader.status_epoch(71)
+        self.assertEqual(self.maps, [])
+        def cannot_close(*args, **kwargs):
+            result = self.mapping(*args, **kwargs)
+            result.close = Mock(side_effect=OSError("unit"))
+            return result
+        with patch.object(self.mapper, "side_effect", cannot_close), self.assertRaises(OSError):
+            self.fresh().status_epoch(71)
+        self.maps[-1].close.assert_called_once()
+        self.assertTrue(self.reader.failed)
+        self.reader.close()
+        self.maps[-1].close.assert_called_once()
+        self.closed_fd.assert_not_called()
+
+    def test_process_thread_clock_and_closed_reader_refuse_native_operation(self):
+        for obj, name, result in ((server.os, "getpid", 999), (server.threading, "get_ident", 999)):
+            self.fresh()
+            with patch.object(obj, name, return_value=result), self.assertRaises(ConformanceError):
+                self.reader.filesystem(71)
+        self.fresh()
+        with patch.object(server.time, "monotonic", side_effect=[100, 99]), self.assertRaises(ConformanceError):
+            self.reader.filesystem(71)
+        self.fresh().close()
+        with self.assertRaises(ConformanceError):
+            self.reader.filesystem(71)
+        self.lib.fstatfs.assert_not_called()
+
+    def test_status_rechecks_filesystem_and_fd_after_fenced_read(self):
+        for change in ("filesystem", "descriptor", "time"):
+            def mutate(number, command, flags, cpu):
+                result = self.barrier(number, command, flags, cpu)
+                if command.value == 8:
+                    if change == "filesystem":
+                        self.fs["flags"] += 1
+                    elif change == "descriptor":
+                        self.info.st_ino += 1
+                    else:
+                        self.now += 2
+                return result
+            with self.subTest(change=change), patch.object(self.lib.syscall, "side_effect", mutate):
+                with self.assertRaises(ConformanceError):
+                    self.fresh().status_epoch(71)
+                self.assertEqual(self.maps[-1].closes, 1)
 
 
 class ProxyQualificationTests(unittest.TestCase):
