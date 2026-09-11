@@ -850,6 +850,467 @@ class KernelRootCustodyTests(unittest.TestCase):
         self.assertFalse(self.handles)
 
 
+class KernelProcessCustodyTests(unittest.TestCase):
+    """Real process/root/native readers with synthetic OS edges, never live proc."""
+    stat_fd = KernelRootCustodyTests.stat_fd
+    statfs = KernelRootCustodyTests.statfs
+    statx = KernelRootCustodyTests.statx
+    close_fd = KernelRootCustodyTests.close_fd
+
+    def setUp(self):
+        KernelRootCustodyTests.setUp(self)
+        self.expected = sample()["record"]["roles"]["SERVER"]
+        self.target, self.dead, self.offsets, self.links = 411, False, {}, {}
+        self.stat_raw = self.process_stat()
+        self.status_raw = self.process_status()
+        self.task_names, self.scan_closes, self.views = ["411"], 0, []
+        proc = self.nodes["/proc"]
+        for index, suffix in enumerate(("", "/ns", "/attr", "/task", "/task/411", "/stat", "/status",
+                                        "/cgroup", "/attr/current", "/task/411/children")):
+            self.nodes["/proc/411" + suffix] = {**proc, "st_ino": 100 + index,
+                "st_mode": stat.S_IFDIR | 0o555 if index < 5 else stat.S_IFREG | 0o444}
+        for index, (name, kind) in enumerate((("user", 0x10000000), ("mnt", 0x20000),
+                                            ("pid", 0x20000000), ("net", 0x40000000))):
+            path = "/proc/411/ns/" + name
+            self.links[path] = {**proc, "st_ino": 200 + index, "st_mode": stat.S_IFLNK | 0o777}
+            self.nodes[path] = {**proc, "st_ino": self.expected["namespaceInodes"][name],
+                "st_dev": server.os.makedev(0, 22), "magic": 0x6e736673,
+                "st_mode": stat.S_IFREG | 0o444, "kind": kind}
+        self.nodes["/pidfd/411"] = {**proc, "st_ino": 800, "st_mode": stat.S_IFREG | 0o700}
+        def patched(obj, name, **kwargs):
+            return self.stack.enter_context(patch.object(obj, name, **kwargs))
+        self.pid_open = patched(server.os, "pidfd_open", side_effect=self.pidfd_open, create=True)
+        self.poll = patched(server.select, "select", side_effect=self.poll_pid)
+        self.read_fd = patched(server.os, "read", side_effect=self.read)
+        self.stat_path = patched(server.os, "stat", side_effect=self.named_stat)
+        self.scanner = patched(server.os, "scandir", side_effect=self.scandir)
+        self.ioctl.side_effect = self.namespace_type
+        self.roots = server._KernelRootViews()
+        self.addCleanup(self.roots.close)
+        self.addCleanup(self.close_views)
+        self.root_fds = set(self.handles)
+        self.cgroup_raw = b"0::/planeon-live/proxy-server\n"
+        self.label_raw = self.expected["processLabel"].encode("ascii") + b"\0"
+        self.children_raw = b""
+
+    def close_views(self):
+        for value in self.views:
+            if not value.closed:
+                value.close()
+
+    def process_stat(self, comm=b"unit ) name\nwith ( brackets", **changes):
+        fields = [b"S"] + [b"0"] * 49
+        for index, value in {1: "100", 17: "1", 19: "999", **{int(k): v for k, v in changes.items()}}.items():
+            fields[index] = str(value).encode("ascii")
+        return b"411 (" + comm + b") " + b" ".join(fields) + b"\n"
+
+    def process_status(self, **changes):
+        fields = dict(Name="unit", Tgid="411", Pid="411", PPid="100", TracerPid="0",
+            Uid="0\t0\t0\t0", Gid="0\t0\t0\t0", Threads="1", NSpid="411", NStgid="411",
+            Groups="0 ", Seccomp="2", NoNewPrivs="1", VmSize="123 kB",
+            CapInh="0000000000000000", CapPrm="0000000000000001", CapEff="0000000000000001",
+            CapBnd="0000000000000001", CapAmb="0000000000000000")
+        fields.update(changes)
+        return "".join(key + ":\t" + value + "\n" for key, value in fields.items()).encode("ascii")
+
+    def allocate(self, path, parent=None):
+        fd, self.next_fd = self.next_fd, self.next_fd + 1
+        self.handles[fd] = (path, self.nodes[path])
+        self.offsets[fd] = 0
+        self.opens.append((path, fd, parent))
+        return fd
+
+    def open_fd(self, name, flags, *, dir_fd):
+        if dir_fd is None or (dir_fd in self.handles and self.handles[dir_fd][0] in ("/", "/sys", "/sys/fs")):
+            return KernelRootCustodyTests.open_fd(self, name, flags, dir_fd=dir_fd)
+        self.assertIs(type(name), str)
+        self.assertNotIn("/", name)
+        path = self.handles[dir_fd][0].rstrip("/") + "/" + name
+        self.assertIn(path, self.nodes)
+        expected = server.os.O_RDONLY | server.os.O_CLOEXEC | server.os.O_NONBLOCK
+        if path in self.links:
+            self.assertIn(name, ("user", "mnt", "pid", "net"))
+        else:
+            expected |= server.os.O_NOFOLLOW
+            if stat.S_ISDIR(self.nodes[path]["st_mode"]):
+                expected |= server.os.O_DIRECTORY
+        self.assertEqual(flags, expected)
+        return self.allocate(path, dir_fd)
+
+    def pidfd_open(self, pid, flags):
+        self.assertEqual((pid, flags), (411, 0))
+        return self.allocate("/pidfd/411")
+
+    def poll_pid(self, reads, writes, errors, timeout):
+        self.assertEqual((writes, timeout), ([], 0))
+        self.assertEqual(reads, errors)
+        self.assertEqual(len(reads), 1)
+        self.assertEqual(self.handles[reads[0]][0], "/pidfd/411")
+        return (reads if self.dead else [], [], [])
+
+    def named_stat(self, name, *, dir_fd, follow_symlinks):
+        self.assertFalse(follow_symlinks)
+        path = self.handles[dir_fd][0] + "/" + name
+        node = self.links[path] if path in self.links else self.nodes[path]
+        return SimpleNamespace(**{k: v for k, v in node.items() if k.startswith("st_")})
+
+    def namespace_type(self, fd, operation, argument):
+        self.assertEqual((operation, argument), (0xb703, 0))
+        return self.handles[fd][1]["kind"]
+
+    def read(self, fd, size):
+        self.assertTrue(0 < size <= 4096)
+        path = self.handles[fd][0]
+        raw = {"/proc/411/stat": self.stat_raw, "/proc/411/status": self.status_raw,
+               "/proc/411/cgroup": self.cgroup_raw, "/proc/411/attr/current": self.label_raw,
+               "/proc/411/task/411/children": self.children_raw}[path]
+        position = self.offsets[fd]
+        self.offsets[fd] += size
+        return raw[position:position + size]
+
+    def scandir(self, fd):
+        self.assertEqual(self.handles[fd][0], "/proc/411/task")
+        owner = self
+        class Entries:
+            def __enter__(self):
+                return iter(SimpleNamespace(name=name) for name in owner.task_names)
+
+            def __exit__(self, *args):
+                owner.scan_closes += 1
+        return Entries()
+
+    def view(self, role="SERVER", expected=None):
+        value = server._KernelProcessView(self.roots, 411, role, self.expected if expected is None else expected)
+        self.views.append(value)
+        return value
+
+    def test_process_stat_handles_delimiters_newlines_and_ignores_cpu_memory_churn(self):
+        observed = server._proc_process_fields(self.stat_raw, self.status_raw)
+        self.assertEqual((observed["pid"], observed["parent"], observed["startTicks"], observed["threads"]), (411, 100, 999, 1))
+        self.assertEqual(observed["uid"], (0, 0, 0, 0))
+        self.assertEqual(server._proc_process_fields(self.process_stat(**{"11": "982", "20": "32768"}),
+                                                   self.process_status(VmSize="9999 kB")), observed)
+
+    def test_stat_rejects_truncated_extra_overflow_dead_and_inconsistent_processes(self):
+        cases = [b"", self.stat_raw[:-1], self.stat_raw + b"\n", self.stat_raw.replace(b"411 (", b"0411 ("),
+                 self.stat_raw[:-1] + b" 0\n", self.stat_raw + b"x" * 8192]
+        cases += [self.process_stat(**{key: value}) for key, value in
+                  (("0", "Z"), ("0", "X"), ("19", "0"), ("19", "9007199254740992"),
+                   ("17", "0"), ("17", "4097"), ("1", "0"), ("30", str(2 ** 64)), ("17", "2"))]
+        for raw in cases:
+            with self.subTest(raw=raw[:60]), self.assertRaises(ConformanceError):
+                server._proc_process_fields(raw, self.status_raw)
+
+    def test_status_rejects_duplicates_missing_fields_credentials_tracing_and_namespace_mismatch(self):
+        cases = [b"", self.status_raw[:-1], self.status_raw + b"Pid:\t411\n", self.status_raw + b"broken\n",
+                 self.status_raw.replace(b"Seccomp:\t2\n", b""), self.status_raw + b"x" * 65536]
+        cases += [self.process_status(**{key: value}) for key, value in
+                  (("Pid", "412"), ("Tgid", "412"), ("PPid", "101"), ("TracerPid", "1"),
+                   ("Uid", "0 0 0"), ("Uid", "-1 0 0 0"), ("Gid", "True 0 0 0"),
+                   ("NSpid", "0"), ("NStgid", "411 2"), ("Seccomp", "0"), ("NoNewPrivs", "2"),
+                   ("CapEff", "0"), ("Groups", "0 0"))]
+        for raw in cases:
+            with self.subTest(raw=raw[-100:]), self.assertRaises(ConformanceError):
+                server._proc_process_fields(self.stat_raw, raw)
+
+    def test_fixed_native_factory_retains_original_roots_proc_pid_and_namespace_fds(self):
+        view = self.view()
+        self.pid_open.assert_called_once_with(411, 0)
+        self.assertEqual(len(view.rows), 9)
+        self.assertEqual(len(self.handles), len(self.root_fds) + 10)
+        self.assertIsNone(view.check())
+        self.assertEqual(view.pin[3], tuple(self.expected["namespaceInodes"][k] for k in ("user", "mnt", "pid", "net")))
+        view.close()
+        view.close()
+        self.assertEqual(set(self.handles), self.root_fds)
+        self.assertIsNone(self.roots.check())
+        self.mapper.assert_not_called()
+        self.lib.syscall.assert_not_called()
+
+    def test_factory_refuses_invalid_pid_roots_role_and_caller_backend_before_acquisition(self):
+        for pid in (True, "411", 1, 412, 2 ** 31):
+            with self.subTest(pid=pid), self.assertRaises(ConformanceError):
+                server._KernelProcessView(self.roots, pid, "SERVER", self.expected)
+        for roots, role in ((Mock(), "SERVER"), (self.roots, "TENANT"), (self.roots, True)):
+            with self.assertRaises(ConformanceError):
+                server._KernelProcessView(roots, 411, role, self.expected)
+        for extra in ({"backend": Mock()}, {"fd": 72}, {"path": "/tmp"}, {"qualified": True}):
+            with self.subTest(extra=extra), self.assertRaises(TypeError):
+                server._KernelProcessView(self.roots, 411, "SERVER", self.expected, **extra)
+        self.pid_open.assert_not_called()
+
+    def test_role_pins_are_detached_and_invalid_pins_do_not_open_process(self):
+        for key, value in (("uid", True), ("gid", 1), ("processLabel", "bad\nlabel"),
+                           ("namespaceInodes", {"user": 1}), ("cgroup", {"path": "/tmp"}), ("seccompMode", True)):
+            with self.subTest(key=key), self.assertRaises(ConformanceError):
+                self.view(expected={**self.expected, key: value})
+        self.pid_open.assert_not_called()
+        view = self.view()
+        self.expected["namespaceInodes"]["mnt"] += 1
+        self.expected["processLabel"] = "changed"
+        self.assertIsNone(view.check())
+
+    def test_uid_gid_label_and_cgroup_mismatch_refuse_and_close_partial_custody(self):
+        original = self.status_raw, self.label_raw, self.cgroup_raw
+        cases = [(self.process_status(Uid="0 1 0 0"), original[1], original[2]),
+                 (self.process_status(Gid="0 0 1 0"), original[1], original[2]),
+                 (original[0], original[1] + b"x", original[2]),
+                 (original[0], original[1], b"0::/foreign\n"),
+                 (original[0], original[1], original[2] + b"1:name=extra:/\n")]
+        for values in cases:
+            self.status_raw, self.label_raw, self.cgroup_raw = values
+            with self.subTest(values=values), self.assertRaises(ConformanceError):
+                self.view()
+            self.assertEqual(set(self.handles), self.root_fds)
+        self.status_raw, self.label_raw, self.cgroup_raw = original
+
+    def test_pid_exit_and_pidfd_replacement_fail_without_reacquisition(self):
+        view = self.view()
+        self.dead = True
+        with self.assertRaisesRegex(ConformanceError, "EXITED_OR_REUSED"):
+            view.check()
+        self.dead = False
+        with self.assertRaises(ConformanceError):
+            view.check()
+        self.pid_open.assert_called_once()
+        view.close()
+        changed = self.view()
+        fd = changed.pidfd[0]
+        path, node = self.handles[fd]
+        self.handles[fd] = (path, {**node, "st_ino": node["st_ino"] + 1})
+        with self.assertRaises(ConformanceError):
+            changed.check()
+        with self.assertRaisesRegex(ConformanceError, "FD_REUSED"):
+            changed.close()
+        self.assertIn(fd, self.handles)
+        self.handles[fd] = (path, node)
+        self.close_fd(fd)
+
+    def test_start_time_parent_credentials_and_privilege_drift_invalidate_lifetime(self):
+        for kind in ("start", "parent", "credentials", "capabilities", "nnp", "groups"):
+            view = self.view()
+            original_stat, original_status = self.stat_raw, self.status_raw
+            if kind == "start":
+                self.stat_raw = self.process_stat(**{"19": "1000"})
+            elif kind == "parent":
+                self.stat_raw, self.status_raw = self.process_stat(**{"1": "101"}), self.process_status(PPid="101")
+            else:
+                self.status_raw = self.process_status(**{"credentials": {"Uid": "0 1 0 0"},
+                    "capabilities": {"CapEff": "0000000000000002"}, "nnp": {"NoNewPrivs": "0"}, "groups": {"Groups": "1"}}[kind])
+            with self.subTest(kind=kind), self.assertRaises(ConformanceError):
+                view.check()
+            self.stat_raw, self.status_raw = original_stat, original_status
+            view.close()
+
+    def test_namespace_inode_type_link_and_retained_descriptor_changes_are_refused(self):
+        for kind in ("inode", "type", "link", "retained"):
+            view = self.view()
+            path = "/proc/411/ns/mnt"
+            original, link = self.nodes[path], self.links[path]
+            if kind == "inode":
+                self.nodes[path] = {**original, "st_ino": original["st_ino"] + 1}
+            elif kind == "type":
+                self.nodes[path] = {**original, "kind": 0x40000000}
+            elif kind == "link":
+                self.links[path] = {**link, "st_mode": stat.S_IFREG | 0o444}
+            else:
+                original["st_uid"] = 1
+            with self.subTest(kind=kind), self.assertRaises(ConformanceError):
+                view.check()
+            original["st_uid"] = 0
+            self.nodes[path], self.links[path] = original, link
+            view.close()
+
+    def test_namespace_native_read_rejects_wrong_fs_missing_ioctl_and_changed_descriptor(self):
+        fd = self.allocate("/proc/411/ns/net")
+        original = self.handles[fd][1]
+        for kind in ("filesystem", "type", "permission", "identity"):
+            reader = server._KernelNativeReads()
+            def call(*args):
+                if kind == "permission":
+                    raise PermissionError("unit")
+                if kind == "identity":
+                    self.handles[fd][1]["st_ino"] += 1
+                return 0 if kind == "type" else 0x40000000
+            if kind == "filesystem":
+                self.handles[fd] = ("/proc/411/ns/net", {**original, "magic": 0x9fa0})
+            with patch.object(server.fcntl, "ioctl", Mock(side_effect=call)), self.subTest(kind=kind):
+                with self.assertRaises((ConformanceError, PermissionError)):
+                    reader.namespace_identity(fd)
+            self.handles[fd] = ("/proc/411/ns/net", original)
+        self.close_fd(fd)
+
+    def test_bound_proc_views_reject_same_inode_submount_and_process_path_replacement(self):
+        for suffix, field in (("/status", "mountId"), ("/ns", "mountId"), ("", "st_ino"), ("/task", "st_ino")):
+            view = self.view()
+            path = "/proc/411" + suffix
+            original = self.nodes[path]
+            self.nodes[path] = {**original, field: original[field] + 1000}
+            with self.subTest(path=path), self.assertRaises(ConformanceError):
+                view.check()
+            self.nodes[path] = original
+            view.close()
+
+    def test_server_extra_threads_children_and_invalid_directory_entries_are_denied(self):
+        for names, children, threads in ((["411", "412"], b"", "2"), (["411"], b"900 ", "1"),
+                                          (["411", "411"], b"", "2"), (["../411"], b"", "1")):
+            self.task_names, self.children_raw = names, children
+            self.stat_raw, self.status_raw = self.process_stat(**{"17": threads}), self.process_status(Threads=threads)
+            with self.subTest(names=names, children=children), self.assertRaises(ConformanceError):
+                self.view()
+            self.assertEqual(set(self.handles), self.root_fds)
+        self.assertGreater(self.scan_closes, 0)
+
+    def test_proc_reads_are_bounded_fresh_and_detect_truncation_and_named_replacement(self):
+        for kind in ("oversize", "truncated", "replacement"):
+            view = self.view()
+            original = self.nodes["/proc/411/status"]
+            def changed(fd, size):
+                raw = self.read(fd, size)
+                if self.handles[fd][0] == "/proc/411/status":
+                    if kind == "oversize":
+                        return b"x" * size
+                    if kind == "truncated":
+                        return b""
+                    self.nodes["/proc/411/status"] = {**original, "st_ino": original["st_ino"] + 1}
+                return raw
+            with patch.object(server.os, "read", Mock(side_effect=changed)), self.subTest(kind=kind):
+                with self.assertRaises(ConformanceError):
+                    view.check()
+            self.nodes["/proc/411/status"] = original
+            view.close()
+        self.assertGreater(len([p for p, _, _ in self.opens if p == "/proc/411/status"]), 6)
+
+    def test_late_read_and_whole_phase_budget_refuse_without_renewal(self):
+        for step in (2, 0.1):
+            original = self.now
+            def delayed(fd, size):
+                raw = self.read(fd, size)
+                self.now += step
+                return raw
+            with patch.object(server.os, "read", Mock(side_effect=delayed)), self.subTest(step=step):
+                with self.assertRaisesRegex(ConformanceError, "DEADLINE"):
+                    self.view()
+            self.assertEqual(set(self.handles), self.root_fds)
+            self.now = original
+
+    def test_partial_open_fstat_and_namespace_failures_close_only_owned_fds(self):
+        for failure in ("open", "fstat", "namespace"):
+            def open_failure(name, *args, **kwargs):
+                if name == "attr":
+                    raise PermissionError("unit")
+                return self.open_fd(name, *args, **kwargs)
+            def stat_failure(fd):
+                if self.handles[fd][0] == "/proc/411/attr":
+                    raise PermissionError("unit")
+                return self.stat_fd(fd)
+            target, name, operation = {"open": (server.os, "open", open_failure),
+                "fstat": (server.os, "fstat", stat_failure),
+                "namespace": (server.fcntl, "ioctl", Mock(side_effect=PermissionError("unit")))}[failure]
+            with patch.object(target, name, Mock(side_effect=operation)), self.subTest(failure=failure):
+                with self.assertRaises(PermissionError):
+                    self.view()
+            self.assertEqual(set(self.handles), self.root_fds)
+
+    def test_temporary_cleanup_failure_remains_sticky_and_cleanup_continues(self):
+        view = self.view()
+        failed_fd = []
+        def uncertain(fd):
+            path = self.handles[fd][0]
+            self.close_fd(fd)
+            if path == "/proc/411/status" and not failed_fd:
+                failed_fd.append(fd)
+                raise OSError("unit uncertain close")
+        with patch.object(server.os, "close", Mock(side_effect=uncertain)), self.assertRaises(OSError):
+            view.check()
+        with self.assertRaises(OSError):
+            view.close()
+        with self.assertRaises(OSError):
+            view.close()
+        self.assertEqual(self.closed.count(failed_fd[0]), 1)
+        self.assertEqual(set(self.handles), self.root_fds)
+
+    def test_wrong_process_thread_closed_root_and_backward_clock_refuse(self):
+        for obj, name, result in ((server.os, "getpid", 412), (server.threading, "get_ident", 722)):
+            view = self.view()
+            with patch.object(obj, name, return_value=result), self.assertRaises(ConformanceError):
+                view.check()
+            view.close()
+        view = self.view()
+        with patch.object(server.time, "monotonic", side_effect=[100, 99]), self.assertRaises(ConformanceError):
+            view.check()
+        view.close()
+        self.roots.close()
+        with self.assertRaises(ConformanceError):
+            self.view()
+
+    def test_all_four_role_paths_and_worker_nonroot_pins_use_only_enrolled_namespaces(self):
+        for role, path in (("OBSERVER", "policy-observer"), ("BROKER", "capacity-broker"), ("WORKER", "probe-worker")):
+            expected = deepcopy(self.expected)
+            expected["cgroup"]["path"] = "/sys/fs/cgroup/planeon-live/" + path
+            self.cgroup_raw = ("0::/planeon-live/" + path + "\n").encode()
+            if role == "WORKER":
+                expected["uid"] = expected["gid"] = 12345
+                self.status_raw = self.process_status(Uid="12345 12345 12345 12345", Gid="12345 12345 12345 12345")
+            view = self.view(role, expected)
+            self.assertIsNone(view.check())
+            self.assertEqual(len(view.rows), 8)
+            view.close()
+        self.assertEqual(set(self.handles), self.root_fds)
+
+    def test_namespace_readonly_ioctl_is_identical_on_both_supported_abis(self):
+        fd = self.allocate("/proc/411/ns/user")
+        for machine in ("x86_64", "aarch64"):
+            with self.subTest(machine=machine), patch.object(server.os, "uname", return_value=SimpleNamespace(machine=machine)):
+                reader = server._KernelNativeReads()
+                observed = reader.namespace_identity(fd)
+                self.assertEqual(observed["kind"], 0x10000000)
+                self.assertEqual(observed["identity"][1], self.expected["namespaceInodes"]["user"])
+                reader.close()
+        self.assertTrue(all(call.args == (fd, 0xb703, 0) for call in self.ioctl.call_args_list))
+        self.lib.syscall.assert_not_called()
+        self.close_fd(fd)
+
+    def test_missing_pidfd_permission_inheritance_and_late_acquisition_are_unavailable(self):
+        with patch.object(server.os, "pidfd_open", Mock(side_effect=PermissionError("unit"))), self.assertRaises(PermissionError):
+            self.view()
+        self.assertEqual(set(self.handles), self.root_fds)
+        def inherited(fd):
+            return self.handles[fd][0] == "/pidfd/411"
+        with patch.object(server.os, "get_inheritable", Mock(side_effect=inherited)), self.assertRaises(ConformanceError):
+            self.view()
+        self.assertEqual(set(self.handles), self.root_fds)
+        def delayed(pid, flags):
+            fd = self.pidfd_open(pid, flags)
+            self.now += 2
+            return fd
+        with patch.object(server.os, "pidfd_open", Mock(side_effect=delayed)), self.assertRaisesRegex(ConformanceError, "DEADLINE"):
+            self.view()
+        self.assertEqual(set(self.handles), self.root_fds)
+
+    def test_exit_during_a_blocking_read_refuses_the_returned_bytes(self):
+        view = self.view()
+        def dies(fd, size):
+            raw = self.read(fd, size)
+            self.dead = True
+            return raw
+        with patch.object(server.os, "read", Mock(side_effect=dies)), self.assertRaisesRegex(ConformanceError, "EXITED_OR_REUSED"):
+            view.check()
+        self.dead = False
+        view.close()
+        self.assertEqual(set(self.handles), self.root_fds)
+
+    def test_namespace_link_change_during_open_refuses_the_acquired_view(self):
+        def changed(name, flags, *, dir_fd):
+            fd = self.open_fd(name, flags, dir_fd=dir_fd)
+            if name == "net":
+                self.links["/proc/411/ns/net"]["st_ino"] += 1
+            return fd
+        with patch.object(server.os, "open", Mock(side_effect=changed)), self.assertRaisesRegex(ConformanceError, "NAMESPACE_PIN"):
+            self.view()
+        self.assertEqual(set(self.handles), self.root_fds)
+
+
 class ProxyQualificationTests(unittest.TestCase):
     def test_four_architecture_resource_profiles_and_sixteen_captures_are_data_only(self):
         self.assertEqual(len(VECTORS["qualification"]["positive"]), 4)

@@ -186,6 +186,62 @@ def _proc_code_maps(raw, machine, auxv):
     return dict(files=maps, kernel=special, pageSize=page_size)
 
 
+def _proc_process_fields(raw, status):
+    """Bounded Linux 6.12 proc data, never a process/namespace authority grant."""
+    require(type(raw) is bytes and 0 < len(raw) <= 8192 and raw.endswith(b"\n")
+            and b"\0" not in raw, "KERNEL_PROCESS_STAT_LAYOUT")
+    prefix, separator, rest = raw.partition(b" (")
+    end = rest.rfind(b") ")
+    require(separator and re.fullmatch(rb"[1-9][0-9]{0,9}", prefix) is not None
+            and 0 < end <= 256, "KERNEL_PROCESS_STAT_LAYOUT")
+    fields = rest[end + 2:-1].split(b" ")
+    require(len(fields) == 50 and fields[0] in (b"R", b"S", b"D", b"T", b"t", b"I")
+            and all(re.fullmatch(rb"-?(?:0|[1-9][0-9]{0,19})", v) for v in fields[1:]),
+            "KERNEL_PROCESS_STAT_LAYOUT")
+    numbers = [int(v) for v in fields[1:]]
+    require(all(-(2 ** 63) <= v < 2 ** 64 for v in numbers), "KERNEL_PROCESS_STAT_RANGE")
+    pid, parent, threads, start = int(prefix), numbers[0], numbers[16], numbers[18]
+    require(1 < pid < 2 ** 31 and 0 < parent < 2 ** 31 and 1 <= threads <= 4096
+            and 0 < start <= 9007199254740991, "KERNEL_PROCESS_STAT_RANGE")
+    require(type(status) is bytes and 0 < len(status) <= 65536 and status.endswith(b"\n")
+            and b"\0" not in status and len(status.splitlines()) <= 512, "KERNEL_PROCESS_STATUS_LAYOUT")
+    rows = {}
+    for line in status.splitlines():
+        key, colon, value = line.partition(b":")
+        require(colon and re.fullmatch(rb"[A-Za-z_][A-Za-z0-9_]{0,63}", key)
+                and key not in rows, "KERNEL_PROCESS_STATUS_LAYOUT")
+        rows[key] = value.split()
+    def integers(key, minimum, maximum, count):
+        values = rows.get(key, [])
+        require(len(values) == count and all(re.fullmatch(rb"(?:0|[1-9][0-9]{0,15})", v) for v in values),
+                "KERNEL_PROCESS_STATUS_FIELD")
+        values = tuple(int(v) for v in values)
+        require(all(minimum <= v <= maximum for v in values), "KERNEL_PROCESS_STATUS_RANGE")
+        return values
+    require(integers(b"Pid", 2, 2147483647, 1) == integers(b"Tgid", 2, 2147483647, 1) == (pid,)
+            and integers(b"PPid", 1, 2147483647, 1) == (parent,)
+            and integers(b"Threads", 1, 4096, 1) == (threads,)
+            and integers(b"TracerPid", 0, 0, 1) == (0,), "KERNEL_PROCESS_STATUS_MISMATCH")
+    chain_size = len(rows.get(b"NSpid", []))
+    require(1 <= chain_size <= 32, "KERNEL_PROCESS_PID_NAMESPACE")
+    chain = integers(b"NSpid", 1, 2147483647, chain_size)
+    require(chain[0] == pid and integers(b"NStgid", 1, 2147483647, chain_size) == chain,
+            "KERNEL_PROCESS_PID_NAMESPACE")
+    groups = integers(b"Groups", 0, 2147483647, len(rows.get(b"Groups", [])))
+    require(b"Groups" in rows and len(groups) <= 256 and len(set(groups)) == len(groups),
+            "KERNEL_PROCESS_GROUPS")
+    capabilities = []
+    for key in (b"CapInh", b"CapPrm", b"CapEff", b"CapBnd", b"CapAmb"):
+        values = rows.get(key, [])
+        require(len(values) == 1 and re.fullmatch(rb"[0-9a-f]{16}", values[0]), "KERNEL_PROCESS_CAPABILITIES")
+        capabilities.append(int(values[0], 16))
+    return dict(pid=pid, parent=parent, startTicks=start, threads=threads,
+                uid=integers(b"Uid", 0, 2147483647, 4), gid=integers(b"Gid", 0, 2147483647, 4),
+                namespacePids=chain, groups=groups, capabilities=tuple(capabilities),
+                seccompMode=integers(b"Seccomp", 2, 2, 1)[0],
+                noNewPrivs=integers(b"NoNewPrivs", 0, 1, 1)[0])
+
+
 class _KernelStatfs(ctypes.Structure):
     """Linux 6.12 native LP64 layout on the two explicitly supported ABIs."""
     _fields_ = [(name, ctypes.c_long) for name in
@@ -301,9 +357,17 @@ class _KernelNativeReads:
         stable inode/owner/mode, filesystem identity and mount ID are returned.
         A later fixed owner must validate namespace and canonical ancestry.
         """
+        return self._inode_identity(fd, True)
+
+    def proc_file_identity(self, fd):
+        """Stable regular-file and mount identity; proc size/times are dynamic."""
+        return self._inode_identity(fd, False)
+
+    def _inode_identity(self, fd, directory):
         with self._phase():
             info, _ = self._descriptor(fd)
-            require(stat.S_ISDIR(info.st_mode), "KERNEL_DIRECTORY_REQUIRED")
+            require(stat.S_ISDIR(info.st_mode) if directory else stat.S_ISREG(info.st_mode),
+                    "KERNEL_DIRECTORY_REQUIRED" if directory else "KERNEL_PROC_FILE_REQUIRED")
             identity = (info.st_dev, info.st_ino, info.st_uid, info.st_gid, info.st_mode)
             require(ctypes.sizeof(_KernelStatx) == 256 and ctypes.alignment(_KernelStatx) == 8,
                     "KERNEL_STATX_ABI")
@@ -337,6 +401,23 @@ class _KernelNativeReads:
             require((after.st_dev, after.st_ino, after.st_uid, after.st_gid, after.st_mode) == identity,
                     "KERNEL_DIRECTORY_CHANGED")
             return dict(identity=identity, mountId=mount_id, filesystem=filesystem)
+
+    def namespace_identity(self, fd):
+        """Inspect only an already-open nsfs fd; no namespace entry or mutation."""
+        with self._phase():
+            info, identity = self._descriptor(fd)
+            require(stat.S_ISREG(info.st_mode), "KERNEL_NAMESPACE_DESCRIPTOR")
+            filesystem = self._filesystem(fd)
+            require(filesystem["kind"] == 0x6e736673, "KERNEL_NAMESPACE_FILESYSTEM")
+            try:
+                kind = fcntl.ioctl(fd, 0xb703, 0)  # NS_GET_NSTYPE, read only
+            finally:
+                self._tick()
+            require(type(kind) is int and kind in (0x10000000, 0x20000, 0x20000000, 0x40000000),
+                    "KERNEL_NAMESPACE_TYPE")
+            require(self._filesystem(fd) == filesystem, "KERNEL_NAMESPACE_CHANGED")
+            self._same(fd, identity)
+            return dict(identity=identity, filesystem=filesystem, kind=kind)
 
     def measure_verity(self, fd):
         with self._phase():
@@ -569,6 +650,232 @@ def _installed_entry():
         except OSError:
             continue
         require(int(name) <= 2 and not stat.S_ISSOCK(info.st_mode), "PROXY_AMBIENT_FD_FORBIDDEN")
+
+
+class _KernelProcessView:
+    """Retained proc/pidfd/ns observations matched to expected role data only.
+
+    This component cannot authenticate its expected data or grant qualification.
+    The future installed qualifier must own it, supply independently verified
+    role pins and the actual retained socket peer, and enforce boot/code/policy/
+    cgroup/BPF custody. No caller fd, path, backend or function is accepted.
+    """
+    def __init__(self, roots, pid, role, expected):
+        require(type(roots) is _KernelRootViews and type(pid) is int and 1 < pid < 2 ** 31,
+                "KERNEL_PROCESS_INPUT")
+        groups = {"SERVER": "proxy-server", "OBSERVER": "policy-observer",
+                  "BROKER": "capacity-broker", "WORKER": "probe-worker"}
+        require(type(role) is str and role in groups and (role != "SERVER" or pid == os.getpid()),
+                "KERNEL_PROCESS_ROLE")
+        expected = document(expected)
+        require(type(expected) is dict and all(key in expected for key in
+                ("uid", "gid", "processLabel", "namespaceInodes", "cgroup", "seccompMode")),
+                "KERNEL_PROCESS_PINS")
+        uid, gid, label, namespaces = (expected[key] for key in ("uid", "gid", "processLabel", "namespaceInodes"))
+        require(type(uid) is type(gid) is int and (10000 <= uid < 2 ** 31 and 10000 <= gid < 2 ** 31
+                if role == "WORKER" else uid == gid == 0)
+                and type(label) is str and 1 <= len(label) <= 256 and all(32 <= ord(c) <= 126 for c in label)
+                and type(namespaces) is dict and set(namespaces) == {"user", "mnt", "pid", "net"}
+                and all(type(v) is int and 0 < v <= 9007199254740991 for v in namespaces.values())
+                and type(expected["seccompMode"]) is int and expected["seccompMode"] == 2
+                and type(expected["cgroup"]) is dict
+                and expected["cgroup"].get("path") == "/sys/fs/cgroup/planeon-live/" + groups[role],
+                "KERNEL_PROCESS_PINS")
+        self.roots, self.target, self.role = roots, pid, role
+        self.pin = (uid, gid, label, tuple(namespaces[name] for name in ("user", "mnt", "pid", "net")))
+        self.cgroup = ("0::/planeon-live/" + groups[role] + "\n").encode("ascii")
+        self.pid, self.thread = os.getpid(), threading.get_ident()
+        self.rows, self.pidfd = [], [None, None]
+        self.closed = self.failed = self.busy = False
+        self.cleanup_failure = None
+        try:
+            with self._phase():
+                self.pidfd[0] = os.pidfd_open(pid, 0)
+                self.pidfd[1] = self._close_identity(self.pidfd[0])
+                self._tick()
+                self._acquire(self.rows)
+                self.original = self._snapshot()
+                self._compare()
+        except BaseException:
+            try:
+                self.close()
+            except BaseException:
+                pass
+            raise
+
+    @staticmethod
+    def _close_identity(fd):
+        require(type(fd) is int and 2 < fd < 1048576, "KERNEL_PROCESS_FD")
+        info = os.fstat(fd)
+        return info.st_dev, info.st_ino, stat.S_IFMT(info.st_mode)
+
+    def _tick(self):
+        require(type(self) is _KernelProcessView and not self.closed and not self.failed and self.busy
+                and self.pid == os.getpid() and self.thread == threading.get_ident(), "KERNEL_PROCESS_CUSTODY")
+        now = time.monotonic()
+        require(self.last <= now < self.end, "KERNEL_PROCESS_DEADLINE")
+        self.last = now
+        fd, identity = self.pidfd
+        if fd is not None and identity is not None:
+            require(self._close_identity(fd) == identity and not os.get_inheritable(fd)
+                    and select.select([fd], [], [fd], 0) == ([], [], []), "KERNEL_PROCESS_EXITED_OR_REUSED")
+        now = time.monotonic()
+        require(self.last <= now < self.end, "KERNEL_PROCESS_DEADLINE")
+        self.last = now
+
+    def _io(self, function, *args, **kwargs):
+        self._tick()
+        try:
+            return function(*args, **kwargs)
+        finally:
+            self._tick()
+
+    @contextmanager
+    def _phase(self):
+        require(not self.closed and not self.failed and not self.busy, "KERNEL_PROCESS_UNAVAILABLE")
+        self.busy, self.last = True, time.monotonic()
+        self.end = self.last + 2
+        try:
+            self._io(self.roots.check)
+            yield
+            self._io(self.roots.check)
+        except BaseException:
+            self.failed = True
+            raise
+        finally:
+            self.busy = False
+
+    def _open(self, rows, name, parent, directory=True, namespace=False):
+        row = [None, None, None]
+        rows.append(row)
+        flags = os.O_RDONLY | os.O_CLOEXEC | os.O_NONBLOCK
+        flags |= os.O_DIRECTORY if directory else 0
+        flags |= 0 if namespace else os.O_NOFOLLOW
+        self._tick()
+        try:
+            row[0] = os.open(name, flags, dir_fd=parent)
+        finally:
+            self._tick()
+        row[1] = self._io(self._close_identity, row[0])
+        method = (self.roots.native.namespace_identity if namespace else
+                  self.roots.native.directory_identity if directory else self.roots.native.proc_file_identity)
+        row[2] = self._io(method, row[0])
+        if not namespace:
+            proc = self.roots.rows[1][2]
+            require(row[2]["mountId"] == proc["mountId"] and row[2]["filesystem"] == proc["filesystem"],
+                    "KERNEL_PROCESS_PROC_MOUNT")
+        return row[0]
+
+    def _acquire(self, rows):
+        proc = self._open(rows, str(self.target), self.roots.rows[1][0])
+        ns = self._open(rows, "ns", proc)
+        self._open(rows, "attr", proc)
+        task = self._open(rows, "task", proc)
+        if self.role == "SERVER":
+            self._open(rows, str(self.target), task)
+        for index, (name, kind) in enumerate((("user", 0x10000000), ("mnt", 0x20000),
+                                            ("pid", 0x20000000), ("net", 0x40000000))):
+            # The only followed links are these four fixed proc namespace links.
+            before = self._io(os.stat, name, dir_fd=ns, follow_symlinks=False)
+            require(stat.S_ISLNK(before.st_mode) and before.st_dev == rows[1][2]["identity"][0],
+                    "KERNEL_PROCESS_NAMESPACE_LINK")
+            self._open(rows, name, ns, directory=False, namespace=True)
+            after = self._io(os.stat, name, dir_fd=ns, follow_symlinks=False)
+            require(_custody_identity(before) == _custody_identity(after)
+                    and rows[-1][2]["kind"] == kind and rows[-1][2]["identity"][1] == self.pin[3][index],
+                    "KERNEL_PROCESS_NAMESPACE_PIN")
+
+    def _read(self, parent, name, maximum):
+        temporary = []
+        try:
+            fd = self._open(temporary, name, parent, directory=False)
+            chunks, size = [], 0
+            while size <= maximum:
+                chunk = self._io(os.read, fd, min(4096, maximum + 1 - size))
+                require(type(chunk) is bytes, "KERNEL_PROCESS_READ")
+                if not chunk:
+                    break
+                chunks.append(chunk)
+                size += len(chunk)
+            require(size <= maximum, "KERNEL_PROCESS_READ_SIZE")
+            require(self._io(self.roots.native.proc_file_identity, fd) == temporary[0][2],
+                    "KERNEL_PROCESS_FILE_CHANGED")
+            named = self._io(os.stat, name, dir_fd=parent, follow_symlinks=False)
+            require((named.st_dev, named.st_ino, named.st_uid, named.st_gid, named.st_mode) ==
+                    temporary[0][2]["identity"], "KERNEL_PROCESS_FILE_CHANGED")
+            return b"".join(chunks)
+        finally:
+            self._close_rows(temporary)
+
+    def _snapshot(self):
+        proc, attr, task = self.rows[0][0], self.rows[2][0], self.rows[3][0]
+        before = self._read(proc, "stat", 8192)
+        status = self._read(proc, "status", 65536)
+        value = _proc_process_fields(before, status)
+        require(_proc_process_fields(self._read(proc, "stat", 8192), status) == value,
+                "KERNEL_PROCESS_CHANGED")
+        label = self._read(attr, "current", 257)
+        if label.endswith(b"\0"):
+            label = label[:-1]
+        require(label == self.pin[2].encode("ascii") and self._read(proc, "cgroup", 4096) == self.cgroup
+                and value["pid"] == self.target and value["uid"] == (self.pin[0],) * 4
+                and value["gid"] == (self.pin[1],) * 4, "KERNEL_PROCESS_PIN_MISMATCH")
+        tids = []
+        with self._io(os.scandir, task) as entries:
+            for entry in entries:
+                self._tick()
+                require(len(tids) < 4096 and type(entry.name) is str
+                        and re.fullmatch(r"[1-9][0-9]{0,9}", entry.name)
+                        and 0 < int(entry.name) < 2 ** 31, "KERNEL_PROCESS_TASKS")
+                tids.append(int(entry.name))
+        self._tick()
+        require(len(tids) == len(set(tids)) == value["threads"] and self.target in tids,
+                "KERNEL_PROCESS_TASKS")
+        if self.role == "SERVER":
+            require(tids == [self.target] and not self._read(self.rows[4][0], "children", 16384).strip(),
+                    "KERNEL_PROCESS_SERVER_DESCENDANTS")
+        return {**value, "tasks": tuple(sorted(tids))}
+
+    def _compare(self):
+        temporary = []
+        try:
+            self._acquire(temporary)
+            require([row[2] for row in temporary] == [row[2] for row in self.rows], "KERNEL_PROCESS_PATH_CHANGED")
+            require(self._snapshot() == self.original, "KERNEL_PROCESS_CHANGED")
+            for index, (fd, _, expected) in enumerate(self.rows):
+                method = self.roots.native.namespace_identity if index >= (5 if self.role == "SERVER" else 4) else self.roots.native.directory_identity
+                require(self._io(method, fd) == expected, "KERNEL_PROCESS_RETAINED_CHANGED")
+        finally:
+            self._close_rows(temporary)
+
+    def check(self):
+        with self._phase():
+            self._compare()
+
+    def _close_rows(self, rows):
+        failure = None
+        while rows:
+            fd, identity, *_ = rows.pop()
+            if fd is None:
+                continue
+            try:
+                require(identity is None or self._close_identity(fd) == identity, "KERNEL_PROCESS_FD_REUSED")
+                os.close(fd)  # no retry of an uncertain close
+            except BaseException as exc:
+                failure = failure or exc
+        if failure is not None:
+            self.cleanup_failure = self.cleanup_failure or failure
+            raise failure
+
+    def close(self):
+        if not self.closed:
+            self.closed = True
+            rows, self.rows = self.rows, []
+            rows.insert(0, self.pidfd)
+            self.pidfd = [None, None]
+            self._close_rows(rows)
+        if self.cleanup_failure is not None:
+            raise self.cleanup_failure
 
 
 class _Files:

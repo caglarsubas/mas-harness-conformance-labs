@@ -281,6 +281,61 @@ are still required. Reopening detects substitution across observations, not an
 in-between ABA attack; the independent operator's execution fence is mandatory.
 No native root, mount, syscall or host policy is inspected/changed in these tests.
 
+### Retained process and namespace observations — 2026-09-11
+
+Head `c435f7c2574358ce0d5e4d09b2c4f50db0389305` passed all 486 tests,
+zero skips and all eight commands in signed LOCAL activation179 and required
+localhost CI run34585011767 / activation180. Runner43 was retired; zero registered
+runners and zero artifacts were verified. These are the preceding root-custody
+increment's results, not acceptance of the following changes.
+
+The private `_KernelProcessView` retains its own pidfd, numeric proc directory,
+fixed ancestry and four namespace descriptors. It accepts no descriptor, path,
+backend or function selector. SERVER observation must target the current process;
+the future installed qualifier must derive peer PIDs from its actual retained
+kernel-authenticated channel. It checks pidfd liveness/identity/inheritance and
+process/thread ownership before and after bounded I/O, and binds start ticks,
+parent, all four UID/GID values, supplementary groups, capabilities, seccomp,
+namespace PID chains and task identities across the component's lifetime.
+
+Fresh stat/status/label/cgroup/children reads use readonly/no-follow descriptors
+on the same verified proc mount. Proc size/timestamps and CPU/memory counters
+are not stable process identity. The bounded parser handles parentheses and
+newlines in the comm field, rejects duplicate/truncated/overflowing records,
+tracing/dead processes and inconsistent status fields, and requires all four
+credential IDs to match the expected role. SERVER additionally has one thread
+and no children. Only the four fixed ns/{user,mnt,pid,net} magic links may be
+followed; readonly nsfs/type observations and retained inode identities must
+match the expected namespace pins. No setns, ptrace, namespace creation, signal,
+credential, worker execution or policy mutation is used.
+
+The fixed read-only `NS_GET_NSTYPE` interface and proc layouts are grounded in
+[Linux 6.12 nsfs UAPI](https://raw.githubusercontent.com/torvalds/linux/v6.12/include/uapi/linux/nsfs.h)
+and [proc field emission](https://raw.githubusercontent.com/torvalds/linux/v6.12/fs/proc/array.c).
+This is independently authored stdlib code, not imported implementation.
+Each complete construction/check has one two-second budget, including the
+original root-owner checks. PID exit, replaced mounts/paths/namespace FDs,
+late results and changed process fields invalidate the instance without retry.
+Partial resources are closed once; cleanup continues after failures, records
+sticky uncertainty and never closes a detectably recycled descriptor. The
+borrowed original root owner remains separately owned and is never closed here.
+
+Twenty-three new OS-mocked methods exercise the actual process, root and native
+reader methods, including both supported ABI selections and all four role
+cgroup paths. They preserve all 486 prior tests and all 127 accepted files;
+the new full-recipe target is 509 tests. Exact commit/local/CI evidence must be
+recorded externally. No native proc, pidfd, namespace or host policy is used by
+these tests, and no existing server credential/containment gate is enabled.
+
+Expected role data is detached, not authenticated by this component. A matching
+record or successful check grants no qualification. The installed owner must
+still bind the independently signed release/role record, original socket peer,
+boot/kernel identity, active policy epoch, executable/verity/mappings, actual
+cgroup controls/BPF and execution fence before any credential or dispatch.
+These snapshots detect changes across observations, not between-check ABA or
+hostile kernel/operator behavior. Full `_KernelQualification` and its production
+server/observer/broker integration remain unfinished.
+
 PR12 remains DRAFT/unmerged while the native integration below is unfinished.
 The predecessor blocker is resolved; no new operator decision or phase
 completion is claimed.
@@ -338,7 +393,8 @@ probe, live launcher, runtime download or cloud/billable service is authorized.
 | Alpha 2 | MET-REPAIR-016 / CONF-FIX-006 | DONE_SOURCE_GATES_RECORDED | PR115 / PR17; corrected127-file/362-method checkpoint accepted |
 | Alpha 2 | CONF-LIVE-003 checkpoint / kernel byte parsers | LOCAL_AND_CI_PASS_RECORDED | Head1792452 passed448 tests and all8 commands; packet still incomplete |
 | Alpha 2 | CONF-LIVE-003 native read primitives | LOCAL_AND_CI_PASS_RECORDED | Head22de588 passed466 tests and all8 commands |
-| Alpha 2 | CONF-LIVE-003 fixed kernel-root custody | IMPLEMENTED_NOT_ACCEPTED | Twenty OS-mocked regressions; fresh full-recipe evidence required |
+| Alpha 2 | CONF-LIVE-003 fixed kernel-root custody | LOCAL_AND_CI_PASS_RECORDED | Headc435f7c passed486 tests and all8 commands; runner43 retired |
+| Alpha 2 | CONF-LIVE-003 retained process / namespace component | IMPLEMENTED_NOT_ACCEPTED | Twenty-three OS-mocked regressions; fresh full-recipe evidence required |
 | Alpha 2 | CONF-LIVE-003 native inspector / broker / API | ONGOING | Required implementation listed above |
 | Alpha 2 | CONF-LIVE-003 required CI | WAITING | Fresh exact-head localhost evidence required; prior failures retained |
 | Alpha 2 | CONF-LIVE-003 source completion / merge / exact-main | NOT_RUN | Packet is incomplete; no completion claim |
