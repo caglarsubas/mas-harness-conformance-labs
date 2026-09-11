@@ -195,6 +195,11 @@ class _KernelStatfs(ctypes.Structure):
     _fields_ += [("spare", ctypes.c_long * 4)]
 
 
+class _KernelStatx(ctypes.Structure):
+    """An aligned, zero-initialized Linux 6.12 statx result, decoded by offset."""
+    _fields_ = [("words", ctypes.c_uint64 * 32)]
+
+
 class _KernelNativeReads:
     """Fixed read primitives, not a qualification factory or authority handle.
 
@@ -289,6 +294,50 @@ class _KernelNativeReads:
             self._same(fd, identity)
             return value
 
+    def directory_identity(self, fd):
+        """Observe a readable directory and its non-recycled mount ID, not trust.
+
+        procfs directory counters/timestamps can change with process churn. Only
+        stable inode/owner/mode, filesystem identity and mount ID are returned.
+        A later fixed owner must validate namespace and canonical ancestry.
+        """
+        with self._phase():
+            info, _ = self._descriptor(fd)
+            require(stat.S_ISDIR(info.st_mode), "KERNEL_DIRECTORY_REQUIRED")
+            identity = (info.st_dev, info.st_ino, info.st_uid, info.st_gid, info.st_mode)
+            require(ctypes.sizeof(_KernelStatx) == 256 and ctypes.alignment(_KernelStatx) == 8,
+                    "KERNEL_STATX_ABI")
+            call = self.lib.statx
+            call.argtypes = (ctypes.c_int, ctypes.c_char_p, ctypes.c_int,
+                             ctypes.c_uint, ctypes.POINTER(_KernelStatx))
+            call.restype = ctypes.c_int
+            output = _KernelStatx()
+            # Empty retained fd only; no path lookup, automount or sync fallback.
+            required = 0x411b  # TYPE | MODE | UID | GID | INO | MNT_ID_UNIQUE
+            try:
+                result = call(fd, b"", 0x1900, required, ctypes.byref(output))
+            finally:
+                self._tick()
+            require(type(result) is int and result == 0, "KERNEL_MOUNT_ID_UNAVAILABLE")
+            raw = bytes(output)
+            mask = struct.unpack_from("<I", raw)[0]
+            uid, gid, mode, reserved = struct.unpack_from("<IIHH", raw, 20)
+            inode = struct.unpack_from("<Q", raw, 32)[0]
+            major, minor = struct.unpack_from("<II", raw, 136)
+            mount_id = struct.unpack_from("<Q", raw, 144)[0]
+            require(mask & required == required and not mask & ~0x1ffff
+                    and reserved == 0 and raw[180:] == b"\0" * 76 and mount_id > 0
+                    and all(raw[offset:offset + 4] == b"\0" * 4 for offset in (76, 92, 108, 124)),
+                    "KERNEL_STATX_LAYOUT")
+            require((uid, gid, mode, inode, major, minor) ==
+                    (info.st_uid, info.st_gid, info.st_mode, info.st_ino,
+                     os.major(info.st_dev), os.minor(info.st_dev)), "KERNEL_STATX_IDENTITY")
+            filesystem = self._filesystem(fd)
+            after, _ = self._descriptor(fd)
+            require((after.st_dev, after.st_ino, after.st_uid, after.st_gid, after.st_mode) == identity,
+                    "KERNEL_DIRECTORY_CHANGED")
+            return dict(identity=identity, mountId=mount_id, filesystem=filesystem)
+
     def measure_verity(self, fd):
         with self._phase():
             info, identity = self._descriptor(fd)
@@ -361,6 +410,149 @@ class _KernelNativeReads:
     def close(self):
         # No caller-owned fd is closed and no process registration is undone.
         self.closed = True
+
+
+class _KernelRootViews:
+    """Own only the fixed no-follow kernel-view roots and their original fds.
+
+    This is a custody component, never a qualification handle. Initial views
+    still require the installed factory's signed namespace/process authority.
+    Reopening every component detects replacements, including same-inode bind
+    mounts. Checks do not replace the independent operator's execution fence.
+    """
+    def __init__(self):
+        self.native = _KernelNativeReads()
+        self.pid, self.thread = os.getpid(), threading.get_ident()
+        self.rows = []
+        self.closed = self.failed = self.busy = False
+        self.cleanup_failure = None
+        try:
+            with self._phase():
+                self._acquire(self.rows)
+            self.check()
+        except BaseException:
+            try:
+                self.close()
+            except BaseException:
+                pass  # retain cleanup_failure; construction never grants custody
+            raise
+
+    def _tick(self):
+        require(type(self) is _KernelRootViews and not self.closed and not self.failed and self.busy
+                and self.pid == os.getpid() and self.thread == threading.get_ident(), "KERNEL_ROOT_CUSTODY")
+        now = time.monotonic()
+        require(self.last <= now < self.end, "KERNEL_ROOT_DEADLINE")
+        self.last = now
+
+    @contextmanager
+    def _phase(self):
+        require(not self.closed and not self.failed and not self.busy, "KERNEL_ROOT_UNAVAILABLE")
+        self.busy = True
+        self.last = time.monotonic()
+        self.end = self.last + 2
+        try:
+            self._tick()
+            yield
+            self._tick()
+        except BaseException:
+            self.failed = True
+            raise
+        finally:
+            self.busy = False
+
+    def _acquire(self, rows):
+        # Parent indexes are fixed topological ancestry, never caller paths.
+        layout = (("/", None, None), ("proc", 0, 0x9fa0), ("sys", 0, 0x62656572),
+                  ("kernel", 2, 0x62656572), ("fs", 2, 0x62656572),
+                  ("selinux", 4, 0xf97cff8c), ("cgroup", 4, 0x63677270))
+        for name, parent_index, magic in layout:
+            self._tick()
+            parent = None if parent_index is None else rows[parent_index][0]
+            row = [None, None, None]
+            rows.append(row)
+            try:
+                row[0] = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW |
+                                os.O_CLOEXEC | os.O_NONBLOCK, dir_fd=parent)
+            finally:
+                self._tick()
+            # Capture close identity before any later validation can fail.
+            try:
+                info = os.fstat(row[0])
+                row[1] = (info.st_dev, info.st_ino, stat.S_IFMT(info.st_mode))
+            finally:
+                self._tick()
+            try:
+                row[2] = self.native.directory_identity(row[0])
+            finally:
+                self._tick()
+            observed = row[2]
+            require(observed["identity"][2:4] == (0, 0)
+                    and not stat.S_IMODE(observed["identity"][4]) & 0o022,
+                    "KERNEL_ROOT_OWNER_MODE")
+            require(magic is None or observed["filesystem"]["kind"] == magic, "KERNEL_ROOT_FILESYSTEM")
+        self._relationships(rows)
+
+    def _relationships(self, rows):
+        require(len(rows) == 7, "KERNEL_ROOT_INVENTORY")
+        # /sys/kernel and /sys/fs must remain children on the original sysfs
+        # mount, not separately bind-mounted views of the same filesystem.
+        for index in (3, 4):
+            require(rows[index][2]["mountId"] == rows[2][2]["mountId"]
+                    and rows[index][2]["filesystem"] == rows[2][2]["filesystem"], "KERNEL_SYSFS_SUBMOUNT")
+        mounts = [rows[index][2]["mountId"] for index in (0, 1, 2, 5, 6)]
+        require(len(set(mounts)) == len(mounts), "KERNEL_ROOT_MOUNT_ALIAS")
+
+    def _retained(self):
+        for fd, _, expected in self.rows:
+            self._tick()
+            try:
+                observed = self.native.directory_identity(fd)
+            finally:
+                self._tick()
+            require(observed == expected, "KERNEL_ROOT_CHANGED")
+
+    def check(self):
+        with self._phase():
+            temporary = []
+            try:
+                self._retained()
+                self._acquire(temporary)
+                require([row[2] for row in temporary] == [row[2] for row in self.rows],
+                        "KERNEL_ROOT_PATH_REPLACED")
+                self._retained()
+            finally:
+                self._close_rows(temporary)
+
+    def _close_rows(self, rows):
+        failure = None
+        while rows:
+            fd, identity, _ = rows.pop()
+            if fd is None:
+                continue
+            try:
+                if identity is not None:
+                    current = os.fstat(fd)
+                    require((current.st_dev, current.st_ino, stat.S_IFMT(current.st_mode)) == identity,
+                            "KERNEL_ROOT_FD_REUSED")
+                os.close(fd)  # no retry: an error may already have released it
+            except BaseException as exc:
+                failure = failure or exc
+        if failure is not None:
+            self.cleanup_failure = self.cleanup_failure or failure
+            raise failure
+
+    def close(self):
+        if self.closed:
+            if self.cleanup_failure is not None:
+                raise self.cleanup_failure
+            return
+        self.closed = True
+        try:
+            self._close_rows(self.rows)
+        finally:
+            self.native.close()
+        if self.cleanup_failure is not None:
+            raise self.cleanup_failure
 
 
 def _installed_entry():

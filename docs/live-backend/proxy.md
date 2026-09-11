@@ -241,6 +241,46 @@ integration below remain required. No server gate or credential path is enabled
 by these primitives. Tests mock every OS entry point and perform no native read,
 policy registration, credential access, socket operation or installation.
 
+### Fixed kernel-root custody — 2026-09-11
+
+Corrected head `22de588ac3000502a87e52da801626f3e929ebca` passed all 466 tests,
+zero skips and all eight commands in signed LOCAL activation177 and required
+localhost CI run34575890279 / activation178. Runner42 was retired with zero
+registered runners and zero uploaded artifacts. This records that prior interim
+increment only; the changes below need their own exact-commit evidence.
+
+The new private `_KernelRootViews` owns only the fixed `/proc`, `/sys/kernel`,
+`/sys/fs/selinux`, `/sys/fs/cgroup` roots and their ancestry. Its constructor has
+no path, descriptor or backend arguments. Every open uses readonly, directory,
+no-follow, close-on-exec and nonblocking flags. Checks retain original descriptors,
+reopen the complete fixed ancestry, compare both views, then recheck originals.
+They reject path/inode/owner/mode/filesystem drift, separate bind mounts under
+the sysfs ancestry and mount replacement even when inode/filesystem match.
+
+The fixed native read uses an aligned 256-byte
+[Linux 6.12 statx layout](https://raw.githubusercontent.com/torvalds/linux/v6.12/include/uapi/linux/stat.h),
+requests `STATX_MNT_ID_UNIQUE` on an empty retained descriptor path, and requires
+the returned mask to prove support. Missing symbols/permissions, fallback to
+recycled mount IDs, unknown fields and identity mismatch fail closed. Dynamic
+directory link counts, size and timestamps are not stable procfs custody and
+are deliberately excluded; owner/mode, device/inode, filesystem and mount IDs
+remain pinned. This is independently authored stdlib code, not imported source.
+
+Each acquire/check phase has one two-second deadline across all children, not a
+renewed per-child budget. Partial acquisition retains close ownership immediately;
+cleanup continues after errors, does not retry an uncertain close or close a
+detectably recycled descriptor, and preserves cleanup failure on later close.
+Twenty new OS-mocked tests exercise the real root owner and native read methods.
+All 466 prior identities and 127 accepted source files remain; target 486 tests.
+The fixture, signatures, locks, predecessor tests and server gates are unchanged.
+
+These observations do not establish initial namespace trust. Signed process and
+mount-namespace binding, fresh active-policy reads under the same boot/status
+epoch, PID/code/cgroup/BPF custody and the full installed qualification factory
+are still required. Reopening detects substitution across observations, not an
+in-between ABA attack; the independent operator's execution fence is mandatory.
+No native root, mount, syscall or host policy is inspected/changed in these tests.
+
 PR12 remains DRAFT/unmerged while the native integration below is unfinished.
 The predecessor blocker is resolved; no new operator decision or phase
 completion is claimed.
@@ -297,7 +337,8 @@ probe, live launcher, runtime download or cloud/billable service is authorized.
 | Alpha 2 | CONF-LIVE-003 checkpoint / transport | IMPLEMENTED_NOT_ACCEPTED |13 new methods pass in425-method replay; one inherited stage-scalar failure |
 | Alpha 2 | MET-REPAIR-016 / CONF-FIX-006 | DONE_SOURCE_GATES_RECORDED | PR115 / PR17; corrected127-file/362-method checkpoint accepted |
 | Alpha 2 | CONF-LIVE-003 checkpoint / kernel byte parsers | LOCAL_AND_CI_PASS_RECORDED | Head1792452 passed448 tests and all8 commands; packet still incomplete |
-| Alpha 2 | CONF-LIVE-003 native read primitives | IMPLEMENTED_NOT_ACCEPTED | Eighteen OS-mocked regressions; fresh exact full-recipe evidence required |
+| Alpha 2 | CONF-LIVE-003 native read primitives | LOCAL_AND_CI_PASS_RECORDED | Head22de588 passed466 tests and all8 commands |
+| Alpha 2 | CONF-LIVE-003 fixed kernel-root custody | IMPLEMENTED_NOT_ACCEPTED | Twenty OS-mocked regressions; fresh full-recipe evidence required |
 | Alpha 2 | CONF-LIVE-003 native inspector / broker / API | ONGOING | Required implementation listed above |
 | Alpha 2 | CONF-LIVE-003 required CI | WAITING | Fresh exact-head localhost evidence required; prior failures retained |
 | Alpha 2 | CONF-LIVE-003 source completion / merge / exact-main | NOT_RUN | Packet is incomplete; no completion claim |

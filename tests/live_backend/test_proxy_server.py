@@ -516,6 +516,340 @@ class KernelNativeReadTests(unittest.TestCase):
                 self.assertEqual(self.maps[-1].closes, 1)
 
 
+class KernelRootCustodyTests(unittest.TestCase):
+    """Fixed root owner and native statx/fstatfs methods; only OS edges mocked."""
+    def setUp(self):
+        self.stack = ExitStack()
+        self.addCleanup(self.stack.close)
+        self.now = 100.0
+        self.handles, self.closed, self.opens = {}, [], []
+        self.next_fd = 71
+        self.nodes = {}
+        paths = ("/", "/proc", "/sys", "/sys/kernel", "/sys/fs", "/sys/fs/selinux", "/sys/fs/cgroup")
+        for index, path in enumerate(paths):
+            group = (0, 1, 2, 2, 2, 3, 4)[index]
+            self.nodes[path] = dict(st_dev=server.os.makedev(0, 10 + group), st_ino=20 + index,
+                st_uid=0, st_gid=0, st_mode=stat.S_IFDIR | 0o755, st_nlink=2, st_size=0,
+                st_mtime_ns=1, st_ctime_ns=1, mountId=101 + group,
+                magic=(0xef53, 0x9fa0, 0x62656572, 0xf97cff8c, 0x63677270)[group])
+        self.lib = SimpleNamespace(statx=Mock(side_effect=self.statx),
+            fstatfs=Mock(side_effect=self.statfs), syscall=Mock(side_effect=AssertionError("unexpected syscall")))
+        def patched(obj, name, **kwargs):
+            return self.stack.enter_context(patch.object(obj, name, **kwargs))
+        patched(server.sys, "platform", new="linux")
+        patched(server.sys, "byteorder", new="little")
+        patched(server.os, "uname", return_value=SimpleNamespace(machine="x86_64"))
+        patched(server.os, "getpid", return_value=411)
+        patched(server.threading, "get_ident", return_value=721)
+        patched(server.time, "monotonic", side_effect=lambda: self.now)
+        patched(server.ctypes, "CDLL", return_value=self.lib)
+        self.opened = patched(server.os, "open", side_effect=self.open_fd)
+        self.fstat = patched(server.os, "fstat", side_effect=self.stat_fd)
+        self.close_fd_mock = patched(server.os, "close", side_effect=self.close_fd)
+        patched(server.os, "get_inheritable", return_value=False)
+        patched(server.fcntl, "fcntl", return_value=server.os.O_RDONLY)
+        self.ioctl = patched(server.fcntl, "ioctl", side_effect=AssertionError("unexpected ioctl"))
+        self.mapper = patched(server.mmap, "mmap", side_effect=AssertionError("unexpected mapping"))
+        patched(server.socket, "socket", side_effect=AssertionError("unexpected network"))
+
+    def open_fd(self, name, flags, *, dir_fd):
+        expected = server.os.O_RDONLY | server.os.O_DIRECTORY | server.os.O_NOFOLLOW | server.os.O_CLOEXEC | server.os.O_NONBLOCK
+        self.assertEqual(flags, expected)
+        if dir_fd is None:
+            self.assertEqual(name, "/")
+            path = "/"
+        else:
+            self.assertNotIn("/", name)
+            parent = self.handles[dir_fd][0]
+            path = parent.rstrip("/") + "/" + name
+        self.assertIn(path, self.nodes)
+        fd, self.next_fd = self.next_fd, self.next_fd + 1
+        # Like retained descriptors, this row does not follow later path replacement.
+        self.handles[fd] = (path, self.nodes[path])
+        self.opens.append((path, fd, dir_fd))
+        return fd
+
+    def stat_fd(self, fd):
+        node = self.handles[fd][1]
+        return SimpleNamespace(**{key: value for key, value in node.items() if key.startswith("st_")})
+
+    def statfs(self, fd, pointer):
+        node, output = self.handles[fd.value][1], pointer._obj
+        self.assertEqual(bytes(output), b"\0" * 120)
+        output.kind, output.block_size, output.name_length, output.flags = node["magic"], 4096, 255, 1
+        output.fsid[:] = (node["magic"] & 0x7fffffff, 1)
+        return 0
+
+    def statx(self, fd, path, flags, mask, pointer):
+        self.assertEqual((path, flags, mask), (b"", 0x1900, 0x411b))
+        self.assertEqual(bytes(pointer._obj), b"\0" * 256)
+        node = self.handles[fd][1]
+        raw = bytearray(256)
+        server.struct.pack_into("<I", raw, 0, 0x47ff)
+        server.struct.pack_into("<IIH", raw, 20, node["st_uid"], node["st_gid"], node["st_mode"])
+        server.struct.pack_into("<Q", raw, 32, node["st_ino"])
+        server.struct.pack_into("<IIQ", raw, 136, server.os.major(node["st_dev"]),
+                                server.os.minor(node["st_dev"]), node["mountId"])
+        pointer._obj.words[:] = server.struct.unpack("<32Q", raw)
+        return 0
+
+    def close_fd(self, fd):
+        self.assertIn(fd, self.handles, "double close or unowned descriptor")
+        self.closed.append(fd)
+        del self.handles[fd]
+
+    def owner(self):
+        value = server._KernelRootViews()
+        self.addCleanup(value.close)
+        return value
+
+    def test_statx_fixed_layout_empty_path_and_unique_mount_identity(self):
+        fd = self.open_fd("/", server.os.O_DIRECTORY | server.os.O_NOFOLLOW | server.os.O_CLOEXEC | server.os.O_NONBLOCK, dir_fd=None)
+        for machine in ("x86_64", "aarch64"):
+            with self.subTest(machine=machine), patch.object(server.os, "uname", return_value=SimpleNamespace(machine=machine)):
+                reader = server._KernelNativeReads()
+                observed = reader.directory_identity(fd)
+                self.assertEqual(observed["mountId"], 101)
+                self.assertEqual(observed["identity"][1], 20)
+                self.assertEqual(server.ctypes.sizeof(server._KernelStatx), 256)
+                self.assertEqual(server.ctypes.alignment(server._KernelStatx), 8)
+                reader.close()
+        self.lib.syscall.assert_not_called()
+        self.ioctl.assert_not_called()
+        self.mapper.assert_not_called()
+        self.close_fd(fd)
+
+    def test_statx_missing_symbol_or_unique_id_never_falls_back(self):
+        fd = self.open_fd("/", server.os.O_DIRECTORY | server.os.O_NOFOLLOW | server.os.O_CLOEXEC | server.os.O_NONBLOCK, dir_fd=None)
+        original = self.lib.statx
+        del self.lib.statx
+        with self.assertRaises(AttributeError):
+            server._KernelNativeReads().directory_identity(fd)
+        self.lib.statx = original
+        for mask in (0, 0x17ff, 0x47fe, 0x4000):
+            def missing(*args):
+                self.statx(*args)
+                raw = bytearray(bytes(args[-1]._obj))
+                server.struct.pack_into("<I", raw, 0, mask)
+                args[-1]._obj.words[:] = server.struct.unpack("<32Q", raw)
+                return 0
+            with self.subTest(mask=mask), patch.object(self.lib, "statx", Mock(side_effect=missing)), self.assertRaises(ConformanceError):
+                server._KernelNativeReads().directory_identity(fd)
+        self.close_fd(fd)
+
+    def test_statx_rejects_errors_reserved_fields_and_changed_identity(self):
+        fd = self.open_fd("/", server.os.O_DIRECTORY | server.os.O_NOFOLLOW | server.os.O_CLOEXEC | server.os.O_NONBLOCK, dir_fd=None)
+        for offset in (0, 20, 24, 28, 30, 32, 76, 92, 108, 124, 136, 140, 180, 255):
+            def changed(*args):
+                self.statx(*args)
+                raw = bytearray(bytes(args[-1]._obj))
+                raw[offset] ^= 0x80 if offset == 0 else 1
+                if offset == 0:
+                    raw[3] |= 0x80
+                args[-1]._obj.words[:] = server.struct.unpack("<32Q", raw)
+                return 0
+            with self.subTest(offset=offset), patch.object(self.lib, "statx", Mock(side_effect=changed)), self.assertRaises(ConformanceError):
+                server._KernelNativeReads().directory_identity(fd)
+        for result in (-1, 1, True):
+            with patch.object(self.lib, "statx", Mock(return_value=result)), self.assertRaises(ConformanceError):
+                server._KernelNativeReads().directory_identity(fd)
+        with patch.object(self.lib, "statx", Mock(side_effect=PermissionError("unit"))), self.assertRaises(PermissionError):
+            server._KernelNativeReads().directory_identity(fd)
+        self.close_fd(fd)
+
+    def test_directory_changes_after_statx_and_late_reads_are_refused(self):
+        fd = self.open_fd("/", server.os.O_DIRECTORY | server.os.O_NOFOLLOW | server.os.O_CLOEXEC | server.os.O_NONBLOCK, dir_fd=None)
+        for change in ("inode", "deadline"):
+            def mutate(*args):
+                self.statx(*args)
+                if change == "inode":
+                    self.nodes["/"]["st_ino"] += 1
+                else:
+                    self.now += 2
+                return 0
+            with self.subTest(change=change), patch.object(self.lib, "statx", Mock(side_effect=mutate)), self.assertRaises(ConformanceError):
+                server._KernelNativeReads().directory_identity(fd)
+        self.close_fd(fd)
+
+    def test_fixed_roots_retain_seven_fds_and_reopen_only_fixed_ancestry(self):
+        views = self.owner()
+        self.assertEqual(len(views.rows), 7)
+        self.assertEqual(len(self.handles), 7)
+        self.assertEqual(len(self.opens), 14)
+        self.assertIsNone(views.check())
+        self.assertEqual(len(self.handles), 7)
+        self.assertEqual(len(self.opens), 21)
+        self.assertEqual([path for path, _, _ in self.opens[:7]], list(self.nodes))
+        views.close()
+        self.assertFalse(self.handles)
+        self.assertEqual(len(self.closed), 21)
+        views.close()
+        self.assertEqual(len(self.closed), 21)
+
+    def test_root_factory_has_no_path_backend_or_descriptor_selector(self):
+        for kwargs in ({"root": "/tmp"}, {"backend": Mock()}, {"fd": 71}, {"context": {}}, {"qualified": True}):
+            with self.subTest(kwargs=kwargs), self.assertRaises(TypeError):
+                server._KernelRootViews(**kwargs)
+        self.opened.assert_not_called()
+
+    def test_normal_directory_churn_is_not_identity_drift(self):
+        views = self.owner()
+        for node in self.nodes.values():
+            node.update(st_nlink=99, st_size=8192, st_mtime_ns=99, st_ctime_ns=99)
+        self.assertIsNone(views.check())
+        self.assertEqual(len(self.handles), 7)
+
+    def test_same_inode_bind_replacement_is_caught_by_unique_mount_id(self):
+        views = self.owner()
+        prior = self.nodes["/proc"]
+        self.nodes["/proc"] = {**prior, "mountId": prior["mountId"] + 100}
+        with self.assertRaisesRegex(ConformanceError, "KERNEL_ROOT_PATH_REPLACED"):
+            views.check()
+        self.assertTrue(views.failed)
+        self.assertEqual(len(self.handles), 7)
+        before = self.opened.call_count
+        with self.assertRaises(ConformanceError):
+            views.check()
+        self.assertEqual(self.opened.call_count, before)
+
+    def test_root_path_inode_replacement_is_not_followed_through_old_parent(self):
+        views = self.owner()
+        self.nodes["/"] = {**self.nodes["/"], "st_ino": 999}
+        with self.assertRaisesRegex(ConformanceError, "KERNEL_ROOT_PATH_REPLACED"):
+            views.check()
+        self.assertEqual(len(self.handles), 7)
+
+    def test_retained_mount_change_is_refused_before_any_new_open(self):
+        views = self.owner()
+        self.nodes["/sys/fs/cgroup"]["mountId"] += 100
+        before = self.opened.call_count
+        with self.assertRaisesRegex(ConformanceError, "KERNEL_ROOT_CHANGED"):
+            views.check()
+        self.assertEqual(self.opened.call_count, before)
+
+    def test_bootstrap_refuses_wrong_filesystem_owner_and_writable_ancestry(self):
+        for path, key, value in (("/proc", "magic", 0xef53), ("/sys", "st_uid", 9),
+                                 ("/sys/fs", "st_gid", 9), ("/sys/fs/selinux", "st_mode", stat.S_IFDIR | 0o777)):
+            original = self.nodes[path][key]
+            self.nodes[path][key] = value
+            with self.subTest(path=path, key=key), self.assertRaises(ConformanceError):
+                server._KernelRootViews()
+            self.nodes[path][key] = original
+            self.assertFalse(self.handles)
+
+    def test_sysfs_child_bind_mounts_and_root_mount_aliases_are_refused(self):
+        for path, target in (("/sys/kernel", 999), ("/sys/fs", 999), ("/sys/fs/cgroup", 104)):
+            original = self.nodes[path]["mountId"]
+            self.nodes[path]["mountId"] = target
+            with self.subTest(path=path), self.assertRaises(ConformanceError):
+                server._KernelRootViews()
+            self.nodes[path]["mountId"] = original
+            self.assertFalse(self.handles)
+
+    def test_symlink_or_missing_root_refusal_closes_only_acquired_descriptors(self):
+        for fail_path in self.nodes:
+            def refuse(name, flags, *, dir_fd):
+                parent = "" if dir_fd is None else self.handles[dir_fd][0].rstrip("/")
+                path = "/" if dir_fd is None else parent + "/" + name
+                if path == fail_path:
+                    raise OSError("symlink or unavailable")
+                return self.open_fd(name, flags, dir_fd=dir_fd)
+            with self.subTest(path=fail_path), patch.object(server.os, "open", Mock(side_effect=refuse)), self.assertRaises(OSError):
+                server._KernelRootViews()
+            self.assertFalse(self.handles)
+
+    def test_failure_before_fstat_still_retains_close_ownership(self):
+        with patch.object(server.os, "fstat", Mock(side_effect=OSError("unavailable"))), self.assertRaises(OSError):
+            server._KernelRootViews()
+        self.assertFalse(self.handles)
+        self.assertEqual(len(self.closed), 1)
+
+    def test_failed_temporary_acquisition_keeps_original_roots_for_close(self):
+        views = self.owner()
+        original_fds = set(self.handles)
+        def refuse(name, flags, *, dir_fd):
+            if name == "selinux":
+                raise PermissionError("unit")
+            return self.open_fd(name, flags, dir_fd=dir_fd)
+        with patch.object(server.os, "open", Mock(side_effect=refuse)), self.assertRaises(PermissionError):
+            views.check()
+        self.assertEqual(set(self.handles), original_fds)
+        views.close()
+        self.assertFalse(self.handles)
+
+    def test_cleanup_continues_after_error_and_never_retries_released_fd(self):
+        views = server._KernelRootViews()
+        original = set(self.handles)
+        fail = views.rows[-1][0]
+        def fail_once(fd):
+            self.close_fd(fd)
+            if fd == fail:
+                raise OSError("released but reported failure")
+        with patch.object(server.os, "close", Mock(side_effect=fail_once)), self.assertRaises(OSError):
+            views.close()
+        self.assertFalse(self.handles)
+        self.assertTrue(original <= set(self.closed))
+        before = len(self.closed)
+        with self.assertRaises(OSError):
+            views.close()
+        self.assertEqual(len(self.closed), before)
+
+    def test_recycled_descriptor_is_not_closed_and_other_roots_are_retired(self):
+        views = server._KernelRootViews()
+        fd = views.rows[-1][0]
+        path, original = self.handles[fd]
+        self.handles[fd] = (path, {**original, "st_ino": 999})
+        with self.assertRaisesRegex(ConformanceError, "KERNEL_ROOT_FD_REUSED"):
+            views.close()
+        self.assertEqual(set(self.handles), {fd})
+        self.assertNotIn(fd, self.closed)
+        with self.assertRaises(ConformanceError):
+            views.close()
+
+    def test_temporary_cleanup_failure_remains_sticky_after_originals_close(self):
+        views = server._KernelRootViews()
+        originals = set(self.handles)
+        def fail_temporary(fd):
+            self.close_fd(fd)
+            if fd not in originals:
+                raise OSError("temporary cleanup uncertainty")
+        with patch.object(server.os, "close", Mock(side_effect=fail_temporary)), self.assertRaises(OSError):
+            views.check()
+        self.assertEqual(set(self.handles), originals)
+        with self.assertRaises(OSError):
+            views.close()
+        self.assertFalse(self.handles)
+        before = len(self.closed)
+        with self.assertRaises(OSError):
+            views.close()
+        self.assertEqual(len(self.closed), before)
+
+    def test_pid_thread_clock_and_closed_custody_refuse_reopen(self):
+        for obj, name, value in ((server.os, "getpid", 999), (server.threading, "get_ident", 999)):
+            views = self.owner()
+            before = self.opened.call_count
+            with patch.object(obj, name, return_value=value), self.assertRaises(ConformanceError):
+                views.check()
+            self.assertEqual(self.opened.call_count, before)
+            views.close()
+        views = self.owner()
+        with patch.object(server.time, "monotonic", side_effect=[100, 99]), self.assertRaises(ConformanceError):
+            views.check()
+        views.close()
+        with self.assertRaises(ConformanceError):
+            views.check()
+
+    def test_root_acquisition_has_one_deadline_not_one_per_child(self):
+        def slow(name, flags, *, dir_fd):
+            result = self.open_fd(name, flags, dir_fd=dir_fd)
+            self.now += 0.5
+            return result
+        with patch.object(server.os, "open", Mock(side_effect=slow)), self.assertRaises(ConformanceError):
+            server._KernelRootViews()
+        self.assertEqual(len(self.opens), 4)
+        self.assertFalse(self.handles)
+
+
 class ProxyQualificationTests(unittest.TestCase):
     def test_four_architecture_resource_profiles_and_sixteen_captures_are_data_only(self):
         self.assertEqual(len(VECTORS["qualification"]["positive"]), 4)
