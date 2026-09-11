@@ -325,14 +325,14 @@ class KernelNativeReadTests(unittest.TestCase):
                     self.fresh().filesystem(71)
                 self.assertTrue(self.reader.failed)
         for result in (-1, 1):
-            with patch.object(self.lib.fstatfs, "side_effect", None), patch.object(self.lib.fstatfs, "return_value", result):
+            with patch.object(self.lib, "fstatfs", Mock(return_value=result)):
                 with self.assertRaises(ConformanceError):
                     self.fresh().filesystem(71)
         def spare(fd, pointer):
             self.filesystem(fd, pointer)
             pointer._obj.spare[3] = 1
             return 0
-        with patch.object(self.lib.fstatfs, "side_effect", spare), self.assertRaises(ConformanceError):
+        with patch.object(self.lib, "fstatfs", Mock(side_effect=spare)), self.assertRaises(ConformanceError):
             self.fresh().filesystem(71)
 
     def test_descriptor_type_range_access_and_inheritance_before_native_reads(self):
@@ -384,16 +384,16 @@ class KernelNativeReadTests(unittest.TestCase):
 
     def test_verity_errors_and_wrong_measurement_never_fallback_or_enable(self):
         for result in (-1, 1, b"digest", True):
-            with self.subTest(result=result), patch.object(self.ioctl, "side_effect", None), patch.object(self.ioctl, "return_value", result):
+            with self.subTest(result=result), patch.object(server.fcntl, "ioctl", Mock(return_value=result)):
                 with self.assertRaises(ConformanceError):
                     self.fresh().measure_verity(71)
         for raw in (bytes.fromhex("02002000") + b"v" * 32, bytes.fromhex("01004000") + b"v" * 32):
             def wrong(fd, command, output, mutate):
                 output[:] = raw
                 return 0
-            with patch.object(self.ioctl, "side_effect", wrong), self.assertRaises(ConformanceError):
+            with patch.object(server.fcntl, "ioctl", Mock(side_effect=wrong)), self.assertRaises(ConformanceError):
                 self.fresh().measure_verity(71)
-        with patch.object(self.ioctl, "side_effect", PermissionError("unit")), self.assertRaises(PermissionError):
+        with patch.object(server.fcntl, "ioctl", Mock(side_effect=PermissionError("unit"))), self.assertRaises(PermissionError):
             self.fresh().measure_verity(71)
         self.assertTrue(self.reader.failed)
         self.opened.assert_not_called()
@@ -407,7 +407,7 @@ class KernelNativeReadTests(unittest.TestCase):
                 else:
                     self.now += 2
                 return result
-            with self.subTest(change=change), patch.object(self.ioctl, "side_effect", mutated):
+            with self.subTest(change=change), patch.object(server.fcntl, "ioctl", Mock(side_effect=mutated)):
                 with self.assertRaises(ConformanceError):
                     self.fresh().measure_verity(71)
 
@@ -454,30 +454,30 @@ class KernelNativeReadTests(unittest.TestCase):
             if command.value == 8:
                 self.raw = server.struct.pack("<5I", 1, 4, 1, 10, 1)
             return result
-        with patch.object(self.lib.syscall, "side_effect", change), self.assertRaises(ConformanceError):
+        with patch.object(self.lib, "syscall", Mock(side_effect=change)), self.assertRaises(ConformanceError):
             self.fresh().status_epoch(71)
         self.assertEqual(self.maps[-1].closes, 1)
 
     def test_private_barrier_missing_permissions_and_commands_poison_reader(self):
         for responses in ([0], [8], [-1], [24, -1], [24, 1], [24, 0, -1], [24, 0, 1]):
-            with self.subTest(responses=responses), patch.object(self.lib.syscall, "side_effect", responses):
+            with self.subTest(responses=responses), patch.object(self.lib, "syscall", Mock(side_effect=responses)):
                 with self.assertRaises(ConformanceError):
                     self.fresh().status_epoch(71)
                 self.assertTrue(self.reader.failed)
                 self.assertEqual(self.maps[-1].closes, 1)
-        with patch.object(self.lib.syscall, "side_effect", OSError("unit")), self.assertRaises(OSError):
+        with patch.object(self.lib, "syscall", Mock(side_effect=OSError("unit"))), self.assertRaises(OSError):
             self.fresh().status_epoch(71)
         self.assertEqual(self.maps[-1].closes, 1)
 
     def test_status_mapping_partial_failure_and_close_failure_are_not_retried(self):
-        with patch.object(self.mapper, "side_effect", OSError("unit")), self.assertRaises(OSError):
+        with patch.object(server.mmap, "mmap", Mock(side_effect=OSError("unit"))), self.assertRaises(OSError):
             self.reader.status_epoch(71)
         self.assertEqual(self.maps, [])
         def cannot_close(*args, **kwargs):
             result = self.mapping(*args, **kwargs)
             result.close = Mock(side_effect=OSError("unit"))
             return result
-        with patch.object(self.mapper, "side_effect", cannot_close), self.assertRaises(OSError):
+        with patch.object(server.mmap, "mmap", Mock(side_effect=cannot_close)), self.assertRaises(OSError):
             self.fresh().status_epoch(71)
         self.maps[-1].close.assert_called_once()
         self.assertTrue(self.reader.failed)
@@ -510,7 +510,7 @@ class KernelNativeReadTests(unittest.TestCase):
                     else:
                         self.now += 2
                 return result
-            with self.subTest(change=change), patch.object(self.lib.syscall, "side_effect", mutate):
+            with self.subTest(change=change), patch.object(self.lib, "syscall", Mock(side_effect=mutate)):
                 with self.assertRaises(ConformanceError):
                     self.fresh().status_epoch(71)
                 self.assertEqual(self.maps[-1].closes, 1)

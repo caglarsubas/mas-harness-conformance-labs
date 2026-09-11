@@ -225,6 +225,14 @@ ABI selections, refusing missing permissions, changed epochs/FDs, late results
 and partial mapping/cleanup failures. All 448 prior tests remain; the new target
 is 466 methods. Full exact-commit evidence is retained externally after replay.
 
+The first full replay of `7a5e489` found 16 error reports in the new test mock
+cleanup: patching Mock's side_effect/return_value properties repeatedly made
+unittest.mock delete descriptor attributes on restoration. The tests now replace
+the mocked OS/library function on its owning module/object instead. Runtime
+primitives, all test identities/assertions, predecessor source, commands and
+limits are unchanged. The failed activation176/log remains external history;
+the corrected commit requires a fresh full eight-command replay.
+
 This is still only an inspector component. A matching filesystem magic or status
 epoch is not qualification. Canonical root/mount/namespace ancestry, retained
 peer and code ownership, fresh active-policy reads under the same boot/epoch,
