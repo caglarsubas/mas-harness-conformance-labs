@@ -1,6 +1,6 @@
 # CONF-LIVE-003 — Proxy source implementation
 
-## Alpha 2: ONGOING / BLOCKED_PREDECESSOR_INVENTORY
+## Alpha 2: ONGOING / IMPLEMENTATION_INCOMPLETE
 
 This packet has not completed acceptance. Do not package, install or merge this
 work in progress. Source tests and data consistency do not establish native
@@ -12,14 +12,16 @@ are closed **in authority**, not yet in the product integration.
 
 ## Exact consumed authority and ownership
 
-- Current consumed meta main: `2e882d0a4e8288c124bce0a7f9fef315d78c5147`
-  (MET-PERF-005), including the unchanged MET-REPAIR-015 qualification authority
+- Current consumed meta main: `9010ef0280d301eb18071266bda17e4c1ad5ebcc`
+  (MET-REPAIR-016), including the unchanged MET-REPAIR-015 qualification authority
   at `3f52d53c39b2565cb74d527fdcb4215ff0e37b76`.
-- Current product predecessor: `b7586c4b8315dc92051f0b5445b2a9a0204a97bf`
-  (CONF-PERF-004 / PR16), tree `ef7e5afc04c31651bd3f29acc03f59c6c901c130`.
-- Current immutable baseline: 127 files / 354 test identities, separately pinned
+- Current product predecessor: `f988c78e93b28257810ed99e7f0c072e9b76bae5`
+  (CONF-FIX-006 / PR17), tree `542d2e8e49389bb387a84f76700138c3de833f4e`.
+- Current immutable baseline: 127 files / 362 test identities, separately pinned
   as `currentCheckpoint` in `proxy-vectors.json`, including complete hashes,
   Git blobs, modes and method identities.
+- The prior 127-file / 354-test performance checkpoint is preserved unchanged as
+  `performanceCheckpoint`, including its original canonical digest and identity.
 - Historical credential checkpoint remains unchanged in `acceptedCheckpoint`:
   `9df7dd7f2df8ac64096ef37d8df259761947d552`, tree
   `1310cc74cc0ed39cfeb1068e998a0f78502a4be4`, 127 files / 327 identities.
@@ -55,7 +57,7 @@ DER identity extraction, TLS configuration, refused native entry and mocked
 descriptor cleanup. Unsigned DER-shaped codec inputs contain no usable key or
 signature; no certificates are issued, trust files read or network calls made.
 
-Fresh inventory tests preserve all354 current methods and all127 current files,
+Fresh inventory tests preserve all362 current methods and all127 current files,
 as well as the separately verified historical327 identity set and source bytes. They
 also honor the already-approved future141/146/151 stages and the exact final
 launcher-delta proof; they do not introduce a successor-blocking scalar135 check.
@@ -131,7 +133,10 @@ and PR12; this source document alone is not acceptance of its own bytes.
 
 ## Integration remaining before packet completion
 
-### Reproduced predecessor blocker — exact head e5cecc6
+### Historical reproduced predecessor blocker — exact head e5cecc6
+
+Resolved by the accepted CONF-FIX-006 checkpoint above. The original failed run
+below remains historical evidence; no failure is relabelled PASS.
 
 Signed LOCAL replay of `e5cecc64b237f3f06f17e1178258aae017bc05ea`
 (activation166) ran all six full test roots: 425 methods, 424 passing,
@@ -149,12 +154,44 @@ did not reach that second assertion. The cumulative source validator itself
 accepts the ordered stage; the failing test's assumptions are narrower.
 
 That file and its source-proof bindings are outside003 ownership. No existing
-unconsumed corrective packet authorizes this accepted-main repair. Do not edit
+unconsumed corrective packet authorized this accepted-main repair at that time. Do not edit
 the predecessor here, filter the inventory, monkeypatch collection, drop tests,
 revert the accepted performance repair or relabel native evidence. A separately
 reviewed successor must preserve both accepted histories and exact future-stage
 path/test closure, including negative tests for omitted or unapproved paths/IDs.
 Then reconcile this draft with the newly accepted checkpoint and rerun all8.
+
+### Current checkpoint and native byte-reader continuation — 2026-09-11
+
+PR17 closed local, required localhost CI, merge and independent LOCAL exact-main
+on `f988c78`. All362 tests and all8 commands passed, zero skips. This draft merges
+that exact accepted main without rebasing, rewriting failed history or editing
+any of its127 predecessor files. Its owned fixture binds the new checkpoint and
+retains the original354-method performance record separately. A new regression
+checks exact two-file correction ownership and rejects substituting the older
+record for the current one. All71 existing draft test identities are preserved.
+
+The new private server byte parsers decode complete ELF64 little-endian headers
+and executable PT_LOAD segments for x86_64/aarch64, bounded proc maps and auxv,
+the SELinux version1 status layout and SHA256 fs-verity ioctl output. They reject
+truncation, duplicate/overlapping identities, malformed interpreter paths,
+writable/anonymous/deleted/memfd executable code, invalid special kernel mappings,
+odd/non-enforcing status and alternate verity algorithms. Mapping addresses,
+device/inode/offset and permissions remain explicit data for retained comparison.
+The layouts are grounded in [Linux6.12 ELF UAPI](https://raw.githubusercontent.com/torvalds/linux/v6.12/include/uapi/linux/elf.h),
+[procfs documentation](https://www.kernel.org/doc/html/v6.12/filesystems/proc.html),
+and the [SELinux status layout](https://raw.githubusercontent.com/SELinuxProject/selinux/3.8/libselinux/src/sestatus.c).
+No upstream implementation code was copied; no external dependency is introduced.
+
+Fourteen new codec methods exercise inert independent bytes; no ELF is loaded or
+executed and no native syscall, kernel view, socket or credential is accessed.
+The helpers return only data, never a qualification handle. A matching vDSO name
+or auxiliary vector is not native proof. Real kernel-filesystem validation,
+retained PID/FD/namespace/code ownership, fenced status reads, active policy and
+BPF checks and factory integration are still mandatory unfinished work below.
+The interim source inventory targets448 methods:362 accepted +71 preserved draft
++14 codec +1 checkpoint regression. Full-recipe results must be recorded for the
+exact commit externally; these source claims alone are not acceptance.
 
 PR12 remains DRAFT/unmerged. Further native integration work below is unfinished,
 independent of this new acceptance blocker. No phase completion is claimed.
@@ -209,9 +246,10 @@ probe, live launcher, runtime download or cloud/billable service is authorized.
 | Alpha 2 | CONF-LIVE-003 data/codecs | LOCAL_PASS_RECORDED | Head4175299 passed385 tests; subsequent changes require fresh replay |
 | Alpha 2 | CONF-PERF-004 | DONE_SOURCE_GATES_RECORDED | PR16/main b7586c4; current127/354 checkpoint, earlier failures retained |
 | Alpha 2 | CONF-LIVE-003 checkpoint / transport | IMPLEMENTED_NOT_ACCEPTED |13 new methods pass in425-method replay; one inherited stage-scalar failure |
-| Alpha 2 | Successor-inventory corrective authority | WAITING_DECISION | Repair inherited127-file/test-map assumptions and exact proof bindings in a separate packet |
+| Alpha 2 | MET-REPAIR-016 / CONF-FIX-006 | DONE_SOURCE_GATES_RECORDED | PR115 / PR17; corrected127-file/362-method checkpoint accepted |
+| Alpha 2 | CONF-LIVE-003 checkpoint / kernel byte parsers | IMPLEMENTED_NOT_ACCEPTED | Current checkpoint reconciled; fifteen new regressions await exact full-recipe evidence |
 | Alpha 2 | CONF-LIVE-003 native inspector / broker / API | ONGOING | Required implementation listed above |
-| Alpha 2 | CONF-LIVE-003 required CI | BLOCKED_PREDECESSOR | Local acceptance failed; no green or merge claim |
+| Alpha 2 | CONF-LIVE-003 required CI | WAITING | Fresh exact-head localhost evidence required; prior failures retained |
 | Alpha 2 | CONF-LIVE-003 source completion / merge / exact-main | NOT_RUN | Packet is incomplete; no completion claim |
 | Alpha 2 | CONF-LIVE-004 | WAITING | Fixed worker and ten native probes |
 | Alpha 2 | CONF-LIVE-005 | WAITING | Reproducible candidates and operator handoff |

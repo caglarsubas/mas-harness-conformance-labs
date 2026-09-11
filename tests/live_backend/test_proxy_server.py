@@ -24,8 +24,8 @@ VECTORS = json.loads((ROOT / "fixtures/live-backend/proxy-vectors.json").read_by
 
 
 def current_checkpoint(value):
-    if byte_digest(canonical_bytes(value)) != "sha256:bbec5245350891df2207cd4b885908106f0d0ded7274c67873d0cf5396889506":
-        raise ValueError("exact accepted performance checkpoint required")
+    if byte_digest(canonical_bytes(value)) != "sha256:a9422d02a7b44ef0780de9634121f468badb1638ae7f0859dccc48b0202b58b8":
+        raise ValueError("exact accepted successor-correction checkpoint required")
     return value
 
 
@@ -52,6 +52,156 @@ def record_check(value):
 def capture_check(value, capture, role=None, previous=None):
     return admission.validate_qualification_capture(value["record"], capture, value["profile"], value["endpoints"],
                                                     role=capture["role"] if role is None else role, previous=previous)
+
+
+class KernelInputCodecTests(unittest.TestCase):
+    """Inert independently constructed bytes, never loaded as native code."""
+    def elf(self, machine="x86_64"):
+        raw = bytearray(8192)
+        ident = b"\x7fELF\x02\x01\x01" + b"\0" * 9
+        server.struct.pack_into("<16sHHIQQQIHHHHHH", raw, 0, ident, 3,
+            62 if machine == "x86_64" else 183, 1, 4096, 64, 0, 0, 64, 56, 2, 0, 0, 0)
+        server.struct.pack_into("<IIQQQQQQ", raw, 64, 1, 5, 0, 4096, 0, 4096, 4096, 4096)
+        server.struct.pack_into("<IIQQQQQQ", raw, 120, 1, 6, 4096, 12288, 0, 4096, 4096, 4096)
+        return bytes(raw)
+
+    def auxv(self, address=28672):
+        return server.struct.pack("<6Q", 6, 4096, 33, address, 0, 0)
+
+    def maps(self):
+        return (b"00001000-00002000 r-xp 00000000 08:01 71 /opt/planeon/python\n"
+                b"00003000-00004000 rw-p 00001000 08:01 71 /opt/planeon/python\n"
+                b"00005000-00006000 rw-p 00000000 00:00 0 [heap]\n"
+                b"00007000-00008000 r-xp 00000000 00:00 0 [vdso]\n")
+
+    def test_selinux_status_layout_has_distinct_sequence_and_policyload(self):
+        raw = bytes.fromhex("01000000 02000000 01000000 09000000 01000000")
+        self.assertEqual(server._selinux_status_fields(raw),
+            dict(version=1, sequence=2, enforcing=1, policyload=9, denyUnknown=1))
+
+    def test_selinux_status_rejects_odd_permissive_unknown_or_truncated_bytes(self):
+        for fields in ((2, 2, 1, 9, 1), (1, 3, 1, 9, 1), (1, 2, 0, 9, 1),
+                       (1, 2, 1, 0, 1), (1, 2, 1, 9, 0)):
+            with self.subTest(fields=fields), self.assertRaises(ConformanceError):
+                server._selinux_status_fields(server.struct.pack("<5I", *fields))
+        for raw in (b"", b"\0" * 19, b"\0" * 21, bytearray(20), "x" * 20):
+            with self.subTest(kind=type(raw)), self.assertRaises(ConformanceError):
+                server._selinux_status_fields(raw)
+
+    def test_verity_measurement_decodes_distinct_kernel_digest(self):
+        raw = b"\x01\x00\x20\x00" + bytes(range(32))
+        self.assertEqual(server._verity_measurement(raw), "sha256:" + bytes(range(32)).hex())
+        for changed in (raw[:-1], raw + b"x", b"\x02" + raw[1:], raw[:2] + b"\x1f\x00" + raw[4:]):
+            with self.subTest(raw=changed[:4]), self.assertRaises(ConformanceError):
+                server._verity_measurement(changed)
+
+    def test_auxv_requires_unique_complete_native_pairs_and_exact_terminator(self):
+        self.assertEqual(server._native_auxv(self.auxv()), {6: 4096, 33: 28672})
+        for raw in (self.auxv()[:-1], self.auxv()[:-16], self.auxv() + b"\0" * 16,
+                    self.auxv()[:-16] + server.struct.pack("<4Q", 6, 4096, 0, 0),
+                    server.struct.pack("<6Q", 6, 8192, 33, 28672, 0, 0), self.auxv(address=1),
+                    b"\0" * 16, b"\0" * 65552):
+            with self.subTest(size=len(raw)), self.assertRaises(ConformanceError):
+                server._native_auxv(raw)
+
+    def test_elf_both_native_machines_have_exact_executable_loads(self):
+        for machine in ("x86_64", "aarch64"):
+            self.assertEqual(server._elf_code_layout(self.elf(machine), machine, 4096),
+                dict(kind=3, interpreter=None, segments=[dict(offset=0, length=4096,
+                    permissions="r-xp", virtualAddress=4096)]))
+
+    def test_elf_rejects_other_endian_class_machine_and_header_shapes(self):
+        for offset, value in ((0, b"x"), (4, b"\x01"), (5, b"\x02"), (7, b"\x09"),
+                              (8, b"\x01"), (16, b"\x01\0"), (18, b"\xb7\0"),
+                              (52, b"\x3f\0"), (54, b"\x38\x01"), (56, b"\xff\xff")):
+            raw = bytearray(self.elf())
+            raw[offset:offset + len(value)] = value
+            with self.subTest(offset=offset), self.assertRaises(ConformanceError):
+                server._elf_code_layout(bytes(raw), "x86_64", 4096)
+        for machine, size in (("arm64", 4096), ("x86_64", True), ("x86_64", 8192)):
+            with self.assertRaises(ConformanceError):
+                server._elf_code_layout(self.elf(), machine, size)
+
+    def test_elf_refuses_short_tables_ranges_and_overflow(self):
+        for offset, value in ((32, 8192), (72, 8192), (80, 2 ** 64 - 1), (96, 8193), (104, 4095), (112, 3)):
+            raw = bytearray(self.elf())
+            server.struct.pack_into("<Q", raw, offset, value)
+            with self.subTest(offset=offset), self.assertRaises(ConformanceError):
+                server._elf_code_layout(bytes(raw), "x86_64", 4096)
+        for raw in (b"", self.elf()[:63], self.elf()[:119]):
+            with self.assertRaises(ConformanceError):
+                server._elf_code_layout(raw, "x86_64", 4096)
+
+    def test_elf_refuses_writable_executable_anonymous_and_duplicate_loads(self):
+        for fault in ("writable", "anonymous", "duplicate", "empty", "exec-stack"):
+            raw = bytearray(self.elf())
+            if fault == "writable": server.struct.pack_into("<I", raw, 68, 7)
+            if fault == "anonymous": server.struct.pack_into("<Q", raw, 104, 8192)
+            if fault == "duplicate": raw[120:176] = raw[64:120]
+            if fault == "empty": server.struct.pack_into("<I", raw, 68, 4)
+            if fault == "exec-stack": server.struct.pack_into("<II", raw, 120, 0x6474e551, 7)
+            with self.subTest(fault=fault), self.assertRaises(ConformanceError):
+                server._elf_code_layout(bytes(raw), "x86_64", 4096)
+
+    def test_elf_interpreter_is_data_not_a_loadable_path(self):
+        path = b"/lib/ld-linux.so.2\0"
+        raw = bytearray(self.elf())
+        server.struct.pack_into("<IIQQQQQQ", raw, 120, 3, 4, 4096, 0, 0, len(path), len(path), 1)
+        raw[4096:4096 + len(path)] = path
+        self.assertEqual(server._elf_code_layout(bytes(raw), "x86_64", 4096)["interpreter"], path[:-1].decode())
+        for replacement in (b"/../", b"/a//", b"/a\0x", b"/a x"):
+            changed = bytearray(raw)
+            changed[4096:4100] = replacement
+            with self.subTest(path=replacement), self.assertRaises(ConformanceError):
+                server._elf_code_layout(bytes(changed), "x86_64", 4096)
+
+    def test_maps_preserve_aslr_device_inode_permissions_and_offset(self):
+        result = server._proc_code_maps(self.maps(), "x86_64", self.auxv())
+        self.assertEqual(result["files"], [dict(path="/opt/planeon/python", start=4096, end=8192,
+            permissions="r-xp", offset=0, deviceMajor=8, deviceMinor=1, inode=71)])
+        self.assertEqual(result["kernel"], {"[vdso]": dict(start=28672, end=32768, permissions="r-xp")})
+        self.assertEqual(result["pageSize"], 4096)
+
+    def test_maps_reject_truncation_malformed_rows_and_overlapping_addresses(self):
+        for raw in (self.maps()[:-1], b"\n", self.maps() + b"broken\n", self.maps().replace(b"r-xp", b"r-xz", 1),
+                    self.maps().replace(b"00003000", b"00001000"), self.maps().replace(b"00001000-", b"00001001-", 1),
+                    self.maps() + b"\0\n", self.maps().replace(b" 71 ", b" 18446744073709551616 ")):
+            with self.subTest(size=len(raw)), self.assertRaises(ConformanceError):
+                server._proc_code_maps(raw, "x86_64", self.auxv())
+
+    def test_maps_reject_unknown_anonymous_deleted_memfd_and_writable_code(self):
+        for path in (b"[anon:code]", b"/memfd:code", b"/opt/planeon/python (deleted)",
+                     b"/opt/../python", b"/opt//python", b"/opt/code\\040alias"):
+            raw = self.maps().replace(b"/opt/planeon/python", path, 1)
+            with self.subTest(path=path), self.assertRaises(ConformanceError):
+                server._proc_code_maps(raw, "x86_64", self.auxv())
+        with self.assertRaises(ConformanceError):
+            server._proc_code_maps(self.maps().replace(b"r-xp", b"rwxp", 1), "x86_64", self.auxv())
+        with self.assertRaises(ConformanceError):
+            server._proc_code_maps(self.maps().replace(b" 71 /opt/planeon/python", b" 0", 1), "x86_64", self.auxv())
+
+    def test_maps_kernel_names_require_auxv_architecture_and_exact_shapes(self):
+        with self.assertRaises(ConformanceError):
+            server._proc_code_maps(self.maps(), "x86_64", self.auxv(address=32768))
+        for replacement in (b"08:01 0 [vdso]", b"00:00 1 [vdso]", b"00:00 0 [anon:vdso]"):
+            with self.assertRaises(ConformanceError):
+                server._proc_code_maps(self.maps().replace(b"00:00 0 [vdso]", replacement), "x86_64", self.auxv())
+        syscall = b"ffffffffff600000-ffffffffff601000 --xp 00000000 00:00 0 [vsyscall]\n"
+        result = server._proc_code_maps(self.maps() + syscall, "x86_64", self.auxv())
+        self.assertEqual(set(result["kernel"]), {"[vdso]", "[vsyscall]"})
+        with self.assertRaises(ConformanceError):
+            server._proc_code_maps(self.maps() + syscall, "aarch64", self.auxv())
+        with self.assertRaises(ConformanceError):
+            server._proc_code_maps(self.maps() + syscall.replace(b"--xp", b"r-xp"), "x86_64", self.auxv())
+
+    def test_codecs_never_open_execute_or_return_native_authority(self):
+        with patch.object(server.os, "open", side_effect=AssertionError("no native read")), patch.object(
+                server.os, "execve", side_effect=AssertionError("no execution")), patch.object(
+                server.socket, "socket", side_effect=AssertionError("no network")):
+            decoded = server._elf_code_layout(self.elf(), "x86_64", 4096)
+            maps = server._proc_code_maps(self.maps(), "x86_64", self.auxv())
+        self.assertEqual(set(decoded), {"kind", "interpreter", "segments"})
+        self.assertEqual(set(maps), {"files", "kernel", "pageSize"})
 
 
 class ProxyQualificationTests(unittest.TestCase):
@@ -364,7 +514,7 @@ class ProxyPredecessorTests(unittest.TestCase):
                 self.assertEqual(indexed[path]["mode"], expected["mode"])
         current = current_checkpoint(VECTORS["currentCheckpoint"])
         self.assertEqual((current["commit"], current["tree"], current["fileCount"], current["testCount"]),
-                         ("b7586c4b8315dc92051f0b5445b2a9a0204a97bf", "ef7e5afc04c31651bd3f29acc03f59c6c901c130", 127, 354))
+                         ("f988c78e93b28257810ed99e7f0c072e9b76bae5", "542d2e8e49389bb387a84f76700138c3de833f4e", 127, 362))
         for path, expected in current["files"].items():
             if result["stage"] == 6 and path == SUCCESSOR.RECORD["hook"]["path"]:
                 continue  # validate_checkpoint already verifies the exact hook proof
@@ -385,7 +535,7 @@ class ProxyPredecessorTests(unittest.TestCase):
         for path, methods in baseline["tests"].items():
             self.assertTrue(set(methods) <= set(observed[path]), path)
         current = current_checkpoint(VECTORS["currentCheckpoint"])
-        self.assertEqual(sum(map(len, current["tests"].values())), 354)
+        self.assertEqual(sum(map(len, current["tests"].values())), 362)
         for path, methods in current["tests"].items():
             self.assertEqual(observed[path], methods, path)
         additions = set(observed) - set(baseline["tests"])
@@ -395,7 +545,7 @@ class ProxyPredecessorTests(unittest.TestCase):
                     for path in BASELINE["packetPaths"][f"CONF-LIVE-{number:03d}"]
                     if path.startswith("tests/live_backend/test_") and path.endswith(".py")}
         self.assertEqual(additions, expected)
-        print("CONF-LIVE-003 predecessor inventory: current 127 files / 354 methods; historical 327 retained; nativeAcceptance=false", flush=True)
+        print("CONF-LIVE-003 predecessor inventory: current 127 files / 362 methods; historical 327 and 354 retained; nativeAcceptance=false", flush=True)
 
     def test_current_checkpoint_pin_rejects_relabelled_history_and_altered_inventory(self):
         for field, value in (("commit", "9df7dd7f2df8ac64096ef37d8df259761947d552"),
@@ -409,3 +559,19 @@ class ProxyPredecessorTests(unittest.TestCase):
             changed[field].pop(next(iter(changed[field])))
             with self.subTest(field=field), self.assertRaises(ValueError):
                 current_checkpoint(changed)
+
+    def test_corrected_checkpoint_preserves_the_original_performance_record(self):
+        current = current_checkpoint(VECTORS["currentCheckpoint"])
+        prior = VECTORS["performanceCheckpoint"]
+        self.assertEqual(byte_digest(canonical_bytes(prior)),
+                         "sha256:bbec5245350891df2207cd4b885908106f0d0ded7274c67873d0cf5396889506")
+        self.assertEqual(current["predecessorCommit"], prior["commit"])
+        self.assertEqual((current["packetId"], current["predecessorTests"], current["addedTests"]),
+                         ("CONF-FIX-006", 354, 8))
+        self.assertEqual(set(current["files"]), set(prior["files"]))
+        self.assertEqual({p for p in current["files"] if current["files"][p] != prior["files"][p]},
+                         {"tests/live_backend/test_supervisor.py", "docs/live-backend/linux-boundary.md"})
+        for path, methods in prior["tests"].items():
+            self.assertTrue(set(methods) <= set(current["tests"][path]), path)
+        with self.assertRaises(ValueError):
+            current_checkpoint(prior)

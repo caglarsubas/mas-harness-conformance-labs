@@ -12,6 +12,7 @@ import importlib
 import ipaddress
 import os
 from pathlib import Path
+import re
 import select
 import socket
 import stat
@@ -44,6 +45,143 @@ OBSERVER = "/opt/planeon/bin/harness-policy-observer"
 OBSERVER_MANIFEST = "/etc/planeon/harness-policy-observer-manifest.json"
 OBSERVER_SOCKET = "/run/planeon/live-proxy/policy-observer.sock"
 _ACTIVE = None
+
+
+def _selinux_status_fields(raw):
+    """Decode an already fenced status-page slice, not an enforcing-policy grant."""
+    require(type(raw) is bytes and len(raw) == 20, "KERNEL_STATUS_LAYOUT")
+    version, sequence, enforcing, policyload, deny_unknown = struct.unpack("<5I", raw)
+    require(version == 1 and sequence % 2 == 0 and enforcing == deny_unknown == 1
+            and policyload > 0, "KERNEL_STATUS_INVALID")
+    return dict(version=version, sequence=sequence, enforcing=enforcing,
+                policyload=policyload, denyUnknown=deny_unknown)
+
+
+def _verity_measurement(raw):
+    """Decode FS_IOC_MEASURE_VERITY output; never substitute a content digest."""
+    require(type(raw) is bytes and len(raw) == 36, "KERNEL_VERITY_LAYOUT")
+    algorithm, size = struct.unpack_from("<HH", raw)
+    require(algorithm == 1 and size == 32, "KERNEL_VERITY_ALGORITHM")
+    return "sha256:" + raw[4:].hex()
+
+
+def _native_auxv(raw):
+    """Bounded native ELF64 auxiliary-vector data. No proc path or I/O here."""
+    require(type(raw) is bytes and 16 <= len(raw) <= 65536 and len(raw) % 16 == 0,
+            "KERNEL_AUXV_LAYOUT")
+    result = {}
+    for offset in range(0, len(raw), 16):
+        key, value = struct.unpack_from("<QQ", raw, offset)
+        if key == 0:
+            require(value == 0 and offset + 16 == len(raw), "KERNEL_AUXV_TERMINATOR")
+            break
+        require(key not in result, "KERNEL_AUXV_DUPLICATE")
+        result[key] = value
+    else:
+        require(False, "KERNEL_AUXV_TERMINATOR")
+    require(result.get(6) in (4096, 16384, 65536) and result.get(33, 0) > 0
+            and result[33] % result[6] == 0, "KERNEL_AUXV_REQUIRED")
+    return result
+
+
+def _elf_code_layout(raw, machine, page_size):
+    """Decode complete ELF64 LE PT_LOADs without loading or executing the file.
+
+    Native custody, verity, policy and maps must be checked separately. Returned
+    addresses are link-time offsets, not proof of a running process's identity.
+    """
+    require(type(raw) is bytes and 64 <= len(raw) <= 67108864, "KERNEL_ELF_SIZE")
+    require(type(machine) is str and machine in ("x86_64", "aarch64")
+            and type(page_size) is int and page_size in (4096, 16384, 65536), "KERNEL_ELF_ABI")
+    header = struct.unpack_from("<16sHHIQQQIHHHHHH", raw)
+    ident, kind, architecture, version, _, phoff, _, flags, ehsize, phsize, count, _, _, _ = header
+    require(ident[:7] == b"\x7fELF\x02\x01\x01" and ident[7] in (0, 3)
+            and ident[8:] == b"\0" * 8 and kind in (2, 3) and version == 1 and flags == 0
+            and architecture == {"x86_64": 62, "aarch64": 183}[machine]
+            and ehsize == 64 and phsize == 56 and 1 <= count <= 128
+            and phoff >= 64 and phoff % 8 == 0 and phoff + count * phsize <= len(raw), "KERNEL_ELF_LAYOUT")
+    segments, interpreter, last_load_end = [], None, 0
+    for index in range(count):
+        tag, perms, offset, address, _, size, memory, alignment = struct.unpack_from("<IIQQQQQQ", raw, phoff + index * 56)
+        require(offset + size <= len(raw) and address + memory <= 2 ** 64, "KERNEL_ELF_BOUNDS")
+        if tag == 0x6474e551:
+            require(not perms & 1, "KERNEL_ELF_EXECUTABLE_STACK")
+        if tag == 3:
+            require(interpreter is None and 2 <= size <= 4096, "KERNEL_ELF_INTERPRETER")
+            data = raw[offset:offset + size]
+            require(data.endswith(b"\0") and b"\0" not in data[:-1], "KERNEL_ELF_INTERPRETER")
+            require(re.fullmatch(rb"/[A-Za-z0-9_./+-]+", data[:-1]) is not None, "KERNEL_ELF_INTERPRETER")
+            interpreter = data[:-1].decode("ascii")
+            require(all(part not in ("", ".", "..") for part in interpreter[1:].split("/")), "KERNEL_ELF_INTERPRETER")
+        if tag != 1:
+            continue
+        require(perms <= 7 and size <= memory and memory > 0 and address >= last_load_end
+                and (alignment in (0, 1) or alignment & (alignment - 1) == 0)
+                and (alignment <= 1 or address % alignment == offset % alignment)
+                and address % page_size == offset % page_size, "KERNEL_ELF_LOAD_LAYOUT")
+        last_load_end = address + memory
+        if not perms & 1:
+            continue
+        require(not perms & 2 and size > 0 and len(segments) < 16, "KERNEL_ELF_EXECUTABLE_LOAD")
+        start = offset - offset % page_size
+        file_end = ((offset + size + page_size - 1) // page_size) * page_size
+        memory_end = ((offset + memory + page_size - 1) // page_size) * page_size
+        require(memory_end == file_end and file_end - start <= 67108864, "KERNEL_ELF_ANONYMOUS_CODE")
+        segments.append(dict(offset=start, length=file_end - start,
+                             permissions=("r" if perms & 4 else "-") + "-xp",
+                             virtualAddress=address - address % page_size))
+    require(bool(segments), "KERNEL_ELF_CODE_MISSING")
+    identities = [(s["offset"], s["length"]) for s in segments]
+    require(len(identities) == len(set(identities)), "KERNEL_ELF_DUPLICATE_CODE")
+    return dict(kind=kind, interpreter=interpreter, segments=segments)
+
+
+def _proc_code_maps(raw, machine, auxv):
+    """Parse a complete maps read; special kernel names alone prove nothing.
+
+    The native inspector must obtain auxv and maps itself, retain the process,
+    match every returned file against enrolled ELF/descriptor identities, and
+    compare fresh reads under the same kernel-policy epoch. This is data only.
+    """
+    require(type(raw) is bytes and 0 < len(raw) <= 1048576 and raw.endswith(b"\n")
+            and b"\0" not in raw and b"\r" not in raw, "KERNEL_MAPS_SIZE")
+    require(type(machine) is str and machine in ("x86_64", "aarch64"), "KERNEL_MAPS_ABI")
+    auxiliary = _native_auxv(auxv)
+    page_size, vdso_address = auxiliary[6], auxiliary[33]
+    maps, special, previous_end = [], {}, 0
+    lines = raw.splitlines()
+    require(0 < len(lines) <= 16384, "KERNEL_MAPS_COUNT")
+    pattern = rb"([0-9a-f]{1,16})-([0-9a-f]{1,16}) ([r-][w-][x-][ps]) ([0-9a-f]{1,16}) ([0-9a-f]{2,8}):([0-9a-f]{2,8}) +([0-9]{1,20})(?: +([^\n]*))?"
+    for line in lines:
+        require(len(line) <= 8192, "KERNEL_MAPS_LINE_SIZE")
+        match = re.fullmatch(pattern, line)
+        require(match is not None, "KERNEL_MAPS_LAYOUT")
+        begin, end, perms, offset, major, minor, inode, path = match.groups()
+        begin, end, offset = int(begin, 16), int(end, 16), int(offset, 16)
+        major, minor, inode = int(major, 16), int(minor, 16), int(inode)
+        require(previous_end <= begin < end and begin % page_size == end % page_size == offset % page_size == 0
+                and inode < 2 ** 64 and not (b"w" in perms and b"x" in perms), "KERNEL_MAPS_RANGE")
+        previous_end = end
+        if b"x" not in perms:
+            continue
+        require(len(maps) + len(special) < 256 and path is not None, "KERNEL_MAPS_ANONYMOUS_CODE")
+        if path in (b"[vdso]", b"[vsyscall]"):
+            name = path.decode("ascii")
+            require(name not in special and (offset, major, minor, inode) == (0, 0, 0, 0), "KERNEL_MAPS_SPECIAL")
+            if name == "[vdso]":
+                require(begin == vdso_address and perms == b"r-xp" and end - begin <= 1048576, "KERNEL_MAPS_VDSO")
+            else:
+                require(machine == "x86_64" and begin == 0xffffffffff600000 and end - begin == 4096
+                        and perms == b"--xp", "KERNEL_MAPS_VSYSCALL")
+            special[name] = dict(start=begin, end=end, permissions=perms.decode("ascii"))
+            continue
+        require(re.fullmatch(rb"/[A-Za-z0-9_./+-]+", path) is not None and inode > 0, "KERNEL_MAPS_FILE_PATH")
+        path = path.decode("ascii")
+        require(all(part not in ("", ".", "..") for part in path[1:].split("/")), "KERNEL_MAPS_FILE_PATH")
+        maps.append(dict(path=path, start=begin, end=end, permissions=perms.decode("ascii"),
+                         offset=offset, deviceMajor=major, deviceMinor=minor, inode=inode))
+    require(bool(maps) and "[vdso]" in special, "KERNEL_MAPS_CODE_MISSING")
+    return dict(files=maps, kernel=special, pageSize=page_size)
 
 
 def _installed_entry():
