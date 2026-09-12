@@ -32,7 +32,8 @@ from .live import FIXED_RELEASE_TRUST, FIXED_TENANT_TRUST, PINNED_ROOT_PUBLIC_KE
 from .live_backend_authority import verify_backend_authority, binding_from_authority
 from .live_linux_boundary import credentials, process_identity, _custody_identity
 from .live_mutation_admission import (require, document, retained_profile, validate_messages,
-    _time, ZERO, admission_binding, _AdmissionLog, parse_reservations, cleanup_receipt)
+    _time, ZERO, admission_binding, _AdmissionLog, parse_reservations, cleanup_receipt,
+    retained_qualification_record, retained_broker_binding, QUALIFICATION_PATH)
 from .live_proxy_client import (_TLS, tls_context, credential_leaf, _check_certificate,
                                 read_http, http_message)
 from .live_supervisor import utc_now, _verify_reference_authority
@@ -46,6 +47,10 @@ STATE = "/var/lib/planeon/live-proxy"
 OBSERVER = "/opt/planeon/bin/harness-policy-observer"
 OBSERVER_MANIFEST = "/etc/planeon/harness-policy-observer-manifest.json"
 OBSERVER_SOCKET = "/run/planeon/live-proxy/policy-observer.sock"
+BROKER = "/opt/planeon/bin/harness-capacity-broker"
+BROKER_MANIFEST = "/etc/planeon/harness-capacity-broker-manifest.json"
+WORKER = "/opt/planeon/bin/harness-live-probe-exec"
+WORKER_MANIFEST = "/etc/planeon/harness-live-probe-manifest.json"
 _ACTIVE = None
 
 
@@ -2147,6 +2152,140 @@ def _manifest(files, path, executable):
     return value, byte_digest(raw), byte_digest(executable_raw)
 
 
+class _ServerQualificationBinding:
+    """Authenticated expected values, NOT native containment or execution authority.
+
+    Only the active installed server may construct this from its retained files.
+    No caller record, descriptor or success callback is accepted. The native
+    readers still have to prove actual policy/process/code/cgroup/BPF custody.
+    This object borrows the server's file owner and must never close its FDs.
+    """
+    def __init__(self, owner):
+        self.owner, self.closed, self.poisoned = owner, False, False
+        require(type(owner) is NativeProxyServer, "QUALIFICATION_OWNER_INVALID")
+        owner._owner_check()
+        require(owner.qualification_binding is self and type(owner.files) is _Files
+                and owner.files.owner is owner and not owner.files.sealed,
+                "QUALIFICATION_OWNER_INVALID")
+        self.files, self.deadline = owner.files, owner.deadline
+        self.last_wall, self.last_mono = require_time(utc_now(), "now"), time.monotonic()
+        try:
+            self._load()
+            require(self.last_mono <= time.monotonic() < min(self.last_mono + 2, self.deadline)
+                    and 0 <= (require_time(utc_now(), "now") - self.last_wall).total_seconds() < 2,
+                    "QUALIFICATION_LOAD_DEADLINE")
+            self._original = self._inputs()
+            self._record_digests = (byte_digest(self._record_raw), byte_digest(self._broker_raw))
+            self.check()
+        except BaseException:
+            self.poisoned = True
+            raise
+
+    def _inputs(self):
+        owner = self.owner
+        return canonical_bytes([owner.envelope_path, [byte_digest(raw) for raw in owner.authority],
+            owner.envelope, owner.capacity, owner.plan, owner.binding, owner.profile,
+            owner.observation_binding, owner.endpoint, byte_digest(owner.ca), owner.manifest,
+            owner.artifact_digest, byte_digest(owner.snapshot),
+            {path: byte_digest(raw) for path, raw in owner.kit.items()}])
+
+    def _load(self):
+        owner, files = self.owner, self.files
+        envelope_raw = files.read(owner.envelope_path)
+        release_trust = files.read(str(FIXED_RELEASE_TRUST))
+        tenant_trust = files.read(str(FIXED_TENANT_TRUST))
+        envelope = require_canonical_document(envelope_raw)
+        # Authenticate selected references before even reading the capacity file.
+        _verify_reference_authority(envelope, release_trust, tenant_trust, utc_now())
+        capacity_raw = files.read(envelope["capacityAuthorizationFileReference"], envelope["capacityAuthorizationDigest"])
+        self.authority = (envelope_raw, capacity_raw, release_trust, tenant_trust)
+        envelope, capacity, _, _ = verify_backend_authority(*self.authority, now=self.last_wall)
+        release_raw = files.read(envelope["campaignReleaseFileReference"], envelope["campaignReleaseDigest"])
+        release = require_canonical_document(release_raw)
+        kit = files.kit(envelope["conformanceKitRoot"], release["tree"])
+        architecture = {"x86_64": "amd64", "aarch64": "arm64"}.get(os.uname().machine)
+        require(architecture is not None, "QUALIFICATION_ARCHITECTURE_UNAVAILABLE")
+        plan_raw = kit["campaigns/platform/linux-baseline/inputs/" + architecture + ".json"]
+        plan = require_canonical_document(plan_raw)
+        binding = binding_from_authority(*self.authority, release_bytes=release_raw, plan_bytes=plan_raw,
+            architecture=architecture, expected_nonce=envelope["nonce"], expected_tenant=envelope["tenantId"],
+            expected_environment=envelope["environmentId"], expected_release=envelope["campaignReleaseDigest"], now=utc_now())
+        profile, observation, endpoint, ca = retained_profile(envelope, capacity, plan, release, kit)
+        require(self.authority == owner.authority and kit == owner.kit and ca == owner.ca
+                and owner.snapshot == canonical_bytes([envelope, capacity, plan, binding, profile, observation, endpoint])
+                == canonical_bytes([owner.envelope, owner.capacity, owner.plan, owner.binding, owner.profile,
+                                    owner.observation_binding, owner.endpoint]),
+                "QUALIFICATION_INPUT_SUBSTITUTION")
+        endpoints = [{"endpointId": row["endpointId"], "kind": row["kind"],
+            "addressFamily": "IPV4" if ipaddress.ip_address(row["ipAddress"]).version == 4 else "IPV6",
+            "ipAddress": row["ipAddress"], "port": row["port"]} for row in envelope["endpoints"]]
+        record = retained_qualification_record(profile, endpoints, observation, release, kit)
+        require(record["host"]["machine"] == os.uname().machine, "QUALIFICATION_HOST_MISMATCH")
+        broker = retained_broker_binding(profile, observation, release, kit)
+        preflight = byte_digest(kit[QUALIFICATION_PATH])
+        installed = {}
+        for role, path, executable in (("SERVER", MANIFEST, EXECUTABLE),
+                ("OBSERVER", OBSERVER_MANIFEST, OBSERVER), ("BROKER", BROKER_MANIFEST, BROKER),
+                ("WORKER", WORKER_MANIFEST, WORKER)):
+            value, manifest_digest, artifact_digest = _manifest(files, path, executable)
+            require(value["preflightEvidenceDigest"] == preflight
+                    and record["roles"][role]["executable"] == executable
+                    and record["roles"][role]["artifactDigest"] == artifact_digest,
+                    "QUALIFICATION_INSTALLED_ROLE_MISMATCH")
+            installed[role] = {"manifestDigest": manifest_digest, "executableDigest": artifact_digest}
+            if role == "SERVER":
+                require(value == owner.manifest and artifact_digest == owner.artifact_digest,
+                        "QUALIFICATION_SERVER_SUBSTITUTION")
+        require(observation["observer"] == installed["OBSERVER"]
+                and broker["brokerManifestDigest"] == installed["BROKER"]["manifestDigest"]
+                and broker["brokerExecutableDigest"] == installed["BROKER"]["executableDigest"]
+                and broker["workerManifestDigest"] == installed["WORKER"]["manifestDigest"]
+                and broker["workerArtifactDigest"] == installed["WORKER"]["executableDigest"],
+                "QUALIFICATION_PEER_ENROLLMENT_MISMATCH")
+        self._record_raw, self._broker_raw = canonical_bytes(record), canonical_bytes(broker)
+
+    def check(self):
+        try:
+            require(not self.closed and not self.poisoned, "QUALIFICATION_BINDING_CLOSED")
+            owner = self.owner
+            owner._owner_check()
+            require(owner.qualification_binding is self and owner.files is self.files
+                    and self.files.owner is owner and owner.deadline == self.deadline,
+                    "QUALIFICATION_OWNER_CHANGED")
+            self.files.check()
+            now, before = require_time(utc_now(), "now"), time.monotonic()
+            require(now >= self.last_wall and self.last_mono <= before < self.deadline,
+                    "QUALIFICATION_CLOCK_OR_EXPIRY")
+            verify_backend_authority(*self.authority, now=now)
+            require(self._inputs() == self._original and self._record_digests ==
+                    (byte_digest(self._record_raw), byte_digest(self._broker_raw)), "QUALIFICATION_INPUT_SUBSTITUTION")
+            scope = document(self._record_raw)["scope"]
+            require(_time(scope["validFrom"]) <= now < _time(scope["expiresAt"]), "QUALIFICATION_CLOCK_OR_EXPIRY")
+            self.files.check()
+            after_wall, after = require_time(utc_now(), "now"), time.monotonic()
+            require(now <= after_wall < _time(scope["expiresAt"])
+                    and before <= after < min(before + 2, self.deadline)
+                    and (after_wall - now).total_seconds() < 2,
+                    "QUALIFICATION_CLOCK_OR_EXPIRY")
+            self.last_wall, self.last_mono = after_wall, after
+        except BaseException:
+            self.poisoned = True
+            raise
+
+    @property
+    def record(self):
+        self.check()
+        return document(self._record_raw)
+
+    @property
+    def broker_binding(self):
+        self.check()
+        return document(self._broker_raw, 65536)
+
+    def close(self):
+        self.closed = True  # borrowed files remain exclusively server-owned
+
+
 def _fixed_probes():
     try:
         from . import live_fixed_probes as module
@@ -2324,6 +2463,7 @@ class NativeProxyServer:
         self.pid, self.thread, self.closed = os.getpid(), threading.get_ident(), False
         self.files, self.secrets = _Files(self), _Files(self)
         self.observer = self.storage = self.listener = self.connection = None
+        self.qualification_binding = None
         self.memfd = None
         self.active_operation = None
         self.reserved = False
@@ -2332,6 +2472,7 @@ class NativeProxyServer:
             self.manifest, _, self.artifact_digest = _manifest(self.files, MANIFEST, EXECUTABLE)
             envelope_path = os.environ.get("HARNESS_LIVE_EXECUTION_ENVELOPE")
             require(type(envelope_path) is str, "PROXY_ENVELOPE_UNAVAILABLE")
+            self.envelope_path = envelope_path
             envelope_raw = self.files.read(envelope_path)
             release_trust, tenant_trust = self.files.read(str(FIXED_RELEASE_TRUST)), self.files.read(str(FIXED_TENANT_TRUST))
             envelope = require_canonical_document(envelope_raw)
@@ -2364,6 +2505,8 @@ class NativeProxyServer:
             self.deadline = time.monotonic() + remaining
             self.snapshot = canonical_bytes([self.envelope, self.capacity, self.plan, self.binding,
                                              self.profile, self.observation_binding, self.endpoint])
+            self.qualification_binding = object.__new__(_ServerQualificationBinding)
+            self.qualification_binding.__init__(self)
             require(_fixed_probes().require_server_containment(self) is None, "PROXY_CONTAINMENT_UNAVAILABLE")
             self.storage = object.__new__(_State)
             self.storage.__init__(self)
@@ -2428,6 +2571,7 @@ class NativeProxyServer:
                 and self.snapshot == canonical_bytes([self.envelope, self.capacity, self.plan, self.binding,
                                                        self.profile, self.observation_binding, self.endpoint]),
                 "PROXY_AUTHORITY_CHANGED")
+        self.qualification_binding.check()
         require(_fixed_probes().require_server_containment(self) is None, "PROXY_CONTAINMENT_UNAVAILABLE")
 
     def _transport_check(self):
@@ -2506,7 +2650,7 @@ class NativeProxyServer:
             return
         self.closed = True
         operations, failure = [], None
-        for attr in ("connection", "listener", "observer", "storage", "secrets", "files"):
+        for attr in ("connection", "listener", "observer", "storage", "qualification_binding", "secrets", "files"):
             resource = getattr(self, attr, None)
             setattr(self, attr, None)
             if resource is not None:

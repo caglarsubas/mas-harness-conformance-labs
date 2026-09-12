@@ -577,6 +577,42 @@ qualifier, active policy/code composition, signed lifetime, external change fenc
 and broker/API credential ordering remain unfinished. OS-edge mocks exercise the
 real factories; neither architecture has native qualification from these tests.
 
+### Authenticated qualification-record binding — 2026-09-12
+
+The server now creates a private `_ServerQualificationBinding` before entering
+the still-unfinished containment gate. It accepts only its active server owner,
+re-reads the envelope and fixed trust files under retained custody, authenticates
+selected capacity references before opening them, and verifies the independent
+platform/tenant/capacity signatures. It reconstructs the exact release, kit,
+architecture-specific plan and profile instead of trusting a supplied record.
+
+The fixed qualification member must match the signed tree, profile, numeric
+endpoint tuples and observation preflight digest. All four separately installed
+role manifests/signatures and artifact bytes must match the record. Observer
+enrollment and the release-listed broker/worker handoff digests are cross-bound;
+matching a root-signed manifest from another release is insufficient. No worker
+PID is invented and no observer, broker, credential or network operation occurs.
+
+The binding preserves original owner/file identities, signed windows and the
+server deadline, applies two-second load/check limits, detects input replacement
+and remains poisoned after failure. Returned record/broker documents are detached.
+Closing it never closes the server's borrowed file descriptors. Server cleanup
+and base checks include this binding; all existing containment refusals remain.
+
+Twenty-three new methods exercise the real binding, cryptographic verifiers,
+manifest parsing and retained-file reader against deterministic unit signatures
+and mocked OS filesystem edges. The parent server context is explicitly assembled
+in these tests: this is not a full native server-factory startup test. Both
+architecture/address-family data paths, forgeries, missing/substituted inputs,
+ownership, deadline, expiry and cleanup refusals are covered. All671 prior test
+identities and all127 accepted predecessor files remain unchanged; the new source
+target is694 methods, not a self-reported test result.
+
+This object supplies authenticated **expected values only**. It exposes neither
+`check_self` nor `check_peer` and grants no execution. Composing the native readers
+with authenticated peers, independent change fencing, broker dispatch and the
+API/cleanup lifecycle remains unfinished. No native/tenant evidence is promoted.
+
 ## Verification boundary
 
 This is an in-progress source snapshot, not a self-attested run result. Exact
@@ -615,7 +651,8 @@ probe, live launcher, runtime download or cloud/billable service is authorized.
 | Alpha 2 | CONF-LIVE-003 code-file custody / mapping data | LOCAL_AND_CI_PASS_RECORDED | Head1475d3c,572 tests,all8 commands; runner47 retired |
 | Alpha 2 | CONF-LIVE-003 retained process-code component | LOCAL_AND_CI_PASS_RECORDED | Head263e9e2, 605 tests, all8 commands; runner48 retired |
 | Alpha 2 | CONF-LIVE-003 retained cgroup component | LOCAL_AND_CI_PASS_RECORDED | Heade53af04, 636 tests, all8 commands; runner49 retired |
-| Alpha 2 | CONF-LIVE-003 retained endpoint-filter component | IMPLEMENTED_NOT_ACCEPTED | Fixed local/effective queries and translated-program custody; fresh full recipe required |
+| Alpha 2 | CONF-LIVE-003 retained endpoint-filter component | LOCAL_AND_CI_PASS_RECORDED | Head6812922, 671 tests, all8 commands; runner50 retired; initial failed replay retained |
+| Alpha 2 | CONF-LIVE-003 authenticated qualification binding | IMPLEMENTED_NOT_ACCEPTED | Signed release and four-role manifest binding; fresh exact-commit full recipe required |
 | Alpha 2 | CONF-LIVE-003 native inspector / broker / API | ONGOING | Required implementation listed above |
 | Alpha 2 | CONF-LIVE-003 required CI | WAITING | Fresh exact-head localhost evidence required; prior failures retained |
 | Alpha 2 | CONF-LIVE-003 source completion / merge / exact-main | NOT_RUN | Packet is incomplete; no completion claim |

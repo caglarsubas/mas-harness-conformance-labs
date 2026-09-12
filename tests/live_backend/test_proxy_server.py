@@ -55,6 +55,403 @@ def capture_check(value, capture, role=None, previous=None):
                                                     role=capture["role"] if role is None else role, previous=previous)
 
 
+class _QualificationBindingFixture:
+    """Unit-only signed release plus virtual OS files, never installed artifacts.
+
+    The parent server context is assembled, not a native startup success. All
+    binding, canonical, crypto, manifest and retained-file code stays real.
+    """
+    def __init__(self, architecture="amd64", ipv6=False):
+        from _fixtures import backend_fixture
+        from harness_conformance.crypto import b64url_encode, public_key
+        from harness_conformance.canonical import canonical_digest
+        self.fixture = backend_fixture(architecture)
+        self.profile, self.record = sample()["profile"], sample()["record"]
+        self.observation = deepcopy(VECTORS["observation"]["positive"]["binding"])
+        self.broker = deepcopy(VECTORS["broker"]["positive"][0]["binding"])
+        self.machine = {"amd64": "x86_64", "arm64": "aarch64"}[architecture]
+        self.now, self.mono = "2026-09-07T01:00:00Z", 100.0
+        self.raw, self.modes, self.fds, self.positions, self.read_paths = {}, {}, {}, {}, []
+        self.next_fd, self.closed_fds = 700000, []
+        self.seed = bytes([17]) * 32  # deterministic UNIT key, no operator key
+        self.raw[server.PUBLIC_KEY] = canonical_bytes({"algorithm": "ED25519", "publicKey": b64url_encode(public_key(self.seed))})
+        self.key_digest = byte_digest(self.raw[server.PUBLIC_KEY])
+        scope = self.profile["binding"]
+        scope.update(runNonce=self.fixture.envelope["nonce"], validFrom=self.now, expiresAt="2026-09-07T01:10:00Z")
+        self.profile["capacityEntries"]["credentialIdentities"][0]["expiresAt"] = scope["expiresAt"]
+        for key, projection in self.observation["projections"].items():
+            value = {"apiVersion": projection["apiVersion"], "kind": projection["kind"],
+                "metadata": {k: projection[k] for k in ("name", "namespace", "uid")}, "spec": {}}
+            raw = canonical_bytes(value)
+            projection["projectionDigest"] = self.profile["policy"][key + "Digest"] = byte_digest(raw)
+            for ref in self.profile["capacityEntries"]["preexistingResourceRefs"]:
+                if ref["uid"] == projection["uid"]:
+                    ref["observedDigest"] = byte_digest(raw)
+            self.raw["/unit-only/kit/campaigns/platform/linux-baseline/proxy-policy/" + key + ".json"] = raw
+        self.fixture.capacity.update(deepcopy(self.profile["capacityEntries"]))
+        for field in ("admissionPolicyDigest", "resourceQuotaDigest", "limitRangeDigest"):
+            self.fixture.capacity[field] = self.profile["policy"][field]
+            if field != "limitRangeDigest":
+                self.fixture.envelope[field] = self.profile["policy"][field]
+        endpoint = self.fixture.envelope["endpoints"][0]
+        endpoint["tls"]["caCertificateFileReference"] = "/unit-only/kit/ca.pem"
+        if ipv6:
+            endpoint["ipAddress"] = "::1"
+        self.raw["/unit-only/kit/ca.pem"] = b"-----BEGIN CERTIFICATE-----\nUNIT_DATA_NOT_TLS\n"
+        self.raw["/unit-only/kit/campaigns/platform/linux-baseline/inputs/" + architecture + ".json"] = canonical_bytes(self.fixture.plan)
+        self.record.update(profileDigest=canonical_digest(self.profile),
+            scope={k: scope[k] for k in self.record["scope"]})
+        self.record["host"]["machine"] = self.machine
+        self.record["endpointTuples"] = [{"endpointId": endpoint["endpointId"], "kind": endpoint["kind"],
+            "addressFamily": "IPV6" if ipv6 else "IPV4", "ipAddress": endpoint["ipAddress"], "port": endpoint["port"]}]
+        for row in self.record["files"]:
+            raw = ("UNIT_INERT_" + row["path"]).encode().ljust(row["size"], b"_")
+            self.raw[row["path"]], self.modes[row["path"]] = raw, 0o555
+            row["sha256"] = byte_digest(raw)
+        for role in self.record["roles"].values():
+            role["artifactDigest"] = byte_digest(self.raw[role["executable"]])
+        self.raw["/unit-only/kit/" + admission.QUALIFICATION_PATH] = canonical_bytes(self.record)
+        preflight = byte_digest(canonical_bytes(self.record))
+        self.paths = (("SERVER", server.MANIFEST, server.EXECUTABLE),
+            ("OBSERVER", server.OBSERVER_MANIFEST, server.OBSERVER),
+            ("BROKER", server.BROKER_MANIFEST, server.BROKER),
+            ("WORKER", server.WORKER_MANIFEST, server.WORKER))
+        for _, path, executable in self.paths:
+            value = {"schemaVersion": "harness.planeon.ai/live-runner-manifest/v1alpha1",
+                "launcher": {"path": executable, "version": "0.1.0", "sha256": byte_digest(self.raw[executable]),
+                    "ownerUid": 0, "ownerGid": 0, "mode": "0555"},
+                "fixedTrustMounts": [str(server.FIXED_RELEASE_TRUST), str(server.FIXED_TENANT_TRUST)],
+                "isolation": {"backend": "PREINSTALLED_OS_ENDPOINT_ALLOWLIST_V1",
+                    "networkPolicy": "DENY_ALL_EXCEPT_DUAL_SIGNED_ENDPOINTS", "credentialSocketsDenied": True, "ciDenied": True},
+                "preflightEvidenceDigest": preflight}
+            self.manifest(path, value)
+        self.observation.update(profileDigest=canonical_digest(self.profile),
+            scope={k: v for k, v in scope.items() if k != "apiEndpointId"},
+            observer={"manifestDigest": byte_digest(self.raw[server.OBSERVER_MANIFEST]),
+                      "executableDigest": byte_digest(self.raw[server.OBSERVER])})
+        self.observation["enforcementPins"]["hostPreflightDigest"] = preflight
+        self.broker.update(profileDigest=canonical_digest(self.profile), observationBindingDigest=canonical_digest(self.observation),
+            brokerManifestDigest=byte_digest(self.raw[server.BROKER_MANIFEST]), brokerExecutableDigest=byte_digest(self.raw[server.BROKER]),
+            workerManifestDigest=byte_digest(self.raw[server.WORKER_MANIFEST]), workerArtifactDigest=byte_digest(self.raw[server.WORKER]))
+        for path, value in ((admission.PROFILE_PATH, self.profile), (admission.OBSERVATION_PATH, self.observation),
+                            (admission.BROKER_BINDING_PATH, self.broker)):
+            self.raw["/unit-only/kit/" + path] = canonical_bytes(value)
+        self.release()
+
+    def manifest(self, path, value):
+        from harness_conformance.crypto import b64url_encode, sign
+        raw = canonical_bytes(value)
+        self.raw[path], self.raw[path + ".sig"] = raw, b64url_encode(sign(self.seed, raw)).encode()
+
+    def release(self):
+        from harness_conformance.canonical import canonical_digest
+        fixture = self.fixture
+        tree = [{"path": path.removeprefix("/unit-only/kit/"), "mode": "0444", "size": len(raw), "sha256": byte_digest(raw)}
+                for path, raw in sorted(self.raw.items()) if path.startswith("/unit-only/kit/")]
+        fixture.release.update(tree=tree, kitDigest=canonical_digest(tree, "planeon.harness-live-tree/v1alpha1"))
+        fixture.envelope.update(conformanceKitDigest=fixture.release["kitDigest"], campaignReleaseDigest=byte_digest(canonical_bytes(fixture.release)))
+        fixture.resign_authority()
+        for path, value in (("/unit-only/envelope.json", fixture.envelope), ("/unit-only/capacity.json", fixture.capacity),
+                ("/unit-only/release.json", fixture.release), (str(server.FIXED_RELEASE_TRUST), fixture.release_trust),
+                (str(server.FIXED_TENANT_TRUST), fixture.tenant_trust)):
+            self.raw[path] = canonical_bytes(value)
+
+    def context(self, stack):
+        from _fixtures import authority_args, binding_args
+        owner = object.__new__(server.NativeProxyServer)
+        owner.pid, owner.thread, owner.closed = server.os.getpid(), server.threading.get_ident(), False
+        owner.files, owner.deadline, owner.envelope_path = server._Files(owner), self.mono + 600, "/unit-only/envelope.json"
+        owner.authority = authority_args(self.fixture)
+        owner.envelope, owner.capacity = deepcopy(self.fixture.envelope), deepcopy(self.fixture.capacity)
+        owner.plan = deepcopy(self.fixture.plan)
+        owner.binding = server.binding_from_authority(*owner.authority, **binding_args(self.fixture))
+        owner.kit = {p.removeprefix("/unit-only/kit/"): raw for p, raw in self.raw.items() if p.startswith("/unit-only/kit/")}
+        owner.profile, owner.observation_binding = deepcopy(self.profile), deepcopy(self.observation)
+        owner.endpoint = deepcopy(self.fixture.envelope["endpoints"][0])
+        owner.ca, owner.manifest = self.raw["/unit-only/kit/ca.pem"], json.loads(self.raw[server.MANIFEST])
+        owner.artifact_digest = byte_digest(self.raw[server.EXECUTABLE])
+        owner.snapshot = canonical_bytes([owner.envelope, owner.capacity, owner.plan, owner.binding,
+                                          owner.profile, owner.observation_binding, owner.endpoint])
+        owner.qualification_binding = object.__new__(server._ServerQualificationBinding)
+        self.owner = owner
+        self.nodes = {path: SimpleNamespace(st_dev=91, st_ino=100 + i, st_nlink=1,
+            st_mode=stat.S_IFREG | self.modes.get(path, 0o444), st_uid=0, st_gid=0, st_size=len(raw),
+            st_mtime_ns=1, st_ctime_ns=1) for i, (path, raw) in enumerate(self.raw.items())}
+        for path in tuple(self.nodes):
+            parent = path.rsplit("/", 1)[0] or "/"
+            while parent not in self.nodes:
+                self.nodes[parent] = SimpleNamespace(st_dev=91, st_ino=100 + len(self.nodes), st_nlink=1,
+                    st_mode=stat.S_IFDIR | 0o555, st_uid=0, st_gid=0, st_size=0, st_mtime_ns=1, st_ctime_ns=1)
+                if parent == "/":
+                    break
+                parent = parent.rsplit("/", 1)[0] or "/"
+        original_stat = server.os.stat
+        def path_stat(path, *, dir_fd=None, follow_symlinks=True):
+            absolute = self.resolve(path, dir_fd)
+            return self.nodes[absolute] if absolute in self.nodes else original_stat(path, dir_fd=dir_fd, follow_symlinks=follow_symlinks)
+        stack.enter_context(patch.object(server, "_ACTIVE", owner))
+        stack.enter_context(patch.object(server, "PINNED_ROOT_PUBLIC_KEY_SHA256", self.key_digest))
+        stack.enter_context(patch.object(server, "utc_now", side_effect=lambda: self.now))
+        stack.enter_context(patch.object(server.time, "monotonic", side_effect=lambda: self.mono))
+        stack.enter_context(patch.object(server.os, "uname", return_value=SimpleNamespace(machine=self.machine)))
+        for name, fn in (("open", self.open), ("stat", path_stat), ("fstat", lambda fd: self.nodes[self.fds[fd]]),
+                ("read", self.read), ("close", self.close), ("get_inheritable", lambda fd: False),
+                ("listdir", lambda fd: sorted(p[len(self.fds[fd].rstrip("/")) + 1:] for p in self.nodes
+                    if p != "/" and p.rsplit("/", 1)[0] == self.fds[fd]))):
+            stack.enter_context(patch.object(server.os, name, side_effect=fn))
+        self.socket = stack.enter_context(patch.object(server.socket, "socket", side_effect=AssertionError("no socket in binding")))
+        stack.callback(owner.files.close)
+        return owner
+
+    def resolve(self, path, parent):
+        path = str(path)
+        return path if path.startswith("/") else self.fds[parent].rstrip("/") + "/" + path
+
+    def open(self, path, flags, *, dir_fd=None):
+        absolute = self.resolve(path, dir_fd)
+        if absolute not in self.nodes:
+            raise FileNotFoundError(absolute)
+        self.next_fd += 1
+        self.fds[self.next_fd], self.positions[self.next_fd] = absolute, 0
+        return self.next_fd
+
+    def read(self, fd, count):
+        path, offset = self.fds[fd], self.positions[fd]
+        self.read_paths.append(path)
+        raw = self.raw[path][offset:offset + count]
+        self.positions[fd] += len(raw)
+        return raw
+
+    def close(self, fd):
+        self.closed_fds.append(fd)
+        del self.fds[fd]
+
+
+class QualificationBindingTests(unittest.TestCase):
+    def exercise(self, fixture=None, action=None):
+        fixture = fixture or _QualificationBindingFixture()
+        with ExitStack() as stack:
+            owner = fixture.context(stack)
+            owner.qualification_binding.__init__(owner)
+            if action:
+                action(owner, fixture)
+            self.assertFalse(fixture.socket.called)
+            self.assertNotIn(server.IDENTITY, fixture.read_paths)
+            return owner.qualification_binding
+
+    def test_signed_record_and_all_four_manifests_bind_without_native_authority(self):
+        def action(owner, fixture):
+            binding = owner.qualification_binding
+            self.assertEqual(binding.record, fixture.record)
+            self.assertEqual(binding.broker_binding, fixture.broker)
+            self.assertFalse(hasattr(binding, "check_self"))
+            self.assertFalse(hasattr(binding, "check_peer"))
+            for _, path, executable in fixture.paths:
+                self.assertIn(path + ".sig", fixture.read_paths)
+                self.assertIn(executable, fixture.read_paths)
+        self.exercise(action=action)
+
+    def test_arm64_ipv6_uses_only_the_signed_numeric_endpoint(self):
+        self.exercise(_QualificationBindingFixture("arm64", ipv6=True),
+            lambda owner, _: self.assertEqual(owner.qualification_binding.record["endpointTuples"][0]["ipAddress"], "::1"))
+
+    def test_returned_record_and_broker_are_detached(self):
+        def action(owner, fixture):
+            owner.qualification_binding.record["roles"]["SERVER"]["artifactDigest"] = admission.ZERO
+            owner.qualification_binding.broker_binding["workerArtifactDigest"] = admission.ZERO
+            self.assertEqual(owner.qualification_binding.record, fixture.record)
+            self.assertEqual(owner.qualification_binding.broker_binding, fixture.broker)
+        self.exercise(action=action)
+
+    def test_all_role_signature_forgeries_refuse(self):
+        for _, path, _ in _QualificationBindingFixture().paths:
+            fixture = _QualificationBindingFixture()
+            fixture.raw[path + ".sig"] = b"A" * 86
+            with self.subTest(path=path), self.assertRaisesRegex(ConformanceError, "PROXY_MANIFEST_SIGNATURE"):
+                self.exercise(fixture)
+
+    def test_all_role_preflight_substitutions_refuse_even_when_root_signed(self):
+        for _, path, _ in _QualificationBindingFixture().paths:
+            fixture = _QualificationBindingFixture()
+            value = json.loads(fixture.raw[path])
+            value["preflightEvidenceDigest"] = admission.ZERO
+            fixture.manifest(path, value)
+            with self.subTest(path=path), self.assertRaisesRegex(ConformanceError, "QUALIFICATION_INSTALLED_ROLE_MISMATCH"):
+                self.exercise(fixture)
+
+    def test_artifact_substitution_refuses_for_each_role(self):
+        for _, _, executable in _QualificationBindingFixture().paths:
+            fixture = _QualificationBindingFixture()
+            fixture.raw[executable] = b"x" + fixture.raw[executable][1:]
+            with self.subTest(executable=executable), self.assertRaisesRegex(ConformanceError, "PROXY_MANIFEST_INVALID"):
+                self.exercise(fixture)
+
+    def test_retained_file_mode_and_owner_are_enforced_before_binding(self):
+        for field, value in (("st_uid", 1000), ("st_gid", 1000), ("st_mode", stat.S_IFREG | 0o755)):
+            fixture = _QualificationBindingFixture()
+            with self.subTest(field=field), ExitStack() as stack:
+                owner = fixture.context(stack)
+                setattr(fixture.nodes[server.WORKER], field, value)
+                with self.assertRaisesRegex(ConformanceError, "PROXY_FILE_CUSTODY"):
+                    owner.qualification_binding.__init__(owner)
+
+    def test_missing_record_or_broker_binding_does_not_fallback(self):
+        for path in (admission.QUALIFICATION_PATH, admission.BROKER_BINDING_PATH):
+            fixture = _QualificationBindingFixture()
+            del fixture.raw["/unit-only/kit/" + path]
+            fixture.release()
+            with self.subTest(path=path), self.assertRaises(ConformanceError):
+                self.exercise(fixture)
+
+    def test_release_signed_broker_peer_digest_substitution_refuses(self):
+        for field in ("brokerManifestDigest", "brokerExecutableDigest", "workerManifestDigest", "workerArtifactDigest"):
+            fixture = _QualificationBindingFixture()
+            fixture.broker[field] = admission.ZERO
+            fixture.raw["/unit-only/kit/" + admission.BROKER_BINDING_PATH] = canonical_bytes(fixture.broker)
+            fixture.release()
+            with self.subTest(field=field), self.assertRaisesRegex(ConformanceError, "QUALIFICATION_PEER_ENROLLMENT_MISMATCH"):
+                self.exercise(fixture)
+
+    def test_release_signed_endpoint_substitution_refuses(self):
+        fixture = _QualificationBindingFixture()
+        fixture.fixture.envelope["endpoints"][0]["ipAddress"] = "127.0.0.2"
+        fixture.release()
+        with self.assertRaises(ConformanceError):
+            self.exercise(fixture)
+
+    def test_unretained_release_tree_member_refuses(self):
+        fixture = _QualificationBindingFixture()
+        fixture.raw["/unit-only/kit/" + admission.QUALIFICATION_PATH] += b"\n"
+        with self.assertRaisesRegex(ConformanceError, "PROXY_KIT_INVENTORY"):
+            self.exercise(fixture)
+
+    def test_capacity_forgery_refuses_before_release_read(self):
+        fixture = _QualificationBindingFixture()
+        fixture.raw["/unit-only/capacity.json"] = b"{}"
+        with self.assertRaisesRegex(ConformanceError, "PROXY_FILE_DIGEST"):
+            self.exercise(fixture)
+        self.assertNotIn("/unit-only/release.json", fixture.read_paths)
+
+    def test_envelope_forgery_refuses_before_capacity_read(self):
+        fixture = _QualificationBindingFixture()
+        value = json.loads(fixture.raw["/unit-only/envelope.json"])
+        value["tenantSignature"] = "A" * 86
+        fixture.raw["/unit-only/envelope.json"] = canonical_bytes(value)
+        with self.assertRaises(ConformanceError):
+            self.exercise(fixture)
+        self.assertNotIn("/unit-only/capacity.json", fixture.read_paths)
+
+    def test_parent_snapshot_does_not_hide_mutated_projection(self):
+        fixture = _QualificationBindingFixture()
+        with ExitStack() as stack:
+            owner = fixture.context(stack)
+            owner.profile["binding"]["tenantId"] = "other"
+            with self.assertRaisesRegex(ConformanceError, "QUALIFICATION_INPUT_SUBSTITUTION"):
+                owner.qualification_binding.__init__(owner)
+
+    def test_changed_owner_and_file_owner_poison_binding(self):
+        for fault in ("active", "files", "file_owner", "deadline"):
+            def action(owner, fixture):
+                binding = owner.qualification_binding
+                if fault == "active":
+                    with patch.object(server, "_ACTIVE", None), self.assertRaises(ConformanceError):
+                        binding.check()
+                else:
+                    target, field = (owner.files, "owner") if fault == "file_owner" else (owner, fault)
+                    original = getattr(target, field)
+                    setattr(target, field, owner.deadline + 1 if fault == "deadline" else None)
+                    try:
+                        with self.assertRaises(ConformanceError):
+                            binding.check()
+                    finally:
+                        setattr(target, field, original)
+                with self.assertRaisesRegex(ConformanceError, "QUALIFICATION_BINDING_CLOSED"):
+                    binding.check()
+            with self.subTest(fault=fault):
+                self.exercise(action=action)
+
+    def test_retained_inode_change_poisoned_even_after_restoration(self):
+        def action(owner, fixture):
+            node = fixture.nodes[server.WORKER_MANIFEST]
+            node.st_ino += 1
+            with self.assertRaisesRegex(ConformanceError, "PROXY_FILE_CHANGED"):
+                owner.qualification_binding.check()
+            node.st_ino -= 1
+            with self.assertRaisesRegex(ConformanceError, "QUALIFICATION_BINDING_CLOSED"):
+                owner.qualification_binding.check()
+        self.exercise(action=action)
+
+    def test_clock_reversal_and_original_deadline_cannot_be_reset(self):
+        for fault in ("wall", "mono", "expiry"):
+            def action(owner, fixture):
+                if fault == "wall":
+                    fixture.now = "2026-09-07T00:59:59Z"
+                else:
+                    fixture.mono = 99 if fault == "mono" else owner.deadline
+                with self.assertRaisesRegex(ConformanceError, "QUALIFICATION_CLOCK_OR_EXPIRY"):
+                    owner.qualification_binding.check()
+            with self.subTest(fault=fault):
+                self.exercise(action=action)
+
+    def test_check_deadline_overrun_is_sticky(self):
+        def action(owner, fixture):
+            binding = owner.qualification_binding
+            with patch.object(server.time, "monotonic", side_effect=[100.0, 102.0]), self.assertRaises(ConformanceError):
+                binding.check()
+            with self.assertRaisesRegex(ConformanceError, "QUALIFICATION_BINDING_CLOSED"):
+                binding.check()
+        self.exercise(action=action)
+
+    def test_initial_load_cannot_extend_its_two_second_phase(self):
+        fixture = _QualificationBindingFixture()
+        with ExitStack() as stack:
+            owner = fixture.context(stack)
+            with patch.object(server.time, "monotonic", side_effect=[100.0, 102.0]), self.assertRaisesRegex(
+                    ConformanceError, "QUALIFICATION_LOAD_DEADLINE"):
+                owner.qualification_binding.__init__(owner)
+            self.assertTrue(owner.qualification_binding.poisoned)
+
+    def test_changed_retained_input_or_record_cannot_refresh_binding(self):
+        for fault in ("kit", "profile", "record", "broker"):
+            def action(owner, fixture):
+                binding = owner.qualification_binding
+                if fault == "kit":
+                    owner.kit[admission.QUALIFICATION_PATH] += b"\n"
+                elif fault == "profile":
+                    owner.profile["binding"]["tenantId"] = "other"
+                else:
+                    setattr(binding, "_record_raw" if fault == "record" else "_broker_raw", b"{}")
+                with self.assertRaisesRegex(ConformanceError, "QUALIFICATION_INPUT_SUBSTITUTION"):
+                    binding.check()
+            with self.subTest(fault=fault):
+                self.exercise(action=action)
+
+    def test_record_expiry_is_not_extended_to_the_longer_signed_envelope_window(self):
+        def action(owner, fixture):
+            fixture.now = "2026-09-07T01:10:00Z"
+            with self.assertRaisesRegex(ConformanceError, "QUALIFICATION_CLOCK_OR_EXPIRY"):
+                owner.qualification_binding.check()
+        self.exercise(action=action)
+
+    def test_close_never_closes_borrowed_files_and_refuses_reuse(self):
+        def action(owner, fixture):
+            count = len(fixture.fds)
+            owner.qualification_binding.close()
+            owner.qualification_binding.close()
+            self.assertEqual(len(fixture.fds), count)
+            self.assertFalse(owner.files.closed)
+            with self.assertRaisesRegex(ConformanceError, "QUALIFICATION_BINDING_CLOSED"):
+                owner.qualification_binding.check()
+        self.exercise(action=action)
+
+    def test_caller_data_descriptors_callbacks_or_alternate_owner_cannot_construct(self):
+        for value in ({}, Mock(), 9, lambda: True):
+            with self.subTest(kind=type(value)), self.assertRaises(ConformanceError):
+                server._ServerQualificationBinding(value)
+        with self.assertRaises(TypeError):
+            server._ServerQualificationBinding(record=sample()["record"])
+
+
 class KernelInputCodecTests(unittest.TestCase):
     """Inert independently constructed bytes, never loaded as native code."""
     def elf(self, machine="x86_64"):
