@@ -1157,7 +1157,27 @@ class _KernelPolicyView:
 
     def _epoch_mount_inputs(self):
         rows = (self.rows[5], self.roots.rows[5], self.roots.rows[4])
-        return tuple(row[0] for row in rows), canonical_bytes([row[2] for row in rows])
+        return tuple(row[0] for row in rows), self._mount_pins([row[2] for row in rows])
+
+    @staticmethod
+    def _mount_pins(views):
+        # Native identities are not a JSON/wire document: mount IDs may use
+        # the full uint64 range. Deep immutable tuples retain exact integers.
+        require(type(views) is list and len(views) == 3, "KERNEL_EPOCH_MOUNT_LAYOUT")
+        pins = []
+        for view in views:
+            require(type(view) is dict and set(view) == {"identity", "mountId", "filesystem"},
+                    "KERNEL_EPOCH_MOUNT_LAYOUT")
+            identity, fs = view["identity"], view["filesystem"]
+            require(type(identity) is tuple and len(identity) == 5
+                    and all(type(v) is int for v in identity)
+                    and type(view["mountId"]) is int and 0 < view["mountId"] < 2 ** 64
+                    and type(fs) is dict and set(fs) == {"kind", "fsid", "blockSize", "flags"}
+                    and type(fs["fsid"]) is list and len(fs["fsid"]) == 2
+                    and all(type(v) is int for v in (*fs["fsid"], fs["kind"], fs["blockSize"], fs["flags"])),
+                    "KERNEL_EPOCH_MOUNT_LAYOUT")
+            pins.append((identity, view["mountId"], fs["kind"], tuple(fs["fsid"]), fs["blockSize"], fs["flags"]))
+        return tuple(pins)
 
     def _retain_epoch(self):
         # The fixed inspection factory calls this once, after full policy
@@ -1227,10 +1247,10 @@ class _KernelPolicyView:
             custody()
             def sample():
                 descriptors, pins = self.epoch_mount_pin
-                require(canonical_bytes(observed(native._status_mounts, *descriptors)) == pins,
+                require(self._mount_pins(observed(native._status_mounts, *descriptors)) == pins,
                         "KERNEL_EPOCH_MOUNT_CHANGED")
                 fields = observed(native._mapped_status, self.epoch_original)
-                require(canonical_bytes(observed(native._status_mounts, *descriptors)) == pins,
+                require(self._mount_pins(observed(native._status_mounts, *descriptors)) == pins,
                         "KERNEL_EPOCH_MOUNT_CHANGED")
                 return fields
             if native.busy:

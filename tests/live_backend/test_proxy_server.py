@@ -3186,6 +3186,26 @@ class KernelEpochMountTests(unittest.TestCase):
             value._reader_epoch()
         self.assertTrue(value.failed)
 
+    def test_large_unique_mount_ids_preserve_native_uint64_precision(self):
+        self.roots.close()
+        for node in self.nodes.values():
+            node["mountId"] += 2 ** 53
+        self.roots = server._KernelRootViews()
+        self.addCleanup(self.roots.close)
+        self.root_fds = set(self.handles)
+        value = self.retained()
+        self.assertGreater(value.epoch_mount_pin[1][0][1], 2 ** 53)
+        self.assertIsNone(value._reader_epoch())
+        value.close()
+
+    def test_mount_pin_has_no_mutable_filesystem_alias(self):
+        value = self.retained()
+        original = value.epoch_mount_pin
+        value.rows[5][2]["filesystem"]["fsid"][1] += 1
+        self.assertEqual(value.epoch_mount_pin, original)
+        with self.assertRaisesRegex(ConformanceError, "EPOCH_REPLACED"):
+            value._reader_epoch()
+
 
 class KernelInspectionEpochWiringTests(unittest.TestCase):
     """Real owner routing; explicit epoch doubles, not native qualification."""

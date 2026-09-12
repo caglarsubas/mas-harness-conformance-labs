@@ -734,13 +734,21 @@ in [Linux6.12 statx UAPI](https://raw.githubusercontent.com/torvalds/linux/v6.12
 and [fixed lookup flags](https://raw.githubusercontent.com/torvalds/linux/v6.12/include/uapi/linux/fcntl.h);
 no upstream implementation or dependency was imported.
 
-Twenty-two new OS-mocked tests exercise the real epoch/root/native readers.
+Twenty-four new OS-mocked tests exercise the real epoch/root/native readers.
 They cover same-inode mount changes, retained FD/filesystem substitutions,
 missing/unknown layout fields, query failures/delay, immutable pins, original
 deadline and both mocked ABIs. All760 prior test bodies and127 accepted source
 files remain unchanged. The existing statx OS double now models only the two
 additional fixed names; it does not bypass production validation. Source target
-782 methods; exact-commit full8 LOCAL and required CI remain mandatory.
+784 methods; exact-commit full8 LOCAL and required CI remain mandatory.
+
+The first candidate `b43db38` completed all six discovery suites but failed in
+the new mount-pin storage: native identity tuples were passed to the strict JSON
+serializer. Its failed full log is preserved (commands7/8 were NOT_RUN). The
+corrected internal pin is a deep immutable tuple, not a wire/JSON document; it
+also preserves the full native uint64 mount-ID range. Added regressions cover
+IDs above the JSON safe-integer range and mutable filesystem aliases. Shared
+canonical.py, predecessor tests, timeouts and the full recipe are unchanged.
 
 This closes this status-view mount comparison, not complete per-syscall ancestry
 or independent ABA exclusion. Full combined native-factory performance, retained
