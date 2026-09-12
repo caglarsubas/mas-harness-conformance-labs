@@ -3037,6 +3037,440 @@ class KernelCgroupCustodyTests(unittest.TestCase):
         self.close_fd(target)
 
 
+class KernelBpfCustodyTests(unittest.TestCase):
+    """Fixed factories and independent Linux-UAPI OS mocks; no native BPF."""
+    stat_fd = KernelCgroupCustodyTests.stat_fd
+    statfs = KernelCgroupCustodyTests.statfs
+    statx = KernelCgroupCustodyTests.statx
+    close_fd = KernelCgroupCustodyTests.close_fd
+    allocate = KernelCgroupCustodyTests.allocate
+    pidfd_open = KernelCgroupCustodyTests.pidfd_open
+    poll_pid = KernelCgroupCustodyTests.poll_pid
+    named_stat = KernelCgroupCustodyTests.named_stat
+    namespace_type = KernelCgroupCustodyTests.namespace_type
+    scandir = KernelCgroupCustodyTests.scandir
+    close_views = KernelCgroupCustodyTests.close_views
+    process_stat = KernelCgroupCustodyTests.process_stat
+    process_status = KernelCgroupCustodyTests.process_status
+    configure = KernelCgroupCustodyTests.configure
+    open_fd = KernelCgroupCustodyTests.open_fd
+    read = KernelCgroupCustodyTests.read
+    process = KernelCgroupCustodyTests.process
+
+    def setUp(self):
+        KernelCgroupCustodyTests.setUp(self)
+        self.hooks = (("INET_SOCK_CREATE", 2, 9), ("INET4_BIND", 8, 18), ("INET6_BIND", 9, 18),
+                      ("INET4_CONNECT", 10, 18), ("INET6_CONNECT", 11, 18),
+                      ("UDP4_SENDMSG", 14, 18), ("UDP6_SENDMSG", 15, 18))
+        self.pins, self.programs, self.calls, self.program_fds = {}, {}, [], []
+        self.after = lambda command, attr: None
+        for index, (name, hook, kind) in enumerate(self.hooks):
+            # Inert bytes, never loaded as a program or used as semantic proof.
+            raw = bytes([index + 1]) * 16
+            pin = dict(programId=1000 + index, programType=kind, instructionBytes=len(raw),
+                       translatedSha256=byte_digest(raw), mapIds=[], ifindex=0)
+            self.pins[name] = pin
+            self.programs[1000 + index] = (hook, kind, raw)
+        self.lib.syscall.side_effect = self.syscall
+        self.stack.enter_context(patch.object(server.fcntl, "fcntl", side_effect=self.fd_flags))
+
+    def fd_flags(self, fd, command):
+        self.assertEqual(command, server.fcntl.F_GETFL)
+        return server.os.O_RDWR if self.handles[fd][0].startswith("bpf:") else server.os.O_RDONLY
+
+    def syscall(self, number, command, pointer, size):
+        self.assertIs(type(number), server.ctypes.c_long)
+        self.assertIs(type(command), server.ctypes.c_uint)
+        self.assertIs(type(size), server.ctypes.c_uint)
+        self.assertEqual(number.value, 321 if self.roots.native.machine == "x86_64" else 280)
+        self.assertEqual(size.value, 64)
+        attr, command = pointer._obj, command.value
+        raw = bytes(attr)
+        self.calls.append((number.value, command, raw))
+        if command == 16:
+            target, hook, effective, flags, ids, count = server.struct.unpack_from("<4IQI", raw)
+            self.assertEqual(self.handles[target][0], self.group)
+            self.assertIn(hook, [r[1] for r in self.hooks])
+            self.assertIn(effective, (0, 1))
+            self.assertEqual((flags, count, raw[28:]), (0, 16, b"\0" * 36))
+            output = (server.ctypes.c_uint32 * 16).from_address(ids)
+            self.assertEqual(bytes(output), b"\0" * 64)
+            output[0] = next(key for key, value in self.programs.items() if value[0] == hook)
+            server.struct.pack_into("<I", attr, 24, 1)
+            result = 0
+        elif command == 13:
+            program = server.struct.unpack_from("<I", raw)[0]
+            self.assertIn(program, self.programs)
+            self.assertEqual(raw[4:], b"\0" * 60)
+            path = "bpf:" + str(program)
+            # bpf-prog anonymous fds can share an inode; it is NOT a program ID.
+            self.nodes[path] = dict(self.nodes["/"], st_dev=99, st_ino=22, st_mode=0o600)
+            result = self.allocate(path)
+            self.program_fds.append(result)
+        elif command == 15:
+            fd, length, address = server.struct.unpack_from("<IIQ", raw)
+            self.assertEqual((length, raw[16:]), (240, b"\0" * 48))
+            program = int(self.handles[fd][0].split(":")[1])
+            _, kind, instructions = self.programs[program]
+            info = (server.ctypes.c_ubyte * 240).from_address(address)
+            output = server.struct.unpack_from("<Q", info, 32)[0]
+            expected = bytearray(240)
+            if output:
+                server.struct.pack_into("<I", expected, 20, 65536)
+                server.struct.pack_into("<Q", expected, 32, output)
+            self.assertEqual(bytes(info), bytes(expected))
+            if output:
+                code = (server.ctypes.c_ubyte * 65536).from_address(output)
+                self.assertFalse(any(code))
+                code[:len(instructions)] = instructions
+            server.struct.pack_into("<II", info, 0, kind, program)
+            server.struct.pack_into("<I", info, 20, len(instructions))
+            server.struct.pack_into("<Q", info, 40, 76543)
+            for offset, value in ((84, 1), (104, 1), (108, 1), (132, 8), (172, 16), (176, 8)):
+                server.struct.pack_into("<I", info, offset, value)
+            server.struct.pack_into("<I", attr, 4, 232)
+            result = 0
+        else:
+            raise AssertionError("forbidden BPF command")
+        self.after(command, attr)
+        return result
+
+    def fresh(self):
+        group = KernelCgroupCustodyTests.fresh(self)
+        value = server._KernelBpfView(group, self.pins)
+        self.addCleanup(self.close_bpf, value)
+        return value
+
+    def close_bpf(self, value):
+        self.after = lambda command, attr: None
+        value.close()
+
+    def changed_info(self, offset, value, fmt="<I"):
+        def change(command, attr):
+            if command == 15:
+                address = server.struct.unpack_from("<Q", attr, 8)[0]
+                info = (server.ctypes.c_ubyte * 240).from_address(address)
+                server.struct.pack_into(fmt, info, offset, value)
+        self.after = change
+
+    def test_retains_seven_programs_and_queries_local_and_effective_before_after(self):
+        value = self.fresh()
+        self.assertEqual(len(value.rows), 7)
+        self.assertIsNone(value.check())
+        self.assertEqual({c[1] for c in self.calls}, {13, 15, 16})
+        self.assertEqual(sum(c[1] == 13 for c in self.calls), 7)
+        self.assertEqual(sum(c[1] == 16 for c in self.calls), 70)
+        self.assertEqual(sum(c[1] == 15 for c in self.calls), 21)
+        self.assertEqual({server.struct.unpack_from("<II", c[2], 4) for c in self.calls if c[1] == 16},
+                         {(hook, flags) for _, hook, _ in self.hooks for flags in (0, 1)})
+        self.mapper.assert_not_called()
+
+    def test_arm64_uses_fixed_280_and_no_architecture_fallback(self):
+        self.roots.close()
+        with patch.object(server.os, "uname", return_value=SimpleNamespace(machine="aarch64")):
+            self.roots = server._KernelRootViews()
+        self.addCleanup(self.roots.close)
+        self.assertIsNone(self.fresh().check())
+        self.assertEqual({c[0] for c in self.calls}, {280})
+
+    def test_all_four_roles_query_only_their_retained_cgroup(self):
+        for role in ("SERVER", "OBSERVER", "BROKER", "WORKER"):
+            self.configure(role)
+            value = self.fresh()
+            self.assertIsNone(value.check())
+            value.close()
+            value.cgroup.close()
+            value.cgroup.process.close()
+
+    def test_owner_copies_raw_fds_and_injected_backends_are_refused(self):
+        group = KernelCgroupCustodyTests.fresh(self)
+        for owner in (None, {}, 3, SimpleNamespace(**group.__dict__)):
+            with self.assertRaises(ConformanceError):
+                server._KernelBpfView(owner, self.pins)
+        with self.assertRaises(TypeError):
+            server._KernelBpfView(group, self.pins, backend=Mock())
+        group.close()
+        with self.assertRaises(ConformanceError):
+            server._KernelBpfView(group, self.pins)
+        self.assertEqual(self.calls, [])
+
+    def test_pin_shape_hook_set_and_values_are_closed_before_native_calls(self):
+        group = KernelCgroupCustodyTests.fresh(self)
+        key = "INET_SOCK_CREATE"
+        cases = [{}, dict(self.pins, UNKNOWN=self.pins[key])]
+        for change in ({"programId": True}, {"programId": 0}, {"programId": 4294967296},
+                       {"programType": 18}, {"instructionBytes": 9}, {"instructionBytes": 65544},
+                       {"mapIds": [1]}, {"ifindex": False}, {"ifindex": 1},
+                       {"translatedSha256": "tag-only"}, {"extra": True}):
+            cases.append(dict(self.pins, **{key: dict(self.pins[key], **change)}))
+        for pins in cases:
+            with self.subTest(pins=pins), self.assertRaises((ConformanceError, ValueError)):
+                server._KernelBpfView(group, pins)
+        self.assertEqual(self.calls, [])
+
+    def test_missing_attachment_refuses_without_acquiring_programs(self):
+        self.after = lambda cmd, attr: server.struct.pack_into("<I", attr, 24, 0) if cmd == 16 else None
+        with self.assertRaises(ConformanceError):
+            self.fresh()
+        self.assertEqual(self.program_fds, [])
+
+    def test_extra_or_oversized_attachment_count_is_not_truncated_or_retried(self):
+        for count in (2, 16, 17, 4294967295):
+            self.after = lambda cmd, attr: server.struct.pack_into("<I", attr, 24, count) if cmd == 16 else None
+            with self.assertRaises(ConformanceError):
+                self.fresh()
+        self.assertEqual(self.program_fds, [])
+
+    def test_effective_inherited_program_mismatch_refuses(self):
+        def change(cmd, attr):
+            if cmd == 16 and server.struct.unpack_from("<I", attr, 8)[0] == 1:
+                pointer = server.struct.unpack_from("<Q", attr, 16)[0]
+                (server.ctypes.c_uint32 * 16).from_address(pointer)[0] = 999
+        self.after = change
+        with self.assertRaises(ConformanceError):
+            self.fresh()
+
+    def test_query_unknown_tail_or_changed_input_refuses(self):
+        for offset in (0, 4, 8, 16, 28, 32, 40, 48, 56):
+            self.after = lambda cmd, attr: server.struct.pack_into("<I", attr, offset, 255) if cmd == 16 else None
+            with self.subTest(offset=offset), self.assertRaises(ConformanceError):
+                self.fresh()
+
+    def test_effective_flags_and_unknown_local_flags_refuse(self):
+        for flags, mode in ((1, 1), (2, 1), (3, 0), (4, 0)):
+            def change(cmd, attr):
+                if cmd == 16 and server.struct.unpack_from("<I", attr, 8)[0] == mode:
+                    server.struct.pack_into("<I", attr, 12, flags)
+            self.after = change
+            with self.assertRaises(ConformanceError):
+                self.fresh()
+
+    def test_valid_local_flags_are_retained_and_changes_poison_view(self):
+        def multi(cmd, attr):
+            if cmd == 16 and server.struct.unpack_from("<I", attr, 8)[0] == 0:
+                server.struct.pack_into("<I", attr, 12, 2)
+        self.after = multi
+        value = self.fresh()
+        self.assertIsNone(value.check())
+        self.after = lambda cmd, attr: None
+        with self.assertRaises(ConformanceError):
+            value.check()
+        self.assertTrue(value.failed)
+
+    def test_query_unused_id_slots_cannot_hide_additional_output(self):
+        def change(cmd, attr):
+            if cmd == 16:
+                pointer = server.struct.unpack_from("<Q", attr, 16)[0]
+                (server.ctypes.c_uint32 * 16).from_address(pointer)[15] = 999
+        self.after = change
+        with self.assertRaises(ConformanceError):
+            self.fresh()
+
+    def test_syscall_errors_do_not_retry_or_acquire_privileges(self):
+        for command in (13, 15, 16):
+            def fail(number, cmd, pointer, size):
+                return -1 if cmd.value == command else self.syscall(number, cmd, pointer, size)
+            with patch.object(self.lib, "syscall", Mock(side_effect=fail)), self.assertRaises(ConformanceError):
+                self.fresh()
+            self.assertTrue(all(fd not in self.handles for fd in self.program_fds))
+
+    def test_redacted_instruction_length_refuses(self):
+        self.changed_info(20, 0)
+        with self.assertRaises(ConformanceError):
+            self.fresh()
+        self.assertTrue(all(fd not in self.handles for fd in self.program_fds))
+
+    def test_redacted_instruction_pointer_refuses_even_with_matching_length(self):
+        self.changed_info(32, 0, "<Q")
+        with self.assertRaises(ConformanceError):
+            self.fresh()
+
+    def test_actual_id_or_type_mismatch_refuses(self):
+        for offset, value in ((0, 18), (4, 999)):
+            self.changed_info(offset, value)
+            with self.assertRaises(ConformanceError):
+                self.fresh()
+
+    def test_maps_and_offload_are_not_accepted(self):
+        for offset in (52, 56, 80, 88, 96):
+            self.changed_info(offset, 1)
+            with self.assertRaises(ConformanceError):
+                self.fresh()
+
+    def test_unrequested_pointers_reserved_bits_and_record_layouts_refuse(self):
+        for offset, value in ((24, 1), (84, 2), (112, 1), (120, 1), (132, 9), (136, 1),
+                              (152, 1), (160, 1), (172, 17), (176, 9), (184, 1), (228, 1), (232, 1)):
+            self.changed_info(offset, value)
+            with self.subTest(offset=offset), self.assertRaises(ConformanceError):
+                self.fresh()
+
+    def test_short_new_or_changed_info_response_layouts_refuse(self):
+        for offset, value in ((0, 1), (4, 224), (4, 240), (8, 1), (16, 1)):
+            self.after = lambda cmd, attr: server.struct.pack_into("<I", attr, offset, value) if cmd == 15 else None
+            with self.assertRaises(ConformanceError):
+                self.fresh()
+
+    def test_translated_bytes_not_tag_or_stored_artifact_determine_identity(self):
+        self.programs[1000] = (2, 9, b"x" * 16)
+        with self.assertRaises(ConformanceError):
+            self.fresh()
+
+    def test_oversized_or_truncated_instructions_refuse_without_second_allocation(self):
+        for count in (8, 17, 65537, 4294967295):
+            self.changed_info(20, count)
+            with self.assertRaises(ConformanceError):
+                self.fresh()
+
+    def test_runtime_counters_may_advance_but_load_identity_must_not(self):
+        value = self.fresh()
+        self.changed_info(192, 999, "<Q")
+        self.assertIsNone(value.check())
+        self.changed_info(40, 999, "<Q")
+        with self.assertRaises(ConformanceError):
+            value.check()
+
+    def test_replacement_after_program_read_is_caught_by_final_queries(self):
+        value = self.fresh()
+        original = self.programs[1000]
+        def change(cmd, attr):
+            if cmd == 15:
+                self.programs[999] = self.programs.pop(1000)
+                self.after = lambda cmd, attr: None
+        self.after = change
+        with self.assertRaises(ConformanceError):
+            value.check()
+        self.programs[1000] = original
+
+    def test_pid_death_or_cgroup_migration_after_query_poison_owner(self):
+        for field, raw in (("stat_raw", self.process_stat(**{"19": "77"})), ("cgroup_raw", b"0::/foreign\n")):
+            before = getattr(self, field)
+            value = self.fresh()
+            self.after = lambda cmd, attr: setattr(self, field, raw)
+            with self.assertRaises(ConformanceError):
+                value.check()
+            setattr(self, field, before)
+            self.after = lambda cmd, attr: None
+
+    def test_changed_cgroup_control_during_query_fails_before_return(self):
+        value = self.fresh()
+        self.after = lambda cmd, attr: self.contents.update({self.group + "/pids.max": b"2\n"})
+        with self.assertRaises(ConformanceError):
+            value.check()
+
+    def test_inheritable_or_wrong_mode_program_descriptors_refuse(self):
+        with patch.object(server.os, "get_inheritable", side_effect=lambda fd: fd in self.program_fds):
+            with self.assertRaises(ConformanceError):
+                self.fresh()
+        with patch.object(server.fcntl, "fcntl", return_value=server.os.O_RDONLY):
+            with self.assertRaises(ConformanceError):
+                self.fresh()
+
+    def test_expected_pins_detach_and_program_close_preserves_borrowed_owners(self):
+        value = self.fresh()
+        self.pins["INET4_BIND"]["programId"] = 999
+        self.assertIsNone(value.check())
+        value.close()
+        value.close()
+        self.assertTrue(all(fd not in self.handles for fd in self.program_fds))
+        self.assertFalse(value.cgroup.closed or value.cgroup.process.closed or self.roots.closed)
+        self.assertIsNone(value.cgroup.check())
+        with self.assertRaises(ConformanceError):
+            value.check()
+
+    def test_post_acquisition_timeout_closes_new_descriptor_before_raising(self):
+        def expire(cmd, attr):
+            if cmd == 13:
+                self.now += 2
+        self.after = expire
+        with self.assertRaises(ConformanceError):
+            self.fresh()
+        self.assertEqual(len(self.program_fds), 1)
+        self.assertNotIn(self.program_fds[0], self.handles)
+
+    def test_syscall_timeout_and_backwards_clock_refuse(self):
+        for delta in (2, -1):
+            self.after = lambda cmd, attr: setattr(self, "now", self.now + delta)
+            with self.assertRaises(ConformanceError):
+                self.fresh()
+            self.after = lambda cmd, attr: None
+
+    def test_cross_process_thread_or_reentrant_use_refuses(self):
+        for obj, key in ((server.os, "getpid"), (server.threading, "get_ident")):
+            value = self.fresh()
+            with patch.object(obj, key, return_value=999), self.assertRaises(ConformanceError):
+                value.check()
+        value = self.fresh()
+        value.busy = True
+        with self.assertRaises(ConformanceError):
+            value.check()
+        value.busy = False
+
+    def test_shared_anonymous_inode_cannot_hide_fd_substitution_on_close(self):
+        value = self.fresh()
+        self._cleanups.pop()  # this test explicitly verifies sticky close failure
+        fd = value.rows[0][0]
+        self.handles[fd] = ("bpf:1001", self.handles[fd][1])
+        with self.assertRaises(ConformanceError):
+            value.close()
+        self.assertIn(fd, self.handles)
+        self.assertTrue(all(other not in self.handles for other in self.program_fds if other != fd))
+        called = len(self.calls)
+        with self.assertRaises(ConformanceError):
+            value.close()
+        self.assertEqual(len(self.calls), called)
+        self.close_fd(fd)  # test-owned substituted handle, not production cleanup
+
+    def test_uncertain_os_close_is_never_retried_and_other_owned_fds_close(self):
+        value = self.fresh()
+        self._cleanups.pop()
+        fd = value.rows[-1][0]
+        calls = []
+        def fail(number):
+            calls.append(number)
+            self.close_fd(number)
+            if number == fd:
+                raise OSError("unit close uncertainty")
+        with patch.object(server.os, "close", side_effect=fail):
+            with self.assertRaises(OSError):
+                value.close()
+            with self.assertRaises(OSError):
+                value.close()
+        self.assertEqual(calls.count(fd), 1)
+        self.assertEqual(len(calls), 7)
+
+    def test_same_inode_different_program_id_is_detected_during_recheck(self):
+        value = self.fresh()
+        fd = value.rows[0][0]
+        original = self.handles[fd]
+        self.handles[fd] = ("bpf:1001", original[1])
+        with self.assertRaises(ConformanceError):
+            value.check()
+        self.handles[fd] = original
+
+    def test_program_fd_acquisition_partial_failure_releases_only_owned_handles(self):
+        count = 0
+        def fail(number, command, pointer, size):
+            nonlocal count
+            if command.value == 13:
+                count += 1
+                if count == 4:
+                    return -1
+            return self.syscall(number, command, pointer, size)
+        with patch.object(self.lib, "syscall", side_effect=fail), self.assertRaises(ConformanceError):
+            self.fresh()
+        self.assertEqual(len(self.program_fds), 3)
+        self.assertTrue(all(fd not in self.handles for fd in self.program_fds))
+        self.assertFalse(self.roots.closed)
+
+    def test_private_syscall_surface_rejects_mutation_commands(self):
+        value = self.fresh()
+        before = len(self.calls)
+        for command in (0, 1, 2, 5, 8, 9, 10, 28, 29, True, "16"):
+            with self.assertRaises(ConformanceError):
+                value._call(command, server._KernelBpfAttr())
+        self.assertEqual(len(self.calls), before)
+
+
 class ProxyQualificationTests(unittest.TestCase):
     def test_four_architecture_resource_profiles_and_sixteen_captures_are_data_only(self):
         self.assertEqual(len(VECTORS["qualification"]["positive"]), 4)

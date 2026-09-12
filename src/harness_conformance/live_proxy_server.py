@@ -1779,6 +1779,235 @@ class _KernelCgroupView:
             raise self.cleanup_failure
 
 
+class _KernelBpfAttr(ctypes.Structure):
+    _fields_ = [("words", ctypes.c_uint64 * 8)]
+
+
+class _KernelBpfInfo(ctypes.Structure):
+    # Linux 6.12's 232 bytes plus a zero extension sentinel: require the kernel
+    # to return exactly 232, not silently accept a shorter/newer info layout.
+    _fields_ = [("words", ctypes.c_uint64 * 30)]
+
+
+class _KernelBpfView:
+    """Observe seven fixed hooks; never install filters or mint qualification.
+
+    Borrow the original cgroup/process owner and retain only program fds.
+    Authenticated pins, independent semantic review, active policy/code checks
+    and the external execution/change fence remain the qualifier's obligations.
+    """
+    HOOKS = (("INET_SOCK_CREATE", 2, 9), ("INET4_BIND", 8, 18),
+             ("INET6_BIND", 9, 18), ("INET4_CONNECT", 10, 18),
+             ("INET6_CONNECT", 11, 18), ("UDP4_SENDMSG", 14, 18), ("UDP6_SENDMSG", 15, 18))
+
+    def __init__(self, cgroup, expected):
+        require(type(cgroup) is _KernelCgroupView and not cgroup.closed and not cgroup.failed
+                and not cgroup.busy, "KERNEL_BPF_OWNER")
+        expected = document(expected)
+        require(type(expected) is dict and set(expected) == {r[0] for r in self.HOOKS}, "KERNEL_BPF_PINS")
+        for name, _, kind in self.HOOKS:
+            pin = expected[name]
+            require(type(pin) is dict and set(pin) == {"programId", "programType", "translatedSha256",
+                    "instructionBytes", "mapIds", "ifindex"}, "KERNEL_BPF_PINS")
+            require(type(pin["programId"]) is int and 1 <= pin["programId"] <= 4294967295
+                    and type(pin["programType"]) is int and pin["programType"] == kind
+                    and type(pin["instructionBytes"]) is int and 8 <= pin["instructionBytes"] <= 65536
+                    and pin["instructionBytes"] % 8 == 0 and type(pin["mapIds"]) is list and not pin["mapIds"]
+                    and type(pin["ifindex"]) is int and pin["ifindex"] == 0, "KERNEL_BPF_PINS")
+            require_digest(pin["translatedSha256"])
+        require(ctypes.sizeof(_KernelBpfAttr) == 64 and ctypes.alignment(_KernelBpfAttr) == 8
+                and ctypes.sizeof(_KernelBpfInfo) == 240 and ctypes.alignment(_KernelBpfInfo) == 8,
+                "KERNEL_BPF_ABI")
+        self.cgroup, self.expected = cgroup, expected
+        self.native = cgroup.roots.native
+        self.number = {"x86_64": 321, "aarch64": 280}[self.native.machine]
+        self.pid, self.thread = os.getpid(), threading.get_ident()
+        self.closed = self.failed = self.busy = False
+        self.cleanup_failure, self.last = None, time.monotonic()
+        self.rows, self.baseline = [], None
+        try:
+            with self._phase():
+                self.baseline = self._queries()
+                for name, _, _ in self.HOOKS:
+                    self._acquire(name)
+                self._observe()
+        except BaseException:
+            try:
+                self.close()
+            except BaseException:
+                pass
+            raise
+
+    def _tick(self):
+        require(type(self) is _KernelBpfView and not self.closed and not self.failed and self.busy
+                and self.pid == os.getpid() and self.thread == threading.get_ident(), "KERNEL_BPF_CUSTODY")
+        now = time.monotonic()
+        require(self.last <= now < self.end, "KERNEL_BPF_DEADLINE")
+        self.last = now
+        self.cgroup._tick()
+        now = time.monotonic()
+        require(self.last <= now < self.end, "KERNEL_BPF_DEADLINE")
+        self.last = now
+
+    def _io(self, function, *args):
+        self._tick()
+        try:
+            return function(*args)
+        finally:
+            self._tick()
+
+    @contextmanager
+    def _phase(self):
+        require(not self.closed and not self.failed and not self.busy, "KERNEL_BPF_UNAVAILABLE")
+        self.busy = True
+        self.end = time.monotonic() + 2
+        try:
+            with self.cgroup._phase():
+                self._io(self.cgroup._observe)
+                yield
+                self._io(self.cgroup._observe)
+        except BaseException:
+            self.failed = True
+            raise
+        finally:
+            self.busy = False
+
+    def _call(self, command, attr):
+        require(type(command) is int and command in (13, 15, 16)
+                and type(attr) is _KernelBpfAttr, "KERNEL_BPF_COMMAND")
+        return self.native.lib.syscall(ctypes.c_long(self.number), ctypes.c_uint(command),
+                                       ctypes.byref(attr), ctypes.c_uint(64))
+
+    def _queries(self):
+        result = []
+        for name, hook, _ in self.HOOKS:
+            for effective in (0, 1):
+                self._io(self.cgroup._retained)
+                attr, ids = _KernelBpfAttr(), (ctypes.c_uint32 * 16)()
+                target = self.cgroup.rows[1][0]
+                pointer = ctypes.addressof(ids)
+                struct.pack_into("<4IQI", attr, 0, target, hook, effective, 0, pointer, 16)
+                require(self._io(self._call, 16, attr) == 0, "KERNEL_BPF_QUERY_UNAVAILABLE")
+                raw = bytes(attr)
+                fd, actual_hook, flags, attach, returned, count = struct.unpack_from("<4IQI", raw)
+                require((fd, actual_hook, flags, returned) == (target, hook, effective, pointer)
+                        and raw[28:] == b"\0" * 36 and count == 1
+                        and ids[0] == self.expected[name]["programId"] and not any(ids[1:])
+                        and (attach == 0 if effective else attach in (0, 1, 2)), "KERNEL_BPF_QUERY_CHANGED")
+                self._io(self.cgroup._retained)
+                result.append((name, effective, attach, ids[0]))
+        return tuple(result)
+
+    def _descriptor(self, fd):
+        identity = self._io(_KernelProcessView._close_identity, fd)
+        require(not self._io(os.get_inheritable, fd), "KERNEL_BPF_FD_INHERITABLE")
+        flags = self._io(fcntl.fcntl, fd, fcntl.F_GETFL)
+        # The kernel creates bpf-prog anonymous descriptors O_RDWR|O_CLOEXEC.
+        # This is not permission to write them or pass them to another process.
+        require(flags & os.O_ACCMODE == os.O_RDWR and not flags & 0x200000, "KERNEL_BPF_FD_MODE")
+        return identity
+
+    def _acquire(self, name):
+        row = [None, None, name, None]
+        self.rows.append(row)
+        attr = _KernelBpfAttr()
+        struct.pack_into("<I", attr, 0, self.expected[name]["programId"])
+        before = bytes(attr)
+        self._tick()
+        try:
+            fd = self._call(13, attr)
+            # Record ownership before the post-call clock/custody check, so a
+            # successful acquisition followed by expiry cannot leak the fd.
+            if type(fd) is int and fd >= 0:
+                row[0] = fd
+        finally:
+            self._tick()
+        require(row[0] is not None and bytes(attr) == before, "KERNEL_BPF_OPEN_UNAVAILABLE")
+        row[1] = self._descriptor(row[0])
+        row[3] = self._info(row)
+
+    def _info(self, row):
+        fd, identity, name, _ = row
+        require(self._descriptor(fd) == identity, "KERNEL_BPF_FD_REUSED")
+        attr, info = _KernelBpfAttr(), _KernelBpfInfo()
+        instructions = (ctypes.c_ubyte * 65536)()
+        pointer = ctypes.addressof(instructions)
+        struct.pack_into("<I", info, 20, 65536)
+        struct.pack_into("<Q", info, 32, pointer)
+        struct.pack_into("<IIQ", attr, 0, fd, 240, ctypes.addressof(info))
+        require(self._io(self._call, 15, attr) == 0, "KERNEL_BPF_INFO_UNAVAILABLE")
+        raw, out = bytes(info), bytes(attr)
+        require(struct.unpack_from("<IIQ", out) == (fd, 232, ctypes.addressof(info))
+                and out[16:] == b"\0" * 48 and raw[228:] == b"\0" * 12, "KERNEL_BPF_INFO_LAYOUT")
+        pin = self.expected[name]
+        require(struct.unpack_from("<II", raw) == (pin["programType"], pin["programId"])
+                and struct.unpack_from("<I", raw, 20)[0] == pin["instructionBytes"]
+                and struct.unpack_from("<Q", raw, 32)[0] == pointer, "KERNEL_BPF_PROGRAM_CHANGED")
+        require(all(struct.unpack_from("<Q", raw, offset)[0] == 0
+                    for offset in (24, 56, 88, 96, 112, 120, 136, 152, 160, 184))
+                and struct.unpack_from("<I", raw, 52)[0] == 0
+                and struct.unpack_from("<I", raw, 80)[0] == 0
+                and struct.unpack_from("<I", raw, 84)[0] in (0, 1)
+                and tuple(struct.unpack_from("<I", raw, o)[0] for o in (132, 172, 176)) == (8, 16, 8),
+                "KERNEL_BPF_PROGRAM_UNSUPPORTED")
+        require(byte_digest(bytes(instructions[:pin["instructionBytes"]])) == pin["translatedSha256"]
+                and not any(instructions[pin["instructionBytes"]:]), "KERNEL_BPF_INSTRUCTIONS_CHANGED")
+        require(self._descriptor(fd) == identity, "KERNEL_BPF_FD_REUSED")
+        # Runtime counters may advance. Do not turn legitimate executions into
+        # identity drift; the program, tag, load identity and other fields bind.
+        stable = bytearray(raw[:232])
+        stable[32:40] = b"\0" * 8
+        stable[192:216] = b"\0" * 24
+        return bytes(stable)
+
+    def _observe(self):
+        require(self._queries() == self.baseline, "KERNEL_BPF_ATTACHMENT_DRIFT")
+        for row in self.rows:
+            require(self._info(row) == row[3], "KERNEL_BPF_INFO_DRIFT")
+        require(self._queries() == self.baseline, "KERNEL_BPF_ATTACHMENT_DRIFT")
+
+    def check(self):
+        with self._phase():
+            self._observe()
+
+    def _close_program(self, fd, identity, name, observed):
+        require(identity is None or _KernelProcessView._close_identity(fd) == identity,
+                "KERNEL_BPF_FD_REUSED")
+        if observed is not None:
+            # anon_inode fstat identity can be shared by different programs.
+            # On cleanup, recheck the actual ID too, without re-entering failed
+            # inspection or treating a matching ID as execution authority.
+            started = time.monotonic()
+            attr, info = _KernelBpfAttr(), _KernelBpfInfo()
+            struct.pack_into("<IIQ", attr, 0, fd, 240, ctypes.addressof(info))
+            result = self._call(15, attr)
+            now = time.monotonic()
+            require(started <= now < started + 2 and self.pid == os.getpid()
+                    and self.thread == threading.get_ident() and result == 0
+                    and struct.unpack_from("<IIQ", attr) == (fd, 232, ctypes.addressof(info))
+                    and bytes(attr)[16:] == b"\0" * 48 and bytes(info)[228:] == b"\0" * 12
+                    and struct.unpack_from("<II", info) ==
+                        (self.expected[name]["programType"], self.expected[name]["programId"])
+                    and _KernelProcessView._close_identity(fd) == identity, "KERNEL_BPF_CLOSE_UNCERTAIN")
+        os.close(fd)  # never retry an uncertain close or close a substituted program
+
+    def close(self):
+        if not self.closed:
+            self.closed = True
+            failure = None
+            while self.rows:
+                fd, identity, name, observed = self.rows.pop()
+                if fd is None:
+                    continue
+                try:
+                    self._close_program(fd, identity, name, observed)
+                except BaseException as exc:
+                    failure = failure or exc
+            self.cleanup_failure = failure
+        if self.cleanup_failure is not None:
+            raise self.cleanup_failure
+
+
 class _Files:
     """One close owner; bounded first read with retained complete ancestry."""
     def __init__(self, owner):

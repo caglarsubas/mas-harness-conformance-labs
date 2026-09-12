@@ -534,6 +534,49 @@ lifetime and the full qualifier/broker/API integration remain unfinished.
 OS-mocked real-factory tests do not establish native Linux qualification.
 Fresh full signed LOCAL/CI acceptance is mandatory for this exact source.
 
+## Retained endpoint-filter continuation — 2026-09-12
+
+Preceding head `e53af04` passed 636 tests and all eight declared commands locally
+and in required localhost CI run `34672058700`. Runner 49 retired with zero
+registered runners or uploaded artifacts. This is historical evidence, not
+acceptance of this source increment. All 127 accepted files and all preceding
+methods/classes remain unchanged.
+
+The private `_KernelBpfView` borrows the original `_KernelCgroupView` and retains
+seven program descriptors. Every fixed hook is queried locally and effectively
+against that exact cgroup; each view must contain exactly its enrolled program.
+Queries surround acquisition and repeated translated-byte reads. Program ID,
+type, length/hash, map-free/non-offloaded identity and stable metadata must match;
+redaction, extra programs, changed attachment flags, layout changes and failed
+inspection are unavailable, never repaired or retried into success.
+
+The fixed little-endian LP64 reader uses explicitly aligned Linux 6.12 query and
+program-info buffers. Arrays are bounded to 16 IDs and 64 KiB of translated
+instructions. A zero extension sentinel requires the exact 232-byte returned
+program-info layout; unused pointers, reserved fields and unexpected output are
+rejected. Runtime counters may advance without changing program identity.
+The [Linux 6.12 UAPI](https://github.com/torvalds/linux/blob/v6.12/include/uapi/linux/bpf.h),
+[syscall implementation](https://github.com/torvalds/linux/blob/v6.12/kernel/bpf/syscall.c)
+and [cgroup query implementation](https://github.com/torvalds/linux/blob/v6.12/kernel/bpf/cgroup.c)
+are interface references, not imported upstream implementation.
+
+Only query (16), program-FD lookup (13) and object-info read (15) are used with
+fixed syscall numbers 321/280. Program descriptors are kernel-created
+O_RDWR/CLOEXEC anonymous fds, not ordinary read-only files; the reader never
+writes them. Cleanup checks program ID in addition to inode identity because
+anonymous inodes may be shared. Partial acquisitions close only owned resources;
+uncertain cleanup remains sticky and never retries a close. Borrowed cgroup,
+process and root owners stay separate. No filter load/attach/detach, map access,
+link update, test-run, capability acquisition or installer is introduced.
+
+Inspection has one two-second phase including nested cgroup/process checks and
+pre/post syscall custody/clock guards. This component does not authenticate
+caller-supplied pins, review program semantics, enforce an endpoint tuple or
+exclude an in-between policy/filter replacement. The independently installed
+qualifier, active policy/code composition, signed lifetime, external change fence
+and broker/API credential ordering remain unfinished. OS-edge mocks exercise the
+real factories; neither architecture has native qualification from these tests.
+
 ## Verification boundary
 
 This is an in-progress source snapshot, not a self-attested run result. Exact
@@ -571,7 +614,8 @@ probe, live launcher, runtime download or cloud/billable service is authorized.
 | Alpha 2 | CONF-LIVE-003 fresh kernel-policy custody | LOCAL_AND_CI_PASS_RECORDED | Head2adf60a,535 tests,all8 commands; runner45 retired |
 | Alpha 2 | CONF-LIVE-003 code-file custody / mapping data | LOCAL_AND_CI_PASS_RECORDED | Head1475d3c,572 tests,all8 commands; runner47 retired |
 | Alpha 2 | CONF-LIVE-003 retained process-code component | LOCAL_AND_CI_PASS_RECORDED | Head263e9e2, 605 tests, all8 commands; runner48 retired |
-| Alpha 2 | CONF-LIVE-003 retained cgroup component | IMPLEMENTED_NOT_ACCEPTED | Read-only role limits and membership; fresh full recipe required |
+| Alpha 2 | CONF-LIVE-003 retained cgroup component | LOCAL_AND_CI_PASS_RECORDED | Heade53af04, 636 tests, all8 commands; runner49 retired |
+| Alpha 2 | CONF-LIVE-003 retained endpoint-filter component | IMPLEMENTED_NOT_ACCEPTED | Fixed local/effective queries and translated-program custody; fresh full recipe required |
 | Alpha 2 | CONF-LIVE-003 native inspector / broker / API | ONGOING | Required implementation listed above |
 | Alpha 2 | CONF-LIVE-003 required CI | WAITING | Fresh exact-head localhost evidence required; prior failures retained |
 | Alpha 2 | CONF-LIVE-003 source completion / merge / exact-main | NOT_RUN | Packet is incomplete; no completion claim |
