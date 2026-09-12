@@ -1814,7 +1814,7 @@ class _KernelBpfView:
                     and type(pin["instructionBytes"]) is int and 8 <= pin["instructionBytes"] <= 65536
                     and pin["instructionBytes"] % 8 == 0 and type(pin["mapIds"]) is list and not pin["mapIds"]
                     and type(pin["ifindex"]) is int and pin["ifindex"] == 0, "KERNEL_BPF_PINS")
-            require_digest(pin["translatedSha256"])
+            require_digest(pin["translatedSha256"], "KERNEL_BPF_TRANSLATED_DIGEST")
         require(ctypes.sizeof(_KernelBpfAttr) == 64 and ctypes.alignment(_KernelBpfAttr) == 8
                 and ctypes.sizeof(_KernelBpfInfo) == 240 and ctypes.alignment(_KernelBpfInfo) == 8,
                 "KERNEL_BPF_ABI")

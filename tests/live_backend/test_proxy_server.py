@@ -3046,7 +3046,6 @@ class KernelBpfCustodyTests(unittest.TestCase):
     allocate = KernelCgroupCustodyTests.allocate
     pidfd_open = KernelCgroupCustodyTests.pidfd_open
     poll_pid = KernelCgroupCustodyTests.poll_pid
-    named_stat = KernelCgroupCustodyTests.named_stat
     namespace_type = KernelCgroupCustodyTests.namespace_type
     scandir = KernelCgroupCustodyTests.scandir
     close_views = KernelCgroupCustodyTests.close_views
@@ -3056,6 +3055,13 @@ class KernelBpfCustodyTests(unittest.TestCase):
     open_fd = KernelCgroupCustodyTests.open_fd
     read = KernelCgroupCustodyTests.read
     process = KernelCgroupCustodyTests.process
+
+    def named_stat(self, name, *, dir_fd=None, follow_symlinks=True):
+        # unittest's traceback renderer can stat a source filename while an OS
+        # mock is active. Report it absent, not a malformed native observation.
+        if dir_fd is None and str(name) not in self.nodes:
+            raise FileNotFoundError(str(name))
+        return KernelCgroupCustodyTests.named_stat(self, name, dir_fd=dir_fd, follow_symlinks=follow_symlinks)
 
     def setUp(self):
         KernelCgroupCustodyTests.setUp(self)
