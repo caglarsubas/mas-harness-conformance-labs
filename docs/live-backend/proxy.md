@@ -440,7 +440,16 @@ and operator change-fence integration, cgroup/BPF, broker/API and factory tests
 remain required before enabling credentials. fs-verity and snapshots do not
 prevent private-page/ABA code injection without independently enforced policy.
 
-36 new OS-mocked methods target571 total, preserving all535 previous identities.
+The first code-file candidatecda0edc passed571 tests/all8 commands locally and
+in required localhost CI run34662349456; runner46 retired. Final contract
+cross-check found that the approved file/segment schema permits both private
+and shared mappings, while this candidate accepted private mappings only.
+The bounded correction separates ELF's R/W/X flags from the record's pinned
+private/shared selection. It permits either expressly pinned choice, never a
+mapping-mode wildcard, and tests rejection of a mode substitution. No signature,
+schema, source lock, enforcement policy or credential gate changes.
+
+37 new OS-mocked methods target572 total, preserving all571 preceding identities.
 No native calls, host installation, root policy/key change, dependencies,
 downloads, hosted runner, API key or warm-source access occur in this increment.
 Fresh exact-commit LOCAL and required CI evidence is pending outside this source
@@ -481,7 +490,7 @@ probe, live launcher, runtime download or cloud/billable service is authorized.
 | Alpha 2 | CONF-LIVE-003 fixed kernel-root custody | LOCAL_AND_CI_PASS_RECORDED | Headc435f7c passed486 tests and all8 commands; runner43 retired |
 | Alpha 2 | CONF-LIVE-003 retained process / namespace component | LOCAL_AND_CI_PASS_RECORDED | Head6dcd8e7,509 tests,all8 commands; runner44 retired |
 | Alpha 2 | CONF-LIVE-003 fresh kernel-policy custody | LOCAL_AND_CI_PASS_RECORDED | Head2adf60a,535 tests,all8 commands; runner45 retired |
-| Alpha 2 | CONF-LIVE-003 code-file custody / mapping data | IMPLEMENTED_NOT_ACCEPTED |36 new methods; fresh exact-commit full recipe required |
+| Alpha 2 | CONF-LIVE-003 code-file custody / mapping data | IMPLEMENTED_NOT_ACCEPTED |571-test candidate passed LOCAL/CI; shared-mode correction requires fresh572-test recipe |
 | Alpha 2 | CONF-LIVE-003 native inspector / broker / API | ONGOING | Required implementation listed above |
 | Alpha 2 | CONF-LIVE-003 required CI | WAITING | Fresh exact-head localhost evidence required; prior failures retained |
 | Alpha 2 | CONF-LIVE-003 source completion / merge / exact-main | NOT_RUN | Packet is incomplete; no completion claim |

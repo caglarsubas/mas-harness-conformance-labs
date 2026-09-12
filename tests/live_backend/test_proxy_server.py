@@ -1908,7 +1908,7 @@ class KernelCodeCustodyTests(unittest.TestCase):
     def test_bad_segment_pins_and_page_size_fail_closed(self):
         for segments in ({}, [dict(offset=True, length=4096, permissions="r-xp")],
                          [dict(offset=0, length=1, permissions="r-xp")],
-                         [dict(offset=0, length=4096, permissions="r-xs")],
+                         [dict(offset=0, length=4096, permissions="r-wp")],
                          [dict(offset=0, length=4096, permissions="r-xp", extra=1)]):
             with self.assertRaises(ConformanceError):
                 self.view([dict(self.pins[0], executableSegments=segments)])
@@ -2118,6 +2118,19 @@ class KernelCodeCustodyTests(unittest.TestCase):
             value = self.view()
             with self.assertRaises(ConformanceError):
                 value.match_maps(changed, self.auxv())
+            value.close()
+
+    def test_shared_mapping_selection_is_pinned_separately_from_elf_rwx_flags(self):
+        for permissions, elf_flags in (("r-xs", 5), ("--xs", 1)):
+            raw = bytearray(self.elf())
+            server.struct.pack_into("<I", raw, 68, elf_flags)
+            self.nodes["/opt/planeon/python"]["raw"] = bytes(raw)
+            self.pins[0]["sha256"] = server.byte_digest(bytes(raw))
+            self.pins[0]["executableSegments"][0]["permissions"] = permissions
+            value = self.view()
+            self.assertIsNone(value.match_maps(self.maps(permissions=permissions), self.auxv()))
+            with self.assertRaisesRegex(ConformanceError, "KERNEL_CODE_MAP_LAYOUT"):
+                value.match_maps(self.maps(permissions=permissions[:3] + "p"), self.auxv())
             value.close()
 
     def test_mapping_missing_extra_or_oversize_segments_are_refused(self):

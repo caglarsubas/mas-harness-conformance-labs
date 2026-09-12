@@ -1129,7 +1129,7 @@ class _KernelCodeFiles:
                         and type(segment["offset"]) is int and 0 <= segment["offset"] < entry["size"]
                         and type(segment["length"]) is int and 0 < segment["length"] <= 67108864
                         and segment["offset"] % page_size == segment["length"] % page_size == 0
-                        and segment["permissions"] in ("r-xp", "--xp"), "KERNEL_CODE_SEGMENTS")
+                        and segment["permissions"] in ("r-xp", "--xp", "r-xs", "--xs"), "KERNEL_CODE_SEGMENTS")
             self.pins[path] = entry
         require(sum(e["size"] for e in expected) <= 536870912, "KERNEL_CODE_TOTAL_SIZE")
         require(not any(parent in self.pins for path in self.pins
@@ -1260,7 +1260,13 @@ class _KernelCodeFiles:
         layout = _elf_code_layout(raw, self.roots.native.machine, self.page_size) if raw.startswith(b"\x7fELF") else None
         segments = [] if layout is None else [{k: v for k, v in s.items() if k != "virtualAddress"}
                                              for s in layout["segments"]]
-        require(segments == pin["executableSegments"], "KERNEL_CODE_ELF_PIN")
+        # ELF records R/W/X, not mmap's private/shared choice. The record pins
+        # that separate choice; retain it for the exact subsequent maps match.
+        normalized = [dict(s, permissions=s["permissions"][:3] + "p") for s in pin["executableSegments"]]
+        require(segments == normalized, "KERNEL_CODE_ELF_PIN")
+        if layout is not None:
+            for segment, expected in zip(layout["segments"], pin["executableSegments"]):
+                segment["permissions"] = expected["permissions"]
         del raw, chunks  # never retain an executable image or substitute cached bytes
         integrity()
         return layout
