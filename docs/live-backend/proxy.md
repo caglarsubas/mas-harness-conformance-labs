@@ -787,6 +787,16 @@ broker/API wiring and independent AMD64/ARM64 qualification stay open. Snapshot
 comparisons do not replace independent exclusion of intervening changes (ABA).
 No execution authority, credentials, control-plane contract or host policy changed.
 
+The first root-boundary candidate `923b872` hit the unchanged900-second trusted
+launcher limit after one backend failure was reported; the suite-end diagnostic
+was not emitted. Commands7/8 were NOT_RUN, and the complete interrupted log is
+retained externally. The next snapshot emits diagnostic-only timing/failure text
+for its34 new cases, without intercepting TestCase.run or altering results. Its
+original-root-deadline regression now injects one delayed query so it distinguishes
+that pre-existing deadline from the separate two-second sample deadline. This
+does not retroactively diagnose or accept the interrupted candidate. Earlier
+accepted suites also ran more slowly in that replay; cause remains unproven.
+
 ## Verification boundary
 
 This is an in-progress source snapshot, not a self-attested run result. Exact

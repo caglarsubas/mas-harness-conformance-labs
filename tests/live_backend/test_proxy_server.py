@@ -3212,13 +3212,26 @@ class KernelEpochMountTests(unittest.TestCase):
 
 class KernelRootBoundaryMountTests(unittest.TestCase):
     """Real root/native methods; fixed statx/fstatfs and OS edges are mocked."""
-    setUp = KernelRootCustodyTests.setUp
     stat_fd = KernelRootCustodyTests.stat_fd
     statfs = KernelRootCustodyTests.statfs
     statx = KernelRootCustodyTests.statx
     close_fd = KernelRootCustodyTests.close_fd
     open_fd = KernelRootCustodyTests.open_fd
     owner = KernelRootCustodyTests.owner
+
+    def setUp(self):
+        self.case_started = _wall_clock()
+        KernelRootCustodyTests.setUp(self)
+
+    def tearDown(self):
+        # Diagnostic output only. Do not replace discovery, run, result state,
+        # clocks, assertions, or the launcher's unchanged acceptance deadline.
+        result = self._outcome.result
+        for case, detail in result.failures + result.errors:
+            if case is self or getattr(case, "test_case", None) is self:
+                print("CONF-LIVE-003 root-boundary diagnostic " + detail, flush=True)
+        print(f"CONF-LIVE-003 case-timing case={self.id()} "
+              f"elapsedSeconds={_wall_clock() - self.case_started:.6f} evidenceClass=DIAGNOSTIC_ONLY", flush=True)
 
     def named_replacement(self, path):
         roots = self.owner()
@@ -3346,9 +3359,13 @@ class KernelRootBoundaryMountTests(unittest.TestCase):
 
     def test_delayed_success_keeps_original_root_phase_deadline(self):
         roots = self.owner()
+        delayed = False
         def late(*args):
+            nonlocal delayed
             result = self.statx(*args)
-            self.now += 0.2
+            if not delayed:
+                self.now += 0.2
+                delayed = True
             return result
         with self.assertRaisesRegex(ConformanceError, "KERNEL_ROOT_DEADLINE"), roots._phase():
             original_end = roots.end
@@ -3452,6 +3469,10 @@ class KernelInspectionRootWiringTests(unittest.TestCase):
     start = KernelSelfInspectionTests.start
     fail = KernelSelfInspectionTests.fail
     readers = KernelInspectionReadBoundaryTests.readers
+    tearDown = KernelRootBoundaryMountTests.tearDown
+
+    def setUp(self):
+        self.case_started = _wall_clock()
 
     def test_roots_surround_epoch_at_both_io_boundaries(self):
         with ExitStack() as stack:
