@@ -2707,13 +2707,22 @@ class KernelPolicyCustodyTests(unittest.TestCase):
 
 class KernelRetainedEpochTests(unittest.TestCase):
     """Real policy/root/native/mapping flow with OS edges mocked, no active server."""
-    setUp = KernelPolicyCustodyTests.setUp
+    def setUp(self):
+        self.source_stat = server.os.stat
+        KernelPolicyCustodyTests.setUp(self)
+
+    def named_stat(self, name, *, dir_fd=None, follow_symlinks=True):
+        if dir_fd is None:
+            # unittest/linecache inspect source files when formatting failures;
+            # native policy lookups always use a retained directory descriptor.
+            return self.source_stat(name, follow_symlinks=follow_symlinks)
+        return KernelPolicyCustodyTests.named_stat(self, name, dir_fd=dir_fd, follow_symlinks=follow_symlinks)
+
     stat_fd = KernelPolicyCustodyTests.stat_fd
     statfs = KernelPolicyCustodyTests.statfs
     statx = KernelPolicyCustodyTests.statx
     close_fd = KernelPolicyCustodyTests.close_fd
     open_fd = KernelPolicyCustodyTests.open_fd
-    named_stat = KernelPolicyCustodyTests.named_stat
     read = KernelPolicyCustodyTests.read
     barrier = KernelPolicyCustodyTests.barrier
     mapping = KernelPolicyCustodyTests.mapping
@@ -2769,17 +2778,26 @@ class KernelRetainedEpochTests(unittest.TestCase):
             value._reader_epoch()
         self.assertTrue(value.failed)
 
+    def changed_field_refuses(self, index):
+        value = self.retained()
+        fields = list(server.struct.unpack("<5I", self.raw_status))
+        fields[index] = fields[index] + 1 if index in (1, 3) else 0
+        self.raw_status = server.struct.pack("<5I", *fields)
+        with self.assertRaises(ConformanceError):
+            value._reader_epoch()
+        self.assertTrue(value.failed)
+
     def test_odd_sequence_and_changed_controls_refuse(self):
-        for index in (1, 2, 3, 4):
-            original = self.raw_status
-            value = self.retained()
-            fields = list(server.struct.unpack("<5I", original))
-            fields[index] = fields[index] + 1 if index in (1, 3) else 0
-            self.raw_status = server.struct.pack("<5I", *fields)
-            with self.subTest(index=index), self.assertRaises(ConformanceError):
-                value._reader_epoch()
-            self.raw_status = original
-            value.close()
+        self.changed_field_refuses(1)
+
+    def test_enforcement_disabled_refuses_in_fresh_reader_lifetime(self):
+        self.changed_field_refuses(2)
+
+    def test_policyload_changed_refuses_in_fresh_reader_lifetime(self):
+        self.changed_field_refuses(3)
+
+    def test_deny_unknown_disabled_refuses_in_fresh_reader_lifetime(self):
+        self.changed_field_refuses(4)
 
     def test_epoch_change_during_fence_is_rejected(self):
         value = self.retained()

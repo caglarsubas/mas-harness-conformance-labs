@@ -704,11 +704,11 @@ coverage, combined factory performance and real native matrix evidence remain
 unfinished. Source/OS-mocked results cannot qualify the platform or authorize
 effects. Existing containment refusal still precedes observer and credentials.
 
-Twenty-four new tests cover real policy/root/native/mapping methods with OS
+Twenty-seven new tests cover real policy/root/native/mapping methods with OS
 edges mocked, plus explicit owner-routing doubles. Existing component-lifecycle
 tests now double the two new epoch operations alongside their already doubled
 policy operations; no previous test body, identity or accepted file is changed.
-All733 prior methods remain, with source target757 methods. Fresh full8 LOCAL
+All733 prior methods remain, with source target760 methods. Fresh full8 LOCAL
 and required localhost CI are mandatory for this exact source increment.
 
 ## Verification boundary
