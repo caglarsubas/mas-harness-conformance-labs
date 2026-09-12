@@ -96,7 +96,7 @@ class _QualificationBindingFixture:
         endpoint = self.fixture.envelope["endpoints"][0]
         endpoint["tls"]["caCertificateFileReference"] = "/unit-only/kit/ca.pem"
         if ipv6:
-            endpoint["ipAddress"] = "::1"
+            endpoint["ipAddress"] = "fd00::1"
         self.raw["/unit-only/kit/ca.pem"] = b"-----BEGIN CERTIFICATE-----\nUNIT_DATA_NOT_TLS\n"
         self.raw["/unit-only/kit/campaigns/platform/linux-baseline/inputs/" + architecture + ".json"] = canonical_bytes(self.fixture.plan)
         self.record.update(profileDigest=canonical_digest(self.profile),
@@ -253,7 +253,7 @@ class QualificationBindingTests(unittest.TestCase):
 
     def test_arm64_ipv6_uses_only_the_signed_numeric_endpoint(self):
         self.exercise(_QualificationBindingFixture("arm64", ipv6=True),
-            lambda owner, _: self.assertEqual(owner.qualification_binding.record["endpointTuples"][0]["ipAddress"], "::1"))
+            lambda owner, _: self.assertEqual(owner.qualification_binding.record["endpointTuples"][0]["ipAddress"], "fd00::1"))
 
     def test_returned_record_and_broker_are_detached(self):
         def action(owner, fixture):
