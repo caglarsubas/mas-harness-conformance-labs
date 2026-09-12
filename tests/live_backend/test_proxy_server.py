@@ -495,6 +495,10 @@ class KernelSelfInspectionTests(unittest.TestCase):
                 self.on_close(name, resource)
             return close
         if double_readers:
+            # These existing tests intentionally double component operations;
+            # the new retained epoch has separate real OS-edge tests below.
+            for method in ("_retain_epoch", "_reader_epoch"):
+                stack.enter_context(patch.object(server._KernelPolicyView, method, return_value=None))
             for name, kind in self.CLASSES:
                 for method, value in (("__init__", initializer(name)), ("check", checker(name)), ("close", closer(name))):
                     stack.enter_context(patch.object(kind, method, value))
@@ -2699,6 +2703,322 @@ class KernelPolicyCustodyTests(unittest.TestCase):
         self.assertIsNone(self.view().check())
         self.assertTrue(all(item.closes == 1 for item in self.maps))
         self.ioctl.assert_not_called()
+
+
+class KernelRetainedEpochTests(unittest.TestCase):
+    """Real policy/root/native/mapping flow with OS edges mocked, no active server."""
+    setUp = KernelPolicyCustodyTests.setUp
+    stat_fd = KernelPolicyCustodyTests.stat_fd
+    statfs = KernelPolicyCustodyTests.statfs
+    statx = KernelPolicyCustodyTests.statx
+    close_fd = KernelPolicyCustodyTests.close_fd
+    open_fd = KernelPolicyCustodyTests.open_fd
+    named_stat = KernelPolicyCustodyTests.named_stat
+    read = KernelPolicyCustodyTests.read
+    barrier = KernelPolicyCustodyTests.barrier
+    mapping = KernelPolicyCustodyTests.mapping
+    close_views = KernelPolicyCustodyTests.close_views
+    view = KernelPolicyCustodyTests.view
+
+    def retained(self):
+        value = self.view()
+        value._retain_epoch()
+        return value
+
+    def test_retained_mapping_is_read_only_and_reused_without_fresh_policy_open(self):
+        value = self.retained()
+        original, maps, opens = value.epoch_original, len(self.maps), len(self.opens)
+        self.assertIsNotNone(original)
+        self.assertEqual(original.closes, 0)
+        self.assertIsNone(value._reader_epoch())
+        self.assertIsNone(value._reader_epoch())
+        self.assertEqual((len(self.maps), len(self.opens)), (maps, opens))
+        self.assertIs(value.epoch_original, original)
+        value.close()
+        self.assertEqual(original.closes, 1)
+        self.assertEqual(set(self.handles), self.root_fds)
+
+    def test_already_busy_native_phase_is_not_reentered_or_renewed(self):
+        value = self.retained()
+        native = self.roots.native
+        with native._phase():
+            deadline = native.end
+            self.assertIsNone(value._reader_epoch())
+            self.assertTrue(native.busy)
+            self.assertEqual(native.end, deadline)
+
+    def test_policy_check_still_fresh_opens_hashes_and_closes_policy(self):
+        value = self.retained()
+        count = len([p for p, _, _ in self.opens if p == "/sys/fs/selinux/policy"])
+        original = value.epoch_original
+        self.assertIsNone(value.check())
+        self.assertEqual(len([p for p, _, _ in self.opens if p == "/sys/fs/selinux/policy"]), count + 1)
+        self.assertIs(value.epoch_original, original)
+        self.assertEqual(original.closes, 0)
+
+    def test_changed_even_epoch_refuses_and_cannot_be_restored(self):
+        value = self.retained()
+        original = self.raw_status
+        fields = list(server.struct.unpack("<5I", original))
+        fields[1] += 2
+        self.raw_status = server.struct.pack("<5I", *fields)
+        with self.assertRaisesRegex(ConformanceError, "EPOCH_CHANGED"):
+            value._reader_epoch()
+        self.raw_status = original
+        with self.assertRaises(ConformanceError):
+            value._reader_epoch()
+        self.assertTrue(value.failed)
+
+    def test_odd_sequence_and_changed_controls_refuse(self):
+        for index in (1, 2, 3, 4):
+            original = self.raw_status
+            value = self.retained()
+            fields = list(server.struct.unpack("<5I", original))
+            fields[index] = fields[index] + 1 if index in (1, 3) else 0
+            self.raw_status = server.struct.pack("<5I", *fields)
+            with self.subTest(index=index), self.assertRaises(ConformanceError):
+                value._reader_epoch()
+            self.raw_status = original
+            value.close()
+
+    def test_epoch_change_during_fence_is_rejected(self):
+        value = self.retained()
+        changed = False
+        def change(*args):
+            nonlocal changed
+            result = self.barrier(*args)
+            if not changed:
+                changed = True
+                fields = list(server.struct.unpack("<5I", self.raw_status))
+                fields[1] += 2
+                self.raw_status = server.struct.pack("<5I", *fields)
+            return result
+        self.lib.syscall.side_effect = change
+        with self.assertRaises(ConformanceError):
+            value._reader_epoch()
+        self.assertTrue(changed)
+
+    def test_status_path_changed_during_sample_is_not_hidden_by_retained_map(self):
+        value = self.retained()
+        path = "/sys/fs/selinux/status"
+        original = self.nodes[path]
+        def changed(*args):
+            self.nodes[path] = {**original, "st_ino": original["st_ino"] + 1}
+            return self.barrier(*args)
+        self.lib.syscall.side_effect = changed
+        with self.assertRaisesRegex(ConformanceError, "PATH_CHANGED"):
+            value._reader_epoch()
+        self.nodes[path] = original
+
+    def test_status_or_parent_fd_replacement_refuses(self):
+        for role in ("status", "parent"):
+            value = self.retained()
+            fd = value.rows[5][0] if role == "status" else self.roots.rows[5][0]
+            original = self.handles[fd]
+            self.handles[fd] = (original[0], {**original[1], "st_ino": original[1]["st_ino"] + 1})
+            with self.subTest(role=role), self.assertRaisesRegex(ConformanceError, "FD_CHANGED"):
+                value._reader_epoch()
+            self.handles[fd] = original  # restore synthetic foreign owner for cleanup
+            value.close()
+
+    def test_inheritable_or_write_access_refuses_before_status_sample(self):
+        for fault in ("inherit", "write", "path"):
+            value = self.retained()
+            calls = self.lib.syscall.call_count
+            manager = patch.object(server.os, "get_inheritable", return_value=True) if fault == "inherit" else (
+                patch.object(server.fcntl, "fcntl", return_value=server.os.O_WRONLY if fault == "write" else 0o10000000))
+            with manager, self.subTest(fault=fault), self.assertRaisesRegex(ConformanceError, "FD_ACCESS"):
+                value._reader_epoch()
+            self.assertEqual(self.lib.syscall.call_count, calls)
+            value.close()
+
+    def test_mapping_substitution_closes_only_original_mapping(self):
+        value = self.retained()
+        original, replacement = value.epoch_original, Mock()
+        value.epoch_mapping = replacement
+        with self.assertRaisesRegex(ConformanceError, "REPLACED"):
+            value._reader_epoch()
+        value.close()
+        self.assertEqual(original.closes, 1)
+        replacement.close.assert_not_called()
+
+    def test_mutated_expected_status_cannot_reenroll_a_changed_epoch(self):
+        value = self.retained()
+        value.selinux["status"]["sequence"] += 2
+        with self.assertRaisesRegex(ConformanceError, "REPLACED"):
+            value._reader_epoch()
+
+    def test_native_reader_substitution_refuses(self):
+        value = self.retained()
+        original = self.roots.native
+        self.roots.native = object.__new__(server._KernelNativeReads)
+        try:
+            with self.assertRaisesRegex(ConformanceError, "NATIVE_CHANGED"):
+                value._reader_epoch()
+        finally:
+            self.roots.native = original
+
+    def test_barrier_error_never_reuses_a_previous_sample(self):
+        value = self.retained()
+        self.lib.syscall.return_value = -1
+        self.lib.syscall.side_effect = None
+        with self.assertRaises(ConformanceError):
+            value._reader_epoch()
+        self.assertTrue(value.failed)
+
+    def test_delayed_barrier_cannot_reset_a_busy_native_deadline(self):
+        value = self.retained()
+        def delayed(*args):
+            result = self.barrier(*args)
+            self.now += 2
+            return result
+        self.lib.syscall.side_effect = delayed
+        with self.assertRaises(ConformanceError), self.roots.native._phase():
+            value._reader_epoch()
+        self.assertTrue(value.failed)
+
+    def test_duplicate_retention_and_closed_reader_refuse(self):
+        value = self.retained()
+        count = len(self.maps)
+        with self.assertRaises(ConformanceError):
+            value._retain_epoch()
+        self.assertEqual(len(self.maps), count)
+        value.close()
+        with self.assertRaises(ConformanceError):
+            value._reader_epoch()
+        with self.assertRaises(ConformanceError):
+            value._retain_epoch()
+
+    def test_failed_retention_keeps_original_mapping_owned_for_cleanup(self):
+        value = self.view()
+        mapper = self.mapping
+        created = []
+        def allocate(*args, **kwargs):
+            mapping = mapper(*args, **kwargs)
+            created.append(mapping)
+            if len(created) == 2:  # first is the original short-lived _epoch check
+                self.now += 2
+            return mapping
+        self.mapper.side_effect = allocate
+        with self.assertRaises(ConformanceError):
+            value._retain_epoch()
+        self.assertEqual(len(created), 2)
+        self.assertIs(value.epoch_original, created[-1])
+        value.close()
+        self.assertTrue(all(m.closes == 1 for m in created))
+
+    def test_uncertain_mapping_close_is_sticky_and_still_closes_policy_fds(self):
+        value = self.retained()
+        original = value.epoch_original
+        original.close = Mock(side_effect=OSError("unit close uncertain"))
+        for _ in range(2):
+            with self.assertRaises(OSError):
+                value.close()
+        original.close.assert_called_once_with()
+        self.assertEqual(set(self.handles), self.root_fds)
+
+    def test_read_only_page_sizes_and_both_abis_remain_explicit(self):
+        for machine in ("x86_64", "aarch64"):
+            # Construct the actual primitive reader against each mocked OS ABI.
+            self.machine = machine
+            self.host["machine"] = machine
+            original = self.roots.native
+            self.roots.native = self.roots._native_original = server._KernelNativeReads()
+            try:
+                for size in (4096, 16384, 65536):
+                    self.page_size = size
+                    with self.subTest(machine=machine, size=size):
+                        value = self.retained()
+                        self.assertIsNone(value._reader_epoch())
+                        value.close()
+            finally:
+                self.roots.native.close()
+                self.roots.native = self.roots._native_original = original
+
+
+class KernelInspectionEpochWiringTests(unittest.TestCase):
+    """Real owner routing; explicit epoch doubles, not native qualification."""
+    CLASSES = KernelSelfInspectionTests.CLASSES
+    environment = KernelSelfInspectionTests.environment
+    start = KernelSelfInspectionTests.start
+    fail = KernelSelfInspectionTests.fail
+    readers = KernelInspectionReadBoundaryTests.readers
+
+    def test_all_reader_ticks_sample_the_epoch_before_and_after_io(self):
+        with ExitStack() as stack:
+            subject = self.start(stack)
+            readers = self.readers(subject)
+            with patch.object(server._KernelPolicyView, "_reader_epoch", return_value=None) as epoch:
+                with subject._phase():
+                    for reader in readers:
+                        before = epoch.call_count
+                        reader._tick()
+                        self.assertGreater(epoch.call_count, before)
+                    order = []
+                    epoch.side_effect = lambda: order.append("epoch")
+                    subject.code._io(lambda: order.append("read"))
+                    self.assertEqual(order, ["epoch", "read", "epoch"])
+
+    def test_epoch_refusal_during_io_prevents_any_following_read(self):
+        with ExitStack() as stack:
+            subject = self.start(stack)
+            self.readers(subject)
+            changed, reads = False, []
+            def sample_epoch():
+                if changed:
+                    self.fail("UNIT_EPOCH_CHANGED")
+            def operation():
+                nonlocal changed
+                reads.append("first")
+                changed = True
+            with patch.object(server._KernelPolicyView, "_reader_epoch", side_effect=sample_epoch):
+                with self.assertRaises(ConformanceError), subject._phase():
+                    subject.code._io(operation)
+                    reads.append("second")
+            self.assertEqual(reads, ["first"])
+            self.assertTrue(subject.failed and subject.closed)
+
+    def test_epoch_inner_checks_allow_only_policy_and_original_native_reader(self):
+        with ExitStack() as stack:
+            subject = self.start(stack)
+            self.readers(subject)
+            seen = []
+            def sample_epoch():
+                seen.append("sample")
+                server._kernel_inspection_tick(subject.policy)
+                server._kernel_inspection_tick(subject.roots.native)
+            with patch.object(server._KernelPolicyView, "_reader_epoch", side_effect=sample_epoch):
+                with subject._phase():
+                    subject.code._tick()
+            self.assertEqual(seen, ["sample"])
+
+    def test_other_reader_reentry_during_epoch_check_refuses(self):
+        with ExitStack() as stack:
+            subject = self.start(stack)
+            self.readers(subject)
+            with patch.object(server._KernelPolicyView, "_reader_epoch", side_effect=lambda: subject.process._tick()):
+                with self.assertRaises(ConformanceError), subject._phase():
+                    subject.code._tick()
+            self.assertTrue(subject.failed and subject.closed)
+
+    def test_boolean_epoch_result_cannot_replace_the_fixed_check(self):
+        for result in (True, False, "PASS", {}):
+            with self.subTest(result=result), ExitStack() as stack:
+                subject = self.start(stack)
+                self.readers(subject)
+                with patch.object(server._KernelPolicyView, "_reader_epoch", return_value=result):
+                    with self.assertRaises(ConformanceError), subject._phase():
+                        subject.code._tick()
+
+    def test_failed_retention_precedes_process_storage_observer_and_credentials(self):
+        with ExitStack() as stack:
+            subject = self.environment(stack)
+            with patch.object(server._KernelPolicyView, "_retain_epoch", side_effect=ConformanceError("UNIT_EPOCH_MISSING", "unit")):
+                with self.assertRaises(ConformanceError):
+                    subject.__init__(self.owner)
+            self.assertEqual(set(self.resources), {"roots", "policy"})
+            self.assertFalse(self.fixture.socket.called)
+            self.assertNotIn(server.IDENTITY, self.fixture.read_paths)
 
 
 class KernelCodeCustodyTests(unittest.TestCase):

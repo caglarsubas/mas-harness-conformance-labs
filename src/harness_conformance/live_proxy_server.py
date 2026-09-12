@@ -515,6 +515,24 @@ class _KernelNativeReads:
                     mapping.close()
                     self._tick()
 
+    def _mapped_status(self, mapping):
+        # Internal sample in the ORIGINAL native phase, even when the caller
+        # is paused in a native read tick. Do not enter/reset that phase here.
+        self._tick()
+        sequence = bytes(mapping[4:8])
+        self._tick()
+        require(len(sequence) == 4 and struct.unpack("<I", sequence)[0] % 2 == 0,
+                "KERNEL_STATUS_UNSTABLE")
+        self._fence()
+        fields = _selinux_status_fields(bytes(mapping[:20]))
+        self._tick()
+        self._fence()
+        ending = bytes(mapping[4:8])
+        self._tick()
+        require(ending == sequence and fields["sequence"] == struct.unpack("<I", sequence)[0],
+                "KERNEL_STATUS_UNSTABLE")
+        return fields
+
     def close(self):
         # No caller-owned fd is closed and no process registration is undone.
         self.closed = True
@@ -944,6 +962,8 @@ class _KernelPolicyView:
         self.rows, self.policy_identity = [], None
         self.closed = self.failed = self.busy = False
         self.cleanup_failure, self.last = None, time.monotonic()
+        self.epoch_mapping = self.epoch_original = None
+        self.epoch_busy = False
         try:
             with self._phase():
                 self._acquire(self.rows)
@@ -1099,6 +1119,90 @@ class _KernelPolicyView:
         with self._phase():
             self._observe()
 
+    def _epoch_inputs(self):
+        fd, _, status = self.rows[5]
+        parent, _, root = self.roots.rows[5]
+        return (fd, tuple(status["identity"]), parent, tuple(root["identity"]),
+                tuple(sorted(self.selinux["status"].items())))
+
+    def _retain_epoch(self):
+        # The fixed inspection factory calls this once, after full policy
+        # observation. Never accept a mapping, fd, epoch or callback as input.
+        require(not self.closed and not self.failed and self.epoch_original is None,
+                "KERNEL_EPOCH_RETAIN_UNAVAILABLE")
+        try:
+            with self._phase():
+                self._epoch()
+                self.epoch_pin = self._epoch_inputs()
+                page_size = self._io(os.sysconf, "SC_PAGESIZE")
+                require(type(page_size) is int and page_size in (4096, 16384, 65536), "KERNEL_STATUS_PAGE_SIZE")
+                # Retain before the following tick can refuse. The mmap owns
+                # its internal duplicate; rows[5]'s fd remains policy-owned.
+                try:
+                    self.epoch_mapping = mmap.mmap(self.epoch_pin[0], page_size,
+                        flags=mmap.MAP_SHARED, prot=mmap.PROT_READ)
+                    self.epoch_original = self.epoch_mapping
+                finally:
+                    self._tick()
+                self._reader_epoch()
+        except BaseException:
+            self.failed = True
+            raise
+
+    def _reader_epoch(self):
+        require(not self.closed and not self.failed and not self.epoch_busy,
+                "KERNEL_EPOCH_UNAVAILABLE")
+        self.epoch_busy = True
+        before = last = time.monotonic()
+        def guard():
+            nonlocal last
+            require(type(self) is _KernelPolicyView and not self.closed and not self.failed
+                    and self.pid == os.getpid() and self.thread == threading.get_ident(), "KERNEL_EPOCH_CUSTODY")
+            _kernel_inspection_tick(self)
+            now = time.monotonic()
+            require(last <= now < before + 2, "KERNEL_EPOCH_DEADLINE")
+            last = now
+            require(self.epoch_original is not None and self.epoch_mapping is self.epoch_original
+                    and self._epoch_inputs() == self.epoch_pin, "KERNEL_EPOCH_REPLACED")
+        def observed(function, *args, **kwargs):
+            guard()
+            try:
+                return function(*args, **kwargs)
+            finally:
+                guard()
+        try:
+            guard()
+            native = self.roots.native
+            require(type(native) is _KernelNativeReads and native is self.roots._native_original
+                    and not native.closed and not native.failed, "KERNEL_EPOCH_NATIVE_CHANGED")
+            fd, identity, parent, root_identity, expected = self.epoch_pin
+            def custody():
+                for descriptor, pin in ((fd, identity), (parent, root_identity)):
+                    info = observed(os.fstat, descriptor)
+                    require((info.st_dev, info.st_ino, info.st_uid, info.st_gid, info.st_mode) == pin,
+                            "KERNEL_EPOCH_FD_CHANGED")
+                    flags = observed(fcntl.fcntl, descriptor, fcntl.F_GETFL)
+                    require(not observed(os.get_inheritable, descriptor)
+                            and flags & os.O_ACCMODE == os.O_RDONLY and not flags & 0o10000000,
+                            "KERNEL_EPOCH_FD_ACCESS")
+                named = observed(os.stat, "status", dir_fd=parent, follow_symlinks=False)
+                require((named.st_dev, named.st_ino, named.st_uid, named.st_gid, named.st_mode) == identity,
+                        "KERNEL_EPOCH_PATH_CHANGED")
+            custody()
+            if native.busy:
+                fields = observed(native._mapped_status, self.epoch_original)
+            else:
+                with native._phase():
+                    fields = observed(native._mapped_status, self.epoch_original)
+            require(tuple(sorted(fields.items())) == expected, "KERNEL_POLICY_EPOCH_CHANGED")
+            custody()
+            guard()
+        except BaseException:
+            self.failed = True
+            raise
+        finally:
+            self.epoch_busy = False
+
     def _close_rows(self, rows):
         failure = None
         while rows:
@@ -1118,7 +1222,17 @@ class _KernelPolicyView:
     def close(self):
         if not self.closed:
             self.closed = True
-            self._close_rows(self.rows)
+            mapping, self.epoch_original = self.epoch_original, None
+            self.epoch_mapping = None
+            try:
+                if mapping is not None:
+                    mapping.close()  # no retry, including uncertain close
+            except BaseException as exc:
+                self.cleanup_failure = self.cleanup_failure or exc
+            try:
+                self._close_rows(self.rows)
+            except BaseException as exc:
+                self.cleanup_failure = self.cleanup_failure or exc
         if self.cleanup_failure is not None:
             raise self.cleanup_failure
 
@@ -2328,6 +2442,7 @@ class _KernelSelfInspection:
         self.owner, self.owned = owner, []
         self.closed = self.failed = self.busy = False
         self.cleanup_failure = None
+        self.epoch_ready = self.epoch_sampling = False
         for name in ("roots", "policy", "process", "code", "mappings", "cgroup", "filters"):
             setattr(self, name, None)
         try:
@@ -2351,6 +2466,8 @@ class _KernelSelfInspection:
                 self.role = record["roles"]["SERVER"]
                 self._own("roots", _KernelRootViews)
                 self._own("policy", _KernelPolicyView, self.roots, record["host"], record["selinux"])
+                require(self.policy._retain_epoch() is None, "KERNEL_EPOCH_CHECK_RESULT")
+                self.epoch_ready = True
                 self._policy_check()
                 self._own("process", _KernelProcessView, self.roots, os.getpid(), "SERVER", self.role)
                 self._policy_check()
@@ -2409,6 +2526,16 @@ class _KernelSelfInspection:
                     "KERNEL_INSPECTION_AUTHORITY_CHANGED")
             require(self.authority_window[0] <= self.wall < self.authority_window[1],
                     "KERNEL_INSPECTION_AUTHORITY_EXPIRED")
+            if self.epoch_ready:
+                if self.epoch_sampling:
+                    require(reader is self.policy or reader is self.roots.native,
+                            "KERNEL_EPOCH_RECURSIVE_READER")
+                else:
+                    self.epoch_sampling = True
+                    try:
+                        require(self.policy._reader_epoch() is None, "KERNEL_EPOCH_CHECK_RESULT")
+                    finally:
+                        self.epoch_sampling = False
         except BaseException:
             # Unwind the reader's own acquired resources before the outer
             # phase closes its owners. Never close a still-returning FD here.

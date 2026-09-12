@@ -680,6 +680,37 @@ and libc-load ordering. These are not combined OS-edge positive tests. All715
 prior methods and127 accepted source files remain; new source target733 methods.
 Fresh exact-commit full8 LOCAL and required self-hosted CI are mandatory.
 
+### Retained policy-epoch continuation — 2026-09-12
+
+After full initial policy observation, the fixed inspection factory retains a
+read-only shared SELinux status mapping before constructing process/code/cgroup/
+filter readers. The policy owner closes the original mapping before its retained
+status descriptor; failure and uncertain cleanup remain sticky with no retry.
+The mapping is never an execution permit or a caller-selectable input.
+
+Every existing owner-bound reader tick now samples the pinned epoch. The sample
+checks status FD, parent FD, access flags, named status identity and immutable
+expected values before/after reading the mapping. Sequence and status fields are
+read with the existing private membarrier operations and must remain even,
+unchanged and equal to the enrolled values. A native reader already inside its
+phase is sampled without entering a second phase or renewing its deadline.
+Nested epoch checks admit only the original policy/native readers for custody
+and clock checks; a different reader reentering during sampling refuses.
+
+This retains the initial fresh policy hashing and all later full policy checks;
+an epoch sample does not replace policy/boot/root/mount/code observations or the
+independent host-change fence. In-between ABA exclusion, complete syscall/path
+coverage, combined factory performance and real native matrix evidence remain
+unfinished. Source/OS-mocked results cannot qualify the platform or authorize
+effects. Existing containment refusal still precedes observer and credentials.
+
+Twenty-four new tests cover real policy/root/native/mapping methods with OS
+edges mocked, plus explicit owner-routing doubles. Existing component-lifecycle
+tests now double the two new epoch operations alongside their already doubled
+policy operations; no previous test body, identity or accepted file is changed.
+All733 prior methods remain, with source target757 methods. Fresh full8 LOCAL
+and required localhost CI are mandatory for this exact source increment.
+
 ## Verification boundary
 
 This is an in-progress source snapshot, not a self-attested run result. Exact
@@ -721,7 +752,8 @@ probe, live launcher, runtime download or cloud/billable service is authorized.
 | Alpha 2 | CONF-LIVE-003 retained endpoint-filter component | LOCAL_AND_CI_PASS_RECORDED | Head6812922, 671 tests, all8 commands; runner50 retired; initial failed replay retained |
 | Alpha 2 | CONF-LIVE-003 authenticated qualification binding | LOCAL_AND_CI_PASS_RECORDED | Heade4003fc, 694 tests, all8 commands; runner51 retired; failed IPv6 fixture replay retained |
 | Alpha 2 | CONF-LIVE-003 self-inspection composition | LOCAL_AND_CI_PASS_RECORDED | Head3520721,715 tests,all8 commands; runner52 retired |
-| Alpha 2 | CONF-LIVE-003 reader-boundary custody / lifetime | IMPLEMENTED_NOT_ACCEPTED | Fixed owner hooks and signed-window checks; fresh full8 required |
+| Alpha 2 | CONF-LIVE-003 reader-boundary custody / lifetime | LOCAL_AND_CI_PASS_RECORDED | Head87c743a,733 tests,all8 commands; runner53 retired; failed fixture replay retained |
+| Alpha 2 | CONF-LIVE-003 retained policy epoch | IMPLEMENTED_NOT_ACCEPTED | Read-only retained status mapping, reader hooks and recursion refusal; fresh full8 required |
 | Alpha 2 | CONF-LIVE-003 native inspector / broker / API | ONGOING | Required implementation listed above |
 | Alpha 2 | CONF-LIVE-003 required CI | WAITING | Fresh exact-head localhost evidence required; prior failures retained |
 | Alpha 2 | CONF-LIVE-003 source completion / merge / exact-main | NOT_RUN | Packet is incomplete; no completion claim |
