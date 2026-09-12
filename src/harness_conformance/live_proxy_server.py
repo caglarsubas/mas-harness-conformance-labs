@@ -261,6 +261,26 @@ class _KernelStatx(ctypes.Structure):
     _fields_ = [("words", ctypes.c_uint64 * 32)]
 
 
+def _kernel_mount_pins(views, count):
+    # Private native data, not JSON/wire values: retain exact uint64 mount IDs.
+    require(type(count) is int and count in (3, 7) and type(views) is list
+            and len(views) == count, "KERNEL_EPOCH_MOUNT_LAYOUT")
+    pins = []
+    for view in views:
+        require(type(view) is dict and set(view) == {"identity", "mountId", "filesystem"},
+                "KERNEL_EPOCH_MOUNT_LAYOUT")
+        identity, fs = view["identity"], view["filesystem"]
+        require(type(identity) is tuple and len(identity) == 5
+                and all(type(v) is int for v in identity)
+                and type(view["mountId"]) is int and 0 < view["mountId"] < 2 ** 64
+                and type(fs) is dict and set(fs) == {"kind", "fsid", "blockSize", "flags"}
+                and type(fs["fsid"]) is list and len(fs["fsid"]) == 2
+                and all(type(v) is int for v in (*fs["fsid"], fs["kind"], fs["blockSize"], fs["flags"])),
+                "KERNEL_EPOCH_MOUNT_LAYOUT")
+        pins.append((identity, view["mountId"], fs["kind"], tuple(fs["fsid"]), fs["blockSize"], fs["flags"]))
+    return tuple(pins)
+
+
 def _kernel_inspection_tick(reader):
     """Carry the installed owner's custody/lifetime into component I/O ticks.
 
@@ -403,11 +423,12 @@ class _KernelNativeReads:
             return dict(identity=identity, mountId=mount_id, filesystem=filesystem)
 
     def _statx_identity(self, fd, path):
-        # Only retained descriptors and these two fixed single-component names.
+        # Retained descriptors, the fixed root and fixed single-component names.
         # No symlink following, automount, recycled mount-ID or stat fallback.
         self._tick()
         require(type(fd) is int and 2 < fd < 1048576 and type(path) is bytes
-                and path in (b"", b"status", b"selinux"), "KERNEL_STATX_FIXED_PATH")
+                and path in (b"", b"/", b"proc", b"sys", b"kernel", b"fs", b"cgroup", b"status", b"selinux"),
+                "KERNEL_STATX_FIXED_PATH")
         require(ctypes.sizeof(_KernelStatx) == 256 and ctypes.alignment(_KernelStatx) == 8,
                 "KERNEL_STATX_ABI")
         call = self.lib.statx
@@ -436,8 +457,18 @@ class _KernelNativeReads:
     def _status_mounts(self, fd, parent, ancestry):
         # Called inside the original native phase, also during nested epochs.
         # Return observations only; the policy owner compares its frozen pins.
+        views = self._mount_views((fd, parent, ancestry))
+        for descriptor, name, expected in ((parent, b"status", views[0]), (ancestry, b"selinux", views[1])):
+            inode, mount_id = self._statx_identity(descriptor, name)
+            dev, ino, uid, gid, mode = expected["identity"]
+            require(inode == (os.major(dev), os.minor(dev), ino, uid, gid, mode)
+                    and mount_id == expected["mountId"], "KERNEL_EPOCH_MOUNT_PATH_CHANGED")
+        return views
+
+    def _mount_views(self, descriptors):
+        require(type(descriptors) is tuple and len(descriptors) in (3, 7), "KERNEL_MOUNT_DESCRIPTOR_LAYOUT")
         views = []
-        for descriptor in (fd, parent, ancestry):
+        for descriptor in descriptors:
             info, _ = self._descriptor(descriptor)
             inode, mount_id = self._statx_identity(descriptor, b"")
             require(inode == (os.major(info.st_dev), os.minor(info.st_dev), info.st_ino,
@@ -448,11 +479,22 @@ class _KernelNativeReads:
                     (info.st_dev, info.st_ino, info.st_uid, info.st_gid, info.st_mode), "KERNEL_DIRECTORY_CHANGED")
             views.append(dict(identity=(info.st_dev, info.st_ino, info.st_uid, info.st_gid, info.st_mode),
                               mountId=mount_id, filesystem=filesystem))
-        for descriptor, name, expected in ((parent, b"status", views[0]), (ancestry, b"selinux", views[1])):
-            inode, mount_id = self._statx_identity(descriptor, name)
+        return views
+
+    def _root_mounts(self, descriptors):
+        # Fixed topology, never a supplied path map. The absolute root lookup
+        # binds the current namespace view, not just the retained original FD.
+        require(type(descriptors) is tuple and len(descriptors) == 7
+                and all(type(fd) is int for fd in descriptors)
+                and len(set(descriptors)) == 7, "KERNEL_ROOT_MOUNT_DESCRIPTORS")
+        views = self._mount_views(descriptors)
+        layout = ((b"/", 0), (b"proc", 0), (b"sys", 0), (b"kernel", 2),
+                  (b"fs", 2), (b"selinux", 4), (b"cgroup", 4))
+        for expected, (name, parent) in zip(views, layout):
+            inode, mount_id = self._statx_identity(descriptors[parent], name)
             dev, ino, uid, gid, mode = expected["identity"]
             require(inode == (os.major(dev), os.minor(dev), ino, uid, gid, mode)
-                    and mount_id == expected["mountId"], "KERNEL_EPOCH_MOUNT_PATH_CHANGED")
+                    and mount_id == expected["mountId"], "KERNEL_ROOT_MOUNT_PATH_CHANGED")
         return views
 
     def namespace_identity(self, fd):
@@ -585,11 +627,14 @@ class _KernelRootViews:
         self.pid, self.thread = os.getpid(), threading.get_ident()
         self.rows = []
         self.closed = self.failed = self.busy = False
+        self.mount_busy = False
         self.cleanup_failure = None
         try:
             with self._phase():
                 self._acquire(self.rows)
             self.check()
+            self.mount_pin = self._mount_inputs()
+            self.mount_last = time.monotonic()
         except BaseException:
             try:
                 self.close()
@@ -662,6 +707,52 @@ class _KernelRootViews:
                     and rows[index][2]["filesystem"] == rows[2][2]["filesystem"], "KERNEL_SYSFS_SUBMOUNT")
         mounts = [rows[index][2]["mountId"] for index in (0, 1, 2, 5, 6)]
         require(len(set(mounts)) == len(mounts), "KERNEL_ROOT_MOUNT_ALIAS")
+
+    def _mount_inputs(self):
+        return tuple(row[0] for row in self.rows), _kernel_mount_pins([row[2] for row in self.rows], 7)
+
+    def _reader_mounts(self):
+        # Retained fixed roots only. Nested native reads keep their original
+        # phase deadline; sampling never opens or replaces a descriptor.
+        require(not self.closed and not self.failed and not self.mount_busy,
+                "KERNEL_ROOT_MOUNT_UNAVAILABLE")
+        self.mount_busy = True
+        before = time.monotonic()
+        def guard():
+            require(type(self) is _KernelRootViews and not self.closed and not self.failed
+                    and self.pid == os.getpid() and self.thread == threading.get_ident(),
+                    "KERNEL_ROOT_MOUNT_CUSTODY")
+            _kernel_inspection_tick(self)
+            now = time.monotonic()
+            require(self.mount_last <= now < before + 2, "KERNEL_ROOT_MOUNT_DEADLINE")
+            self.mount_last = now
+            if self.busy:
+                require(self.last <= now < self.end, "KERNEL_ROOT_DEADLINE")
+                self.last = now
+            require(self._mount_inputs() == self.mount_pin, "KERNEL_ROOT_MOUNT_REPLACED")
+            require(type(self.native) is _KernelNativeReads and self.native is self._native_original
+                    and not self.native.closed and not self.native.failed, "KERNEL_ROOT_NATIVE_CHANGED")
+        try:
+            guard()
+            native = self.native
+            def sample():
+                guard()
+                try:
+                    views = native._root_mounts(self.mount_pin[0])
+                finally:
+                    guard()
+                require(_kernel_mount_pins(views, 7) == self.mount_pin[1], "KERNEL_ROOT_MOUNT_CHANGED")
+            if native.busy:
+                sample()
+            else:
+                with native._phase():
+                    sample()
+            guard()
+        except BaseException:
+            self.failed = True
+            raise
+        finally:
+            self.mount_busy = False
 
     def _retained(self):
         for fd, _, expected in self.rows:
@@ -1161,23 +1252,7 @@ class _KernelPolicyView:
 
     @staticmethod
     def _mount_pins(views):
-        # Native identities are not a JSON/wire document: mount IDs may use
-        # the full uint64 range. Deep immutable tuples retain exact integers.
-        require(type(views) is list and len(views) == 3, "KERNEL_EPOCH_MOUNT_LAYOUT")
-        pins = []
-        for view in views:
-            require(type(view) is dict and set(view) == {"identity", "mountId", "filesystem"},
-                    "KERNEL_EPOCH_MOUNT_LAYOUT")
-            identity, fs = view["identity"], view["filesystem"]
-            require(type(identity) is tuple and len(identity) == 5
-                    and all(type(v) is int for v in identity)
-                    and type(view["mountId"]) is int and 0 < view["mountId"] < 2 ** 64
-                    and type(fs) is dict and set(fs) == {"kind", "fsid", "blockSize", "flags"}
-                    and type(fs["fsid"]) is list and len(fs["fsid"]) == 2
-                    and all(type(v) is int for v in (*fs["fsid"], fs["kind"], fs["blockSize"], fs["flags"])),
-                    "KERNEL_EPOCH_MOUNT_LAYOUT")
-            pins.append((identity, view["mountId"], fs["kind"], tuple(fs["fsid"]), fs["blockSize"], fs["flags"]))
-        return tuple(pins)
+        return _kernel_mount_pins(views, 3)
 
     def _retain_epoch(self):
         # The fixed inspection factory calls this once, after full policy
@@ -2592,12 +2667,14 @@ class _KernelSelfInspection:
                     "KERNEL_INSPECTION_AUTHORITY_EXPIRED")
             if self.epoch_ready:
                 if self.epoch_sampling:
-                    require(reader is self.policy or reader is self.roots.native,
+                    require(reader is self.roots or reader is self.policy or reader is self.roots.native,
                             "KERNEL_EPOCH_RECURSIVE_READER")
                 else:
                     self.epoch_sampling = True
                     try:
+                        require(self.roots._reader_mounts() is None, "KERNEL_ROOT_MOUNT_CHECK_RESULT")
                         require(self.policy._reader_epoch() is None, "KERNEL_EPOCH_CHECK_RESULT")
+                        require(self.roots._reader_mounts() is None, "KERNEL_ROOT_MOUNT_CHECK_RESULT")
                     finally:
                         self.epoch_sampling = False
         except BaseException:

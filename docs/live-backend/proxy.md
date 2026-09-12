@@ -755,6 +755,38 @@ or independent ABA exclusion. Full combined native-factory performance, retained
 peers, broker/API integration and real AMD64/ARM64 qualification remain unfinished.
 The containment refusal and credential/observer ordering are unchanged.
 
+## Fixed root ancestry at reader boundaries — source increment
+
+The self-inspection owner now brackets each retained policy-epoch sample with
+root-mount comparisons. Each root sample checks the seven original readable
+descriptors and the fixed current `/`, `proc`, `sys`, `kernel`, `fs`, `selinux`
+and `cgroup` names against immutable inode/filesystem/unique-mount pins. Named
+queries retain no-follow/no-automount flags; the absolute `/` query checks the
+current namespace root rather than only its retained FD. This follows the
+[Linux6.12 statx lookup interface](https://raw.githubusercontent.com/torvalds/linux/v6.12/fs/stat.c);
+no upstream source was imported.
+
+Sampling opens no new descriptors, maps no pages and does not renew an existing
+native/root/inspection deadline. It retains thread/process/owner authority,
+rejects backwards time, substitutions and reentry, and leaves cleanup with the
+original owner. Full root reopen checks remain. The existing status-only epoch
+sample still makes its original ten statx queries; root sampling is a distinct
+owner-boundary operation, not a recursive epoch callback.
+
+Twenty-eight additional OS-mocked root/native tests and six explicit-component
+wiring tests cover all seven same-inode path replacements, immutable pins,
+read-only access, original deadlines, exceptional cleanup, both mocked ABIs,
+uint64 mount IDs and root/epoch/read ordering. All784 prior test bodies and all127
+accepted files remain unchanged. Only the existing OS statx fixture and typed
+component fixture gain the new fixed observations. Source target818 methods;
+fresh exact-commit all8 LOCAL and required localhost CI are still required.
+
+These are source and OS-mocked checks, not native installation evidence. Remaining
+syscall/path coverage, full combined native-factory performance, peer custody,
+broker/API wiring and independent AMD64/ARM64 qualification stay open. Snapshot
+comparisons do not replace independent exclusion of intervening changes (ABA).
+No execution authority, credentials, control-plane contract or host policy changed.
+
 ## Verification boundary
 
 This is an in-progress source snapshot, not a self-attested run result. Exact
@@ -798,7 +830,8 @@ probe, live launcher, runtime download or cloud/billable service is authorized.
 | Alpha 2 | CONF-LIVE-003 self-inspection composition | LOCAL_AND_CI_PASS_RECORDED | Head3520721,715 tests,all8 commands; runner52 retired |
 | Alpha 2 | CONF-LIVE-003 reader-boundary custody / lifetime | LOCAL_AND_CI_PASS_RECORDED | Head87c743a,733 tests,all8 commands; runner53 retired; failed fixture replay retained |
 | Alpha 2 | CONF-LIVE-003 retained policy epoch | LOCAL_AND_CI_PASS_RECORDED | Head99652a1,760 tests,all8 commands; runner54 retired; failed fixture replay retained |
-| Alpha 2 | CONF-LIVE-003 epoch mount custody | IMPLEMENTED_NOT_ACCEPTED | Retained and fixed-name unique mount identities; fresh full8 required |
+| Alpha 2 | CONF-LIVE-003 epoch mount custody | LOCAL_AND_CI_PASS_RECORDED | Heada196f32,784 tests,all8 commands; runner56 retired; failed local replay and failed pre-listener startup preserved |
+| Alpha 2 | CONF-LIVE-003 reader-boundary root ancestry | IMPLEMENTED_NOT_ACCEPTED | Seven retained/fixed-name root comparisons; fresh full8 required |
 | Alpha 2 | CONF-LIVE-003 native inspector / broker / API | ONGOING | Required implementation listed above |
 | Alpha 2 | CONF-LIVE-003 required CI | WAITING | Fresh exact-head localhost evidence required; prior failures retained |
 | Alpha 2 | CONF-LIVE-003 source completion / merge / exact-main | NOT_RUN | Packet is incomplete; no completion claim |

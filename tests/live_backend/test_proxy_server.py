@@ -497,6 +497,7 @@ class KernelSelfInspectionTests(unittest.TestCase):
         if double_readers:
             # These existing tests intentionally double component operations;
             # the new retained epoch has separate real OS-edge tests below.
+            stack.enter_context(patch.object(server._KernelRootViews, "_reader_mounts", return_value=None))
             for method in ("_retain_epoch", "_reader_epoch"):
                 stack.enter_context(patch.object(server._KernelPolicyView, method, return_value=None))
             for name, kind in self.CLASSES:
@@ -1553,8 +1554,10 @@ class KernelRootCustodyTests(unittest.TestCase):
         if path:
             self.assertEqual((flags, mask), (0x900, 0x411b))
             self.assertIn((self.handles[fd][0], path),
-                (("/sys/fs/selinux", b"status"), ("/sys/fs", b"selinux")))
-            node = self.nodes[self.handles[fd][0] + "/" + path.decode("ascii")]
+                (("/sys/fs/selinux", b"status"), ("/sys/fs", b"selinux"), ("/", b"/"),
+                 ("/", b"proc"), ("/", b"sys"), ("/sys", b"kernel"), ("/sys", b"fs"),
+                 ("/sys/fs", b"cgroup")))
+            node = self.nodes["/" if path == b"/" else self.handles[fd][0].rstrip("/") + "/" + path.decode("ascii")]
         else:
             self.assertEqual((path, flags, mask), (b"", 0x1900, 0x411b))
             node = self.handles[fd][1]
@@ -3205,6 +3208,321 @@ class KernelEpochMountTests(unittest.TestCase):
         self.assertEqual(value.epoch_mount_pin, original)
         with self.assertRaisesRegex(ConformanceError, "EPOCH_REPLACED"):
             value._reader_epoch()
+
+
+class KernelRootBoundaryMountTests(unittest.TestCase):
+    """Real root/native methods; fixed statx/fstatfs and OS edges are mocked."""
+    setUp = KernelRootCustodyTests.setUp
+    stat_fd = KernelRootCustodyTests.stat_fd
+    statfs = KernelRootCustodyTests.statfs
+    statx = KernelRootCustodyTests.statx
+    close_fd = KernelRootCustodyTests.close_fd
+    open_fd = KernelRootCustodyTests.open_fd
+    owner = KernelRootCustodyTests.owner
+
+    def named_replacement(self, path):
+        roots = self.owner()
+        original = self.nodes[path]
+        self.nodes[path] = dict(original, mountId=original["mountId"] + 100)
+        with self.assertRaisesRegex(ConformanceError, "KERNEL_ROOT_MOUNT_PATH_CHANGED"):
+            roots._reader_mounts()
+        self.assertTrue(roots.failed)
+        self.nodes[path] = original
+        with self.assertRaises(ConformanceError):
+            roots._reader_mounts()
+        self.assertEqual(len(self.handles), 7)  # owner, not sampler, closes
+
+    def test_fixed_queries_retain_descriptors_without_open_mapping_or_syscall(self):
+        roots = self.owner()
+        before = (list(self.opens), list(self.closed), set(self.handles))
+        self.lib.statx.reset_mock()
+        self.assertIsNone(roots._reader_mounts())
+        self.assertEqual((self.opens, self.closed, set(self.handles)), before)
+        self.assertEqual(self.lib.statx.call_count, 14)
+        self.assertEqual([call.args[1] for call in self.lib.statx.call_args_list],
+            [b""] * 7 + [b"/", b"proc", b"sys", b"kernel", b"fs", b"selinux", b"cgroup"])
+        self.mapper.assert_not_called()
+        self.ioctl.assert_not_called()
+        self.lib.syscall.assert_not_called()
+
+    def test_same_inode_current_root_replacement_refuses(self):
+        self.named_replacement("/")
+
+    def test_same_inode_proc_replacement_refuses(self):
+        self.named_replacement("/proc")
+
+    def test_same_inode_sys_replacement_refuses(self):
+        self.named_replacement("/sys")
+
+    def test_same_inode_kernel_replacement_refuses(self):
+        self.named_replacement("/sys/kernel")
+
+    def test_same_inode_fs_replacement_refuses(self):
+        self.named_replacement("/sys/fs")
+
+    def test_same_inode_selinux_replacement_refuses(self):
+        self.named_replacement("/sys/fs/selinux")
+
+    def test_same_inode_cgroup_replacement_refuses(self):
+        self.named_replacement("/sys/fs/cgroup")
+
+    def test_retained_mount_change_refuses_even_if_named_view_agrees(self):
+        roots = self.owner()
+        self.nodes["/proc"]["mountId"] += 100
+        with self.assertRaisesRegex(ConformanceError, "KERNEL_ROOT_MOUNT_CHANGED"):
+            roots._reader_mounts()
+        self.assertTrue(roots.failed)
+
+    def test_frozen_filesystem_pins_reject_mutable_alias(self):
+        roots = self.owner()
+        original = roots.mount_pin
+        roots.rows[0][2]["filesystem"]["fsid"][0] += 1
+        self.assertEqual(roots.mount_pin, original)
+        with self.assertRaisesRegex(ConformanceError, "KERNEL_ROOT_MOUNT_REPLACED"):
+            roots._reader_mounts()
+
+    def test_frozen_descriptor_inventory_rejects_reordered_rows(self):
+        roots = self.owner()
+        roots.rows[0], roots.rows[1] = roots.rows[1], roots.rows[0]
+        with self.assertRaisesRegex(ConformanceError, "KERNEL_ROOT_MOUNT_REPLACED"):
+            roots._reader_mounts()
+
+    def test_native_replacement_is_refused_and_not_closed_by_sampler(self):
+        roots = self.owner()
+        original = roots.native
+        substitute = object.__new__(server._KernelNativeReads)
+        roots.native = substitute
+        try:
+            with self.assertRaisesRegex(ConformanceError, "KERNEL_ROOT_NATIVE_CHANGED"):
+                roots._reader_mounts()
+            self.assertFalse(original.closed)
+            self.assertEqual(len(self.handles), 7)
+        finally:
+            roots.native = original
+
+    def test_filesystem_identity_substitution_refuses(self):
+        roots = self.owner()
+        def changed(fd, pointer):
+            result = self.statfs(fd, pointer)
+            pointer._obj.fsid[1] += 1
+            return result
+        self.lib.fstatfs.side_effect = changed
+        with self.assertRaisesRegex(ConformanceError, "KERNEL_ROOT_MOUNT_CHANGED"):
+            roots._reader_mounts()
+
+    def test_writable_descriptor_is_refused(self):
+        roots = self.owner()
+        with patch.object(server.fcntl, "fcntl", return_value=server.os.O_RDWR):
+            with self.assertRaisesRegex(ConformanceError, "KERNEL_DESCRIPTOR_ACCESS"):
+                roots._reader_mounts()
+
+    def test_inheritable_descriptor_is_refused(self):
+        roots = self.owner()
+        with patch.object(server.os, "get_inheritable", return_value=True):
+            with self.assertRaisesRegex(ConformanceError, "KERNEL_DESCRIPTOR_ACCESS"):
+                roots._reader_mounts()
+
+    def test_symlink_replacement_is_not_followed(self):
+        roots = self.owner()
+        self.nodes["/proc"] = dict(self.nodes["/proc"], st_mode=stat.S_IFLNK | 0o777)
+        with self.assertRaisesRegex(ConformanceError, "KERNEL_ROOT_MOUNT_PATH_CHANGED"):
+            roots._reader_mounts()
+
+    def test_delayed_success_keeps_original_native_phase_deadline(self):
+        roots = self.owner()
+        def late(*args):
+            result = self.statx(*args)
+            self.now += 0.2
+            return result
+        with self.assertRaises(ConformanceError), roots.native._phase():
+            original_end = roots.native.end
+            self.now += 1.9
+            self.lib.statx.side_effect = late
+            try:
+                roots._reader_mounts()
+            finally:
+                self.assertEqual(roots.native.end, original_end)
+        self.assertTrue(roots.failed and roots.native.failed)
+
+    def test_delayed_success_keeps_original_root_phase_deadline(self):
+        roots = self.owner()
+        def late(*args):
+            result = self.statx(*args)
+            self.now += 0.2
+            return result
+        with self.assertRaisesRegex(ConformanceError, "KERNEL_ROOT_DEADLINE"), roots._phase():
+            original_end = roots.end
+            self.now += 1.9
+            self.lib.statx.side_effect = late
+            try:
+                roots._reader_mounts()
+            finally:
+                self.assertEqual(roots.end, original_end)
+
+    def test_backward_clock_between_samples_is_refused(self):
+        roots = self.owner()
+        roots._reader_mounts()
+        self.now -= 1
+        with self.assertRaisesRegex(ConformanceError, "KERNEL_ROOT_MOUNT_DEADLINE"):
+            roots._reader_mounts()
+
+    def test_exception_still_checks_deadline_and_retains_cleanup_owner(self):
+        roots = self.owner()
+        def late(*args):
+            self.now += 2
+            raise OSError("unit delayed kernel refusal")
+        self.lib.statx.side_effect = late
+        with self.assertRaisesRegex(ConformanceError, "DEADLINE"):
+            roots._reader_mounts()
+        self.assertTrue(roots.failed)
+        self.assertFalse(roots.mount_busy or roots.native.busy)
+        self.assertEqual(len(self.handles), 7)
+        roots.close()
+        self.assertFalse(self.handles)
+
+    def test_query_exception_is_sticky_without_retry(self):
+        roots = self.owner()
+        self.lib.statx.side_effect = OSError("unit unavailable")
+        with self.assertRaises(OSError):
+            roots._reader_mounts()
+        self.lib.statx.side_effect = self.statx
+        with self.assertRaises(ConformanceError):
+            roots._reader_mounts()
+
+    def test_reentrant_sampling_poisoned_without_recursive_native_calls(self):
+        roots = self.owner()
+        self.lib.statx.side_effect = lambda *args: roots._reader_mounts()
+        with self.assertRaisesRegex(ConformanceError, "KERNEL_ROOT_MOUNT_UNAVAILABLE"):
+            roots._reader_mounts()
+        self.assertTrue(roots.failed)
+        self.assertFalse(roots.mount_busy)
+
+    def test_wrong_thread_refuses_before_any_query(self):
+        roots = self.owner()
+        self.lib.statx.reset_mock()
+        with patch.object(server.threading, "get_ident", return_value=722):
+            with self.assertRaisesRegex(ConformanceError, "KERNEL_ROOT_MOUNT_CUSTODY"):
+                roots._reader_mounts()
+        self.lib.statx.assert_not_called()
+
+    def test_closed_owner_refuses_without_query_or_double_close(self):
+        roots = self.owner()
+        roots.close()
+        self.lib.statx.reset_mock()
+        count = len(self.closed)
+        with self.assertRaises(ConformanceError):
+            roots._reader_mounts()
+        roots.close()
+        self.assertEqual(len(self.closed), count)
+        self.lib.statx.assert_not_called()
+
+    def test_full_root_reopen_check_remains_required_and_available(self):
+        roots = self.owner()
+        roots._reader_mounts()
+        before = len(self.opens)
+        roots.check()
+        self.assertEqual(len(self.opens), before + 7)
+        self.assertEqual(len(self.handles), 7)
+
+    def test_dynamic_directory_counters_are_not_mount_identity(self):
+        roots = self.owner()
+        for node in self.nodes.values():
+            node.update(st_nlink=42, st_size=1024, st_mtime_ns=27, st_ctime_ns=28)
+        self.assertIsNone(roots._reader_mounts())
+
+    def test_full_uint64_mount_ids_are_not_json_numbers(self):
+        for node in self.nodes.values():
+            node["mountId"] += 2 ** 63
+        roots = self.owner()
+        self.assertIsNone(roots._reader_mounts())
+        self.assertGreater(roots.mount_pin[1][0][1], 2 ** 63)
+
+    def test_both_mocked_linux_abis_use_the_same_fixed_root_layout(self):
+        for machine in ("x86_64", "aarch64"):
+            with self.subTest(machine=machine), patch.object(server.os, "uname", return_value=SimpleNamespace(machine=machine)):
+                roots = self.owner()
+                self.assertIsNone(roots._reader_mounts())
+                roots.close()
+
+
+class KernelInspectionRootWiringTests(unittest.TestCase):
+    """Real reader-boundary routing with explicit root/epoch operation doubles."""
+    CLASSES = KernelSelfInspectionTests.CLASSES
+    environment = KernelSelfInspectionTests.environment
+    start = KernelSelfInspectionTests.start
+    fail = KernelSelfInspectionTests.fail
+    readers = KernelInspectionReadBoundaryTests.readers
+
+    def test_roots_surround_epoch_at_both_io_boundaries(self):
+        with ExitStack() as stack:
+            subject = self.start(stack)
+            self.readers(subject)
+            order = []
+            with patch.object(server._KernelRootViews, "_reader_mounts", side_effect=lambda: order.append("roots")), \
+                 patch.object(server._KernelPolicyView, "_reader_epoch", side_effect=lambda: order.append("epoch")):
+                with subject._phase():
+                    subject.code._io(lambda: order.append("read"))
+            self.assertEqual(order, ["roots", "epoch", "roots", "read", "roots", "epoch", "roots"])
+
+    def test_initial_root_refusal_prevents_epoch_and_observation(self):
+        with ExitStack() as stack:
+            subject = self.start(stack)
+            self.readers(subject)
+            operation = Mock()
+            with patch.object(server._KernelRootViews, "_reader_mounts", side_effect=self.fail), \
+                 patch.object(server._KernelPolicyView, "_reader_epoch") as epoch:
+                with self.assertRaises(ConformanceError), subject._phase():
+                    subject.code._io(operation)
+            epoch.assert_not_called()
+            operation.assert_not_called()
+
+    def test_root_change_during_observation_prevents_the_next_read(self):
+        with ExitStack() as stack:
+            subject = self.start(stack)
+            self.readers(subject)
+            changed, reads = False, []
+            def roots():
+                if changed:
+                    self.fail("UNIT_ROOT_CHANGED")
+            def operation():
+                nonlocal changed
+                reads.append("first")
+                changed = True
+            with patch.object(server._KernelRootViews, "_reader_mounts", side_effect=roots):
+                with self.assertRaises(ConformanceError), subject._phase():
+                    subject.code._io(operation)
+                    reads.append("second")
+            self.assertEqual(reads, ["first"])
+            self.assertTrue(subject.closed and subject.failed)
+
+    def test_root_and_original_native_nested_ticks_do_not_resample(self):
+        with ExitStack() as stack:
+            subject = self.start(stack)
+            self.readers(subject)
+            def roots():
+                server._kernel_inspection_tick(subject.roots)
+                server._kernel_inspection_tick(subject.roots.native)
+            with patch.object(server._KernelRootViews, "_reader_mounts", side_effect=roots) as sample:
+                with subject._phase():
+                    subject.code._tick()
+            self.assertEqual(sample.call_count, 2)
+
+    def test_unrelated_reader_reentry_during_root_sample_refuses(self):
+        with ExitStack() as stack:
+            subject = self.start(stack)
+            self.readers(subject)
+            with patch.object(server._KernelRootViews, "_reader_mounts", side_effect=lambda: subject.process._tick()):
+                with self.assertRaisesRegex(ConformanceError, "KERNEL_EPOCH_RECURSIVE_READER"), subject._phase():
+                    subject.code._tick()
+
+    def test_boolean_or_data_root_result_never_grants_readiness(self):
+        for result in (True, False, "PASS", {}):
+            with self.subTest(result=result), ExitStack() as stack:
+                subject = self.start(stack)
+                self.readers(subject)
+                with patch.object(server._KernelRootViews, "_reader_mounts", return_value=result):
+                    with self.assertRaisesRegex(ConformanceError, "KERNEL_ROOT_MOUNT_CHECK_RESULT"), subject._phase():
+                        subject.code._tick()
 
 
 class KernelInspectionEpochWiringTests(unittest.TestCase):
