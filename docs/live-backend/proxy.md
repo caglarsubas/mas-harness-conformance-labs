@@ -455,6 +455,48 @@ downloads, hosted runner, API key or warm-source access occur in this increment.
 Fresh exact-commit LOCAL and required CI evidence is pending outside this source
 snapshot. PR12 stays draft; sourceComplete=false and nativeAcceptance=false.
 
+## Retained process-code continuation — 2026-09-12
+
+Preceding head1475d3c passed all8 LOCAL commands/572 tests and required localhost
+CI run34662894243; runner47 retired with zero runners/artifacts. That evidence
+belongs to the preceding code-file component, not this new source snapshot.
+All127 accepted files and572 preceding test methods remain preserved.
+
+The new private `_KernelProcessCode` composes the real retained process/root and
+code-file components. It accepts only fixed role-code pins, not caller proc
+paths, descriptors, argv or map snapshots. It owns readable non-inheritable
+descriptors for the original process's exe/maps/auxv/cmdline. Only the fixed exe
+kernel magic link is followed; its returned path is compared, never opened.
+The actual executable descriptor must match the already-enrolled interpreter or
+native ELF's inode/mount/metadata. Reopened proc interfaces and the retained
+descriptors are compared before/after reads; partial acquisition closes only
+this component's descriptors, never the borrowed process/code/root owners.
+
+Two complete bounded offset reads of actual maps/auxv/cmdline surround file
+integrity and process checks. Mappings must cover exactly that role's enrolled
+executable files, including the real interpreter, not another role's globally
+enrolled code. Exact fixed argv is checked as supporting evidence, not standalone
+proof of which Python archive was loaded. The native host page size must match
+the observed auxv and enrolled code. Changed executable mappings, ASLR, auxiliary
+data, PID/start identity, proc paths, flags, executable link or file are refused;
+normal non-executable heap/stack changes do not become code drift. One two-second
+phase covers nested checks and all reads; owner/clock/PID liveness checks surround
+I/O. Failures and uncertain closes are sticky and never trigger reacquisition.
+
+This remains a **supporting observation component**. Expected pins still need
+independent manifest/record authentication and original socket-peer binding.
+Kernel-special maps need full host/kernel/active-policy corroboration; proc
+snapshots and command lines do not defeat ABA or certify loaded archive identity
+without reviewed enforcement and the operator change fence. Full signed clocks,
+policy/cgroup/BPF, qualifier/broker/API and production factory integration remain
+unfinished. No existing credential gate is enabled and no native PASS is claimed.
+
+33 added OS-mocked methods target605 total; all six suites and both structural
+commands must run again through the exact signed launcher. No native syscall,
+host installation, policy/key change, dependency, download, hosted runner, paid
+API or warm-source access is introduced. Current exact-commit LOCAL/CI results
+are retained externally; this source snapshot is not self-attested acceptance.
+
 ## Verification boundary
 
 This is an in-progress source snapshot, not a self-attested run result. Exact
@@ -490,7 +532,8 @@ probe, live launcher, runtime download or cloud/billable service is authorized.
 | Alpha 2 | CONF-LIVE-003 fixed kernel-root custody | LOCAL_AND_CI_PASS_RECORDED | Headc435f7c passed486 tests and all8 commands; runner43 retired |
 | Alpha 2 | CONF-LIVE-003 retained process / namespace component | LOCAL_AND_CI_PASS_RECORDED | Head6dcd8e7,509 tests,all8 commands; runner44 retired |
 | Alpha 2 | CONF-LIVE-003 fresh kernel-policy custody | LOCAL_AND_CI_PASS_RECORDED | Head2adf60a,535 tests,all8 commands; runner45 retired |
-| Alpha 2 | CONF-LIVE-003 code-file custody / mapping data | IMPLEMENTED_NOT_ACCEPTED |571-test candidate passed LOCAL/CI; shared-mode correction requires fresh572-test recipe |
+| Alpha 2 | CONF-LIVE-003 code-file custody / mapping data | LOCAL_AND_CI_PASS_RECORDED | Head1475d3c,572 tests,all8 commands; runner47 retired |
+| Alpha 2 | CONF-LIVE-003 retained process-code component | IMPLEMENTED_NOT_ACCEPTED |33 new methods; fresh605-test full recipe required |
 | Alpha 2 | CONF-LIVE-003 native inspector / broker / API | ONGOING | Required implementation listed above |
 | Alpha 2 | CONF-LIVE-003 required CI | WAITING | Fresh exact-head localhost evidence required; prior failures retained |
 | Alpha 2 | CONF-LIVE-003 source completion / merge / exact-main | NOT_RUN | Packet is incomplete; no completion claim |

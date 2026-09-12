@@ -2229,6 +2229,423 @@ class KernelCodeCustodyTests(unittest.TestCase):
         self.close_fd(target)  # mock owner retires its simulated replacement
 
 
+class KernelProcessCodeTests(unittest.TestCase):
+    """Original proc/root/code factories; only kernel edges use synthetic data."""
+    stat_fd = KernelRootCustodyTests.stat_fd
+    statfs = KernelRootCustodyTests.statfs
+    statx = KernelRootCustodyTests.statx
+    close_fd = KernelRootCustodyTests.close_fd
+    allocate = KernelProcessCustodyTests.allocate
+    pidfd_open = KernelProcessCustodyTests.pidfd_open
+    poll_pid = KernelProcessCustodyTests.poll_pid
+    named_stat = KernelProcessCustodyTests.named_stat
+    namespace_type = KernelProcessCustodyTests.namespace_type
+    read = KernelProcessCustodyTests.read
+    scandir = KernelProcessCustodyTests.scandir
+    close_views = KernelProcessCustodyTests.close_views
+    process_stat = KernelProcessCustodyTests.process_stat
+    process_status = KernelProcessCustodyTests.process_status
+    elf = KernelInputCodecTests.elf
+    auxv = KernelInputCodecTests.auxv
+    add_file = KernelCodeCustodyTests.add_file
+    label = KernelCodeCustodyTests.label
+    verity = KernelCodeCustodyTests.verity
+
+    def setUp(self):
+        KernelProcessCustodyTests.setUp(self)
+        self.roles = deepcopy(sample()["record"]["roles"])
+        self.pins, self.reads, self.labels, self.measures, self.proc_reads = [], [], [], [], []
+        self.python = "/opt/planeon/python/3.12.14/bin/python3.12"
+        for path in ("/opt", "/opt/planeon", "/opt/planeon/bin", "/opt/planeon/python",
+                     "/opt/planeon/python/3.12.14", "/opt/planeon/python/3.12.14/bin"):
+            self.nodes[path] = dict(self.nodes["/"], st_ino=500 + len(self.nodes))
+        segment = [dict(offset=0, length=4096, permissions="r-xp")]
+        self.add_file(self.python, self.elf(), deepcopy(segment))
+        for role, expected in self.roles.items():
+            raw = b"PK\x03\x04unit-only archive " + role.encode() if expected["interpreterPath"] else self.elf()
+            self.add_file(expected["executable"], raw, [] if expected["interpreterPath"] else deepcopy(segment))
+            expected["artifactDigest"] = server.byte_digest(raw)
+            expected["filePaths"] = [expected["executable"]] + ([self.python] if expected["interpreterPath"] else [])
+        for index, name in enumerate(("maps", "auxv", "cmdline")):
+            self.nodes["/proc/411/" + name] = dict(self.nodes["/proc/411/status"], st_ino=700 + index)
+        self.links["/proc/411/exe"] = dict(self.nodes["/proc"], st_ino=799, st_mode=stat.S_IFLNK | 0o777)
+        self.stack.enter_context(patch.object(server.os, "pread", side_effect=self.pread))
+        self.stack.enter_context(patch.object(server.os, "getxattr", side_effect=self.label, create=True))
+        self.stack.enter_context(patch.object(server.os, "readlink", side_effect=self.readlink))
+        self.stack.enter_context(patch.object(server.os, "sysconf", return_value=4096))
+        self.stack.enter_context(patch.object(server.fcntl, "ioctl", side_effect=self.query))
+        self.configure("SERVER")
+
+    def configure(self, role):
+        self.role, self.expected = role, deepcopy(self.roles[role])
+        uid, gid = self.expected["uid"], self.expected["gid"]
+        self.status_raw = self.process_status(Uid=" ".join([str(uid)] * 4), Gid=" ".join([str(gid)] * 4))
+        group = {"SERVER": "proxy-server", "OBSERVER": "policy-observer", "BROKER": "capacity-broker", "WORKER": "probe-worker"}[role]
+        self.cgroup_raw = ("0::/planeon-live/" + group + "\n").encode()
+        self.label_raw = self.expected["processLabel"].encode() + b"\0"
+        for path, node in self.nodes.items():
+            if path.startswith("/proc/411") and path != "/proc/411/exe":
+                node["st_uid"], node["st_gid"] = uid, gid
+        for path, node in self.links.items():
+            node["st_uid"], node["st_gid"] = uid, gid
+            if path != "/proc/411/exe":
+                self.nodes[path]["st_ino"] = self.expected["namespaceInodes"][path.rsplit("/", 1)[1]]
+        self.native = self.expected["interpreterPath"] or self.expected["executable"]
+        self.nodes["/proc/411/exe"] = self.nodes[self.native]
+        self.exe_target = self.native
+        argv = [self.native, self.expected["executable"]] if self.expected["interpreterPath"] else [self.native]
+        self.proc_data = dict(auxv=self.auxv(), maps=self.maps(), cmdline=b"\0".join(p.encode() for p in argv) + b"\0")
+
+    def open_fd(self, name, flags, *, dir_fd):
+        if name == "exe":
+            self.assertEqual(self.handles[dir_fd][0], "/proc/411")
+            self.assertEqual(flags, server.os.O_RDONLY | server.os.O_CLOEXEC | server.os.O_NONBLOCK)
+            return self.allocate("/proc/411/exe", dir_fd)
+        return KernelProcessCustodyTests.open_fd(self, name, flags, dir_fd=dir_fd)
+
+    def query(self, fd, command, *args):
+        if command == 0xb703:
+            return self.namespace_type(fd, command, *args)
+        return self.verity(fd, command, *args)
+
+    def pread(self, fd, count, offset):
+        path = self.handles[fd][0]
+        if path.startswith("/proc/411/"):
+            name = path.rsplit("/", 1)[1]
+            self.assertIn(name, ("maps", "auxv", "cmdline"))
+            self.assertTrue(0 < count <= 4096 and offset >= 0)
+            self.proc_reads.append((name, fd, offset, count))
+            return self.proc_data[name][offset:offset + count]
+        return KernelCodeCustodyTests.pread(self, fd, count, offset)
+
+    def readlink(self, name, *, dir_fd):
+        self.assertEqual((name, self.handles[dir_fd][0]), ("exe", "/proc/411"))
+        return self.exe_target
+
+    def maps(self, start=4096, path=None):
+        path = self.native if path is None else path
+        node = self.nodes[path]
+        return (f"{start:08x}-{start + 4096:08x} r-xp 00000000 "
+                f"{server.os.major(node['st_dev']):02x}:{server.os.minor(node['st_dev']):02x} "
+                f"{node['st_ino']} {path}\n".encode()
+                + b"00007000-00008000 r-xp 00000000 00:00 0 [vdso]\n")
+
+    def components(self):
+        process = KernelProcessCustodyTests.view(self, self.role, self.expected)
+        code = server._KernelCodeFiles(self.roots, self.pins, 4096)
+        self.addCleanup(code.close)
+        pins = {k: self.expected[k] for k in ("executable", "artifactDigest", "interpreterPath", "filePaths")}
+        return process, code, pins
+
+    def fresh(self):
+        value = server._KernelProcessCode(*self.components())
+        self.addCleanup(value.close)
+        return value
+
+    def test_actual_factories_retain_four_interfaces_and_never_accept_map_input(self):
+        value = self.fresh()
+        self.assertEqual(set(value.rows), {"exe", "maps", "auxv", "cmdline"})
+        self.assertIsNone(value.check())
+        self.assertEqual(len([r for r in self.proc_reads if r[0] == "maps" and r[2] == 0]), 4)
+        self.assertEqual({r[1] for r in self.proc_reads}, {value.rows[n][0] for n in ("maps", "auxv", "cmdline")})
+        self.assertEqual(value.original["maps"]["files"][0]["path"], self.python)
+        with self.assertRaises(TypeError):
+            value.check(maps=self.maps())
+        self.mapper.assert_not_called()
+        self.lib.syscall.assert_not_called()
+
+    def test_native_observer_and_broker_bind_their_own_executable(self):
+        for role in ("OBSERVER", "BROKER"):
+            self.configure(role)
+            value = self.fresh()
+            self.assertIsNone(value.check())
+            self.assertEqual(value.native, self.roles[role]["executable"])
+            value.close()
+            value.process.close()
+            value.code.close()
+
+    def test_worker_uses_its_enrolled_uid_and_fixed_python_archive(self):
+        self.configure("WORKER")
+        value = self.fresh()
+        self.assertGreaterEqual(value.process.pin[0], 10000)
+        self.assertIsNone(value.check())
+
+    def test_arm64_process_reads_bind_arm64_elf_without_emulation(self):
+        self.roots.close()
+        with patch.object(server.os, "uname", return_value=SimpleNamespace(machine="aarch64")):
+            self.roots = server._KernelRootViews()
+        self.addCleanup(self.roots.close)
+        for entry in self.pins:
+            node = self.nodes[entry["path"]]
+            if entry["executableSegments"]:
+                node["raw"] = self.elf("aarch64")
+                entry["sha256"] = server.byte_digest(node["raw"])
+        self.assertIsNone(self.fresh().check())
+
+    def test_unknown_role_paths_artifact_or_inventory_are_rejected_before_proc_io(self):
+        process, code, pins = self.components()
+        variants = [dict(pins, extra=True), dict(pins, executable="/unknown"), dict(pins, interpreterPath=None),
+                    dict(pins, artifactDigest="sha256:" + "0" * 64), dict(pins, filePaths=[]),
+                    dict(pins, filePaths=pins["filePaths"] * 2), dict(pins, filePaths=[self.python]),
+                    dict(pins, filePaths=[pins["executable"], "/unknown"])]
+        for variant in variants:
+            with self.assertRaises(ConformanceError):
+                server._KernelProcessCode(process, code, variant)
+        self.assertEqual(self.proc_reads, [])
+
+    def test_copied_owners_and_mixed_roots_are_refused(self):
+        process, code, pins = self.components()
+        for other in (None, {}, SimpleNamespace(**process.__dict__)):
+            with self.assertRaises(ConformanceError):
+                server._KernelProcessCode(other, code, pins)
+        roots = server._KernelRootViews()
+        self.addCleanup(roots.close)
+        other_code = server._KernelCodeFiles(roots, self.pins, 4096)
+        self.addCleanup(other_code.close)
+        with self.assertRaises(ConformanceError):
+            server._KernelProcessCode(process, other_code, pins)
+
+    def test_expected_data_is_detached_and_original_process_is_borrowed(self):
+        process, code, pins = self.components()
+        value = server._KernelProcessCode(process, code, pins)
+        self.addCleanup(value.close)
+        pins["filePaths"].clear()
+        self.assertIsNone(value.check())
+        value.close()
+        self.assertFalse(process.closed or code.closed or self.roots.closed)
+
+    def test_exe_magic_link_target_must_be_exact_and_never_opened_as_a_path(self):
+        for path in (self.python + " (deleted)", "/unknown", "/opt/../python", self.python.encode()):
+            self.exe_target = path
+            with self.assertRaisesRegex(ConformanceError, "KERNEL_PROCESS_CODE_EXE_LINK"):
+                self.fresh()
+        self.exe_target = self.python
+        self.assertFalse(any(p == "/unknown" for p, *_ in self.opens))
+
+    def test_exe_link_owner_type_and_named_identity_must_stay_original(self):
+        value = self.fresh()
+        self.links["/proc/411/exe"]["st_uid"] = 17
+        with self.assertRaises(ConformanceError):
+            value.check()
+
+    def test_exe_descriptor_cannot_reference_different_inode_or_mount(self):
+        original = self.nodes["/proc/411/exe"]
+        for change in (dict(st_ino=9999), dict(mountId=9999)):
+            process, code, pins = self.components()
+            self.nodes["/proc/411/exe"] = dict(original, **change)
+            with self.assertRaisesRegex(ConformanceError, "KERNEL_PROCESS_CODE_EXE_CHANGED"):
+                server._KernelProcessCode(process, code, pins)
+            self.nodes["/proc/411/exe"] = original
+
+    def test_deleted_executable_link_count_cannot_be_hidden_by_matching_bytes(self):
+        value = self.fresh()
+        self.nodes[self.python]["st_nlink"] = 0
+        with self.assertRaises(ConformanceError):
+            value.check()
+
+    def test_named_proc_file_and_mount_replacements_are_refused(self):
+        for name, change in (("maps", dict(st_ino=8888)), ("auxv", dict(mountId=8888)),
+                             ("cmdline", dict(st_uid=123))):
+            value = self.fresh()
+            path = "/proc/411/" + name
+            original = self.nodes[path]
+            self.nodes[path] = dict(original, **change)
+            with self.assertRaises(ConformanceError):
+                value.check()
+            self.nodes[path] = original
+            value.close()
+
+    def test_fixed_command_line_has_no_user_arguments_or_alternate_archive(self):
+        original = self.proc_data["cmdline"]
+        for raw in (b"", original[:-1], original + b"--unsafe\0", original.replace(b"proxy-serve", b"other-entry")):
+            self.proc_data["cmdline"] = raw
+            with self.assertRaises(ConformanceError):
+                self.fresh()
+        self.proc_data["cmdline"] = original
+
+    def test_mapping_inode_permission_and_unenrolled_code_are_rejected(self):
+        raw = self.maps()
+        for changed in (raw.replace(b"00:0a", b"08:01"), raw.replace(b"r-xp", b"rwxp", 1),
+                        raw.replace(self.python.encode(), b"/unknown")):
+            self.proc_data["maps"] = changed
+            with self.assertRaises(ConformanceError):
+                self.fresh()
+
+    def test_role_cannot_use_another_globally_enrolled_executable(self):
+        self.proc_data["maps"] = self.maps(path=self.roles["BROKER"]["executable"])
+        with self.assertRaisesRegex(ConformanceError, "KERNEL_PROCESS_CODE_MAPPING_INVENTORY"):
+            self.fresh()
+
+    def test_all_role_executable_dependencies_must_be_mapped(self):
+        self.expected["filePaths"].append(self.roles["BROKER"]["executable"])
+        with self.assertRaisesRegex(ConformanceError, "KERNEL_PROCESS_CODE_MAPPING_INVENTORY"):
+            self.fresh()
+
+    def test_two_fresh_maps_reject_between_read_changes(self):
+        process, code, pins = self.components()
+        reads = 0
+        def changed(fd, n, off):
+            nonlocal reads
+            if self.handles[fd][0] == "/proc/411/maps" and off == 0:
+                reads += 1
+                if reads == 2:
+                    self.proc_data["maps"] = self.maps(start=12288)
+            return self.pread(fd, n, off)
+        with patch.object(server.os, "pread", side_effect=changed), self.assertRaisesRegex(ConformanceError, "KERNEL_PROCESS_CODE_MAPPING_CHANGED"):
+            server._KernelProcessCode(process, code, pins)
+        self.assertEqual(reads, 2)
+
+    def test_retained_aslr_and_auxv_cannot_change_between_checks(self):
+        value = self.fresh()
+        self.proc_data["maps"] = self.maps(start=12288)
+        with self.assertRaisesRegex(ConformanceError, "KERNEL_PROCESS_CODE_MAPPING_CHANGED"):
+            value.check()
+        self.proc_data["maps"] = self.maps()
+        with self.assertRaisesRegex(ConformanceError, "KERNEL_PROCESS_CODE_UNAVAILABLE"):
+            value.check()
+
+    def test_auxv_change_is_detected_even_when_executable_maps_match(self):
+        value = self.fresh()
+        self.proc_data["auxv"] = self.auxv()[:-16] + server.struct.pack("<4Q", 25, 123456, 0, 0)
+        with self.assertRaisesRegex(ConformanceError, "KERNEL_PROCESS_CODE_MAPPING_CHANGED"):
+            value.check()
+
+    def test_normal_nonexecutable_heap_changes_do_not_become_code_drift(self):
+        value = self.fresh()
+        lines = self.maps().splitlines(keepends=True)
+        self.proc_data["maps"] = lines[0] + b"00003000-00005000 rw-p 00000000 00:00 0 [heap]\n" + lines[1]
+        self.assertIsNone(value.check())
+
+    def test_native_page_size_and_actual_auxv_vdso_must_agree(self):
+        value = self.fresh()
+        with patch.object(server.os, "sysconf", return_value=16384), self.assertRaises(ConformanceError):
+            value.check()
+        self.proc_data["auxv"] = self.auxv(36864)
+        with self.assertRaises(ConformanceError):
+            self.fresh()
+
+    def test_partial_short_reads_use_retained_offsets_and_complete_eof(self):
+        def short(fd, n, off):
+            if self.handles[fd][0] in ("/proc/411/maps", "/proc/411/auxv", "/proc/411/cmdline"):
+                return self.pread(fd, min(n, 17), off)
+            return self.pread(fd, n, off)
+        with patch.object(server.os, "pread", side_effect=short):
+            self.assertIsNone(self.fresh().check())
+        self.assertGreater(len(self.proc_reads), 40)
+
+    def test_oversize_truncated_and_wrong_type_proc_reads_fail_closed(self):
+        for name, raw in (("maps", self.maps()[:-1]), ("auxv", b"\0" * 15), ("cmdline", b"x" * 8193)):
+            original = self.proc_data[name]
+            self.proc_data[name] = raw
+            with self.assertRaises(ConformanceError):
+                self.fresh()
+            self.proc_data[name] = original
+        process, code, pins = self.components()
+        def wrong(fd, n, off):
+            return bytearray(n) if self.handles[fd][0] == "/proc/411/maps" else self.pread(fd, n, off)
+        with patch.object(server.os, "pread", side_effect=wrong), self.assertRaises(ConformanceError):
+            server._KernelProcessCode(process, code, pins)
+
+    def test_process_death_during_a_read_prevents_returning_an_observation(self):
+        value = self.fresh()
+        def die(fd, n, off):
+            raw = self.pread(fd, n, off)
+            if self.handles[fd][0] == "/proc/411/maps":
+                self.dead = True
+            return raw
+        with patch.object(server.os, "pread", side_effect=die), self.assertRaises(ConformanceError):
+            value.check()
+
+    def test_one_whole_budget_includes_all_proc_reads_and_code_checks(self):
+        value = self.fresh()
+        def slow(fd, n, off):
+            if self.handles[fd][0] == "/proc/411/auxv":
+                self.now += 0.6
+            return self.pread(fd, n, off)
+        with patch.object(server.os, "pread", side_effect=slow), self.assertRaises(ConformanceError):
+            value.check()
+        self.assertTrue(value.failed)
+
+    def test_clock_rollback_cannot_restart_a_phase(self):
+        value = self.fresh()
+        self.now -= 1
+        with self.assertRaises(ConformanceError):
+            value.check()
+        self.now += 1
+        with self.assertRaises(ConformanceError):
+            value.check()
+
+    def test_inspector_process_change_is_refused(self):
+        value = self.fresh()
+        with patch.object(server.os, "getpid", return_value=412), self.assertRaises(ConformanceError):
+            value.check()
+
+    def test_inspector_thread_change_is_refused(self):
+        value = self.fresh()
+        with patch.object(server.threading, "get_ident", return_value=722), self.assertRaises(ConformanceError):
+            value.check()
+
+    def test_start_identity_change_during_maps_read_is_detected_before_return(self):
+        value = self.fresh()
+        def changed(fd, n, off):
+            raw = self.pread(fd, n, off)
+            if self.handles[fd][0] == "/proc/411/maps":
+                self.stat_raw = self.process_stat(**{"19": "1000"})
+            return raw
+        with patch.object(server.os, "pread", side_effect=changed), self.assertRaises(ConformanceError):
+            value.check()
+
+    def test_failed_partial_acquisition_closes_only_newly_owned_descriptors(self):
+        process, code, pins = self.components()
+        retained = set(self.handles)
+        def denied(name, *args, **kwargs):
+            if name == "cmdline":
+                raise PermissionError("unit denied")
+            return self.open_fd(name, *args, **kwargs)
+        with patch.object(server.os, "open", side_effect=denied), self.assertRaises(PermissionError):
+            server._KernelProcessCode(process, code, pins)
+        self.assertEqual(set(self.handles), retained)
+
+    def test_late_exe_open_is_owned_before_deadline_check_and_cleaned_once(self):
+        process, code, pins = self.components()
+        retained = set(self.handles)
+        def late(name, *args, **kwargs):
+            fd = self.open_fd(name, *args, **kwargs)
+            if name == "exe":
+                self.now += 2
+            return fd
+        with patch.object(server.os, "open", side_effect=late), self.assertRaises(ConformanceError):
+            server._KernelProcessCode(process, code, pins)
+        self.assertEqual(set(self.handles), retained)
+
+    def test_uncertain_close_is_sticky_without_closing_borrowed_owners(self):
+        process, code, pins = self.components()
+        value = server._KernelProcessCode(process, code, pins)
+        target = value.rows["cmdline"][0]
+        def uncertain(fd):
+            self.close_fd(fd)
+            if fd == target:
+                raise OSError("unit uncertain close")
+        with patch.object(server.os, "close", side_effect=uncertain), self.assertRaises(OSError):
+            value.close()
+        with self.assertRaises(OSError):
+            value.close()
+        self.assertEqual(self.closed.count(target), 1)
+        self.assertFalse(process.closed or code.closed)
+
+    def test_recycled_descriptor_is_not_closed_as_the_original(self):
+        process, code, pins = self.components()
+        value = server._KernelProcessCode(process, code, pins)
+        target = value.rows["maps"][0]
+        original = self.handles[target]
+        self.handles[target] = ("/replacement", dict(original[1], st_ino=9999))
+        with self.assertRaisesRegex(ConformanceError, "KERNEL_PROCESS_CODE_FD_REUSED"):
+            value.close()
+        self.assertNotIn(target, self.closed)
+        self.handles[target] = original
+        self.close_fd(target)
+
+
 class ProxyQualificationTests(unittest.TestCase):
     def test_four_architecture_resource_profiles_and_sixteen_captures_are_data_only(self):
         self.assertEqual(len(VECTORS["qualification"]["positive"]), 4)

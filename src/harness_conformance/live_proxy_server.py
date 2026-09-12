@@ -1357,6 +1357,224 @@ class _KernelCodeFiles:
             raise self.cleanup_failure
 
 
+class _KernelProcessCode:
+    """Retain original proc code observations, never authenticate role authority.
+
+    The installed qualifier must bind signed manifests, original socket peers,
+    kernel/policy and the external change fence before these observations grant
+    anything. Kernel-special maps still need that host/policy corroboration.
+    No caller-selected proc path, fd, backend, argv or mapping data is accepted.
+    """
+    def __init__(self, process, code, expected):
+        require(type(process) is _KernelProcessView and type(code) is _KernelCodeFiles
+                and process.roots is code.roots and not process.closed and not process.failed
+                and not process.busy and not code.closed and not code.failed and not code.busy,
+                "KERNEL_PROCESS_CODE_OWNER")
+        expected = document(expected)
+        require(type(expected) is dict and set(expected) ==
+                {"executable", "artifactDigest", "interpreterPath", "filePaths"}, "KERNEL_PROCESS_CODE_PINS")
+        python = "/opt/planeon/python/3.12.14/bin/python3.12"
+        fixed = {"SERVER": (EXECUTABLE, python), "OBSERVER": (OBSERVER, None),
+                 "BROKER": ("/opt/planeon/bin/harness-capacity-broker", None),
+                 "WORKER": ("/opt/planeon/bin/harness-live-probe-exec", python)}
+        require((expected["executable"], expected["interpreterPath"]) == fixed[process.role],
+                "KERNEL_PROCESS_CODE_ROLE")
+        selected = expected["filePaths"]
+        require(type(selected) is list and 1 <= len(selected) <= 128
+                and all(type(p) is str for p in selected) and len(set(selected)) == len(selected)
+                and set(selected) <= code.pins.keys() and expected["executable"] in selected,
+                "KERNEL_PROCESS_CODE_INVENTORY")
+        require_digest(expected["artifactDigest"], "role artifact")
+        artifact = code.pins[expected["executable"]]
+        require(artifact["sha256"] == expected["artifactDigest"] and artifact["mode"] == "0555",
+                "KERNEL_PROCESS_CODE_ARTIFACT")
+        native = expected["interpreterPath"] or expected["executable"]
+        require(native in selected and code.pins[native]["mode"] == "0555"
+                and code.layouts[native] is not None, "KERNEL_PROCESS_CODE_INTERPRETER")
+        if expected["interpreterPath"] is not None:
+            require(code.layouts[expected["executable"]] is None, "KERNEL_PROCESS_CODE_ARCHIVE")
+        self.process, self.code, self.roots = process, code, code.roots
+        self.expected, self.native = expected, native
+        self.cmdline = b"\0".join(p.encode("ascii") for p in
+            ((native, expected["executable"]) if expected["interpreterPath"] else (native,))) + b"\0"
+        self.pid, self.thread = os.getpid(), threading.get_ident()
+        self.rows, self.link, self.original = {}, None, None
+        self.closed = self.failed = self.busy = False
+        self.cleanup_failure, self.last = None, time.monotonic()
+        try:
+            with self._phase():
+                self.link = self._acquire(self.rows)
+                self._observe()
+        except BaseException:
+            try:
+                self.close()
+            except BaseException:
+                pass  # partial cleanup cannot turn a failure into an observation
+            raise
+
+    def _tick(self):
+        require(type(self) is _KernelProcessCode and self.busy and not self.closed and not self.failed
+                and self.pid == os.getpid() and self.thread == threading.get_ident(), "KERNEL_PROCESS_CODE_CUSTODY")
+        now = time.monotonic()
+        require(self.last <= now < self.end, "KERNEL_PROCESS_CODE_DEADLINE")
+        self.last = now
+        self.process._tick()  # retained pidfd liveness and process/thread custody
+        now = time.monotonic()
+        require(self.last <= now < self.end, "KERNEL_PROCESS_CODE_DEADLINE")
+        self.last = now
+
+    def _io(self, function, *args, **kwargs):
+        self._tick()
+        try:
+            return function(*args, **kwargs)
+        finally:
+            self._tick()
+
+    @contextmanager
+    def _phase(self):
+        require(not self.closed and not self.failed and not self.busy, "KERNEL_PROCESS_CODE_UNAVAILABLE")
+        self.busy = True
+        self.end = time.monotonic() + 2
+        try:
+            with self.process._phase():
+                self._io(self.process._compare)
+                yield
+                self._io(self.process._compare)
+        except BaseException:
+            self.failed = True
+            raise
+        finally:
+            self.busy = False
+
+    def _exe_link(self):
+        proc = self.process.rows[0][0]
+        before = self._io(os.stat, "exe", dir_fd=proc, follow_symlinks=False)
+        require(stat.S_ISLNK(before.st_mode) and before.st_dev == self.roots.rows[1][2]["identity"][0]
+                and (before.st_uid, before.st_gid) == self.process.pin[:2], "KERNEL_PROCESS_CODE_EXE_LINK")
+        # Read only this fixed kernel magic link. Never open its returned value.
+        path = self._io(os.readlink, "exe", dir_fd=proc)
+        after = self._io(os.stat, "exe", dir_fd=proc, follow_symlinks=False)
+        require(type(path) is str and path == self.native
+                and _custody_identity(before) == _custody_identity(after), "KERNEL_PROCESS_CODE_EXE_LINK")
+        return _custody_identity(after)
+
+    def _identity(self, name, fd):
+        identity = self._io(self.roots.native.proc_file_identity, fd)
+        if name == "exe":
+            fingerprint = _custody_identity(self._io(os.fstat, fd))
+            require((identity, fingerprint) == self.code.rows[self.native][2], "KERNEL_PROCESS_CODE_EXE_CHANGED")
+            return identity, fingerprint
+        proc = self.process.rows[0][2]
+        require(identity["mountId"] == proc["mountId"] and identity["filesystem"] == proc["filesystem"]
+                and identity["identity"][2:4] == self.process.pin[:2]
+                and not stat.S_IMODE(identity["identity"][4]) & 0o022, "KERNEL_PROCESS_CODE_PROC_IDENTITY")
+        return identity
+
+    def _acquire(self, rows):
+        link = self._exe_link()
+        for name in ("exe", "maps", "auxv", "cmdline"):
+            row = [None, None, None]
+            rows[name] = row
+            flags = os.O_RDONLY | os.O_CLOEXEC | os.O_NONBLOCK
+            if name != "exe":
+                flags |= os.O_NOFOLLOW
+            self._tick()
+            try:
+                row[0] = os.open(name, flags, dir_fd=self.process.rows[0][0])
+            finally:
+                self._tick()
+            row[1] = self._io(_KernelProcessView._close_identity, row[0])
+            row[2] = self._identity(name, row[0])
+        require(self._exe_link() == link, "KERNEL_PROCESS_CODE_EXE_LINK")
+        return link
+
+    def _retained(self):
+        for name, (fd, _, identity) in self.rows.items():
+            require(self._identity(name, fd) == identity, "KERNEL_PROCESS_CODE_RETAINED_CHANGED")
+        require(self._exe_link() == self.link, "KERNEL_PROCESS_CODE_EXE_LINK")
+
+    def _paths(self):
+        temporary = {}
+        try:
+            require(self._acquire(temporary) == self.link
+                    and {n: r[2] for n, r in temporary.items()} == {n: r[2] for n, r in self.rows.items()},
+                    "KERNEL_PROCESS_CODE_PATH_CHANGED")
+        finally:
+            self._close_rows(temporary)
+            self._tick()
+
+    def _read(self, name):
+        maximum = {"maps": 1048576, "auxv": 65536, "cmdline": 8192}[name]
+        fd, _, identity = self.rows[name]
+        chunks, size = [], 0
+        while size <= maximum:
+            limit = min(4096, maximum + 1 - size)
+            chunk = self._io(os.pread, fd, limit, size)
+            require(type(chunk) is bytes and len(chunk) <= limit, "KERNEL_PROCESS_CODE_READ")
+            require(self._identity(name, fd) == identity, "KERNEL_PROCESS_CODE_RETAINED_CHANGED")
+            if not chunk:
+                break
+            chunks.append(chunk)
+            size += len(chunk)
+        require(0 < size <= maximum, "KERNEL_PROCESS_CODE_READ_SIZE")
+        return b"".join(chunks)
+
+    def _snapshot(self):
+        auxv, cmdline, raw = self._read("auxv"), self._read("cmdline"), self._read("maps")
+        require(cmdline == self.cmdline, "KERNEL_PROCESS_CODE_CMDLINE")
+        parsed = _proc_code_maps(raw, self.roots.native.machine, auxv)
+        native_page = self._io(os.sysconf, "SC_PAGESIZE")
+        require(type(native_page) is int and native_page == parsed["pageSize"] == self.code.page_size,
+                "KERNEL_PROCESS_CODE_PAGE_SIZE")
+        selected = {p for p in self.expected["filePaths"] if self.code.layouts[p] is not None}
+        require({m["path"] for m in parsed["files"]} == selected and self.native in selected,
+                "KERNEL_PROCESS_CODE_MAPPING_INVENTORY")
+        self._io(self.code.match_maps, raw, auxv)
+        return dict(auxv=auxv, cmdline=cmdline, maps=parsed)
+
+    def _observe(self):
+        self._io(self.code.check)
+        self._retained()
+        self._paths()
+        first = self._snapshot()
+        self._io(self.process._compare)
+        self._retained()
+        second = self._snapshot()
+        require(first == second and (self.original is None or first == self.original),
+                "KERNEL_PROCESS_CODE_MAPPING_CHANGED")
+        self._paths()
+        self._retained()
+        self.original = first  # ignore normal non-executable heap/stack churn
+
+    def check(self):
+        with self._phase():
+            self._observe()
+
+    def _close_rows(self, rows):
+        failure = None
+        while rows:
+            _, (fd, identity, *_) = rows.popitem()
+            if fd is None:
+                continue
+            try:
+                require(identity is None or _KernelProcessView._close_identity(fd) == identity,
+                        "KERNEL_PROCESS_CODE_FD_REUSED")
+                os.close(fd)  # uncertain close is never retried
+            except BaseException as exc:
+                failure = failure or exc
+        if failure is not None:
+            self.cleanup_failure = self.cleanup_failure or failure
+            raise failure
+
+    def close(self):
+        if not self.closed:
+            self.closed = True
+            self.original = None
+            self._close_rows(self.rows)
+        if self.cleanup_failure is not None:
+            raise self.cleanup_failure
+
+
 class _Files:
     """One close owner; bounded first read with retained complete ancestry."""
     def __init__(self, owner):
