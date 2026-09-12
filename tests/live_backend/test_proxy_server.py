@@ -758,6 +758,239 @@ class KernelSelfInspectionTests(unittest.TestCase):
             if isinstance(n, ast.ClassDef) and n.name == "_KernelSelfInspection")))
 
 
+class KernelInspectionReadBoundaryTests(unittest.TestCase):
+    """Real binding/coordinator/tick methods with typed component and OS doubles.
+
+    This is boundary wiring/refusal evidence, not a combined native factory or
+    per-I/O policy-epoch qualification. Existing individual OS-edge tests stay.
+    """
+    CLASSES = KernelSelfInspectionTests.CLASSES
+    environment = KernelSelfInspectionTests.environment
+    start = KernelSelfInspectionTests.start
+    fail = KernelSelfInspectionTests.fail
+
+    def readers(self, subject):
+        native = object.__new__(server._KernelNativeReads)
+        native._inspection_owner = subject
+        subject.roots.native = native
+        subject.roots._native_original = native
+        readers = list(self.resources.values()) + [native]
+        for reader in readers:
+            reader.pid, reader.thread = self.owner.pid, self.owner.thread
+            reader.closed = reader.failed = False
+            reader.busy, reader.last, reader.end = True, self.fixture.mono, self.fixture.mono + 2
+        subject.process.pidfd = [None, None]
+        subject.mappings.process = subject.cgroup.process = subject.process
+        subject.filters.cgroup = subject.cgroup
+        return readers
+
+    def test_every_component_is_bound_before_its_constructor(self):
+        with ExitStack() as stack:
+            subject = self.environment(stack)
+            seen = []
+            def acquired(name, reader):
+                self.assertIs(reader._inspection_owner, subject)
+                self.assertIsNone(server._kernel_inspection_tick(reader))
+                seen.append(name)
+            self.on_build = acquired
+            subject.__init__(self.owner)
+            self.assertEqual(seen, [name for name, _ in self.CLASSES])
+            self.assertFalse(self.fixture.socket.called)
+            self.assertNotIn(server.IDENTITY, self.fixture.read_paths)
+
+    def test_all_eight_real_reader_ticks_retain_original_owner(self):
+        with ExitStack() as stack:
+            subject = self.start(stack)
+            readers = self.readers(subject)
+            with subject._phase():
+                for reader in readers:
+                    self.assertIsNone(reader._tick())
+            self.assertFalse(subject.failed)
+            self.assertFalse(self.fixture.socket.called)
+
+    def test_real_io_wrappers_guard_before_and_after_an_observation(self):
+        with ExitStack() as stack:
+            subject = self.start(stack)
+            self.readers(subject)
+            with subject._phase():
+                for name in ("process", "policy", "code", "mappings", "cgroup", "filters"):
+                    operation = Mock(return_value=b"UNIT_READ_ONLY")
+                    self.assertEqual(getattr(subject, name)._io(operation, 71), b"UNIT_READ_ONLY")
+                    operation.assert_called_once_with(71)
+
+    def test_owner_disappearing_inside_io_stops_before_second_observation(self):
+        for name in ("process", "policy", "code", "mappings", "cgroup", "filters"):
+            with self.subTest(name=name), ExitStack() as stack:
+                subject = self.start(stack)
+                self.readers(subject)
+                operation, next_read = Mock(), Mock()
+                operation.side_effect = lambda: stack.enter_context(patch.object(server, "_ACTIVE", None))
+                with self.assertRaises(ConformanceError), subject._phase():
+                    getattr(subject, name)._io(operation)
+                    next_read()
+                operation.assert_called_once_with()
+                next_read.assert_not_called()
+                self.assertTrue(subject.failed and subject.closed)
+
+    def test_guard_failure_before_io_never_calls_the_operation(self):
+        with ExitStack() as stack:
+            subject = self.start(stack)
+            self.readers(subject)
+            operation = Mock()
+            with self.assertRaises(ConformanceError), subject._phase():
+                self.owner.qualification_binding.poisoned = True
+                subject.code._io(operation)
+            operation.assert_not_called()
+
+    def test_authority_file_replacement_inside_io_poisoned_before_next_read(self):
+        for path in (str(server.FIXED_RELEASE_TRUST), str(server.FIXED_TENANT_TRUST), server.PUBLIC_KEY):
+            with self.subTest(path=path), ExitStack() as stack:
+                subject = self.start(stack)
+                self.readers(subject)
+                node = self.fixture.nodes[path]
+                original = node.st_ino
+                operation = Mock(side_effect=lambda: setattr(node, "st_ino", original + 1))
+                try:
+                    with self.assertRaises(ConformanceError), subject._phase():
+                        subject.policy._io(operation)
+                finally:
+                    node.st_ino = original  # unit OS restoration for borrowed-file cleanup
+                operation.assert_called_once_with()
+                self.assertTrue(subject.failed and subject.closed)
+
+    def test_authority_bytes_replaced_during_read_cannot_use_prior_signature(self):
+        for field in ("owner", "binding"):
+            with self.subTest(field=field), ExitStack() as stack:
+                subject = self.start(stack)
+                self.readers(subject)
+                target = self.owner if field == "owner" else subject.binding
+                original = target.authority
+                try:
+                    with self.assertRaises(ConformanceError), subject._phase():
+                        subject.code._io(lambda: setattr(target, "authority", (b"{}",) * 4))
+                finally:
+                    target.authority = original
+                self.assertTrue(subject.failed and subject.closed)
+
+    def test_session_window_replacement_inside_read_cannot_extend_authority(self):
+        with ExitStack() as stack:
+            subject = self.start(stack)
+            self.readers(subject)
+            original = self.owner.binding["notAfter"]
+            try:
+                with self.assertRaises(ConformanceError), subject._phase():
+                    subject.code._io(lambda: self.owner.binding.update(notAfter="2026-09-07T02:00:00Z"))
+            finally:
+                self.owner.binding["notAfter"] = original
+            self.assertTrue(subject.failed and subject.closed)
+
+    def test_signed_window_is_retained_separately_from_record_expiry(self):
+        with ExitStack() as stack:
+            subject = self.start(stack)
+            self.readers(subject)
+            self.assertEqual(subject.authority_window, tuple(server._time(self.owner.binding[k])
+                for k in ("notBefore", "notAfter")))
+            # A deliberately shortened private pin proves this separate guard;
+            # this test does not claim an independently signed shorter fixture.
+            subject.authority_window = (subject.authority_window[0], server._time(self.fixture.now))
+            with self.assertRaises(ConformanceError), subject._phase():
+                subject.code._tick()
+
+    def test_delayed_io_cannot_reset_original_combined_deadline(self):
+        for clock in ("mono", "wall"):
+            with self.subTest(clock=clock), ExitStack() as stack:
+                subject = self.start(stack)
+                self.readers(subject)
+                def delay():
+                    if clock == "mono":
+                        self.fixture.mono += 2
+                    else:
+                        self.fixture.now = "2026-09-07T01:00:02Z"
+                with self.assertRaises(ConformanceError), subject._phase():
+                    subject.code._io(delay)
+                self.assertTrue(subject.failed and subject.closed)
+
+    def test_reversed_wall_or_monotonic_clock_inside_read_refuses(self):
+        for field, value in (("mono", 99.0), ("now", "2026-09-07T00:59:59Z")):
+            with self.subTest(field=field), ExitStack() as stack:
+                subject = self.start(stack)
+                self.readers(subject)
+                with self.assertRaises(ConformanceError), subject._phase():
+                    subject.code._io(lambda: setattr(self.fixture, field, value))
+                self.assertTrue(subject.failed and subject.closed)
+
+    def test_unowned_same_class_and_copied_owner_reference_refused(self):
+        with ExitStack() as stack:
+            subject = self.start(stack)
+            substitute = object.__new__(server._KernelCodeFiles)
+            substitute._inspection_owner = subject
+            with self.assertRaisesRegex(ConformanceError, "KERNEL_INSPECTION_READER_UNOWNED"), subject._phase():
+                server._kernel_inspection_tick(substitute)
+            self.assertTrue(subject.closed)
+
+    def test_replaced_native_reader_cannot_reuse_the_previous_lifetime(self):
+        with ExitStack() as stack:
+            subject = self.start(stack)
+            original = self.readers(subject)[-1]
+            subject.roots.native = object.__new__(server._KernelNativeReads)
+            with self.assertRaises(ConformanceError), subject._phase():
+                original._tick()
+            self.assertTrue(subject.failed and subject.closed)
+
+    def test_missing_owner_binding_during_active_server_is_not_standalone_mode(self):
+        with ExitStack() as stack:
+            subject = self.start(stack)
+            self.readers(subject)
+            del subject.code._inspection_owner
+            with self.assertRaisesRegex(ConformanceError, "KERNEL_INSPECTION_READER_UNBOUND"), subject._phase():
+                subject.code._tick()
+
+    def test_callback_dictionary_or_raw_fd_cannot_select_a_guard(self):
+        for value in (Mock(), {}, 71, lambda: None):
+            with self.subTest(kind=type(value)), ExitStack() as stack:
+                subject = self.start(stack)
+                self.readers(subject)
+                subject.code._inspection_owner = value
+                with self.assertRaises(ConformanceError), subject._phase():
+                    subject.code._tick()
+
+    def test_failure_stays_poisoned_after_unit_owner_is_restored(self):
+        with ExitStack() as stack:
+            subject = self.start(stack)
+            reader = self.readers(subject)[3]
+            with self.assertRaises(ConformanceError), subject._phase():
+                with patch.object(server, "_ACTIVE", None), self.assertRaises(ConformanceError):
+                    reader._tick()
+                self.assertTrue(subject.failed)
+                with self.assertRaises(ConformanceError):
+                    reader._tick()
+                # The outer phase must still reject even when an inner caller
+                # caught the initial refusal; exercise that below on exit.
+
+    def test_native_constructor_refuses_unbound_reader_before_loading_libc(self):
+        with ExitStack() as stack:
+            subject = self.start(stack)
+            with patch.object(server.sys, "platform", "linux"), patch.object(server.ctypes, "CDLL") as load:
+                with self.assertRaisesRegex(ConformanceError, "KERNEL_INSPECTION_READER_UNBOUND"):
+                    server._KernelNativeReads()
+                load.assert_not_called()
+            self.assertFalse(self.fixture.socket.called)
+
+    def test_source_retains_native_owner_and_all_eight_read_hooks(self):
+        import ast
+        tree = ast.parse((ROOT / "src/harness_conformance/live_proxy_server.py").read_bytes())
+        classes = {n.name: n for n in tree.body if isinstance(n, ast.ClassDef)}
+        for kind in (server._KernelNativeReads,) + tuple(kind for _, kind in self.CLASSES):
+            tick = next(n for n in classes[kind.__name__].body if isinstance(n, ast.FunctionDef) and n.name == "_tick")
+            self.assertIn("_kernel_inspection_tick(self)", ast.unparse(tick))
+        root_init = next(n for n in classes["_KernelRootViews"].body if isinstance(n, ast.FunctionDef) and n.name == "__init__")
+        source = ast.unparse(root_init)
+        self.assertLess(source.index("self.native._inspection_owner"), source.index("self.native.__init__()"))
+        guard = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "_kernel_inspection_tick")
+        self.assertEqual([a.arg for a in guard.args.args], ["reader"])
+        self.assertFalse(guard.args.defaults or guard.args.kwonlyargs)
+
+
 class KernelInputCodecTests(unittest.TestCase):
     """Inert independently constructed bytes, never loaded as native code."""
     def elf(self, machine="x86_64"):

@@ -261,6 +261,22 @@ class _KernelStatx(ctypes.Structure):
     _fields_ = [("words", ctypes.c_uint64 * 32)]
 
 
+def _kernel_inspection_tick(reader):
+    """Carry the installed owner's custody/lifetime into component I/O ticks.
+
+    Standalone readers are observations only, never qualification. Once a
+    server exists they must be retained by its exact inspection owner. No
+    callback, caller context or transferable descriptor selects this guard.
+    Epoch sampling and external change exclusion remain separate obligations.
+    """
+    owner = getattr(reader, "_inspection_owner", None)
+    if owner is None:
+        require(_ACTIVE is None, "KERNEL_INSPECTION_READER_UNBOUND")
+        return
+    require(type(owner) is _KernelSelfInspection, "KERNEL_INSPECTION_READER_OWNER")
+    owner._reader_tick(reader)
+
+
 class _KernelNativeReads:
     """Fixed read primitives, not a qualification factory or authority handle.
 
@@ -278,6 +294,7 @@ class _KernelNativeReads:
         require(self.machine in ("x86_64", "aarch64"), "KERNEL_NATIVE_ABI_UNAVAILABLE")
         self.pid, self.thread = os.getpid(), threading.get_ident()
         self.closed = self.failed = self.busy = self.registered = False
+        _kernel_inspection_tick(self)
         self.lib = ctypes.CDLL(None, use_errno=True)
         self.lib.fstatfs.argtypes = (ctypes.c_int, ctypes.POINTER(_KernelStatfs))
         self.lib.fstatfs.restype = ctypes.c_int
@@ -289,6 +306,7 @@ class _KernelNativeReads:
         require(type(self) is _KernelNativeReads and not self.closed and not self.failed
                 and self.busy and self.pid == os.getpid() and self.thread == threading.get_ident(),
                 "KERNEL_READER_CUSTODY")
+        _kernel_inspection_tick(self)
         now = time.monotonic()
         require(self.last <= now < self.end, "KERNEL_INSPECTION_DEADLINE")
         self.last = now
@@ -511,7 +529,11 @@ class _KernelRootViews:
     mounts. Checks do not replace the independent operator's execution fence.
     """
     def __init__(self):
-        self.native = _KernelNativeReads()
+        _kernel_inspection_tick(self)
+        self.native = object.__new__(_KernelNativeReads)
+        self._native_original = self.native
+        self.native._inspection_owner = getattr(self, "_inspection_owner", None)
+        self.native.__init__()
         self.pid, self.thread = os.getpid(), threading.get_ident()
         self.rows = []
         self.closed = self.failed = self.busy = False
@@ -530,6 +552,7 @@ class _KernelRootViews:
     def _tick(self):
         require(type(self) is _KernelRootViews and not self.closed and not self.failed and self.busy
                 and self.pid == os.getpid() and self.thread == threading.get_ident(), "KERNEL_ROOT_CUSTODY")
+        _kernel_inspection_tick(self)
         now = time.monotonic()
         require(self.last <= now < self.end, "KERNEL_ROOT_DEADLINE")
         self.last = now
@@ -721,6 +744,7 @@ class _KernelProcessView:
     def _tick(self):
         require(type(self) is _KernelProcessView and not self.closed and not self.failed and self.busy
                 and self.pid == os.getpid() and self.thread == threading.get_ident(), "KERNEL_PROCESS_CUSTODY")
+        _kernel_inspection_tick(self)
         now = time.monotonic()
         require(self.last <= now < self.end, "KERNEL_PROCESS_DEADLINE")
         self.last = now
@@ -728,6 +752,7 @@ class _KernelProcessView:
         if fd is not None and identity is not None:
             require(self._close_identity(fd) == identity and not os.get_inheritable(fd)
                     and select.select([fd], [], [fd], 0) == ([], [], []), "KERNEL_PROCESS_EXITED_OR_REUSED")
+        _kernel_inspection_tick(self)
         now = time.monotonic()
         require(self.last <= now < self.end, "KERNEL_PROCESS_DEADLINE")
         self.last = now
@@ -933,6 +958,7 @@ class _KernelPolicyView:
     def _tick(self):
         require(type(self) is _KernelPolicyView and not self.closed and not self.failed and self.busy
                 and self.pid == os.getpid() and self.thread == threading.get_ident(), "KERNEL_POLICY_CUSTODY")
+        _kernel_inspection_tick(self)
         now = time.monotonic()
         require(self.last <= now < self.end, "KERNEL_POLICY_DEADLINE")
         self.last = now
@@ -1158,6 +1184,7 @@ class _KernelCodeFiles:
     def _tick(self):
         require(type(self) is _KernelCodeFiles and not self.closed and not self.failed and self.busy
                 and self.pid == os.getpid() and self.thread == threading.get_ident(), "KERNEL_CODE_CUSTODY")
+        _kernel_inspection_tick(self)
         now = time.monotonic()
         require(self.last <= now < self.end, "KERNEL_CODE_DEADLINE")
         self.last = now
@@ -1420,6 +1447,7 @@ class _KernelProcessCode:
     def _tick(self):
         require(type(self) is _KernelProcessCode and self.busy and not self.closed and not self.failed
                 and self.pid == os.getpid() and self.thread == threading.get_ident(), "KERNEL_PROCESS_CODE_CUSTODY")
+        _kernel_inspection_tick(self)
         now = time.monotonic()
         require(self.last <= now < self.end, "KERNEL_PROCESS_CODE_DEADLINE")
         self.last = now
@@ -1625,6 +1653,7 @@ class _KernelCgroupView:
     def _tick(self):
         require(type(self) is _KernelCgroupView and not self.closed and not self.failed and self.busy
                 and self.pid == os.getpid() and self.thread == threading.get_ident(), "KERNEL_CGROUP_CUSTODY")
+        _kernel_inspection_tick(self)
         now = time.monotonic()
         require(self.last <= now < self.end, "KERNEL_CGROUP_DEADLINE")
         self.last = now
@@ -1846,6 +1875,7 @@ class _KernelBpfView:
     def _tick(self):
         require(type(self) is _KernelBpfView and not self.closed and not self.failed and self.busy
                 and self.pid == os.getpid() and self.thread == threading.get_ident(), "KERNEL_BPF_CUSTODY")
+        _kernel_inspection_tick(self)
         now = time.monotonic()
         require(self.last <= now < self.end, "KERNEL_BPF_DEADLINE")
         self.last = now
@@ -2313,6 +2343,9 @@ class _KernelSelfInspection:
             require(self.last < self.deadline <= self.last + 900, "KERNEL_INSPECTION_LIFETIME")
             with self._phase():
                 record = self.binding.record
+                self.authority = self.binding.authority
+                self.session_raw = canonical_bytes(owner.binding)
+                self.authority_window = (_time(owner.binding["notBefore"]), _time(owner.binding["notAfter"]))
                 self.record_raw = canonical_bytes(record)
                 self.scope = record["scope"]
                 self.role = record["roles"]["SERVER"]
@@ -2360,6 +2393,28 @@ class _KernelSelfInspection:
             require(_time(self.scope["validFrom"]) <= wall < _time(self.scope["expiresAt"]), "KERNEL_INSPECTION_EXPIRED")
         self.last, self.wall = now, wall
 
+    def _reader_tick(self, reader):
+        try:
+            self._tick()
+            require(getattr(reader, "_inspection_owner", None) is self, "KERNEL_INSPECTION_READER_OWNER")
+            retained = any(reader is resource for _, resource in self.owned)
+            roots = self.roots
+            native = (type(reader) is _KernelNativeReads and type(roots) is _KernelRootViews
+                      and any(name == "roots" and resource is roots for name, resource in self.owned)
+                      and getattr(roots, "native", None) is reader
+                      and getattr(roots, "_native_original", None) is reader)
+            require(retained or native, "KERNEL_INSPECTION_READER_UNOWNED")
+            require(self.binding.authority == self.authority == self.owner.authority
+                    and canonical_bytes(self.owner.binding) == self.session_raw,
+                    "KERNEL_INSPECTION_AUTHORITY_CHANGED")
+            require(self.authority_window[0] <= self.wall < self.authority_window[1],
+                    "KERNEL_INSPECTION_AUTHORITY_EXPIRED")
+        except BaseException:
+            # Unwind the reader's own acquired resources before the outer
+            # phase closes its owners. Never close a still-returning FD here.
+            self.failed = True
+            raise
+
     @contextmanager
     def _phase(self):
         require(not self.closed and not self.failed and not self.busy, "KERNEL_INSPECTION_UNAVAILABLE")
@@ -2387,6 +2442,7 @@ class _KernelSelfInspection:
     def _own(self, name, kind, *args):
         self._tick()
         resource = object.__new__(kind)
+        resource._inspection_owner = self
         setattr(self, name, resource)
         self.owned.append((name, resource))  # retain before constructor can fail
         try:

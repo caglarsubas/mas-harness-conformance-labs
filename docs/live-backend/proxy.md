@@ -647,6 +647,39 @@ The source target is715 methods, with all127 accepted files and all694 prior
 methods preserved. Exact-commit LOCAL and CI evidence is recorded externally
 only after running the complete declared recipe; source counts alone are not PASS.
 
+### Reader-boundary custody and lifetime continuation — 2026-09-12
+
+The original inspection owner is now retained before each component constructor,
+including the root-owned native primitive reader. All eight reader `_tick`
+methods reach that exact owner. During an active server, an unbound reader,
+copied owner reference on an unowned component, replaced native reader or lost
+active server refuses further observation. Standalone components remain data
+readers only and cannot establish qualification or bypass server startup.
+
+These hooks carry retained authority-file custody, original record/owner identity,
+the combined two-second inspection deadline and the original signed validity
+intersection into existing read/query boundaries. Authority bytes and the
+authenticated session binding cannot be substituted mid-read. A failure poisons
+the inspection even if an inner caller catches it; component cleanup unwinds
+before the outer owner closes its resources. No credential or observer I/O is
+introduced, and no budget is renewed by nested readers.
+
+Full cryptographic verification remains at phase boundaries; these intermediate
+checks reject changes to the original authenticated bytes and their retained
+files and enforce the signed trust/envelope/capacity time intersection. This is
+**not yet full per-I/O qualification**: cross-reader policy-epoch sampling,
+complete OS-call coverage, independent host-change exclusion and combined native
+factory performance still require implementation/testing. Individual syscall
+timeouts and post-read deadline checks are not evidence of forced interruption
+of a blocked kernel call. No native or execution grant is added.
+
+Eighteen new methods exercise actual coordinator/binding/reader ticks and I/O
+wrappers with typed components and OS doubles. They cover pre-read denial,
+mid-read authority/clock/owner loss, sticky refusal, ownership before construction
+and libc-load ordering. These are not combined OS-edge positive tests. All715
+prior methods and127 accepted source files remain; new source target733 methods.
+Fresh exact-commit full8 LOCAL and required self-hosted CI are mandatory.
+
 ## Verification boundary
 
 This is an in-progress source snapshot, not a self-attested run result. Exact
@@ -687,7 +720,8 @@ probe, live launcher, runtime download or cloud/billable service is authorized.
 | Alpha 2 | CONF-LIVE-003 retained cgroup component | LOCAL_AND_CI_PASS_RECORDED | Heade53af04, 636 tests, all8 commands; runner49 retired |
 | Alpha 2 | CONF-LIVE-003 retained endpoint-filter component | LOCAL_AND_CI_PASS_RECORDED | Head6812922, 671 tests, all8 commands; runner50 retired; initial failed replay retained |
 | Alpha 2 | CONF-LIVE-003 authenticated qualification binding | LOCAL_AND_CI_PASS_RECORDED | Heade4003fc, 694 tests, all8 commands; runner51 retired; failed IPv6 fixture replay retained |
-| Alpha 2 | CONF-LIVE-003 self-inspection composition | IMPLEMENTED_NOT_ACCEPTED | Server-owned reader lifetimes and authenticated pins; fresh full recipe required |
+| Alpha 2 | CONF-LIVE-003 self-inspection composition | LOCAL_AND_CI_PASS_RECORDED | Head3520721,715 tests,all8 commands; runner52 retired |
+| Alpha 2 | CONF-LIVE-003 reader-boundary custody / lifetime | IMPLEMENTED_NOT_ACCEPTED | Fixed owner hooks and signed-window checks; fresh full8 required |
 | Alpha 2 | CONF-LIVE-003 native inspector / broker / API | ONGOING | Required implementation listed above |
 | Alpha 2 | CONF-LIVE-003 required CI | WAITING | Fresh exact-head localhost evidence required; prior failures retained |
 | Alpha 2 | CONF-LIVE-003 source completion / merge / exact-main | NOT_RUN | Packet is incomplete; no completion claim |
