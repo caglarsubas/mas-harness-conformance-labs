@@ -613,6 +613,40 @@ This object supplies authenticated **expected values only**. It exposes neither
 with authenticated peers, independent change fencing, broker dispatch and the
 API/cleanup lifecycle remains unfinished. No native/tenant evidence is promoted.
 
+### Server-owned native inspection composition — 2026-09-12
+
+The new `_KernelSelfInspection` connects the authenticated server binding to the
+fixed root, active-policy, process, code-file, process-mapping, cgroup and BPF
+readers. It derives only the current SERVER PID and signed SERVER pins; caller
+PID/role/record/backend/FD selectors are not constructor inputs. The complete
+record's code inventory is retained, without inventing a running WORKER or peer.
+
+One owner retains each resource before its constructor can fail and closes
+acquired resources in reverse dependency order. Partial failures and uncertain
+closes remain sticky; no close retry, substituted-component cleanup or borrowed
+binding/file closure. Combined construction/check phases have one two-second
+budget within the original signed/server lifetime, with monotonic and wall-clock
+guards. Retained authority, owner and record identity are checked at component
+boundaries; fresh active-policy checks surround component observations.
+
+The server creates this composition after authenticated binding and before its
+existing containment refusal, storage, observer and credentials. Base checks and
+cleanup include it. It is intentionally **not** the completed `_KernelQualification`:
+it exposes neither `check_self` nor `check_peer`, supplies no execution permit,
+and does not replace the containment gate. Peer ownership, per-I/O cross-reader
+trust/epoch fencing, independent external change exclusion and broker/API
+integration remain required. Snapshot brackets cannot exclude an in-between ABA.
+
+Twenty-one new tests exercise the real composition and authenticated binding with
+typed reader doubles for lifecycle fault injection; a separate unsupported-OS
+case invokes the real root constructor and refuses before loading libc. The
+694 predecessor methods retain OS-edge tests of each individual reader. These
+new composition tests are not a combined OS-edge/native positive or a full
+installed-server factory test. Those remain required before packet completion.
+The source target is715 methods, with all127 accepted files and all694 prior
+methods preserved. Exact-commit LOCAL and CI evidence is recorded externally
+only after running the complete declared recipe; source counts alone are not PASS.
+
 ## Verification boundary
 
 This is an in-progress source snapshot, not a self-attested run result. Exact
@@ -652,7 +686,8 @@ probe, live launcher, runtime download or cloud/billable service is authorized.
 | Alpha 2 | CONF-LIVE-003 retained process-code component | LOCAL_AND_CI_PASS_RECORDED | Head263e9e2, 605 tests, all8 commands; runner48 retired |
 | Alpha 2 | CONF-LIVE-003 retained cgroup component | LOCAL_AND_CI_PASS_RECORDED | Heade53af04, 636 tests, all8 commands; runner49 retired |
 | Alpha 2 | CONF-LIVE-003 retained endpoint-filter component | LOCAL_AND_CI_PASS_RECORDED | Head6812922, 671 tests, all8 commands; runner50 retired; initial failed replay retained |
-| Alpha 2 | CONF-LIVE-003 authenticated qualification binding | IMPLEMENTED_NOT_ACCEPTED | Signed release and four-role manifest binding; fresh exact-commit full recipe required |
+| Alpha 2 | CONF-LIVE-003 authenticated qualification binding | LOCAL_AND_CI_PASS_RECORDED | Heade4003fc, 694 tests, all8 commands; runner51 retired; failed IPv6 fixture replay retained |
+| Alpha 2 | CONF-LIVE-003 self-inspection composition | IMPLEMENTED_NOT_ACCEPTED | Server-owned reader lifetimes and authenticated pins; fresh full recipe required |
 | Alpha 2 | CONF-LIVE-003 native inspector / broker / API | ONGOING | Required implementation listed above |
 | Alpha 2 | CONF-LIVE-003 required CI | WAITING | Fresh exact-head localhost evidence required; prior failures retained |
 | Alpha 2 | CONF-LIVE-003 source completion / merge / exact-main | NOT_RUN | Packet is incomplete; no completion claim |

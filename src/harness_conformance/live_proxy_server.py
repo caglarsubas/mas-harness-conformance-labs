@@ -2286,6 +2286,157 @@ class _ServerQualificationBinding:
         self.closed = True  # borrowed files remain exclusively server-owned
 
 
+class _KernelSelfInspection:
+    """Server-owned composition of authenticated expected data and read views.
+
+    This is NOT the completed _KernelQualification or an execution permit.
+    Peer custody, per-I/O cross-reader fencing and external broker enforcement
+    remain separate obligations. The server's containment refusal is unchanged.
+    No PID, role, backend, callback, record or descriptor is caller-selectable.
+    """
+    def __init__(self, owner):
+        self.owner, self.owned = owner, []
+        self.closed = self.failed = self.busy = False
+        self.cleanup_failure = None
+        for name in ("roots", "policy", "process", "code", "mappings", "cgroup", "filters"):
+            setattr(self, name, None)
+        try:
+            require(type(owner) is NativeProxyServer, "KERNEL_INSPECTION_OWNER")
+            owner._owner_check()
+            require(owner.self_inspection is self
+                    and type(owner.qualification_binding) is _ServerQualificationBinding
+                    and owner.qualification_binding.owner is owner,
+                    "KERNEL_INSPECTION_BINDING")
+            self.binding = owner.qualification_binding
+            self.deadline = owner.deadline
+            self.last, self.wall = time.monotonic(), require_time(utc_now(), "now")
+            require(self.last < self.deadline <= self.last + 900, "KERNEL_INSPECTION_LIFETIME")
+            with self._phase():
+                record = self.binding.record
+                self.record_raw = canonical_bytes(record)
+                self.scope = record["scope"]
+                self.role = record["roles"]["SERVER"]
+                self._own("roots", _KernelRootViews)
+                self._own("policy", _KernelPolicyView, self.roots, record["host"], record["selinux"])
+                self._policy_check()
+                self._own("process", _KernelProcessView, self.roots, os.getpid(), "SERVER", self.role)
+                self._policy_check()
+                self._tick()
+                page_size = os.sysconf("SC_PAGESIZE")
+                self._tick()
+                require(type(page_size) is int and page_size in (4096, 16384, 65536), "KERNEL_INSPECTION_PAGE_SIZE")
+                self._own("code", _KernelCodeFiles, self.roots, record["files"], page_size)
+                self._policy_check()
+                code_pins = {k: self.role[k] for k in ("executable", "artifactDigest", "interpreterPath", "filePaths")}
+                self._own("mappings", _KernelProcessCode, self.process, self.code, code_pins)
+                self._policy_check()
+                self._own("cgroup", _KernelCgroupView, self.process, self.role["cgroup"])
+                self._policy_check()
+                self._own("filters", _KernelBpfView, self.cgroup, self.role["bpfPrograms"])
+                self._observe()
+        except BaseException:
+            self.failed = True
+            try:
+                self.close()
+            except BaseException:
+                pass  # original refusal plus sticky cleanup uncertainty
+            raise
+
+    def _tick(self):
+        require(type(self) is _KernelSelfInspection and not self.closed and not self.failed and self.busy,
+                "KERNEL_INSPECTION_UNAVAILABLE")
+        self.owner._owner_check()
+        require(self.owner.self_inspection is self and self.owner.qualification_binding is self.binding
+                and self.binding.owner is self.owner and not self.binding.closed and not self.binding.poisoned
+                and self.owner.files is self.binding.files and self.owner.deadline == self.deadline,
+                "KERNEL_INSPECTION_OWNER_CHANGED")
+        require(all(getattr(self, name) is resource for name, resource in self.owned), "KERNEL_INSPECTION_VIEW_REPLACED")
+        self.binding.files.check()
+        now, wall = time.monotonic(), require_time(utc_now(), "now")
+        require(self.last <= now < self.end and self.wall <= wall
+                and (wall - self.phase_wall).total_seconds() < 2, "KERNEL_INSPECTION_DEADLINE")
+        if hasattr(self, "record_raw"):
+            require(self.binding._record_raw == self.record_raw, "KERNEL_INSPECTION_RECORD_CHANGED")
+            require(_time(self.scope["validFrom"]) <= wall < _time(self.scope["expiresAt"]), "KERNEL_INSPECTION_EXPIRED")
+        self.last, self.wall = now, wall
+
+    @contextmanager
+    def _phase(self):
+        require(not self.closed and not self.failed and not self.busy, "KERNEL_INSPECTION_UNAVAILABLE")
+        self.busy = True
+        self.end = min(time.monotonic() + 2, self.deadline)
+        self.phase_wall = require_time(utc_now(), "now")
+        try:
+            self._tick()
+            self.binding.check()
+            self._tick()
+            yield
+            self._tick()
+            self.binding.check()
+            self._tick()
+        except BaseException:
+            self.failed = True
+            try:
+                self.close()
+            except BaseException:
+                pass
+            raise
+        finally:
+            self.busy = False
+
+    def _own(self, name, kind, *args):
+        self._tick()
+        resource = object.__new__(kind)
+        setattr(self, name, resource)
+        self.owned.append((name, resource))  # retain before constructor can fail
+        try:
+            resource.__init__(*args)
+        finally:
+            self._tick()
+
+    def _checked(self, resource):
+        self._tick()
+        try:
+            require(resource.check() is None, "KERNEL_INSPECTION_CHECK_RESULT")
+        finally:
+            self._tick()
+
+    def _policy_check(self):
+        self._checked(self.policy)
+
+    def _observe(self):
+        # Fresh active policy surrounds the combined component observations.
+        # These brackets detect drift, not an in-between change/ABA exclusion.
+        self._policy_check()
+        for resource in (self.roots, self.process, self.code, self.mappings, self.cgroup, self.filters):
+            self._checked(resource)
+            self._policy_check()
+        self._checked(self.roots)
+
+    def check(self):
+        with self._phase():
+            self._observe()
+
+    def close(self):
+        if not self.closed:
+            self.closed = True
+            while self.owned:
+                name, resource = self.owned.pop()
+                if getattr(self, name) is resource:
+                    setattr(self, name, None)
+                try:
+                    # Existing readers validate arguments before setting closed;
+                    # no descriptor exists before that initialization boundary.
+                    if hasattr(resource, "closed"):
+                        resource.close()
+                    elif name == "roots" and hasattr(resource, "native"):
+                        resource.native.close()
+                except BaseException as exc:
+                    self.cleanup_failure = self.cleanup_failure or exc
+        if self.cleanup_failure is not None:
+            raise self.cleanup_failure
+
+
 def _fixed_probes():
     try:
         from . import live_fixed_probes as module
@@ -2464,6 +2615,7 @@ class NativeProxyServer:
         self.files, self.secrets = _Files(self), _Files(self)
         self.observer = self.storage = self.listener = self.connection = None
         self.qualification_binding = None
+        self.self_inspection = None
         self.memfd = None
         self.active_operation = None
         self.reserved = False
@@ -2507,6 +2659,8 @@ class NativeProxyServer:
                                              self.profile, self.observation_binding, self.endpoint])
             self.qualification_binding = object.__new__(_ServerQualificationBinding)
             self.qualification_binding.__init__(self)
+            self.self_inspection = object.__new__(_KernelSelfInspection)
+            self.self_inspection.__init__(self)
             require(_fixed_probes().require_server_containment(self) is None, "PROXY_CONTAINMENT_UNAVAILABLE")
             self.storage = object.__new__(_State)
             self.storage.__init__(self)
@@ -2572,6 +2726,7 @@ class NativeProxyServer:
                                                        self.profile, self.observation_binding, self.endpoint]),
                 "PROXY_AUTHORITY_CHANGED")
         self.qualification_binding.check()
+        self.self_inspection.check()
         require(_fixed_probes().require_server_containment(self) is None, "PROXY_CONTAINMENT_UNAVAILABLE")
 
     def _transport_check(self):
@@ -2650,7 +2805,7 @@ class NativeProxyServer:
             return
         self.closed = True
         operations, failure = [], None
-        for attr in ("connection", "listener", "observer", "storage", "qualification_binding", "secrets", "files"):
+        for attr in ("connection", "listener", "observer", "storage", "self_inspection", "qualification_binding", "secrets", "files"):
             resource = getattr(self, attr, None)
             setattr(self, attr, None)
             if resource is not None:

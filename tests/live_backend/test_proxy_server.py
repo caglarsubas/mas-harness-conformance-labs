@@ -452,6 +452,312 @@ class QualificationBindingTests(unittest.TestCase):
             server._ServerQualificationBinding(record=sample()["record"])
 
 
+class KernelSelfInspectionTests(unittest.TestCase):
+    """Real coordinator/binding; typed reader doubles for lifecycle fault injection.
+
+    The 694 predecessor tests retain separate OS-edge coverage of each reader.
+    These composition tests are NOT a combined native-reader or installed-server
+    qualification. There is no production switch for selecting the doubles.
+    """
+    CLASSES = (("roots", server._KernelRootViews), ("policy", server._KernelPolicyView),
+        ("process", server._KernelProcessView), ("code", server._KernelCodeFiles),
+        ("mappings", server._KernelProcessCode), ("cgroup", server._KernelCgroupView),
+        ("filters", server._KernelBpfView))
+
+    def environment(self, stack, *, double_readers=True):
+        self.fixture = _QualificationBindingFixture()
+        self.owner = self.fixture.context(stack)
+        self.owner.qualification_binding.__init__(self.owner)
+        self.owner.self_inspection = object.__new__(server._KernelSelfInspection)
+        self.events, self.resources, self.args = [], {}, {}
+        self.on_build = self.on_check = self.on_close = lambda name, resource: None
+        stack.enter_context(patch.object(server.os, "sysconf", return_value=4096))
+        def initializer(name):
+            def initialize(resource, *args):
+                self.events.append(("acquire", name))
+                self.resources[name], self.args[name] = resource, args
+                resource.closed, resource.close_count = False, 0
+                self.on_build(name, resource)
+            return initialize
+        def checker(name):
+            def check(resource):
+                self.assertIs(self.resources[name], resource)
+                self.assertFalse(resource.closed)
+                self.events.append(("check", name))
+                return self.on_check(name, resource)
+            return check
+        def closer(name):
+            def close(resource):
+                self.assertFalse(resource.closed, "double close")
+                resource.closed = True
+                resource.close_count += 1
+                self.events.append(("close", name))
+                self.on_close(name, resource)
+            return close
+        if double_readers:
+            for name, kind in self.CLASSES:
+                for method, value in (("__init__", initializer(name)), ("check", checker(name)), ("close", closer(name))):
+                    stack.enter_context(patch.object(kind, method, value))
+        subject = self.owner.self_inspection
+        def cleanup():
+            if hasattr(subject, "closed"):
+                failure = subject.cleanup_failure
+                if failure is None:
+                    subject.close()
+                else:
+                    with self.assertRaises(type(failure)):
+                        subject.close()  # verify sticky error; never reset it
+        stack.callback(cleanup)
+        return subject
+
+    def start(self, stack):
+        subject = self.environment(stack)
+        subject.__init__(self.owner)
+        return subject
+
+    def fail(self, code="UNIT_READER_UNAVAILABLE"):
+        raise ConformanceError(code, "unit lifecycle fault, no native proof")
+
+    def test_fixed_composition_uses_authenticated_server_pins_and_current_pid_only(self):
+        with ExitStack() as stack:
+            subject = self.start(stack)
+            record, resources = self.fixture.record, self.resources
+            self.assertEqual([n for e, n in self.events if e == "acquire"], [n for n, _ in self.CLASSES])
+            self.assertEqual(self.args["roots"], ())
+            self.assertEqual(self.args["policy"], (resources["roots"], record["host"], record["selinux"]))
+            self.assertEqual(self.args["process"], (resources["roots"], server.os.getpid(), "SERVER", record["roles"]["SERVER"]))
+            self.assertEqual(self.args["code"], (resources["roots"], record["files"], 4096))
+            self.assertEqual(self.args["mappings"][:2], (resources["process"], resources["code"]))
+            self.assertEqual(self.args["mappings"][2], {k: record["roles"]["SERVER"][k]
+                for k in ("executable", "artifactDigest", "interpreterPath", "filePaths")})
+            self.assertEqual(self.args["cgroup"], (resources["process"], record["roles"]["SERVER"]["cgroup"]))
+            self.assertEqual(self.args["filters"], (resources["cgroup"], record["roles"]["SERVER"]["bpfPrograms"]))
+            self.assertIsNone(subject.check())
+            self.assertFalse(hasattr(subject, "check_self"))
+            self.assertFalse(hasattr(subject, "check_peer"))
+            self.assertFalse(self.fixture.socket.called)
+            self.assertNotIn(server.IDENTITY, self.fixture.read_paths)
+
+    def test_policy_checks_surround_every_other_component_observation(self):
+        with ExitStack() as stack:
+            subject = self.start(stack)
+            self.events.clear()
+            subject.check()
+            names = [n for event, n in self.events if event == "check"]
+            self.assertEqual(names, ["policy", "roots", "policy", "process", "policy", "code", "policy",
+                "mappings", "policy", "cgroup", "policy", "filters", "policy", "roots"])
+
+    def test_reverse_cleanup_closes_only_owned_readers_and_not_binding_files(self):
+        with ExitStack() as stack:
+            subject = self.start(stack)
+            original_files = set(self.fixture.fds)
+            self.events.clear()
+            subject.close()
+            subject.close()
+            self.assertEqual(self.events, [("close", n) for n, _ in reversed(self.CLASSES)])
+            self.assertTrue(all(r.close_count == 1 for r in self.resources.values()))
+            self.assertEqual(set(self.fixture.fds), original_files)
+            self.assertFalse(self.owner.qualification_binding.closed)
+            self.assertFalse(self.owner.files.closed)
+
+    def test_each_partial_constructor_is_retained_and_closed_on_failure(self):
+        for index, (fault, _) in enumerate(self.CLASSES):
+            with self.subTest(fault=fault), ExitStack() as stack:
+                subject = self.environment(stack)
+                self.on_build = lambda name, resource: self.fail() if name == fault else None
+                with self.assertRaisesRegex(ConformanceError, "UNIT_READER_UNAVAILABLE"):
+                    subject.__init__(self.owner)
+                self.assertEqual([n for e, n in self.events if e == "close"],
+                    [n for n, _ in reversed(self.CLASSES[:index + 1])])
+                self.assertTrue(subject.closed and subject.failed)
+                with self.assertRaises(ConformanceError):
+                    subject.check()
+
+    def test_each_reader_failure_poisoned_and_all_owned_views_closed(self):
+        for fault, _ in self.CLASSES:
+            with self.subTest(fault=fault), ExitStack() as stack:
+                subject = self.start(stack)
+                self.on_check = lambda name, resource: self.fail() if name == fault else None
+                with self.assertRaises(ConformanceError):
+                    subject.check()
+                self.assertTrue(all(r.closed and r.close_count == 1 for r in self.resources.values()))
+                self.on_check = lambda name, resource: None
+                with self.assertRaises(ConformanceError):
+                    subject.check()
+
+    def test_boolean_or_data_success_cannot_replace_reader_contract(self):
+        for result in (True, False, {}, [], "PASS"):
+            with self.subTest(result=result), ExitStack() as stack:
+                subject = self.start(stack)
+                self.on_check = lambda name, resource: result if name == "filters" else None
+                with self.assertRaisesRegex(ConformanceError, "KERNEL_INSPECTION_CHECK_RESULT"):
+                    subject.check()
+
+    def test_cleanup_failure_is_sticky_and_never_retries_close(self):
+        with ExitStack() as stack:
+            subject = self.start(stack)
+            self.on_close = lambda name, resource: self.fail("UNIT_CLOSE_UNCERTAIN") if name == "filters" else None
+            with self.assertRaisesRegex(ConformanceError, "UNIT_CLOSE_UNCERTAIN"):
+                subject.close()
+            self.assertTrue(all(r.close_count == 1 for r in self.resources.values()))
+            with self.assertRaisesRegex(ConformanceError, "UNIT_CLOSE_UNCERTAIN"):
+                subject.close()
+            self.assertTrue(all(r.close_count == 1 for r in self.resources.values()))
+
+    def test_replaced_component_never_closes_the_unowned_replacement(self):
+        with ExitStack() as stack:
+            subject = self.start(stack)
+            replacement, original = Mock(), subject.filters
+            subject.filters = replacement
+            with self.assertRaisesRegex(ConformanceError, "KERNEL_INSPECTION_VIEW_REPLACED"):
+                subject.check()
+            replacement.close.assert_not_called()
+            self.assertTrue(original.closed)
+            self.assertEqual(original.close_count, 1)
+
+    def test_early_root_failure_does_not_acquire_other_readers(self):
+        with ExitStack() as stack:
+            subject = self.environment(stack, double_readers=False)
+            with patch.object(server.sys, "platform", "unsupported"), patch.object(server.ctypes, "CDLL") as load:
+                with self.assertRaises(ConformanceError):
+                    subject.__init__(self.owner)
+                load.assert_not_called()
+            self.assertTrue(subject.closed)
+            self.assertEqual(subject.owned, [])
+            self.assertFalse(self.fixture.socket.called)
+
+    def test_alternate_owner_and_unsigned_record_refused_before_reader_acquisition(self):
+        for owner in ({}, Mock(), 77, lambda: None):
+            with self.subTest(kind=type(owner)), self.assertRaises(ConformanceError):
+                server._KernelSelfInspection(owner)
+        with self.assertRaises(TypeError):
+            server._KernelSelfInspection(record=sample()["record"])
+
+    def test_same_class_but_unregistered_inspection_cannot_construct(self):
+        with ExitStack() as stack:
+            self.environment(stack)
+            with self.assertRaisesRegex(ConformanceError, "KERNEL_INSPECTION_BINDING"):
+                server._KernelSelfInspection(self.owner)
+            self.assertEqual(self.events, [])
+
+    def test_binding_failure_precedes_any_kernel_view(self):
+        with ExitStack() as stack:
+            subject = self.environment(stack)
+            self.owner.qualification_binding.poisoned = True
+            with self.assertRaises(ConformanceError):
+                subject.__init__(self.owner)
+            self.assertEqual(self.events, [])
+
+    def test_parent_binding_or_owner_replacement_closes_existing_views(self):
+        for fault in ("active", "binding", "deadline"):
+            with self.subTest(fault=fault), ExitStack() as stack:
+                subject = self.start(stack)
+                if fault == "active":
+                    with patch.object(server, "_ACTIVE", None), self.assertRaises(ConformanceError):
+                        subject.check()
+                else:
+                    field = "qualification_binding" if fault == "binding" else "deadline"
+                    original = getattr(self.owner, field)
+                    setattr(self.owner, field, None if fault == "binding" else original + 1)
+                    try:
+                        with self.assertRaises(ConformanceError):
+                            subject.check()
+                    finally:
+                        setattr(self.owner, field, original)
+                self.assertTrue(all(r.closed for r in self.resources.values()))
+
+    def test_record_change_during_component_acquisition_closes_partial_owner(self):
+        with ExitStack() as stack:
+            subject = self.environment(stack)
+            def change(name, resource):
+                if name == "code":
+                    self.owner.qualification_binding._record_raw = b"{}"
+            self.on_build = change
+            with self.assertRaisesRegex(ConformanceError, "KERNEL_INSPECTION_RECORD_CHANGED"):
+                subject.__init__(self.owner)
+            self.assertEqual(set(self.resources), {"roots", "policy", "process", "code"})
+            self.assertTrue(all(r.closed for r in self.resources.values()))
+
+    def test_retained_authority_file_drift_stops_a_reader_transition(self):
+        with ExitStack() as stack:
+            subject = self.start(stack)
+            node = self.fixture.nodes[server.WORKER_MANIFEST]
+            original = node.st_ino
+            self.on_check = lambda name, resource: setattr(node, "st_ino", original + 1) if name == "code" else None
+            try:
+                with self.assertRaisesRegex(ConformanceError, "PROXY_FILE_CHANGED"):
+                    subject.check()
+            finally:
+                node.st_ino = original
+            self.assertTrue(all(r.closed for r in self.resources.values()))
+
+    def test_slow_constructor_cannot_reset_the_outer_two_second_budget(self):
+        with ExitStack() as stack:
+            subject = self.environment(stack)
+            self.on_build = lambda name, resource: setattr(self.fixture, "mono", 102.0) if name == "code" else None
+            with self.assertRaisesRegex(ConformanceError, "KERNEL_INSPECTION_DEADLINE"):
+                subject.__init__(self.owner)
+            self.assertNotIn("mappings", self.resources)
+            self.assertTrue(all(r.closed for r in self.resources.values()))
+
+    def test_nested_reader_delay_and_wall_jump_are_bounded(self):
+        for clock in ("mono", "wall"):
+            with self.subTest(clock=clock), ExitStack() as stack:
+                subject = self.start(stack)
+                def delay(name, resource):
+                    if name == "mappings":
+                        if clock == "mono":
+                            self.fixture.mono += 2
+                        else:
+                            self.fixture.now = "2026-09-07T01:00:02Z"
+                self.on_check = delay
+                with self.assertRaisesRegex(ConformanceError, "KERNEL_INSPECTION_DEADLINE"):
+                    subject.check()
+                self.assertTrue(all(r.closed for r in self.resources.values()))
+
+    def test_original_deadline_and_clock_reversals_refuse_without_observation(self):
+        for clock in ("deadline", "mono", "wall"):
+            with self.subTest(clock=clock), ExitStack() as stack:
+                subject = self.start(stack)
+                if clock == "wall":
+                    self.fixture.now = "2026-09-07T00:59:59Z"
+                else:
+                    self.fixture.mono = self.owner.deadline if clock == "deadline" else 99.0
+                self.events.clear()
+                with self.assertRaises(ConformanceError):
+                    subject.check()
+                self.assertFalse(any(event == "check" for event, _ in self.events))
+
+    def test_recursive_inspection_poisoned_instead_of_reentering_views(self):
+        with ExitStack() as stack:
+            subject = self.start(stack)
+            self.on_check = lambda name, resource: subject.check() if name == "policy" else None
+            with self.assertRaisesRegex(ConformanceError, "KERNEL_INSPECTION_UNAVAILABLE"):
+                subject.check()
+            self.assertTrue(subject.failed and subject.closed)
+
+    def test_unsupported_page_size_stops_before_code_or_mapping_reads(self):
+        with ExitStack() as stack:
+            subject = self.environment(stack)
+            with patch.object(server.os, "sysconf", return_value=8192), self.assertRaisesRegex(
+                    ConformanceError, "KERNEL_INSPECTION_PAGE_SIZE"):
+                subject.__init__(self.owner)
+            self.assertEqual(set(self.resources), {"roots", "policy", "process"})
+
+    def test_startup_keeps_containment_refusal_before_storage_observer_and_credentials(self):
+        import ast
+        tree = ast.parse((ROOT / "src/harness_conformance/live_proxy_server.py").read_bytes())
+        owner = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "NativeProxyServer")
+        init = next(n for n in owner.body if isinstance(n, ast.FunctionDef) and n.name == "__init__")
+        source = ast.unparse(init)
+        stages = ["self.qualification_binding.__init__(self)", "self.self_inspection.__init__(self)",
+                  "_fixed_probes().require_server_containment(self)", "self.storage.__init__(self)",
+                  "self.observer.__init__(self)", "self.secrets.read(IDENTITY"]
+        self.assertEqual(sorted(source.index(s) for s in stages), [source.index(s) for s in stages])
+        self.assertNotIn("check_self", ast.unparse(next(n for n in tree.body
+            if isinstance(n, ast.ClassDef) and n.name == "_KernelSelfInspection")))
+
+
 class KernelInputCodecTests(unittest.TestCase):
     """Inert independently constructed bytes, never loaded as native code."""
     def elf(self, machine="x86_64"):
