@@ -404,6 +404,48 @@ completion is claimed.
    and merge, then an independent LOCAL exact-main replay. A passing interim
    test suite cannot establish that these unfinished deliverables are complete.
 
+## Code-file custody continuation — 2026-09-12
+
+Prior head `2adf60a06e24e76aae6367659efda8e6f3276c61` passed all eight LOCAL
+commands and required localhost CI run34650854215:535 tests, zero skips.
+Runner45 retired. This records the preceding kernel-policy component, not
+acceptance of the code-file changes below. Accepted main and all127 predecessor
+files remain unchanged. Meta main451cfc7 published MET-ADOPT-001 without changing
+this packet or its native-qualification authority.
+
+The private `_KernelCodeFiles` component retains a closed, bounded inventory of
+root-owned regular files and complete no-follow ancestry. It checks exact mode,
+single link, size, device/inode, non-recycled mount identity, SELinux label,
+ordinary SHA256 and a separately measured fs-verity digest. Every check performs
+fresh bounded offset reads; no executable bytes, loader or measurement fallback
+is cached. ELF executable segments and enrolled loader closure are checked
+against actual file bytes. Reopened ancestry before/after reads detects named
+substitution. One two-second phase includes every child/chunk and cleanup;
+failure is sticky, partial acquisition is closed, uncertain closes are not
+retried, and borrowed kernel roots remain separately owned.
+
+`match_maps` checks **supplied data**, not native proc provenance. It binds every
+parsed executable mapping to an enrolled retained file, exact device/inode,
+permissions and complete ELF segment coverage at one observed ASLR bias. Split
+segments must be contiguous; static ELF cannot claim a relocation bias; mapped
+ELF loaders must be enrolled and mapped. Unknown executable files/archives,
+extra/missing mappings and writable code are refused. Its return is None, not
+an execution/qualification handle. Host auxv/kernel-special corroboration and
+two fresh reads from original process descriptors remain with the unfinished
+process-code integration. Caller-provided map snapshots do not prove those gates.
+
+Expected inventory is detached data, not authenticated authority. Full record/
+manifest/role binding, `/proc/<pid>/exe`, process maps/auxv custody, active-policy
+and operator change-fence integration, cgroup/BPF, broker/API and factory tests
+remain required before enabling credentials. fs-verity and snapshots do not
+prevent private-page/ABA code injection without independently enforced policy.
+
+36 new OS-mocked methods target571 total, preserving all535 previous identities.
+No native calls, host installation, root policy/key change, dependencies,
+downloads, hosted runner, API key or warm-source access occur in this increment.
+Fresh exact-commit LOCAL and required CI evidence is pending outside this source
+snapshot. PR12 stays draft; sourceComplete=false and nativeAcceptance=false.
+
 ## Verification boundary
 
 This is an in-progress source snapshot, not a self-attested run result. Exact
@@ -438,7 +480,8 @@ probe, live launcher, runtime download or cloud/billable service is authorized.
 | Alpha 2 | CONF-LIVE-003 native read primitives | LOCAL_AND_CI_PASS_RECORDED | Head22de588 passed466 tests and all8 commands |
 | Alpha 2 | CONF-LIVE-003 fixed kernel-root custody | LOCAL_AND_CI_PASS_RECORDED | Headc435f7c passed486 tests and all8 commands; runner43 retired |
 | Alpha 2 | CONF-LIVE-003 retained process / namespace component | LOCAL_AND_CI_PASS_RECORDED | Head6dcd8e7,509 tests,all8 commands; runner44 retired |
-| Alpha 2 | CONF-LIVE-003 fresh kernel-policy custody | IMPLEMENTED_NOT_ACCEPTED | OS-mocked active-policy/boot/epoch checks; fresh exact-commit full recipe required |
+| Alpha 2 | CONF-LIVE-003 fresh kernel-policy custody | LOCAL_AND_CI_PASS_RECORDED | Head2adf60a,535 tests,all8 commands; runner45 retired |
+| Alpha 2 | CONF-LIVE-003 code-file custody / mapping data | IMPLEMENTED_NOT_ACCEPTED |36 new methods; fresh exact-commit full recipe required |
 | Alpha 2 | CONF-LIVE-003 native inspector / broker / API | ONGOING | Required implementation listed above |
 | Alpha 2 | CONF-LIVE-003 required CI | WAITING | Fresh exact-head localhost evidence required; prior failures retained |
 | Alpha 2 | CONF-LIVE-003 source completion / merge / exact-main | NOT_RUN | Packet is incomplete; no completion claim |

@@ -1762,6 +1762,460 @@ class KernelPolicyCustodyTests(unittest.TestCase):
         self.ioctl.assert_not_called()
 
 
+class KernelCodeCustodyTests(unittest.TestCase):
+    """Real code/root/native factories with independent bytes and OS edges only."""
+    stat_fd = KernelRootCustodyTests.stat_fd
+    statfs = KernelRootCustodyTests.statfs
+    statx = KernelRootCustodyTests.statx
+    close_fd = KernelRootCustodyTests.close_fd
+    elf = KernelInputCodecTests.elf
+    auxv = KernelInputCodecTests.auxv
+
+    def setUp(self):
+        KernelRootCustodyTests.setUp(self)
+        self.reads, self.labels, self.measures = [], [], []
+        self.pins = []
+        for path in ("/opt", "/opt/planeon"):
+            self.nodes[path] = dict(self.nodes["/"], st_ino=100 + len(self.nodes))
+        self.add_file("/opt/planeon/python", self.elf(), [dict(offset=0, length=4096, permissions="r-xp")])
+        self.add_file("/opt/planeon/app", b"PK\x03\x04inert archive", [])
+        self.stack.enter_context(patch.object(server.fcntl, "ioctl", side_effect=self.verity))
+        self.stack.enter_context(patch.object(server.os, "pread", side_effect=self.pread))
+        self.stack.enter_context(patch.object(server.os, "getxattr", side_effect=self.label, create=True))
+        self.roots = server._KernelRootViews()
+        self.addCleanup(self.roots.close)
+
+    def add_file(self, path, raw, segments):
+        node = dict(self.nodes["/"], st_ino=200 + len(self.nodes), st_mode=stat.S_IFREG | 0o555,
+                    st_size=len(raw), st_nlink=1, raw=raw, label=b"system_u:object_r:code_t:s0\0",
+                    verity=hashlib.sha256(b"independent verity descriptor:" + raw).digest())
+        self.nodes[path] = node
+        self.pins.append(dict(path=path, mode="0555", size=len(raw), sha256=server.byte_digest(raw),
+                              verityDigest="sha256:" + node["verity"].hex(),
+                              selinuxLabel="system_u:object_r:code_t:s0", executableSegments=segments))
+
+    def open_fd(self, name, flags, *, dir_fd):
+        path = "/" if dir_fd is None else self.handles[dir_fd][0].rstrip("/") + "/" + name
+        self.assertNotIn("/", name if dir_fd is not None else "root")
+        node = self.nodes[path]
+        directory = stat.S_ISDIR(node["st_mode"])
+        expected = server.os.O_RDONLY | server.os.O_NOFOLLOW | server.os.O_CLOEXEC | server.os.O_NONBLOCK
+        # Kernel open would reject a symlink; retain the flag assertion here.
+        if flags & server.os.O_DIRECTORY:
+            expected |= server.os.O_DIRECTORY
+            self.assertTrue(directory)
+        self.assertEqual(flags, expected)
+        if stat.S_ISLNK(node["st_mode"]):
+            raise OSError("unit nofollow")
+        fd, self.next_fd = self.next_fd, self.next_fd + 1
+        self.handles[fd] = (path, node)
+        self.opens.append((path, fd, dir_fd))
+        return fd
+
+    def pread(self, fd, count, offset):
+        path, node = self.handles[fd]
+        self.reads.append((path, count, offset))
+        self.assertTrue(0 < count <= 65536 and offset >= 0)
+        return node["raw"][offset:offset + count]
+
+    def label(self, fd, name):
+        self.assertEqual(name, "security.selinux")
+        self.assertIs(type(fd), int)
+        self.labels.append(self.handles[fd][0])
+        return self.handles[fd][1]["label"]
+
+    def verity(self, fd, command, output, mutate):
+        self.assertEqual((command, mutate), (0xc0046686, True))
+        self.assertEqual(output, server.struct.pack("<HH", 0, 32) + b"\0" * 32)
+        self.measures.append(self.handles[fd][0])
+        output[:] = server.struct.pack("<HH", 1, 32) + self.handles[fd][1]["verity"]
+        return 0
+
+    def view(self, pins=None, page_size=4096):
+        value = server._KernelCodeFiles(self.roots, self.pins if pins is None else pins, page_size)
+        self.addCleanup(value.close)
+        return value
+
+    def maps(self, path="/opt/planeon/python", start=4096, end=8192, offset=0, permissions="r-xp"):
+        node = self.nodes[path]
+        return (f"{start:08x}-{end:08x} {permissions} {offset:08x} "
+                f"{server.os.major(node['st_dev']):02x}:{server.os.minor(node['st_dev']):02x} "
+                f"{node['st_ino']} {path}\n".encode()
+                + b"00007000-00008000 r-xp 00000000 00:00 0 [vdso]\n")
+
+    def loader(self):
+        raw = bytearray(self.elf())
+        server.struct.pack_into("<H", raw, 56, 3)
+        value = b"/opt/planeon/loader\0"
+        server.struct.pack_into("<IIQQQQQQ", raw, 176, 3, 4, 300, 0, 0, len(value), len(value), 1)
+        raw[300:300 + len(value)] = value
+        self.nodes["/opt/planeon/python"]["raw"] = bytes(raw)
+        self.pins[0]["sha256"] = server.byte_digest(bytes(raw))
+        self.add_file("/opt/planeon/loader", self.elf(), [dict(offset=0, length=4096, permissions="r-xp")])
+
+    def test_retains_complete_ancestry_separate_measurements_and_fresh_reads(self):
+        value = self.view()
+        self.assertEqual(set(value.rows), {"/opt", "/opt/planeon", "/opt/planeon/python", "/opt/planeon/app"})
+        count = len(self.reads)
+        self.assertIsNone(value.check())
+        self.assertEqual(len(self.reads), count * 2)
+        self.assertEqual(len(self.measures), 8)
+        self.assertEqual(len(self.labels), 8)
+        self.assertIsNone(value.layouts["/opt/planeon/app"])
+        value.close()
+        self.assertFalse(self.roots.closed)
+        self.assertEqual(set(self.handles), {r[0] for r in self.roots.rows})
+        self.lib.syscall.assert_not_called()
+        self.mapper.assert_not_called()
+
+    def test_arm64_uses_same_fixed_file_interfaces_and_its_own_elf_architecture(self):
+        self.roots.close()
+        with patch.object(server.os, "uname", return_value=SimpleNamespace(machine="aarch64")):
+            self.roots = server._KernelRootViews()
+        self.addCleanup(self.roots.close)
+        raw = self.elf("aarch64")
+        self.nodes["/opt/planeon/python"]["raw"] = raw
+        self.pins[0]["sha256"] = server.byte_digest(raw)
+        self.assertIsNone(self.view().match_maps(self.maps(), self.auxv()))
+
+    def test_closed_inventory_shapes_and_duplicate_paths_fail_before_file_io(self):
+        for pins in ([], {}, self.pins * 65, self.pins * 2, [dict(self.pins[0], extra=1)],
+                     [{k: v for k, v in self.pins[0].items() if k != "size"}]):
+            with self.subTest(pins_type=type(pins)), self.assertRaises(ConformanceError):
+                self.view(pins)
+        self.assertEqual(self.reads, [])
+
+    def test_noncanonical_paths_and_file_directory_overlap_are_rejected_before_io(self):
+        for path in ("/", "relative", "/opt//x", "/opt/../x", "/opt/./x", "/opt/x (deleted)",
+                     "/opt/é", "/" + "x/" * 65 + "x", "/" + "x" * 4096):
+            with self.subTest(path=path), self.assertRaises(ConformanceError):
+                self.view([dict(self.pins[0], path=path)])
+        with self.assertRaises(ConformanceError):
+            self.view(self.pins + [dict(self.pins[0], path="/opt")])
+        self.assertEqual(self.reads, [])
+
+    def test_file_and_aggregate_bounds_and_distinct_digest_pins(self):
+        for field, values in (("size", (True, 0, 67108865)), ("mode", ("0755", "04555", 555)),
+                              ("selinuxLabel", ("", "x\n", "x" * 257)),
+                              ("sha256", ("mutable", self.pins[0]["verityDigest"]))):
+            for changed in values:
+                with self.subTest(field=field, value=changed), self.assertRaises(ConformanceError):
+                    self.view([dict(self.pins[0], **{field: changed})])
+        with self.assertRaises(ConformanceError):
+            self.view([dict(self.pins[0], path=f"/x{i}", size=67108864) for i in range(9)])
+        self.assertEqual(self.reads, [])
+
+    def test_bad_segment_pins_and_page_size_fail_closed(self):
+        for segments in ({}, [dict(offset=True, length=4096, permissions="r-xp")],
+                         [dict(offset=0, length=1, permissions="r-xp")],
+                         [dict(offset=0, length=4096, permissions="r-xs")],
+                         [dict(offset=0, length=4096, permissions="r-xp", extra=1)]):
+            with self.assertRaises(ConformanceError):
+                self.view([dict(self.pins[0], executableSegments=segments)])
+        for size in (True, 8192, 0):
+            with self.assertRaises(ConformanceError):
+                self.view(page_size=size)
+
+    def test_exact_root_owner_mode_size_and_single_link_are_required(self):
+        node = self.nodes["/opt/planeon/python"]
+        for key, value in (("st_uid", 10000), ("st_gid", 10000), ("st_mode", stat.S_IFREG | 0o755),
+                           ("st_mode", stat.S_IFREG | 0o4555), ("st_nlink", 2), ("st_size", 8191)):
+            original = node[key]
+            node[key] = value
+            with self.subTest(key=key), self.assertRaises(ConformanceError):
+                self.view()
+            node[key] = original
+            self.assertEqual(set(self.handles), {r[0] for r in self.roots.rows})
+
+    def test_symlink_and_nonregular_leaf_are_not_followed(self):
+        node = self.nodes["/opt/planeon/python"]
+        for mode in (stat.S_IFLNK | 0o555, stat.S_IFIFO | 0o555):
+            node["st_mode"] = mode
+            with self.assertRaises((ConformanceError, OSError)):
+                self.view()
+        node["st_mode"] = stat.S_IFREG | 0o555
+        self.assertEqual(self.reads, [])
+
+    def test_writable_or_unowned_parent_is_refused(self):
+        for key, value in (("st_uid", 1), ("st_gid", 1), ("st_mode", stat.S_IFDIR | 0o777)):
+            original = self.nodes["/opt"][key]
+            self.nodes["/opt"][key] = value
+            with self.assertRaises(ConformanceError):
+                self.view()
+            self.nodes["/opt"][key] = original
+
+    def test_hardlink_alias_even_with_claimed_single_link_is_refused(self):
+        self.nodes["/opt/planeon/app"]["st_ino"] = self.nodes["/opt/planeon/python"]["st_ino"]
+        with self.assertRaisesRegex(ConformanceError, "KERNEL_CODE_FILE_ALIAS"):
+            self.view()
+
+    def test_parent_or_leaf_named_substitution_is_sticky(self):
+        for path in ("/opt", "/opt/planeon/python"):
+            value = self.view()
+            original = self.nodes[path]
+            self.nodes[path] = dict(original, st_ino=9999)
+            with self.assertRaisesRegex(ConformanceError, "KERNEL_CODE_PATH_CHANGED"):
+                value.check()
+            self.nodes[path] = original
+            with self.assertRaisesRegex(ConformanceError, "KERNEL_CODE_UNAVAILABLE"):
+                value.check()
+            value.close()
+
+    def test_same_inode_mount_substitution_is_refused(self):
+        value = self.view()
+        original = self.nodes["/opt"]
+        self.nodes["/opt"] = dict(original, mountId=999)
+        with self.assertRaisesRegex(ConformanceError, "KERNEL_CODE_PATH_CHANGED"):
+            value.check()
+        self.nodes["/opt"] = original
+
+    def test_content_digest_is_checked_even_when_verity_response_is_unchanged(self):
+        value = self.view()
+        node = self.nodes["/opt/planeon/python"]
+        node["raw"] = node["raw"][:-1] + b"x"
+        with self.assertRaisesRegex(ConformanceError, "KERNEL_CODE_DIGEST_CHANGED"):
+            value.check()
+
+    def test_verity_mismatch_or_missing_ioctl_never_falls_back_to_content_hash(self):
+        for behavior in ("mismatch", "unavailable"):
+            value = self.view()
+            original = self.nodes["/opt/planeon/python"]["verity"]
+            if behavior == "mismatch":
+                self.nodes["/opt/planeon/python"]["verity"] = bytes(32)
+                with self.assertRaises(ConformanceError):
+                    value.check()
+            else:
+                with patch.object(server.fcntl, "ioctl", side_effect=OSError("unit unavailable")), self.assertRaises(OSError):
+                    value.check()
+            self.nodes["/opt/planeon/python"]["verity"] = original
+            value.close()
+
+    def test_file_labels_are_exact_and_missing_labels_do_not_fall_back(self):
+        node = self.nodes["/opt/planeon/python"]
+        for label in (b"other", b"system_u:object_r:code_t:s0\0\0", "system_u:object_r:code_t:s0"):
+            original, node["label"] = node["label"], label
+            with self.assertRaises(ConformanceError):
+                self.view()
+            node["label"] = original
+        with patch.object(server.os, "getxattr", side_effect=OSError("unit missing label")), self.assertRaises(OSError):
+            self.view()
+        node["label"] = node["label"][:-1]
+        self.assertIsNone(self.view().check())
+
+    def test_short_chunk_reads_are_complete_and_offset_based(self):
+        def short(fd, count, offset):
+            return self.pread(fd, min(count, 101), offset)
+        with patch.object(server.os, "pread", side_effect=short):
+            self.assertIsNone(self.view().check())
+        self.assertGreater(len(self.reads), 100)
+
+    def test_truncation_growth_wrong_types_and_oversize_read_results_are_rejected(self):
+        for reader in (lambda fd, n, off: b"", lambda fd, n, off: b"x" * (n + 1),
+                       lambda fd, n, off: bytearray(n), lambda fd, n, off: self.pread(fd, n, off) or b"x"):
+            with patch.object(server.os, "pread", side_effect=reader), self.assertRaises(ConformanceError):
+                self.view()
+
+    def test_metadata_label_or_named_path_change_during_read_is_detected(self):
+        for kind in ("metadata", "label", "path"):
+            original = deepcopy(self.nodes["/opt/planeon/python"])
+            def change(fd, count, offset):
+                raw = self.pread(fd, count, offset)
+                if self.handles[fd][0] == "/opt/planeon/python":
+                    if kind == "metadata":
+                        self.nodes["/opt/planeon/python"]["st_ctime_ns"] += 1
+                    elif kind == "label":
+                        self.nodes["/opt/planeon/python"]["label"] = b"changed"
+                    else:
+                        self.nodes["/opt/planeon/python"] = dict(original, st_ino=9001)
+                return raw
+            with patch.object(server.os, "pread", side_effect=change), self.assertRaises(ConformanceError):
+                self.view()
+            self.nodes["/opt/planeon/python"] = original
+
+    def test_one_phase_budget_covers_all_reads_and_does_not_restart_per_chunk(self):
+        value = self.view()
+        def slow(fd, n, off):
+            self.now += 0.75
+            return self.pread(fd, n, off)
+        with patch.object(server.os, "pread", side_effect=slow), self.assertRaisesRegex(ConformanceError, "KERNEL_CODE_DEADLINE"):
+            value.check()
+        self.assertTrue(value.failed)
+
+    def test_late_open_retains_and_closes_the_new_descriptor(self):
+        retained = set(self.handles)
+        def late(*args, **kwargs):
+            fd = self.open_fd(*args, **kwargs)
+            if self.handles[fd][0] == "/opt/planeon/app":
+                self.now += 2
+            return fd
+        with patch.object(server.os, "open", side_effect=late), self.assertRaises(ConformanceError):
+            self.view()
+        self.assertEqual(set(self.handles), retained)
+
+    def test_clock_rollback_process_and_thread_changes_are_not_reacquired(self):
+        for kind in ("clock", "pid", "thread"):
+            value = self.view()
+            with ExitStack() as stack:
+                if kind == "clock":
+                    self.now -= 1
+                elif kind == "pid":
+                    stack.enter_context(patch.object(server.os, "getpid", return_value=412))
+                else:
+                    stack.enter_context(patch.object(server.threading, "get_ident", return_value=722))
+                with self.assertRaises(ConformanceError):
+                    value.check()
+            if kind == "clock":
+                self.now += 1
+            value.close()
+
+    def test_closed_or_failed_owner_never_grants_custody(self):
+        value = self.view()
+        value.close()
+        with self.assertRaises(ConformanceError):
+            value.check()
+        self.roots.close()
+        with self.assertRaises(ConformanceError):
+            self.view()
+
+    def test_expected_inventory_is_detached_from_caller_mutation(self):
+        pins = deepcopy(self.pins)
+        value = self.view(pins)
+        pins[0]["sha256"] = "sha256:" + "0" * 64
+        pins[0]["executableSegments"][0]["length"] = 8192
+        self.assertIsNone(value.check())
+
+    def test_loader_must_be_enrolled_actual_elf_not_an_archive(self):
+        self.loader()
+        self.assertIsNone(self.view().check())
+        with self.assertRaisesRegex(ConformanceError, "KERNEL_CODE_LOADER_NOT_ENROLLED"):
+            self.view(self.pins[:-1])
+        self.nodes["/opt/planeon/loader"]["raw"] = b"P" * 8192
+        self.pins[-1]["sha256"] = server.byte_digest(b"P" * 8192)
+        self.pins[-1]["executableSegments"] = []
+        with self.assertRaisesRegex(ConformanceError, "KERNEL_CODE_LOADER_NOT_ENROLLED"):
+            self.view()
+
+    def test_executable_segment_pins_must_match_actual_file_and_not_hide_elf(self):
+        for segments in ([], [dict(offset=4096, length=4096, permissions="r-xp")],
+                         [dict(offset=0, length=4096, permissions="--xp")]):
+            with self.assertRaisesRegex(ConformanceError, "KERNEL_CODE_ELF_PIN"):
+                self.view([dict(self.pins[0], executableSegments=segments), self.pins[1]])
+        with self.assertRaisesRegex(ConformanceError, "KERNEL_CODE_ELF_PIN"):
+            self.view([self.pins[0], dict(self.pins[1], executableSegments=self.pins[0]["executableSegments"])])
+
+    def test_mapping_match_is_data_only_and_allows_observed_pie_bias(self):
+        value = self.view()
+        for start in (4096, 12288):
+            self.assertIsNone(value.match_maps(self.maps(start=start, end=start + 4096), self.auxv()))
+        self.assertIsNone(value.match_maps(self.maps().replace(b"00007000", b"00009000").replace(b"00008000", b"0000a000"),
+                                          self.auxv(36864)))
+
+    def test_mapping_path_device_inode_and_permissions_are_closed(self):
+        raw = self.maps()
+        for changed in (raw.replace(b"/opt/planeon/python", b"/unknown"), raw.replace(b"00:0a", b"08:01"),
+                        raw.replace(f" {self.nodes['/opt/planeon/python']['st_ino']} ".encode(), b" 999 "),
+                        raw.replace(b"r-xp", b"r-xs", 1), raw.replace(b"r-xp", b"rwxp", 1)):
+            value = self.view()
+            with self.assertRaises(ConformanceError):
+                value.match_maps(changed, self.auxv())
+            value.close()
+
+    def test_mapping_missing_extra_or_oversize_segments_are_refused(self):
+        for changed in (self.maps(offset=4096), self.maps(end=12288),
+                        self.maps().splitlines(keepends=True)[0] + self.maps(start=12288, end=16384)):
+            value = self.view()
+            with self.assertRaises(ConformanceError):
+                value.match_maps(changed, self.auxv())
+            value.close()
+
+    def test_mapping_cannot_execute_an_enrolled_archive(self):
+        value = self.view()
+        with self.assertRaisesRegex(ConformanceError, "KERNEL_CODE_MAP_UNENROLLED"):
+            value.match_maps(self.maps(path="/opt/planeon/app"), self.auxv())
+
+    def test_mapping_static_executable_cannot_claim_pie_bias(self):
+        raw = bytearray(self.nodes["/opt/planeon/python"]["raw"])
+        server.struct.pack_into("<H", raw, 16, 2)
+        self.nodes["/opt/planeon/python"]["raw"] = bytes(raw)
+        self.pins[0]["sha256"] = server.byte_digest(bytes(raw))
+        value = self.view()
+        self.assertIsNone(value.match_maps(self.maps(), self.auxv()))
+        with self.assertRaisesRegex(ConformanceError, "KERNEL_CODE_MAP_LAYOUT"):
+            value.match_maps(self.maps(start=12288, end=16384), self.auxv())
+
+    def test_mapping_requires_enrolled_loader_to_be_mapped_too(self):
+        self.loader()
+        value = self.view()
+        mapped = self.maps().splitlines(keepends=True)[0] + self.maps(path="/opt/planeon/loader", start=12288, end=16384)
+        self.assertIsNone(value.match_maps(mapped, self.auxv()))
+        with self.assertRaisesRegex(ConformanceError, "KERNEL_CODE_MAP_LOADER_MISSING"):
+            value.match_maps(self.maps(), self.auxv())
+
+    def test_split_mapping_must_cover_the_complete_segment_at_one_bias(self):
+        raw = bytearray(self.elf())
+        server.struct.pack_into("<H", raw, 56, 1)
+        server.struct.pack_into("<IIQQQQQQ", raw, 64, 1, 5, 0, 4096, 0, 8192, 8192, 4096)
+        self.nodes["/opt/planeon/python"]["raw"] = bytes(raw)
+        self.pins[0]["sha256"] = server.byte_digest(bytes(raw))
+        self.pins[0]["executableSegments"][0]["length"] = 8192
+        value = self.view()
+        first = self.maps().splitlines(keepends=True)[0]
+        self.assertIsNone(value.match_maps(first + self.maps(start=8192, end=12288, offset=4096), self.auxv()))
+        with self.assertRaisesRegex(ConformanceError, "KERNEL_CODE_MAP_LAYOUT"):
+            value.match_maps(first + self.maps(start=12288, end=16384, offset=4096), self.auxv())
+
+    def test_multiple_executable_segments_require_complete_consistent_address_bias(self):
+        raw = bytearray(self.elf())
+        server.struct.pack_into("<I", raw, 124, 5)
+        self.nodes["/opt/planeon/python"]["raw"] = bytes(raw)
+        self.pins[0]["sha256"] = server.byte_digest(bytes(raw))
+        self.pins[0]["executableSegments"].append(dict(offset=4096, length=4096, permissions="r-xp"))
+        value = self.view()
+        first = self.maps().splitlines(keepends=True)[0]
+        self.assertIsNone(value.match_maps(first + self.maps(start=12288, end=16384, offset=4096), self.auxv()))
+        with self.assertRaisesRegex(ConformanceError, "KERNEL_CODE_MAP_SEGMENT_COVERAGE"):
+            value.match_maps(self.maps(), self.auxv())
+        value.close()
+        with self.assertRaisesRegex(ConformanceError, "KERNEL_CODE_MAP_LAYOUT"):
+            self.view().match_maps(first + self.maps(start=16384, end=20480, offset=4096), self.auxv())
+
+    def test_partial_acquisition_failure_closes_owned_fds_but_not_roots(self):
+        retained = set(self.handles)
+        def denied(*args, **kwargs):
+            if args[0] == "app":
+                raise PermissionError("unit denied")
+            return self.open_fd(*args, **kwargs)
+        with patch.object(server.os, "open", side_effect=denied), self.assertRaises(PermissionError):
+            self.view()
+        self.assertEqual(set(self.handles), retained)
+
+    def test_uncertain_close_is_sticky_and_never_retried(self):
+        value = server._KernelCodeFiles(self.roots, self.pins, 4096)
+        target = value.rows["/opt/planeon/app"][0]
+        def uncertain(fd):
+            self.close_fd(fd)
+            if fd == target:
+                raise OSError("unit ambiguous close")
+        with patch.object(server.os, "close", side_effect=uncertain), self.assertRaises(OSError):
+            value.close()
+        for _ in range(2):
+            with self.assertRaises(OSError):
+                value.close()
+        self.assertEqual(self.closed.count(target), 1)
+        self.assertEqual(set(self.handles), {r[0] for r in self.roots.rows})
+
+    def test_recycled_fd_is_not_closed_as_if_still_owned(self):
+        value = server._KernelCodeFiles(self.roots, self.pins, 4096)
+        target = value.rows["/opt/planeon/app"][0]
+        original = self.handles[target]
+        self.handles[target] = ("/replacement", dict(original[1], st_ino=9999))
+        with self.assertRaisesRegex(ConformanceError, "KERNEL_CODE_FD_REUSED"):
+            value.close()
+        self.assertNotIn(target, self.closed)
+        self.handles[target] = original
+        self.close_fd(target)  # mock owner retires its simulated replacement
+
+
 class ProxyQualificationTests(unittest.TestCase):
     def test_four_architecture_resource_profiles_and_sixteen_captures_are_data_only(self):
         self.assertEqual(len(VECTORS["qualification"]["positive"]), 4)

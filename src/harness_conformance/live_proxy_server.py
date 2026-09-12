@@ -1092,6 +1092,265 @@ class _KernelPolicyView:
             raise self.cleanup_failure
 
 
+class _KernelCodeFiles:
+    """Closed, retained code-file observations; not a qualification authority.
+
+    Expected pins are detached data. The installed qualifier must authenticate
+    them, bind process exe/maps and enclose this component in the independently
+    enforced policy/change fence. No caller fd, loader or path discovery is used.
+    """
+    def __init__(self, roots, expected, page_size):
+        require(type(roots) is _KernelRootViews and type(page_size) is int
+                and page_size in (4096, 16384, 65536), "KERNEL_CODE_OWNER")
+        expected = document(expected)
+        require(type(expected) is list and 1 <= len(expected) <= 128, "KERNEL_CODE_INVENTORY")
+        self.pins = {}
+        for entry in expected:
+            require(type(entry) is dict and set(entry) == {"path", "mode", "size", "sha256",
+                    "verityDigest", "selinuxLabel", "executableSegments"}, "KERNEL_CODE_PINS")
+            path = entry["path"]
+            require(type(path) is str and 1 < len(path) <= 4096
+                    and re.fullmatch(r"/[A-Za-z0-9_./+-]+", path)
+                    and 1 <= len(path[1:].split("/")) <= 64
+                    and all(p not in ("", ".", "..") for p in path[1:].split("/"))
+                    and path not in self.pins, "KERNEL_CODE_PATH")
+            require(entry["mode"] in ("0444", "0555") and type(entry["size"]) is int
+                    and 0 < entry["size"] <= 67108864, "KERNEL_CODE_SIZE_MODE")
+            require_digest(entry["sha256"], "code bytes")
+            require_digest(entry["verityDigest"], "code verity")
+            require(entry["sha256"] != entry["verityDigest"], "KERNEL_CODE_DISTINCT_DIGESTS")
+            label = entry["selinuxLabel"]
+            require(type(label) is str and 1 <= len(label) <= 256
+                    and all(32 <= ord(c) <= 126 for c in label), "KERNEL_CODE_LABEL_PIN")
+            segments = entry["executableSegments"]
+            require(type(segments) is list and len(segments) <= 16, "KERNEL_CODE_SEGMENTS")
+            for segment in segments:
+                require(type(segment) is dict and set(segment) == {"offset", "length", "permissions"}
+                        and type(segment["offset"]) is int and 0 <= segment["offset"] < entry["size"]
+                        and type(segment["length"]) is int and 0 < segment["length"] <= 67108864
+                        and segment["offset"] % page_size == segment["length"] % page_size == 0
+                        and segment["permissions"] in ("r-xp", "--xp"), "KERNEL_CODE_SEGMENTS")
+            self.pins[path] = entry
+        require(sum(e["size"] for e in expected) <= 536870912, "KERNEL_CODE_TOTAL_SIZE")
+        require(not any(parent in self.pins for path in self.pins
+                for parent in (str(p) for p in Path(path).parents)), "KERNEL_CODE_PATH_OVERLAP")
+        self.roots, self.page_size = roots, page_size
+        self.pid, self.thread = os.getpid(), threading.get_ident()
+        self.rows, self.layouts = {}, {}
+        self.closed = self.failed = self.busy = False
+        self.cleanup_failure, self.last = None, time.monotonic()
+        try:
+            with self._phase():
+                self._acquire(self.rows)
+                self._observe()
+        except BaseException:
+            try:
+                self.close()
+            except BaseException:
+                pass  # construction grants nothing, even if cleanup is uncertain
+            raise
+
+    def _tick(self):
+        require(type(self) is _KernelCodeFiles and not self.closed and not self.failed and self.busy
+                and self.pid == os.getpid() and self.thread == threading.get_ident(), "KERNEL_CODE_CUSTODY")
+        now = time.monotonic()
+        require(self.last <= now < self.end, "KERNEL_CODE_DEADLINE")
+        self.last = now
+
+    def _io(self, function, *args, **kwargs):
+        self._tick()
+        try:
+            return function(*args, **kwargs)
+        finally:
+            self._tick()
+
+    @contextmanager
+    def _phase(self):
+        require(not self.closed and not self.failed and not self.busy, "KERNEL_CODE_UNAVAILABLE")
+        self.busy = True
+        self.end = time.monotonic() + 2
+        try:
+            self._io(self.roots.check)
+            yield
+            self._io(self.roots.check)
+        except BaseException:
+            self.failed = True
+            raise
+        finally:
+            self.busy = False
+
+    def _identity(self, fd, directory):
+        reader = self.roots.native.directory_identity if directory else self.roots.native.proc_file_identity
+        identity = self._io(reader, fd)
+        info = self._io(os.fstat, fd)
+        require(info.st_uid == info.st_gid == 0
+                and not stat.S_IMODE(info.st_mode) & (0o022 if directory else 0o222), "KERNEL_CODE_OWNER_MODE")
+        # Directory times/counters may vary; code bytes/metadata may not.
+        fingerprint = None if directory else _custody_identity(info)
+        return identity, fingerprint
+
+    def _acquire(self, rows):
+        def descend(path, directory):
+            if path == "/":
+                return self.roots.rows[0][0]
+            if path in rows:
+                require(rows[path][3] == directory, "KERNEL_CODE_PATH_OVERLAP")
+                return rows[path][0]
+            parent_path, name = path.rsplit("/", 1)
+            parent = descend(parent_path or "/", True)
+            require(len(rows) < 8192, "KERNEL_CODE_ANCESTRY_SIZE")
+            row = [None, None, None, directory]
+            rows[path] = row
+            flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK
+            if directory:
+                flags |= os.O_DIRECTORY
+            self._tick()
+            try:
+                row[0] = os.open(name, flags, dir_fd=parent)
+            finally:
+                self._tick()
+            row[1] = self._io(_KernelProcessView._close_identity, row[0])
+            row[2] = self._identity(row[0], directory)
+            return row[0]
+        for path in self.pins:
+            descend(path, False)
+        identities = [rows[p][2][0]["identity"][:2] for p in self.pins]
+        require(len(identities) == len(set(identities)), "KERNEL_CODE_FILE_ALIAS")
+
+    def _retained(self):
+        for fd, _, expected, directory in self.rows.values():
+            require(self._identity(fd, directory) == expected, "KERNEL_CODE_RETAINED_CHANGED")
+
+    def _paths(self):
+        temporary = {}
+        try:
+            self._acquire(temporary)
+            require({p: r[2:] for p, r in temporary.items()} == {p: r[2:] for p, r in self.rows.items()},
+                    "KERNEL_CODE_PATH_CHANGED")
+        finally:
+            self._close_rows(temporary)
+            self._tick()
+
+    def _file(self, path, pin):
+        fd, _, identity, _ = self.rows[path]
+        info = self._io(os.fstat, fd)
+        require(stat.S_ISREG(info.st_mode) and info.st_nlink == 1 and info.st_size == pin["size"]
+                and stat.S_IMODE(info.st_mode) == int(pin["mode"], 8), "KERNEL_CODE_FILE_PIN")
+        def integrity():
+            require(self._identity(fd, False) == identity, "KERNEL_CODE_FILE_CHANGED")
+            label = self._io(os.getxattr, fd, "security.selinux")
+            encoded = pin["selinuxLabel"].encode("ascii")
+            require(type(label) is bytes and label in (encoded, encoded + b"\0"), "KERNEL_CODE_LABEL_CHANGED")
+            require(self._io(self.roots.native.measure_verity, fd) == pin["verityDigest"],
+                    "KERNEL_CODE_VERITY_CHANGED")
+        integrity()
+        chunks, size = [], 0
+        while size <= pin["size"]:
+            limit = min(65536, pin["size"] + 1 - size)
+            chunk = self._io(os.pread, fd, limit, size)
+            require(type(chunk) is bytes and len(chunk) <= limit, "KERNEL_CODE_READ")
+            require(self._identity(fd, False) == identity, "KERNEL_CODE_FILE_CHANGED")
+            if not chunk:
+                break
+            chunks.append(chunk)
+            size += len(chunk)
+        require(size == pin["size"], "KERNEL_CODE_READ_SIZE")
+        raw = b"".join(chunks)
+        require(byte_digest(raw) == pin["sha256"], "KERNEL_CODE_DIGEST_CHANGED")
+        layout = _elf_code_layout(raw, self.roots.native.machine, self.page_size) if raw.startswith(b"\x7fELF") else None
+        segments = [] if layout is None else [{k: v for k, v in s.items() if k != "virtualAddress"}
+                                             for s in layout["segments"]]
+        require(segments == pin["executableSegments"], "KERNEL_CODE_ELF_PIN")
+        del raw, chunks  # never retain an executable image or substitute cached bytes
+        integrity()
+        return layout
+
+    def _observe(self):
+        self._retained()
+        self._paths()
+        layouts = {p: self._file(p, pin) for p, pin in self.pins.items()}
+        for layout in layouts.values():
+            if layout is not None and layout["interpreter"] is not None:
+                interpreter = layouts.get(layout["interpreter"])
+                require(interpreter is not None and interpreter["interpreter"] is None,
+                        "KERNEL_CODE_LOADER_NOT_ENROLLED")
+        require(not self.layouts or self.layouts == layouts, "KERNEL_CODE_LAYOUT_CHANGED")
+        self.layouts = layouts
+        self._paths()
+        self._retained()
+
+    def check(self):
+        with self._phase():
+            self._observe()
+
+    def match_maps(self, raw, auxv):
+        """Match supplied map bytes to retained files; no native-map provenance.
+
+        The eventual process owner must read maps/auxv from its original proc
+        descriptors, twice under the same process/policy custody. This returns
+        no handle and cannot authenticate a caller-supplied proc snapshot.
+        """
+        with self._phase():
+            self._observe()
+            maps = _proc_code_maps(raw, self.roots.native.machine, auxv)
+            require(maps["pageSize"] == self.page_size, "KERNEL_CODE_MAP_PAGE_SIZE")
+            grouped = {}
+            for mapping in maps["files"]:
+                path = mapping["path"]
+                require(path in self.pins and self.layouts[path] is not None, "KERNEL_CODE_MAP_UNENROLLED")
+                dev, inode, *_ = self.rows[path][2][0]["identity"]
+                require((mapping["deviceMajor"], mapping["deviceMinor"], mapping["inode"]) ==
+                        (os.major(dev), os.minor(dev), inode), "KERNEL_CODE_MAP_FILE_IDENTITY")
+                grouped.setdefault(path, []).append(mapping)
+            for path, actual in grouped.items():
+                layout, bias = self.layouts[path], None
+                remaining = list(actual)
+                for segment in layout["segments"]:
+                    cursor = segment["offset"]
+                    end = cursor + segment["length"]
+                    while cursor < end:
+                        matches = [m for m in remaining if m["offset"] == cursor]
+                        require(len(matches) == 1, "KERNEL_CODE_MAP_SEGMENT_COVERAGE")
+                        mapping = matches[0]
+                        size = mapping["end"] - mapping["start"]
+                        observed_bias = mapping["start"] - segment["virtualAddress"] - (cursor - segment["offset"])
+                        require(mapping["permissions"] == segment["permissions"] and cursor + size <= end
+                                and observed_bias >= 0 and observed_bias % self.page_size == 0
+                                and (layout["kind"] != 2 or observed_bias == 0)
+                                and (bias is None or observed_bias == bias), "KERNEL_CODE_MAP_LAYOUT")
+                        bias = observed_bias
+                        cursor += size
+                        remaining.remove(mapping)
+                require(not remaining, "KERNEL_CODE_MAP_EXTRA_SEGMENT")
+                require(layout["interpreter"] is None or layout["interpreter"] in grouped,
+                        "KERNEL_CODE_MAP_LOADER_MISSING")
+            self._observe()
+
+    def _close_rows(self, rows):
+        failure = None
+        while rows:
+            _, (fd, identity, *_) = rows.popitem()
+            if fd is None:
+                continue
+            try:
+                require(identity is None or _KernelProcessView._close_identity(fd) == identity,
+                        "KERNEL_CODE_FD_REUSED")
+                os.close(fd)  # never retry an uncertain close
+            except BaseException as exc:
+                failure = failure or exc
+        if failure is not None:
+            self.cleanup_failure = self.cleanup_failure or failure
+            raise failure
+
+    def close(self):
+        if not self.closed:
+            self.closed = True
+            self.layouts = {}
+            self._close_rows(self.rows)
+        if self.cleanup_failure is not None:
+            raise self.cleanup_failure
+
+
 class _Files:
     """One close owner; bounded first read with retained complete ancestry."""
     def __init__(self, owner):
