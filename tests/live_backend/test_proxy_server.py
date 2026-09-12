@@ -2646,6 +2646,397 @@ class KernelProcessCodeTests(unittest.TestCase):
         self.close_fd(target)
 
 
+class KernelCgroupCustodyTests(unittest.TestCase):
+    """Production process/root/cgroup factories with independent OS-edge data."""
+    stat_fd = KernelRootCustodyTests.stat_fd
+    statfs = KernelRootCustodyTests.statfs
+    statx = KernelRootCustodyTests.statx
+    close_fd = KernelRootCustodyTests.close_fd
+    allocate = KernelProcessCustodyTests.allocate
+    pidfd_open = KernelProcessCustodyTests.pidfd_open
+    poll_pid = KernelProcessCustodyTests.poll_pid
+    named_stat = KernelProcessCustodyTests.named_stat
+    namespace_type = KernelProcessCustodyTests.namespace_type
+    scandir = KernelProcessCustodyTests.scandir
+    close_views = KernelProcessCustodyTests.close_views
+    process_stat = KernelProcessCustodyTests.process_stat
+    process_status = KernelProcessCustodyTests.process_status
+
+    def setUp(self):
+        self.contents, self.snapshots, self.reads = {}, {}, []
+        KernelProcessCustodyTests.setUp(self)
+        self.role = "SERVER"
+        self.configure(self.role)
+        for name in ("write", "mkdir", "rmdir", "execve"):
+            self.stack.enter_context(patch.object(server.os, name, side_effect=AssertionError("no cgroup mutation or execution")))
+
+    def configure(self, role):
+        self.role = role
+        self.expected = deepcopy(sample()["record"]["roles"][role])
+        uid, gid = self.expected["uid"], self.expected["gid"]
+        self.status_raw = self.process_status(Uid=" ".join([str(uid)] * 4), Gid=" ".join([str(gid)] * 4))
+        self.label_raw = self.expected["processLabel"].encode() + b"\0"
+        self.group = self.expected["cgroup"]["path"]
+        self.cgroup_raw = ("0::" + self.group.removeprefix("/sys/fs/cgroup") + "\n").encode()
+        for path, node in self.nodes.items():
+            if path.startswith("/proc/411"):
+                node["st_uid"], node["st_gid"] = uid, gid
+        for path, node in self.links.items():
+            node["st_uid"], node["st_gid"] = uid, gid
+            self.nodes[path]["st_ino"] = self.expected["namespaceInodes"][path.rsplit("/", 1)[1]]
+        root = self.nodes["/sys/fs/cgroup"]
+        self.nodes["/sys/fs/cgroup/planeon-live"] = dict(root, st_ino=899)
+        self.nodes[self.group] = dict(root, st_ino=self.expected["cgroup"]["inode"])
+        for index, name in enumerate(("memory.max", "pids.max", "cpu.max", "cgroup.procs")):
+            self.nodes[self.group + "/" + name] = dict(root, st_ino=900 + index, st_mode=stat.S_IFREG | 0o644)
+        pins = self.expected["cgroup"]
+        self.contents = {self.group + "/memory.max": (str(pins["memoryMaxBytes"]) + "\n").encode(),
+                         self.group + "/pids.max": (str(pins["pidsMax"]) + "\n").encode(),
+                         self.group + "/cpu.max": (str(pins["cpuQuotaMicros"]) + " " + str(pins["cpuPeriodMicros"]) + "\n").encode(),
+                         self.group + "/cgroup.procs": b"411\n"}
+
+    def open_fd(self, name, flags, *, dir_fd):
+        fd = KernelProcessCustodyTests.open_fd(self, name, flags, dir_fd=dir_fd)
+        path = self.handles[fd][0]
+        if path in self.contents:
+            self.snapshots[fd] = self.contents[path]
+        return fd
+
+    def read(self, fd, count):
+        path = self.handles[fd][0]
+        if path not in self.contents:
+            return KernelProcessCustodyTests.read(self, fd, count)
+        self.assertTrue(0 < count <= 4096)
+        self.reads.append((path, fd, self.offsets[fd], count))
+        raw = self.snapshots[fd][self.offsets[fd]:self.offsets[fd] + count]
+        self.offsets[fd] += len(raw)
+        return raw
+
+    def process(self):
+        return KernelProcessCustodyTests.view(self, self.role, self.expected)
+
+    def fresh(self):
+        value = server._KernelCgroupView(self.process(), self.expected["cgroup"])
+        self.addCleanup(value.close)
+        return value
+
+    def test_real_factories_retain_original_cgroup_and_fresh_open_each_control(self):
+        value = self.fresh()
+        self.assertEqual(len(value.rows), 6)
+        self.assertEqual(self.handles[value.rows[1][0]][0], self.group)
+        self.assertIsNone(value.check())
+        reads = [r for r in self.reads if r[0].endswith("/memory.max") and r[2] == 0]
+        self.assertEqual(len(reads), 4)
+        self.assertEqual(len({r[1] for r in reads}), 4)
+        self.assertFalse({r[1] for r in self.reads} & {r[0] for r in value.rows})
+        self.mapper.assert_not_called()
+        self.lib.syscall.assert_not_called()
+
+    def test_each_role_uses_its_fixed_existing_group_and_worker_stays_nonroot(self):
+        for role in ("OBSERVER", "BROKER", "WORKER"):
+            self.configure(role)
+            value = self.fresh()
+            self.assertIsNone(value.check())
+            self.assertEqual(value.expected["path"], self.group)
+            if role == "WORKER":
+                self.assertGreaterEqual(value.process.pin[0], 10000)
+            value.close()
+            value.process.close()
+
+    def test_arm64_uses_the_same_readonly_cgroup_contract_without_native_execution(self):
+        self.roots.close()
+        with patch.object(server.os, "uname", return_value=SimpleNamespace(machine="aarch64")):
+            self.roots = server._KernelRootViews()
+        self.addCleanup(self.roots.close)
+        self.assertIsNone(self.fresh().check())
+        self.lib.syscall.assert_not_called()
+
+    def test_closed_pins_reject_wrong_roles_unknown_fields_and_invalid_numbers(self):
+        process = self.process()
+        pins = self.expected["cgroup"]
+        cases = [dict(pins, path="/sys/fs/cgroup/planeon-live/probe-worker"), dict(pins, extra=True),
+                 {k: v for k, v in pins.items() if k != "inode"}]
+        cases += [dict(pins, **{key: value}) for key, value in (("inode", True), ("inode", 0),
+                  ("inode", 9007199254740992), ("memoryMaxBytes", "1048576"), ("memoryMaxBytes", 1048575),
+                  ("memoryMaxBytes", 1099511627777), ("pidsMax", 0), ("pidsMax", 4097),
+                  ("cpuQuotaMicros", 999), ("cpuQuotaMicros", 1000001), ("cpuPeriodMicros", 999),
+                  ("cpuPeriodMicros", 1000001))]
+        opened = len(self.opens)
+        for pins in cases:
+            with self.assertRaises(ConformanceError):
+                server._KernelCgroupView(process, pins)
+        self.assertEqual(len(self.opens), opened)
+
+    def test_copied_or_failed_owner_and_caller_backend_are_not_admitted(self):
+        process = self.process()
+        for owner in (None, {}, SimpleNamespace(**process.__dict__)):
+            with self.assertRaises(ConformanceError):
+                server._KernelCgroupView(owner, self.expected["cgroup"])
+        for extra in ({"path": "/tmp"}, {"fd": 3}, {"backend": Mock()}, {"qualified": True}):
+            with self.assertRaises(TypeError):
+                server._KernelCgroupView(process, self.expected["cgroup"], **extra)
+        process.close()
+        with self.assertRaises(ConformanceError):
+            server._KernelCgroupView(process, self.expected["cgroup"])
+
+    def test_expected_pins_are_detached_and_closing_does_not_close_borrowed_process(self):
+        value = self.fresh()
+        self.expected["cgroup"]["memoryMaxBytes"] += 1
+        self.assertIsNone(value.check())
+        value.close()
+        value.close()
+        self.assertFalse(value.process.closed or self.roots.closed)
+        self.assertIsNone(value.process.check())
+        with self.assertRaises(ConformanceError):
+            value.check()
+
+    def test_finite_limit_changes_and_unlimited_or_noncanonical_values_are_refused(self):
+        for name, raw in (("memory.max", b"max\n"), ("pids.max", b"max\n"),
+                          ("cpu.max", b"max 100000\n"), ("memory.max", b"1048576\n"),
+                          ("pids.max", b"0\n"), ("cpu.max", b"1000 1000\n")):
+            value = self.fresh()
+            path = self.group + "/" + name
+            original = self.contents[path]
+            self.contents[path] = raw
+            with self.assertRaisesRegex(ConformanceError, "KERNEL_CGROUP_LIMIT_CHANGED"):
+                value.check()
+            self.contents[path] = original
+            value.close()
+
+    def test_no_whitespace_coercion_truncation_or_extra_control_fields(self):
+        path = self.group + "/cpu.max"
+        original = self.contents[path]
+        for raw in (original[:-1], b" " + original, original + b"\n", original.replace(b" ", b"\t"), original + b"1\n"):
+            self.contents[path] = raw
+            with self.assertRaises(ConformanceError):
+                self.fresh()
+        self.contents[path] = original
+
+    def test_actual_group_inode_must_equal_enrolled_pin(self):
+        self.expected["cgroup"]["inode"] += 1
+        with self.assertRaisesRegex(ConformanceError, "KERNEL_CGROUP_INODE"):
+            self.fresh()
+
+    def test_ancestor_replacement_and_same_inode_submount_are_refused(self):
+        for path, change in (("/sys/fs/cgroup/planeon-live", {"st_ino": 9999}),
+                             (self.group, {"mountId": 9999}), (self.group + "/memory.max", {"mountId": 9999})):
+            value = self.fresh()
+            original = self.nodes[path]
+            self.nodes[path] = dict(original, **change)
+            with self.assertRaises(ConformanceError):
+                value.check()
+            self.nodes[path] = original
+            value.close()
+
+    def test_control_and_membership_path_replacements_cannot_adopt_new_inodes(self):
+        for name in ("memory.max", "pids.max", "cpu.max", "cgroup.procs"):
+            value = self.fresh()
+            path = self.group + "/" + name
+            original = self.nodes[path]
+            self.nodes[path] = dict(original, st_ino=123456)
+            with self.assertRaisesRegex(ConformanceError, "KERNEL_CGROUP_PATH_CHANGED"):
+                value.check()
+            self.nodes[path] = original
+            value.close()
+
+    def test_group_and_controls_must_be_root_owned_not_tenant_writable(self):
+        for suffix, key, replacement in (("", "st_uid", 12345), ("/memory.max", "st_gid", 12345),
+                                          ("/cgroup.procs", "st_mode", stat.S_IFREG | 0o666)):
+            path = self.group + suffix
+            original = self.nodes[path][key]
+            self.nodes[path][key] = replacement
+            with self.assertRaisesRegex(ConformanceError, "KERNEL_CGROUP_IDENTITY"):
+                self.fresh()
+            self.nodes[path][key] = original
+
+    def test_control_inode_aliases_are_refused(self):
+        self.nodes[self.group + "/pids.max"]["st_ino"] = self.nodes[self.group + "/memory.max"]["st_ino"]
+        with self.assertRaisesRegex(ConformanceError, "KERNEL_CGROUP_ALIAS"):
+            self.fresh()
+
+    def test_membership_is_unsorted_and_other_member_churn_is_not_target_drift(self):
+        path = self.group + "/cgroup.procs"
+        self.contents[path] = b"901\n411\n503\n"
+        value = self.fresh()
+        self.contents[path] = b"411\n701\n"
+        self.assertIsNone(value.check())
+
+    def test_membership_must_include_original_live_process_without_duplicates(self):
+        path = self.group + "/cgroup.procs"
+        for raw in (b"", b"\n", b"412\n", b"411\n411\n", b"0411\n", b"411", b"411 \n",
+                    b"411\n0\n", b"411\n2147483648\n", b"411\n-1\n", b"411\n\x00\n"):
+            self.contents[path] = raw
+            with self.assertRaises(ConformanceError):
+                self.fresh()
+
+    def test_process_migration_during_controls_read_is_detected_before_return(self):
+        value = self.fresh()
+        def moved(fd, n):
+            raw = self.read(fd, n)
+            if self.handles[fd][0].endswith("/memory.max"):
+                self.cgroup_raw = b"0::/planeon-live/foreign\n"
+            return raw
+        with patch.object(server.os, "read", side_effect=moved), self.assertRaises(ConformanceError):
+            value.check()
+
+    def test_second_fresh_control_snapshot_rejects_between_open_drift(self):
+        value = self.fresh()
+        count = 0
+        def changed(name, *args, **kwargs):
+            nonlocal count
+            if name == "memory.max":
+                count += 1
+                if count == 3:  # named-path check, then the two actual snapshot opens
+                    self.contents[self.group + "/memory.max"] = b"max\n"
+            return self.open_fd(name, *args, **kwargs)
+        with patch.object(server.os, "open", side_effect=changed), self.assertRaisesRegex(ConformanceError, "KERNEL_CGROUP_LIMIT_CHANGED"):
+            value.check()
+        self.assertEqual(count, 3)
+
+    def test_membership_removal_during_control_read_is_not_hidden_by_old_sequence_buffer(self):
+        value = self.fresh()
+        def removed(fd, n):
+            raw = self.read(fd, n)
+            if self.handles[fd][0].endswith("/memory.max"):
+                self.contents[self.group + "/cgroup.procs"] = b"412\n"
+            return raw
+        with patch.object(server.os, "read", side_effect=removed), self.assertRaisesRegex(ConformanceError, "KERNEL_CGROUP_MEMBERSHIP"):
+            value.check()
+
+    def test_short_reads_continue_to_complete_eof(self):
+        def short(fd, n):
+            return self.read(fd, min(n, 2) if self.handles[fd][0] in self.contents else n)
+        with patch.object(server.os, "read", side_effect=short):
+            self.assertIsNone(self.fresh().check())
+        self.assertTrue(any(r[2] > 2 for r in self.reads))
+
+    def test_oversize_and_nonbytes_reads_do_not_yield_observations(self):
+        for path, raw in ((self.group + "/memory.max", b"1" * 65),
+                          (self.group + "/cgroup.procs", b"1\n" * 4097)):
+            original = self.contents[path]
+            self.contents[path] = raw
+            with self.assertRaises(ConformanceError):
+                self.fresh()
+            self.contents[path] = original
+        value = self.fresh()
+        def wrong(fd, n):
+            return bytearray(n) if self.handles[fd][0] in self.contents else self.read(fd, n)
+        with patch.object(server.os, "read", side_effect=wrong), self.assertRaises(ConformanceError):
+            value.check()
+
+    def test_retained_descriptor_change_during_read_is_refused(self):
+        value = self.fresh()
+        def changed(fd, n):
+            raw = self.read(fd, n)
+            if self.handles[fd][0].endswith("/memory.max"):
+                self.nodes[self.group]["st_mode"] = stat.S_IFDIR | 0o777
+            return raw
+        with patch.object(server.os, "read", side_effect=changed), self.assertRaises(ConformanceError):
+            value.check()
+
+    def test_dead_pidfd_during_read_never_returns_matching_limits(self):
+        value = self.fresh()
+        def dies(fd, n):
+            raw = self.read(fd, n)
+            if self.handles[fd][0] in self.contents:
+                self.dead = True
+            return raw
+        with patch.object(server.os, "read", side_effect=dies), self.assertRaises(ConformanceError):
+            value.check()
+
+    def test_restarted_process_cannot_reuse_same_cgroup_and_limits(self):
+        value = self.fresh()
+        self.stat_raw = self.process_stat(**{"19": "1000"})
+        with self.assertRaises(ConformanceError):
+            value.check()
+
+    def test_inspection_has_one_two_second_budget_across_all_nested_reads(self):
+        value = self.fresh()
+        def slow(fd, n):
+            if self.handles[fd][0] in self.contents:
+                self.now += 0.4
+            return self.read(fd, n)
+        with patch.object(server.os, "read", side_effect=slow), self.assertRaises(ConformanceError):
+            value.check()
+        self.assertTrue(value.failed)
+
+    def test_clock_rollback_and_failure_cannot_renew_inspection(self):
+        value = self.fresh()
+        self.now -= 1
+        with self.assertRaises(ConformanceError):
+            value.check()
+        self.now += 1
+        with self.assertRaisesRegex(ConformanceError, "KERNEL_CGROUP_UNAVAILABLE"):
+            value.check()
+
+    def test_inspector_pid_change_refuses_before_cgroup_io(self):
+        value = self.fresh()
+        count = len(self.reads)
+        with patch.object(server.os, "getpid", return_value=412), self.assertRaises(ConformanceError):
+            value.check()
+        self.assertEqual(len(self.reads), count)
+
+    def test_inspector_thread_change_refuses_before_cgroup_io(self):
+        value = self.fresh()
+        count = len(self.reads)
+        with patch.object(server.threading, "get_ident", return_value=722), self.assertRaises(ConformanceError):
+            value.check()
+        self.assertEqual(len(self.reads), count)
+
+    def test_missing_symlinked_or_unreadable_control_is_not_repaired(self):
+        process = self.process()
+        retained = set(self.handles)
+        def missing(name, *args, **kwargs):
+            if name == "cpu.max":
+                raise PermissionError("unit missing or symlinked control")
+            return self.open_fd(name, *args, **kwargs)
+        with patch.object(server.os, "open", side_effect=missing), self.assertRaises(PermissionError):
+            server._KernelCgroupView(process, self.expected["cgroup"])
+        self.assertEqual(set(self.handles), retained)
+
+    def test_late_open_is_owned_and_closed_even_before_identity_capture(self):
+        process = self.process()
+        retained = set(self.handles)
+        def late(name, *args, **kwargs):
+            fd = self.open_fd(name, *args, **kwargs)
+            if name == "planeon-live":
+                self.now += 2
+            return fd
+        with patch.object(server.os, "open", side_effect=late), self.assertRaises(ConformanceError):
+            server._KernelCgroupView(process, self.expected["cgroup"])
+        self.assertEqual(set(self.handles), retained)
+
+    def test_uncertain_temporary_close_sticks_and_never_closes_borrowed_owners(self):
+        value = server._KernelCgroupView(self.process(), self.expected["cgroup"])
+        retained = {r[0] for r in value.rows}
+        failed = []
+        def uncertain(fd):
+            path = self.handles[fd][0]
+            self.close_fd(fd)
+            if path.endswith("/memory.max") and fd not in retained and not failed:
+                failed.append(fd)
+                raise OSError("unit uncertain close")
+        with patch.object(server.os, "close", side_effect=uncertain), self.assertRaises(OSError):
+            value.check()
+        with self.assertRaises(OSError):
+            value.close()
+        with self.assertRaises(OSError):
+            value.close()
+        self.assertEqual(self.closed.count(failed[0]), 1)
+        self.assertFalse(value.process.closed or self.roots.closed)
+
+    def test_recycled_group_descriptor_is_never_closed_as_original(self):
+        value = server._KernelCgroupView(self.process(), self.expected["cgroup"])
+        target = value.rows[1][0]
+        original = self.handles[target]
+        self.handles[target] = ("/replacement", dict(original[1], st_ino=999999))
+        with self.assertRaisesRegex(ConformanceError, "KERNEL_CGROUP_FD_REUSED"):
+            value.close()
+        self.assertNotIn(target, self.closed)
+        self.handles[target] = original
+        self.close_fd(target)
+
+
 class ProxyQualificationTests(unittest.TestCase):
     def test_four_architecture_resource_profiles_and_sixteen_captures_are_data_only(self):
         self.assertEqual(len(VECTORS["qualification"]["positive"]), 4)

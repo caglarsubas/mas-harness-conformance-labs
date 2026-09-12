@@ -497,6 +497,43 @@ host installation, policy/key change, dependency, download, hosted runner, paid
 API or warm-source access is introduced. Current exact-commit LOCAL/CI results
 are retained externally; this source snapshot is not self-attested acceptance.
 
+## Retained cgroup continuation — 2026-09-12
+
+Preceding head `263e9e2` passed 605 tests and all eight declared commands locally
+and in required localhost CI run `34670621024`. Runner 48 retired with zero
+registered runners or uploaded artifacts. All 127 accepted files and all 605
+preceding test methods remain preserved. That evidence is not acceptance of this
+new source snapshot.
+
+The private `_KernelCgroupView` borrows the original process/root owner and owns
+only the fixed role's pre-existing cgroup ancestry and four control interfaces.
+It checks root ownership, non-tenant-writable modes, cgroup2 filesystem identity,
+original mount/inode and finite memory/pids/CPU limits against the closed
+expected record. A matching path or PID alone never grants qualification.
+
+Fresh opens prevent a retained sequence buffer from masquerading as a fresh
+control observation. Each bounded complete read must match the original retained
+file identity; temporary descriptors close promptly. Two control snapshots are
+surrounded by process and membership checks. Membership must contain the original
+live process, while PID reuse, migration, substituted paths, changed limits,
+truncation, unknown bytes, oversized reads and unavailable interfaces fail closed.
+The [Linux 6.12 cgroup-v2 reference](https://www.kernel.org/doc/html/v6.12/admin-guide/cgroup-v2.html)
+defines the finite control interfaces and unordered membership list. Duplicate
+PIDs are treated as an uncertain observation, not normalized away. Other-member
+churn is not itself target drift and never proves descendants were reaped.
+
+One two-second phase includes nested process checks and all I/O. Inspector
+PID/thread, retained pidfd, monotonic time and descriptor custody are checked;
+failures and uncertain closes stay sticky. No cgroup is created, migrated,
+configured, repaired or deleted. No control file is opened writable.
+
+This remains a supporting observation component, not capacity reservation,
+headroom proof or an endpoint enforcement grant. Signed pin authentication,
+active policy/code/BPF composition, external change fencing, original signed
+lifetime and the full qualifier/broker/API integration remain unfinished.
+OS-mocked real-factory tests do not establish native Linux qualification.
+Fresh full signed LOCAL/CI acceptance is mandatory for this exact source.
+
 ## Verification boundary
 
 This is an in-progress source snapshot, not a self-attested run result. Exact
@@ -533,7 +570,8 @@ probe, live launcher, runtime download or cloud/billable service is authorized.
 | Alpha 2 | CONF-LIVE-003 retained process / namespace component | LOCAL_AND_CI_PASS_RECORDED | Head6dcd8e7,509 tests,all8 commands; runner44 retired |
 | Alpha 2 | CONF-LIVE-003 fresh kernel-policy custody | LOCAL_AND_CI_PASS_RECORDED | Head2adf60a,535 tests,all8 commands; runner45 retired |
 | Alpha 2 | CONF-LIVE-003 code-file custody / mapping data | LOCAL_AND_CI_PASS_RECORDED | Head1475d3c,572 tests,all8 commands; runner47 retired |
-| Alpha 2 | CONF-LIVE-003 retained process-code component | IMPLEMENTED_NOT_ACCEPTED |33 new methods; fresh605-test full recipe required |
+| Alpha 2 | CONF-LIVE-003 retained process-code component | LOCAL_AND_CI_PASS_RECORDED | Head263e9e2, 605 tests, all8 commands; runner48 retired |
+| Alpha 2 | CONF-LIVE-003 retained cgroup component | IMPLEMENTED_NOT_ACCEPTED | Read-only role limits and membership; fresh full recipe required |
 | Alpha 2 | CONF-LIVE-003 native inspector / broker / API | ONGOING | Required implementation listed above |
 | Alpha 2 | CONF-LIVE-003 required CI | WAITING | Fresh exact-head localhost evidence required; prior failures retained |
 | Alpha 2 | CONF-LIVE-003 source completion / merge / exact-main | NOT_RUN | Packet is incomplete; no completion claim |

@@ -1575,6 +1575,210 @@ class _KernelProcessCode:
             raise self.cleanup_failure
 
 
+class _KernelCgroupView:
+    """Read only the retained role cgroup; observations are not enforcement.
+
+    The installed qualifier must authenticate the pins and namespace, compose
+    active policy/code/BPF checks, and retain the external change fence. This
+    reader neither migrates a process nor grants capacity, execution or cleanup.
+    """
+    def __init__(self, process, expected):
+        require(type(process) is _KernelProcessView and not process.closed and not process.failed
+                and not process.busy, "KERNEL_CGROUP_OWNER")
+        expected = document(expected)
+        require(type(expected) is dict and set(expected) == {"path", "inode", "memoryMaxBytes",
+                "pidsMax", "cpuQuotaMicros", "cpuPeriodMicros"}, "KERNEL_CGROUP_PINS")
+        group = {"SERVER": "proxy-server", "OBSERVER": "policy-observer",
+                 "BROKER": "capacity-broker", "WORKER": "probe-worker"}[process.role]
+        require(expected["path"] == "/sys/fs/cgroup/planeon-live/" + group
+                and process.cgroup == ("0::/planeon-live/" + group + "\n").encode("ascii"),
+                "KERNEL_CGROUP_ROLE")
+        for key, minimum, maximum in (("inode", 1, 9007199254740991),
+                ("memoryMaxBytes", 1048576, 1099511627776), ("pidsMax", 1, 4096),
+                ("cpuQuotaMicros", 1000, 1000000), ("cpuPeriodMicros", 1000, 1000000)):
+            require(type(expected[key]) is int and minimum <= expected[key] <= maximum, "KERNEL_CGROUP_PINS")
+        self.process, self.roots, self.expected, self.group = process, process.roots, expected, group
+        self.controls = {"memory.max": (str(expected["memoryMaxBytes"]) + "\n").encode("ascii"),
+                         "pids.max": (str(expected["pidsMax"]) + "\n").encode("ascii"),
+                         "cpu.max": (str(expected["cpuQuotaMicros"]) + " " +
+                                     str(expected["cpuPeriodMicros"]) + "\n").encode("ascii")}
+        self.pid, self.thread = os.getpid(), threading.get_ident()
+        self.rows = []
+        self.closed = self.failed = self.busy = False
+        self.cleanup_failure, self.last = None, time.monotonic()
+        try:
+            with self._phase():
+                self._acquire(self.rows)
+                self._observe()
+        except BaseException:
+            try:
+                self.close()
+            except BaseException:
+                pass  # partial/uncertain cleanup cannot produce qualification
+            raise
+
+    def _tick(self):
+        require(type(self) is _KernelCgroupView and not self.closed and not self.failed and self.busy
+                and self.pid == os.getpid() and self.thread == threading.get_ident(), "KERNEL_CGROUP_CUSTODY")
+        now = time.monotonic()
+        require(self.last <= now < self.end, "KERNEL_CGROUP_DEADLINE")
+        self.last = now
+        self.process._tick()  # original pidfd, process and namespace owner
+        now = time.monotonic()
+        require(self.last <= now < self.end, "KERNEL_CGROUP_DEADLINE")
+        self.last = now
+
+    def _io(self, function, *args, **kwargs):
+        self._tick()
+        try:
+            return function(*args, **kwargs)
+        finally:
+            self._tick()
+
+    @contextmanager
+    def _phase(self):
+        require(not self.closed and not self.failed and not self.busy, "KERNEL_CGROUP_UNAVAILABLE")
+        self.busy = True
+        self.end = time.monotonic() + 2
+        try:
+            with self.process._phase():
+                self._io(self.process._compare)
+                yield
+                self._io(self.process._compare)
+        except BaseException:
+            self.failed = True
+            raise
+        finally:
+            self.busy = False
+
+    def _identity(self, fd, directory):
+        reader = self.roots.native.directory_identity if directory else self.roots.native.proc_file_identity
+        identity = self._io(reader, fd)
+        root = self.roots.rows[6][2]
+        require(identity["mountId"] == root["mountId"] and identity["filesystem"] == root["filesystem"]
+                and identity["identity"][2:4] == (0, 0)
+                and not stat.S_IMODE(identity["identity"][4]) & 0o022, "KERNEL_CGROUP_IDENTITY")
+        return identity
+
+    def _open(self, rows, name, parent, directory=False):
+        row = [None, None, None, directory]
+        rows.append(row)
+        flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK
+        if directory:
+            flags |= os.O_DIRECTORY
+        self._tick()
+        try:
+            row[0] = os.open(name, flags, dir_fd=parent)
+        finally:
+            self._tick()
+        row[1] = self._io(_KernelProcessView._close_identity, row[0])
+        row[2] = self._identity(row[0], directory)
+        return row[0]
+
+    def _acquire(self, rows):
+        parent = self._open(rows, "planeon-live", self.roots.rows[6][0], True)
+        group = self._open(rows, self.group, parent, True)
+        require(rows[1][2]["identity"][1] == self.expected["inode"], "KERNEL_CGROUP_INODE")
+        for name in (*self.controls, "cgroup.procs"):
+            self._open(rows, name, group)
+        require(len({tuple(row[2]["identity"][:2]) for row in rows}) == len(rows), "KERNEL_CGROUP_ALIAS")
+
+    def _retained(self):
+        for fd, _, identity, directory in self.rows:
+            require(self._identity(fd, directory) == identity, "KERNEL_CGROUP_RETAINED_CHANGED")
+
+    def _paths(self):
+        temporary = []
+        try:
+            self._acquire(temporary)
+            require([r[2:] for r in temporary] == [r[2:] for r in self.rows], "KERNEL_CGROUP_PATH_CHANGED")
+        finally:
+            self._close_rows(temporary)
+            self._tick()
+
+    def _read(self, name, index, maximum):
+        # Fresh-open each kernfs sequence; a retained fd's old seq-file buffer
+        # is not a fresh control/membership observation. Never return that fd.
+        temporary = []
+        try:
+            fd = self._open(temporary, name, self.rows[1][0])
+            identity = self.rows[index][2]
+            require(temporary[0][2] == identity, "KERNEL_CGROUP_PATH_CHANGED")
+            chunks, size = [], 0
+            while size <= maximum:
+                limit = min(4096, maximum + 1 - size)
+                raw = self._io(os.read, fd, limit)
+                require(type(raw) is bytes and len(raw) <= limit, "KERNEL_CGROUP_READ")
+                require(self._identity(fd, False) == identity, "KERNEL_CGROUP_READ_CHANGED")
+                if not raw:
+                    break
+                chunks.append(raw)
+                size += len(raw)
+            require(0 < size <= maximum, "KERNEL_CGROUP_READ_SIZE")
+            named = self._io(os.stat, name, dir_fd=self.rows[1][0], follow_symlinks=False)
+            require((named.st_dev, named.st_ino, named.st_uid, named.st_gid, named.st_mode) ==
+                    identity["identity"], "KERNEL_CGROUP_PATH_CHANGED")
+            return b"".join(chunks)
+        finally:
+            self._close_rows(temporary)
+            self._tick()
+
+    def _membership(self):
+        raw = self._read("cgroup.procs", 5, 65536)
+        require(raw.endswith(b"\n"), "KERNEL_CGROUP_MEMBERSHIP")
+        lines = raw[:-1].split(b"\n")
+        require(1 <= len(lines) <= 4096 and all(re.fullmatch(rb"[1-9][0-9]{0,9}", p) for p in lines),
+                "KERNEL_CGROUP_MEMBERSHIP")
+        pids = [int(p) for p in lines]
+        require(all(p < 2 ** 31 for p in pids) and len(pids) == len(set(pids))
+                and self.process.target in pids, "KERNEL_CGROUP_MEMBERSHIP")
+        # Linux does not sort this list. Duplicates indicate an uncertain read;
+        # unrelated member churn is not target drift or proof of worker reaping.
+
+    def _snapshot(self):
+        self._membership()
+        for index, (name, expected) in enumerate(self.controls.items(), 2):
+            require(self._read(name, index, 64) == expected, "KERNEL_CGROUP_LIMIT_CHANGED")
+        self._membership()
+
+    def _observe(self):
+        self._retained()
+        self._paths()
+        self._snapshot()
+        self._io(self.process._compare)
+        self._retained()
+        self._snapshot()
+        self._paths()
+        self._retained()
+
+    def check(self):
+        with self._phase():
+            self._observe()
+
+    def _close_rows(self, rows):
+        failure = None
+        while rows:
+            fd, identity, *_ = rows.pop()
+            if fd is None:
+                continue
+            try:
+                require(identity is None or _KernelProcessView._close_identity(fd) == identity,
+                        "KERNEL_CGROUP_FD_REUSED")
+                os.close(fd)  # an uncertain close is never retried
+            except BaseException as exc:
+                failure = failure or exc
+        if failure is not None:
+            self.cleanup_failure = self.cleanup_failure or failure
+            raise failure
+
+    def close(self):
+        if not self.closed:
+            self.closed = True
+            self._close_rows(self.rows)
+        if self.cleanup_failure is not None:
+            raise self.cleanup_failure
+
+
 class _Files:
     """One close owner; bounded first read with retained complete ancestry."""
     def __init__(self, owner):
