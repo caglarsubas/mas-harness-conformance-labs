@@ -873,13 +873,16 @@ class KernelInspectionReadBoundaryTests(unittest.TestCase):
                 self.assertTrue(subject.failed and subject.closed)
 
     def test_session_window_replacement_inside_read_cannot_extend_authority(self):
+        from datetime import timedelta
         with ExitStack() as stack:
             subject = self.start(stack)
             self.readers(subject)
             original = self.owner.binding["notAfter"]
+            extended = (server._time(original) + timedelta(seconds=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+            self.assertNotEqual(extended, original)
             try:
                 with self.assertRaises(ConformanceError), subject._phase():
-                    subject.code._io(lambda: self.owner.binding.update(notAfter="2026-09-07T02:00:00Z"))
+                    subject.code._io(lambda: self.owner.binding.update(notAfter=extended))
             finally:
                 self.owner.binding["notAfter"] = original
             self.assertTrue(subject.failed and subject.closed)
