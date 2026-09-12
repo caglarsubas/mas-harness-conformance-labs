@@ -392,30 +392,7 @@ class _KernelNativeReads:
             require(stat.S_ISDIR(info.st_mode) if directory else stat.S_ISREG(info.st_mode),
                     "KERNEL_DIRECTORY_REQUIRED" if directory else "KERNEL_PROC_FILE_REQUIRED")
             identity = (info.st_dev, info.st_ino, info.st_uid, info.st_gid, info.st_mode)
-            require(ctypes.sizeof(_KernelStatx) == 256 and ctypes.alignment(_KernelStatx) == 8,
-                    "KERNEL_STATX_ABI")
-            call = self.lib.statx
-            call.argtypes = (ctypes.c_int, ctypes.c_char_p, ctypes.c_int,
-                             ctypes.c_uint, ctypes.POINTER(_KernelStatx))
-            call.restype = ctypes.c_int
-            output = _KernelStatx()
-            # Empty retained fd only; no path lookup, automount or sync fallback.
-            required = 0x411b  # TYPE | MODE | UID | GID | INO | MNT_ID_UNIQUE
-            try:
-                result = call(fd, b"", 0x1900, required, ctypes.byref(output))
-            finally:
-                self._tick()
-            require(type(result) is int and result == 0, "KERNEL_MOUNT_ID_UNAVAILABLE")
-            raw = bytes(output)
-            mask = struct.unpack_from("<I", raw)[0]
-            uid, gid, mode, reserved = struct.unpack_from("<IIHH", raw, 20)
-            inode = struct.unpack_from("<Q", raw, 32)[0]
-            major, minor = struct.unpack_from("<II", raw, 136)
-            mount_id = struct.unpack_from("<Q", raw, 144)[0]
-            require(mask & required == required and not mask & ~0x1ffff
-                    and reserved == 0 and raw[180:] == b"\0" * 76 and mount_id > 0
-                    and all(raw[offset:offset + 4] == b"\0" * 4 for offset in (76, 92, 108, 124)),
-                    "KERNEL_STATX_LAYOUT")
+            (major, minor, inode, uid, gid, mode), mount_id = self._statx_identity(fd, b"")
             require((uid, gid, mode, inode, major, minor) ==
                     (info.st_uid, info.st_gid, info.st_mode, info.st_ino,
                      os.major(info.st_dev), os.minor(info.st_dev)), "KERNEL_STATX_IDENTITY")
@@ -424,6 +401,59 @@ class _KernelNativeReads:
             require((after.st_dev, after.st_ino, after.st_uid, after.st_gid, after.st_mode) == identity,
                     "KERNEL_DIRECTORY_CHANGED")
             return dict(identity=identity, mountId=mount_id, filesystem=filesystem)
+
+    def _statx_identity(self, fd, path):
+        # Only retained descriptors and these two fixed single-component names.
+        # No symlink following, automount, recycled mount-ID or stat fallback.
+        self._tick()
+        require(type(fd) is int and 2 < fd < 1048576 and type(path) is bytes
+                and path in (b"", b"status", b"selinux"), "KERNEL_STATX_FIXED_PATH")
+        require(ctypes.sizeof(_KernelStatx) == 256 and ctypes.alignment(_KernelStatx) == 8,
+                "KERNEL_STATX_ABI")
+        call = self.lib.statx
+        call.argtypes = (ctypes.c_int, ctypes.c_char_p, ctypes.c_int,
+                         ctypes.c_uint, ctypes.POINTER(_KernelStatx))
+        call.restype = ctypes.c_int
+        output = _KernelStatx()
+        required = 0x411b  # TYPE | MODE | UID | GID | INO | MNT_ID_UNIQUE
+        try:
+            result = call(fd, path, 0x900 if path else 0x1900, required, ctypes.byref(output))
+        finally:
+            self._tick()
+        require(type(result) is int and result == 0, "KERNEL_MOUNT_ID_UNAVAILABLE")
+        raw = bytes(output)
+        mask = struct.unpack_from("<I", raw)[0]
+        uid, gid, mode, reserved = struct.unpack_from("<IIHH", raw, 20)
+        inode = struct.unpack_from("<Q", raw, 32)[0]
+        major, minor = struct.unpack_from("<II", raw, 136)
+        mount_id = struct.unpack_from("<Q", raw, 144)[0]
+        require(mask & required == required and not mask & ~0x1ffff
+                and reserved == 0 and raw[180:] == b"\0" * 76 and mount_id > 0
+                and all(raw[offset:offset + 4] == b"\0" * 4 for offset in (76, 92, 108, 124)),
+                "KERNEL_STATX_LAYOUT")
+        return (major, minor, inode, uid, gid, mode), mount_id
+
+    def _status_mounts(self, fd, parent, ancestry):
+        # Called inside the original native phase, also during nested epochs.
+        # Return observations only; the policy owner compares its frozen pins.
+        views = []
+        for descriptor in (fd, parent, ancestry):
+            info, _ = self._descriptor(descriptor)
+            inode, mount_id = self._statx_identity(descriptor, b"")
+            require(inode == (os.major(info.st_dev), os.minor(info.st_dev), info.st_ino,
+                              info.st_uid, info.st_gid, info.st_mode), "KERNEL_STATX_IDENTITY")
+            filesystem = self._filesystem(descriptor)
+            after, _ = self._descriptor(descriptor)
+            require((after.st_dev, after.st_ino, after.st_uid, after.st_gid, after.st_mode) ==
+                    (info.st_dev, info.st_ino, info.st_uid, info.st_gid, info.st_mode), "KERNEL_DIRECTORY_CHANGED")
+            views.append(dict(identity=(info.st_dev, info.st_ino, info.st_uid, info.st_gid, info.st_mode),
+                              mountId=mount_id, filesystem=filesystem))
+        for descriptor, name, expected in ((parent, b"status", views[0]), (ancestry, b"selinux", views[1])):
+            inode, mount_id = self._statx_identity(descriptor, name)
+            dev, ino, uid, gid, mode = expected["identity"]
+            require(inode == (os.major(dev), os.minor(dev), ino, uid, gid, mode)
+                    and mount_id == expected["mountId"], "KERNEL_EPOCH_MOUNT_PATH_CHANGED")
+        return views
 
     def namespace_identity(self, fd):
         """Inspect only an already-open nsfs fd; no namespace entry or mutation."""
@@ -1125,6 +1155,10 @@ class _KernelPolicyView:
         return (fd, tuple(status["identity"]), parent, tuple(root["identity"]),
                 tuple(sorted(self.selinux["status"].items())))
 
+    def _epoch_mount_inputs(self):
+        rows = (self.rows[5], self.roots.rows[5], self.roots.rows[4])
+        return tuple(row[0] for row in rows), canonical_bytes([row[2] for row in rows])
+
     def _retain_epoch(self):
         # The fixed inspection factory calls this once, after full policy
         # observation. Never accept a mapping, fd, epoch or callback as input.
@@ -1134,6 +1168,7 @@ class _KernelPolicyView:
             with self._phase():
                 self._epoch()
                 self.epoch_pin = self._epoch_inputs()
+                self.epoch_mount_pin = self._epoch_mount_inputs()
                 page_size = self._io(os.sysconf, "SC_PAGESIZE")
                 require(type(page_size) is int and page_size in (4096, 16384, 65536), "KERNEL_STATUS_PAGE_SIZE")
                 # Retain before the following tick can refuse. The mmap owns
@@ -1163,7 +1198,8 @@ class _KernelPolicyView:
             require(last <= now < before + 2, "KERNEL_EPOCH_DEADLINE")
             last = now
             require(self.epoch_original is not None and self.epoch_mapping is self.epoch_original
-                    and self._epoch_inputs() == self.epoch_pin, "KERNEL_EPOCH_REPLACED")
+                    and self._epoch_inputs() == self.epoch_pin
+                    and self._epoch_mount_inputs() == self.epoch_mount_pin, "KERNEL_EPOCH_REPLACED")
         def observed(function, *args, **kwargs):
             guard()
             try:
@@ -1189,11 +1225,19 @@ class _KernelPolicyView:
                 require((named.st_dev, named.st_ino, named.st_uid, named.st_gid, named.st_mode) == identity,
                         "KERNEL_EPOCH_PATH_CHANGED")
             custody()
-            if native.busy:
+            def sample():
+                descriptors, pins = self.epoch_mount_pin
+                require(canonical_bytes(observed(native._status_mounts, *descriptors)) == pins,
+                        "KERNEL_EPOCH_MOUNT_CHANGED")
                 fields = observed(native._mapped_status, self.epoch_original)
+                require(canonical_bytes(observed(native._status_mounts, *descriptors)) == pins,
+                        "KERNEL_EPOCH_MOUNT_CHANGED")
+                return fields
+            if native.busy:
+                fields = sample()
             else:
                 with native._phase():
-                    fields = observed(native._mapped_status, self.epoch_original)
+                    fields = sample()
             require(tuple(sorted(fields.items())) == expected, "KERNEL_POLICY_EPOCH_CHANGED")
             custody()
             guard()

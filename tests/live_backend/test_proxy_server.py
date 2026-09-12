@@ -1550,9 +1550,15 @@ class KernelRootCustodyTests(unittest.TestCase):
         return 0
 
     def statx(self, fd, path, flags, mask, pointer):
-        self.assertEqual((path, flags, mask), (b"", 0x1900, 0x411b))
+        if path:
+            self.assertEqual((flags, mask), (0x900, 0x411b))
+            self.assertIn((self.handles[fd][0], path),
+                (("/sys/fs/selinux", b"status"), ("/sys/fs", b"selinux")))
+            node = self.nodes[self.handles[fd][0] + "/" + path.decode("ascii")]
+        else:
+            self.assertEqual((path, flags, mask), (b"", 0x1900, 0x411b))
+            node = self.handles[fd][1]
         self.assertEqual(bytes(pointer._obj), b"\0" * 256)
-        node = self.handles[fd][1]
         raw = bytearray(256)
         server.struct.pack_into("<I", raw, 0, 0x47ff)
         server.struct.pack_into("<IIH", raw, 20, node["st_uid"], node["st_gid"], node["st_mode"])
@@ -2952,6 +2958,233 @@ class KernelRetainedEpochTests(unittest.TestCase):
             finally:
                 self.roots.native.close()
                 self.roots.native = self.roots._native_original = original
+
+
+class KernelEpochMountTests(unittest.TestCase):
+    """Actual epoch/native/root readers; fixed OS boundaries are synthetic."""
+    setUp = KernelRetainedEpochTests.setUp
+    named_stat = KernelRetainedEpochTests.named_stat
+    stat_fd = KernelRetainedEpochTests.stat_fd
+    statfs = KernelRetainedEpochTests.statfs
+    statx = KernelRetainedEpochTests.statx
+    close_fd = KernelRetainedEpochTests.close_fd
+    open_fd = KernelRetainedEpochTests.open_fd
+    read = KernelRetainedEpochTests.read
+    barrier = KernelRetainedEpochTests.barrier
+    mapping = KernelRetainedEpochTests.mapping
+    close_views = KernelRetainedEpochTests.close_views
+    view = KernelRetainedEpochTests.view
+    retained = KernelRetainedEpochTests.retained
+
+    def replace_named(self, path, **changes):
+        original = self.nodes[path]
+        self.nodes[path] = {**original, **changes}
+        self.addCleanup(self.nodes.__setitem__, path, original)
+
+    def mount_refusal(self, role):
+        value = self.retained()
+        fd = {"status": value.rows[5][0], "parent": self.roots.rows[5][0],
+              "ancestry": self.roots.rows[4][0]}[role]
+        original = self.handles[fd]
+        self.handles[fd] = (original[0], {**original[1], "mountId": original[1]["mountId"] + 100})
+        try:
+            with self.assertRaisesRegex(ConformanceError, "MOUNT.*CHANGED"):
+                value._reader_epoch()
+            self.assertTrue(value.failed)
+        finally:
+            self.handles[fd] = original
+        with self.assertRaises(ConformanceError):
+            value._reader_epoch()  # restoration never renews a failed lifetime
+
+    def corrupt_statx(self, offset, fmt, changed):
+        value = self.retained()
+        def corrupt(*args):
+            result = self.statx(*args)
+            raw = bytearray(bytes(args[-1]._obj))
+            server.struct.pack_into(fmt, raw, offset, changed)
+            args[-1]._obj.words[:] = server.struct.unpack("<32Q", raw)
+            return result
+        self.lib.statx.side_effect = corrupt
+        with self.assertRaises(ConformanceError):
+            value._reader_epoch()
+        self.assertTrue(value.failed)
+
+    def test_samples_mounts_without_new_descriptors_mappings_or_policy_opens(self):
+        value = self.retained()
+        before = (len(self.opens), len(self.maps), set(self.handles))
+        self.lib.statx.reset_mock()
+        self.assertIsNone(value._reader_epoch())
+        calls = [(c.args[0], c.args[1], c.args[2], c.args[3]) for c in self.lib.statx.call_args_list]
+        fd, parent, ancestry = value.epoch_mount_pin[0]
+        expected = [(fd, b"", 0x1900, 0x411b), (parent, b"", 0x1900, 0x411b),
+                    (ancestry, b"", 0x1900, 0x411b), (parent, b"status", 0x900, 0x411b),
+                    (ancestry, b"selinux", 0x900, 0x411b)]
+        self.assertEqual(calls, expected * 2)
+        self.assertEqual((len(self.opens), len(self.maps), set(self.handles)), before)
+        value.close()
+        self.assertEqual(set(self.handles), self.root_fds)
+
+    def test_same_inode_status_bind_mount_is_not_hidden_by_retained_mapping(self):
+        value = self.retained()
+        path = "/sys/fs/selinux/status"
+        self.replace_named(path, mountId=self.nodes[path]["mountId"] + 1)
+        count = self.lib.syscall.call_count
+        with self.assertRaisesRegex(ConformanceError, "MOUNT_PATH_CHANGED"):
+            value._reader_epoch()
+        self.assertEqual(self.lib.syscall.call_count, count)
+
+    def test_same_inode_selinux_parent_bind_mount_refuses(self):
+        value = self.retained()
+        path = "/sys/fs/selinux"
+        self.replace_named(path, mountId=self.nodes[path]["mountId"] + 1)
+        with self.assertRaisesRegex(ConformanceError, "MOUNT_PATH_CHANGED"):
+            value._reader_epoch()
+
+    def test_retained_status_mount_change_refuses(self):
+        self.mount_refusal("status")
+
+    def test_retained_parent_mount_change_refuses(self):
+        self.mount_refusal("parent")
+
+    def test_retained_sysfs_ancestry_mount_change_refuses(self):
+        self.mount_refusal("ancestry")
+
+    def test_retained_filesystem_identity_change_refuses(self):
+        value = self.retained()
+        def changed(fd, pointer):
+            result = self.statfs(fd, pointer)
+            pointer._obj.fsid[1] += 1
+            return result
+        self.lib.fstatfs.side_effect = changed
+        with self.assertRaisesRegex(ConformanceError, "MOUNT_CHANGED"):
+            value._reader_epoch()
+
+    def test_symlink_status_output_never_matches_regular_inode(self):
+        value = self.retained()
+        self.replace_named("/sys/fs/selinux/status", st_mode=stat.S_IFLNK | 0o777)
+        with self.assertRaisesRegex(ConformanceError, "PATH_CHANGED"):
+            value._reader_epoch()
+
+    def test_missing_unique_mount_bit_cannot_use_recycled_id(self):
+        self.corrupt_statx(0, "<I", 0x17ff)
+
+    def test_unknown_statx_fields_are_not_accepted(self):
+        self.corrupt_statx(0, "<I", 0x247ff)
+
+    def test_nonzero_reserved_statx_bytes_refuse(self):
+        self.corrupt_statx(184, "<Q", 1)
+
+    def test_mount_change_during_epoch_fence_is_seen_after_sample(self):
+        value = self.retained()
+        path = "/sys/fs/selinux/status"
+        original = self.nodes[path]
+        def changed(*args):
+            self.nodes[path] = {**original, "mountId": original["mountId"] + 1}
+            return self.barrier(*args)
+        self.lib.syscall.side_effect = changed
+        try:
+            with self.assertRaisesRegex(ConformanceError, "MOUNT_PATH_CHANGED"):
+                value._reader_epoch()
+        finally:
+            self.nodes[path] = original
+
+    def test_delayed_mount_query_keeps_original_busy_phase_deadline(self):
+        value = self.retained()
+        def delayed(*args):
+            result = self.statx(*args)
+            self.now += 2
+            return result
+        self.lib.statx.side_effect = delayed
+        native = self.roots.native
+        with self.assertRaises(ConformanceError), native._phase():
+            deadline = native.end
+            try:
+                value._reader_epoch()
+            finally:
+                self.assertEqual(native.end, deadline)
+        self.assertTrue(value.failed and native.failed)
+
+    def test_failed_query_still_checks_post_io_owner_custody(self):
+        value = self.retained()
+        pid = self.roots.native.pid
+        def failed(*args):
+            self.roots.native.pid = pid + 1
+            raise OSError("unit unavailable statx")
+        self.lib.statx.side_effect = failed
+        try:
+            with self.assertRaisesRegex(ConformanceError, "READER_CUSTODY"):
+                value._reader_epoch()
+        finally:
+            self.roots.native.pid = pid
+        self.assertTrue(value.failed)
+
+    def test_inheritable_sysfs_ancestry_is_refused(self):
+        value = self.retained()
+        ancestry = self.roots.rows[4][0]
+        with patch.object(server.os, "get_inheritable", side_effect=lambda fd: fd == ancestry):
+            with self.assertRaisesRegex(ConformanceError, "DESCRIPTOR_ACCESS"):
+                value._reader_epoch()
+
+    def test_mutated_mount_pins_cannot_reenroll_the_view(self):
+        value = self.retained()
+        value.rows[5][2]["mountId"] += 1
+        with self.assertRaisesRegex(ConformanceError, "EPOCH_REPLACED"):
+            value._reader_epoch()
+
+    def test_replaced_sysfs_descriptor_is_not_adopted(self):
+        value = self.retained()
+        row = self.roots.rows[4]
+        original = row[0]
+        row[0] = self.roots.rows[2][0]
+        try:
+            with self.assertRaisesRegex(ConformanceError, "EPOCH_REPLACED"):
+                value._reader_epoch()
+        finally:
+            row[0] = original
+
+    def test_dynamic_directory_counters_are_not_mount_custody(self):
+        value = self.retained()
+        def dynamic(fd):
+            node = self.handles[fd][1]
+            node["st_size"] += 1
+            node["st_mtime_ns"] += 1
+            node["st_ctime_ns"] += 1
+            return self.stat_fd(fd)
+        with patch.object(server.os, "fstat", side_effect=dynamic):
+            self.assertIsNone(value._reader_epoch())
+
+    def test_same_fixed_queries_on_both_mocked_native_abis(self):
+        for machine in ("x86_64", "aarch64"):
+            self.machine = self.host["machine"] = machine
+            original = self.roots.native
+            self.roots.native = self.roots._native_original = server._KernelNativeReads()
+            try:
+                value = self.retained()
+                with self.subTest(machine=machine):
+                    self.assertIsNone(value._reader_epoch())
+                value.close()
+            finally:
+                self.roots.native.close()
+                self.roots.native = self.roots._native_original = original
+
+    def test_statx_helper_has_no_arbitrary_path_or_fd_fallback(self):
+        value = self.retained()
+        calls = self.lib.statx.call_count
+        with self.assertRaisesRegex(ConformanceError, "FIXED_PATH"), self.roots.native._phase():
+            self.roots.native._statx_identity(value.rows[5][0], b"../policy")
+        self.assertEqual(self.lib.statx.call_count, calls)
+
+    def test_statx_inode_disagreement_with_retained_fd_refuses(self):
+        self.corrupt_statx(32, "<Q", 999999)
+
+    def test_unavailable_named_query_never_falls_back_to_stat(self):
+        value = self.retained()
+        def failed(*args):
+            return -1 if args[1] else self.statx(*args)
+        self.lib.statx.side_effect = failed
+        with self.assertRaisesRegex(ConformanceError, "MOUNT_ID_UNAVAILABLE"):
+            value._reader_epoch()
+        self.assertTrue(value.failed)
 
 
 class KernelInspectionEpochWiringTests(unittest.TestCase):

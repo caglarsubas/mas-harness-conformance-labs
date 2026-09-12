@@ -711,6 +711,42 @@ policy operations; no previous test body, identity or accepted file is changed.
 All733 prior methods remain, with source target760 methods. Fresh full8 LOCAL
 and required localhost CI are mandatory for this exact source increment.
 
+### Retained epoch mount custody — 2026-09-13
+
+The preceding retained-epoch head `99652a1` passed all8 declared commands and
+760 tests, zero skips, in LOCAL activation211 and required localhost CI
+run34702314811 / activation212. Runner54 retired; this is historical source/CI
+evidence, not acceptance of the following changes or native qualification.
+
+Epoch samples now compare immutable mount/filesystem pins for the retained
+status FD, its selinuxfs parent and the retained sysfs ancestry. Fixed no-follow
+`statx` lookups of `status` and `selinux` also compare unique mount IDs: a
+same-inode bind mount cannot hide behind the original status mapping. Both
+descriptor and named checks surround the fenced status read, with no new open,
+mapping, cached policy image, phase or deadline. Dynamic directory counters and
+timestamps are not stable custody and remain excluded.
+
+The shared statx decoder preserves the existing LP64 layout/mask/reserved-field
+checks and accepts only empty retained-FD paths or those two fixed names. It
+requests non-recycled mount IDs, disables symlink following and automount, and
+refuses missing support/errors without a stat fallback. The interface is grounded
+in [Linux6.12 statx UAPI](https://raw.githubusercontent.com/torvalds/linux/v6.12/include/uapi/linux/stat.h)
+and [fixed lookup flags](https://raw.githubusercontent.com/torvalds/linux/v6.12/include/uapi/linux/fcntl.h);
+no upstream implementation or dependency was imported.
+
+Twenty-two new OS-mocked tests exercise the real epoch/root/native readers.
+They cover same-inode mount changes, retained FD/filesystem substitutions,
+missing/unknown layout fields, query failures/delay, immutable pins, original
+deadline and both mocked ABIs. All760 prior test bodies and127 accepted source
+files remain unchanged. The existing statx OS double now models only the two
+additional fixed names; it does not bypass production validation. Source target
+782 methods; exact-commit full8 LOCAL and required CI remain mandatory.
+
+This closes this status-view mount comparison, not complete per-syscall ancestry
+or independent ABA exclusion. Full combined native-factory performance, retained
+peers, broker/API integration and real AMD64/ARM64 qualification remain unfinished.
+The containment refusal and credential/observer ordering are unchanged.
+
 ## Verification boundary
 
 This is an in-progress source snapshot, not a self-attested run result. Exact
@@ -753,7 +789,8 @@ probe, live launcher, runtime download or cloud/billable service is authorized.
 | Alpha 2 | CONF-LIVE-003 authenticated qualification binding | LOCAL_AND_CI_PASS_RECORDED | Heade4003fc, 694 tests, all8 commands; runner51 retired; failed IPv6 fixture replay retained |
 | Alpha 2 | CONF-LIVE-003 self-inspection composition | LOCAL_AND_CI_PASS_RECORDED | Head3520721,715 tests,all8 commands; runner52 retired |
 | Alpha 2 | CONF-LIVE-003 reader-boundary custody / lifetime | LOCAL_AND_CI_PASS_RECORDED | Head87c743a,733 tests,all8 commands; runner53 retired; failed fixture replay retained |
-| Alpha 2 | CONF-LIVE-003 retained policy epoch | IMPLEMENTED_NOT_ACCEPTED | Read-only retained status mapping, reader hooks and recursion refusal; fresh full8 required |
+| Alpha 2 | CONF-LIVE-003 retained policy epoch | LOCAL_AND_CI_PASS_RECORDED | Head99652a1,760 tests,all8 commands; runner54 retired; failed fixture replay retained |
+| Alpha 2 | CONF-LIVE-003 epoch mount custody | IMPLEMENTED_NOT_ACCEPTED | Retained and fixed-name unique mount identities; fresh full8 required |
 | Alpha 2 | CONF-LIVE-003 native inspector / broker / API | ONGOING | Required implementation listed above |
 | Alpha 2 | CONF-LIVE-003 required CI | WAITING | Fresh exact-head localhost evidence required; prior failures retained |
 | Alpha 2 | CONF-LIVE-003 source completion / merge / exact-main | NOT_RUN | Packet is incomplete; no completion claim |
