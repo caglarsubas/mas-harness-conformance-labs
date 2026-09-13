@@ -3555,7 +3555,7 @@ class _Broker:
         except BaseException:
             self.failed = True
             if self._created_original is not None:
-                self._created_original._poison()
+                _BrokerCreated._poison(self._created_original)
             if self._intent_original is not None:
                 self._intent_original._poison()
             try:
@@ -4290,12 +4290,15 @@ class _BrokerCreated:
     """
     def __init__(self, broker):
         self.failed = self.committed = self.writing = self.advanced = False
-        self.log = None
+        self.log = self._log_original = None
+        self.broker = self._broker_original = None
+        self.intent = self._intent_original = None
         try:
             require(type(self) is _BrokerCreated and type(broker) is _Broker
                     and broker.created is broker._created_original is self, "BROKER_CREATED_OWNER")
-            self.broker, self.owner = broker, broker.owner
-            self.exchange, self.intent = broker.exchange, broker.intent
+            self.broker = self._broker_original = broker
+            self.owner, self.exchange = broker.owner, broker.exchange
+            self.intent = self._intent_original = broker.intent
             require(type(self.exchange) is _BrokerCreateExchange
                     and self.exchange is broker._exchange_original and self.exchange.complete
                     and self.exchange.attempted and not self.exchange.failed,
@@ -4304,7 +4307,8 @@ class _BrokerCreated:
                     and self.intent.committed and self.intent.advanced and not self.intent.failed,
                     "BROKER_CREATED_INTENT_REQUIRED")
             self.events, self.start = self.intent.events, self.intent.start
-            self.api, self.storage, self.log = self.exchange.api, self.intent.storage, self.intent.log
+            self.api, self.storage = self.exchange.api, self.intent.storage
+            self.log = self._log_original = self.intent.log
             self.before = self.intent.after
             self.response_raw = self.exchange.response_raw
             self.action_raw, self.deadline = self.intent.action_raw, broker.deadline
@@ -4343,9 +4347,11 @@ class _BrokerCreated:
     def _state_check(self):
         broker, intent, exchange = self.broker, self.intent, self.exchange
         require(type(self) is _BrokerCreated and not self.failed
-                and type(broker) is _Broker and broker.created is broker._created_original is self
+                and type(broker) is _Broker and broker is self._broker_original
+                and broker.created is broker._created_original is self
                 and broker.owner is self.owner and self.owner.broker is self.owner._broker_original is broker
-                and broker.intent is broker._intent_original is intent and type(intent) is _BrokerIntent
+                and broker.intent is broker._intent_original is intent is self._intent_original
+                and type(intent) is _BrokerIntent
                 and intent.broker is broker and intent.owner is self.owner and intent.committed
                 and intent.advanced and not intent.failed
                 and broker.exchange is broker._exchange_original is exchange
@@ -4359,7 +4365,7 @@ class _BrokerCreated:
                 and broker.dispatch is broker._dispatch_original is self.start
                 and self.start is intent.start is self.events.start
                 and self.owner.storage is self.storage is intent.storage is self.start.storage
-                and self.owner.log is self.log is intent.log is self.start.log
+                and self.owner.log is self.log is self._log_original is intent.log is self.start.log
                 and self.log.storage is self.storage and not self.log.poisoned,
                 "BROKER_CREATED_OWNER_CHANGED")
         require(type(self.response_raw) is bytes and 0 < len(self.response_raw) <= 16384
@@ -4389,18 +4395,22 @@ class _BrokerCreated:
             self._check()
         except BaseException:
             self._poison()
-            self.intent._poison()
-            self.broker.failed = True
+            if type(self._intent_original) is _BrokerIntent:
+                _BrokerIntent._poison(self._intent_original)
+            broker = self._broker_original
+            if type(broker) is not _Broker:
+                raise
+            broker.failed = True
             try:
-                self.broker.close()
+                _Broker.close(broker)
             except BaseException:
                 pass  # no repair, adoption, retry or foreign resource cleanup
             raise
 
     def _poison(self):
         self.failed = True
-        if self.writing and self.log is not None:
-            self.log.poisoned = True
+        if self.writing and type(self._log_original) is _AdmissionLog:
+            self._log_original.poisoned = True
 
 
 class _State:

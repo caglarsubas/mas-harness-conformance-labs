@@ -1193,6 +1193,9 @@ resource adoption or capacity release follows. Repeated/reentrant calls refuse.
 The retained no-argument `check()` revalidates this accounting but grants no
 cleanup or action permission.
 
+Refusal cleanup uses separately retained original broker, intent and log owners;
+replaced references cannot become cleanup callbacks or receive poisoned state.
+
 The broker action remains pending: this step sends no RESOURCE_RESULT, HTTP
 request, GET/DELETE, cleanup receipt or terminal frame and reads no new credential.
 Result acknowledgement, connection retirement/next-action lifecycle, exact-UID

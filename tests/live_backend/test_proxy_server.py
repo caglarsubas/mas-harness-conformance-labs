@@ -8277,13 +8277,14 @@ class BrokerCreatedTests(_BrokerEventFixture, unittest.TestCase):
         self.io_events.clear()
 
     def refuse_created(self, reason=".+"):
-        with self.assertRaisesRegex((ConformanceError, OSError), reason):
+        with self.assertRaisesRegex((ConformanceError, OSError), reason) as caught:
             self.subject.record_api_created()
         self.assertTrue(self.subject.failed and self.subject.closed)
         if self.subject._created_original is not None:
             self.assertTrue(self.subject._created_original.failed)
             self.assertFalse(self.subject._created_original.committed)
         self.socket.send.assert_not_called()
+        return caught.exception
 
     def test_validated_identity_is_exactly_recorded_under_original_lock(self):
         self.complete()
@@ -8520,7 +8521,8 @@ class BrokerCreatedTests(_BrokerEventFixture, unittest.TestCase):
     def test_reentrant_record_never_repeats_create_or_append(self):
         self.complete()
         self.on_append = self.subject.record_api_created
-        self.refuse_created("BROKER_CREATED_ALREADY_ATTEMPTED")
+        failure = self.refuse_created("BROKER_OWNER_CHANGED")
+        self.assertIn("BROKER_CREATED_ALREADY_ATTEMPTED", str(failure.__context__))
         self.assertEqual(self.ledger, self.before_created)
         self.assertEqual(len(self.plain_requests), 1)
 
@@ -8580,6 +8582,39 @@ class BrokerCreatedTests(_BrokerEventFixture, unittest.TestCase):
         self.assertNotIn("committed", vars(foreign))
         foreign.close.assert_not_called()
         self.assertEqual(len(self.writes), 2)
+
+    def test_changed_local_broker_reference_closes_only_original_broker(self):
+        self.complete()
+        self.subject.record_api_created()
+        original = self.subject.created
+        foreign = original.broker = Mock()
+        with self.assertRaisesRegex(ConformanceError, "BROKER_CREATED_OWNER_CHANGED"):
+            original.check()
+        foreign.close.assert_not_called()
+        self.assertNotIn("failed", vars(foreign))
+        self.assertTrue(self.subject.closed and self.subject.failed and self.owner.log.poisoned)
+
+    def test_changed_local_intent_reference_never_calls_foreign_poison(self):
+        self.complete()
+        self.subject.record_api_created()
+        original = self.subject.created
+        foreign = original.intent = Mock()
+        with self.assertRaisesRegex(ConformanceError, "BROKER_CREATED_OWNER_CHANGED"):
+            original.check()
+        foreign._poison.assert_not_called()
+        foreign.close.assert_not_called()
+        self.assertTrue(self.subject.intent.failed and self.owner.log.poisoned)
+
+    def test_changed_local_log_reference_never_poisons_foreign_log(self):
+        self.complete()
+        self.subject.record_api_created()
+        original = self.subject.created
+        foreign = original.log = Mock()
+        with self.assertRaisesRegex(ConformanceError, "BROKER_CREATED_OWNER_CHANGED"):
+            original.check()
+        self.assertNotIn("poisoned", vars(foreign))
+        foreign.close.assert_not_called()
+        self.assertTrue(self.owner.log.poisoned)
 
 
 class BrokerApiZeroResourceTests(_BrokerEventFixture, unittest.TestCase):
