@@ -2776,80 +2776,188 @@ def _fixed_probes():
 class _Observer:
     def __init__(self, owner):
         self.owner, self.sock, self.pidfd, self.previous = owner, None, None, None
+        self.closed = self.failed = self.busy = False
+        self.cleanup_failure = None
+        self._socket_original = self._pidfd_original = None
+        self._socket_fd = self._socket_pin = self._pidfd_pin = None
+        self._previous_raw = None
+        self.deadline = owner.deadline
         self.last_wall, self.last_mono = None, time.monotonic()
-        value, manifest_digest, executable_digest = _manifest(owner.files, OBSERVER_MANIFEST, OBSERVER)
+        try:
+            with self._phase():
+                self._connect()
+        except BaseException:
+            self.failed = True
+            try:
+                self.close()
+            except BaseException:
+                pass  # retain the original refusal and sticky cleanup failure
+            raise
+
+    def _connect(self):
+        owner = self.owner
+        value, manifest_digest, executable_digest = self._io(_manifest, owner.files, OBSERVER_MANIFEST, OBSERVER)
         require(owner.observation_binding["observer"] == {"manifestDigest": manifest_digest,
             "executableDigest": executable_digest}, "OBSERVER_ENROLLMENT_MISMATCH")
-        self.parent = owner.files._open(OBSERVER_SOCKET.rsplit("/", 1)[0], True, 0o700)
-        self.socket_identity = _custody_identity(os.stat("policy-observer.sock", dir_fd=self.parent, follow_symlinks=False))
-        info = os.stat("policy-observer.sock", dir_fd=self.parent, follow_symlinks=False)
+        self.parent = self._io(owner.files._open, OBSERVER_SOCKET.rsplit("/", 1)[0], True, 0o700)
+        info = self._io(os.stat, "policy-observer.sock", dir_fd=self.parent, follow_symlinks=False)
+        self.socket_identity = _custody_identity(info)
         require(stat.S_ISSOCK(info.st_mode) and info.st_uid == info.st_gid == 0
                 and stat.S_IMODE(info.st_mode) == 0o600, "OBSERVER_SOCKET_CUSTODY")
-        self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
-        self.sock.set_inheritable(False)
-        self.sock.setsockopt(socket.SOL_SOCKET, 16, 1)
-        self.sock.settimeout(min(2, owner.deadline - time.monotonic()))
-        self.sock.connect(OBSERVER_SOCKET)
-        self.peer = struct.unpack("3i", self.sock.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
+        # Retain newly acquired resources BEFORE any post-I/O guard can fail.
+        try:
+            self.sock = self._socket_original = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
+            self._socket_fd = self.sock.fileno()
+            self._socket_pin = self._fd_pin(self._socket_fd)
+        finally:
+            self._guard()
+        self._io(self.sock.set_inheritable, False)
+        self._io(self.sock.setsockopt, socket.SOL_SOCKET, 16, 1)
+        self._io(self.sock.settimeout, self.end - time.monotonic())
+        self._io(self.sock.connect, OBSERVER_SOCKET)
+        self.peer = struct.unpack("3i", self._io(self.sock.getsockopt, socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
         require(self.peer[0] > 1 and self.peer[1:] == (0, 0), "OBSERVER_PEER_INVALID")
-        self.identity = process_identity(self.peer[0])
-        self.pidfd = os.pidfd_open(self.peer[0], 0)
+        self._peer_original = self.peer
+        self.identity = self._io(process_identity, self.peer[0])
+        self._process_original = self._process_pin(self.identity)
+        try:
+            self.pidfd = self._pidfd_original = os.pidfd_open(self.peer[0], 0)
+            self._pidfd_pin = self._fd_pin(self.pidfd)
+        finally:
+            self._guard()
         require(owner.files.raw[OBSERVER].startswith(b"\x7fELF"), "OBSERVER_NATIVE_ELF_REQUIRED")
-        self.check()
+        self._check_peer()
 
-    def check(self):
-        self.owner._base_check()
-        require(_custody_identity(os.stat("policy-observer.sock", dir_fd=self.parent, follow_symlinks=False))
-                == self.socket_identity and not select.select([self.pidfd], [], [], 0)[0]
-                and process_identity(self.peer[0]) == self.identity, "OBSERVER_PEER_CHANGED")
-        actual = os.stat(f"/proc/{self.peer[0]}/exe")
+    @staticmethod
+    def _fd_pin(fd):
+        require(type(fd) is int and 2 < fd < 1048576, "OBSERVER_DESCRIPTOR_INVALID")
+        info = os.fstat(fd)
+        return info.st_dev, info.st_ino, stat.S_IFMT(info.st_mode)
+
+    @staticmethod
+    def _process_pin(value):
+        return (value["pid"], value["start"], value["parent"], tuple(value["uid"]), tuple(value["gid"]),
+                tuple(value["capabilities"]), value["seccomp"], value["noNewPrivs"], value["cgroup"],
+                tuple(sorted(value["namespaces"].items())))
+
+    def _guard(self):
+        require(type(self) is _Observer and not self.closed and not self.failed and self.busy
+                and type(self.owner) is NativeProxyServer and self.owner.observer is self
+                and self.owner.deadline == self.deadline, "OBSERVER_OWNER_CHANGED")
+        self.owner._base_check()  # no observer I/O or credential acquisition
+        now, wall = time.monotonic(), require_time(utc_now(), "now")
+        require(self.last_mono <= now < self.end
+                and (self.last_wall is None or self.last_wall <= wall)
+                and 0 <= (wall - self.phase_wall).total_seconds() < 2, "OBSERVER_CLOCK_OR_DEADLINE")
+        self.last_mono, self.last_wall = now, wall
+
+    @contextmanager
+    def _phase(self):
+        require(not self.closed and not self.failed and not self.busy, "OBSERVER_UNAVAILABLE")
+        self.busy = True
+        self.end = min(self.deadline, time.monotonic() + 2)
+        self.phase_wall = require_time(utc_now(), "now")
+        try:
+            self._guard()
+            yield
+            self._guard()
+        except BaseException:
+            self.failed = True
+            raise
+        finally:
+            self.busy = False
+
+    def _io(self, function, *args, **kwargs):
+        self._guard()
+        try:
+            return function(*args, **kwargs)
+        finally:
+            self._guard()  # unsuccessful I/O never skips retained authority
+
+    def _check_peer(self):
+        require(self.sock is self._socket_original and self.pidfd == self._pidfd_original
+                and self.peer == self._peer_original and self._process_pin(self.identity) == self._process_original,
+                "OBSERVER_RETAINED_PEER_CHANGED")
+        require(self._io(self.sock.fileno) == self._socket_fd
+                and self._io(self._fd_pin, self._socket_fd) == self._socket_pin
+                and self._io(self._fd_pin, self.pidfd) == self._pidfd_pin
+                and not self._io(os.get_inheritable, self._socket_fd)
+                and not self._io(os.get_inheritable, self.pidfd), "OBSERVER_DESCRIPTOR_CHANGED")
+        require(struct.unpack("3i", self._io(self.sock.getsockopt, socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
+                == self._peer_original, "OBSERVER_PEER_CHANGED")
+        require(_custody_identity(self._io(os.stat, "policy-observer.sock", dir_fd=self.parent, follow_symlinks=False))
+                == self.socket_identity and self._io(select.select, [self.pidfd], [], [self.pidfd], 0) == ([], [], [])
+                and self._process_pin(self._io(process_identity, self.peer[0])) == self._process_original,
+                "OBSERVER_PEER_CHANGED")
+        actual = self._io(os.stat, f"/proc/{self.peer[0]}/exe")
         expected = self.owner.files.rows[OBSERVER][3]
         require((actual.st_dev, actual.st_ino) == expected[:2], "OBSERVER_EXECUTABLE_CHANGED")
-        require(_fixed_probes().require_observer_containment(self.owner, self.peer[0], self.identity) is None,
+        require(self._io(_fixed_probes().require_observer_containment, self.owner, self.peer[0], self.identity) is None,
                 "OBSERVER_CONTAINMENT_UNAVAILABLE")
+        require(self._process_pin(self.identity) == self._process_original, "OBSERVER_RETAINED_PEER_CHANGED")
+
+    def check(self):
+        with self._phase():
+            self._check_peer()
 
     def observe(self):
-        self.check()
-        previous = self.previous
-        request = {"schemaVersion": "planeon.internal.policy-observation-request/v1", "operation": "OBSERVE_POLICY",
-            "bindingDigest": canonical_digest(self.owner.observation_binding), "runNonce": self.owner.envelope["nonce"],
-            "challenge": os.urandom(32).hex(), "sequence": 1 if previous is None else previous["sequence"] + 1,
-            "previousObservationDigest": ZERO if previous is None else canonical_digest(previous)}
-        deadline = min(self.owner.deadline, time.monotonic() + 2)
-        encoded = canonical_bytes(request)
-        self.sock.settimeout(deadline - time.monotonic())
-        require(self.sock.send(encoded) == len(encoded), "OBSERVER_SEND_AMBIGUOUS")
-        self.check()
-        require(time.monotonic() < deadline, "OBSERVER_DEADLINE")
-        self.sock.settimeout(deadline - time.monotonic())
-        raw, ancillary, flags, _ = self.sock.recvmsg(65537, socket.CMSG_SPACE(12) + socket.CMSG_SPACE(253 * 4))
-        require(credentials(ancillary, flags) == self.peer, "OBSERVER_MESSAGE_PEER")
-        self.check()
-        mono, now = time.monotonic(), utc_now()
-        instant = require_time(now, "now")
-        require(self.last_mono <= mono < deadline and (self.last_wall is None or self.last_wall <= instant),
-                "OBSERVER_CLOCK_OR_DEADLINE")
-        self.previous = validate_messages(self.owner.observation_binding, request, raw, self.owner.profile,
-                                         instant.strftime("%Y-%m-%dT%H:%M:%SZ"), previous)
-        self.last_mono, self.last_wall = mono, instant
-        return self.previous
+        with self._phase():
+            self._check_peer()
+            require((None if self.previous is None else canonical_bytes(self.previous)) == self._previous_raw,
+                    "OBSERVER_HISTORY_CHANGED")
+            previous = None if self._previous_raw is None else document(self._previous_raw, 65536)
+            request = {"schemaVersion": "planeon.internal.policy-observation-request/v1", "operation": "OBSERVE_POLICY",
+                "bindingDigest": canonical_digest(self.owner.observation_binding), "runNonce": self.owner.envelope["nonce"],
+                "challenge": self._io(os.urandom, 32).hex(), "sequence": 1 if previous is None else previous["sequence"] + 1,
+                "previousObservationDigest": ZERO if previous is None else canonical_digest(previous)}
+            encoded = canonical_bytes(request)
+            self._io(self.sock.settimeout, self.end - time.monotonic())
+            self._check_peer()
+            try:
+                require(self.sock.send(encoded) == len(encoded), "OBSERVER_SEND_AMBIGUOUS")
+            finally:
+                self._check_peer()  # no replay, including timeout or partial send
+            self._io(self.sock.settimeout, self.end - time.monotonic())
+            self._check_peer()
+            try:
+                raw, ancillary, flags, _ = self.sock.recvmsg(65537, socket.CMSG_SPACE(12) + socket.CMSG_SPACE(253 * 4))
+                # Drain/reject received rights even if the subsequent custody
+                # guard fails. Untrusted ancillary FDs never become owned peers.
+                require(credentials(ancillary, flags) == self._peer_original, "OBSERVER_MESSAGE_PEER")
+            finally:
+                self._check_peer()
+            observed = validate_messages(self.owner.observation_binding, request, raw, self.owner.profile,
+                                         require_time(utc_now(), "now").strftime("%Y-%m-%dT%H:%M:%SZ"), previous)
+            self._guard()
+            self._previous_raw = canonical_bytes(observed)
+            self.previous = document(self._previous_raw, 65536)
+            return document(self._previous_raw, 65536)  # no mutable history alias
 
     def close(self):
-        operations = []
-        sock, self.sock = self.sock, None
-        pidfd, self.pidfd = self.pidfd, None
-        if sock is not None:
-            operations.append(sock.close)
-        if pidfd is not None:
-            operations.append(lambda: os.close(pidfd))
-        failure = None
-        for operation in operations:
-            try:
-                operation()
-            except BaseException as exc:
-                failure = failure or exc
-        if failure is not None:
-            raise failure
+        if not self.closed:
+            self.closed = True
+            sock, self._socket_original, self.sock = self._socket_original, None, None
+            pidfd, self._pidfd_original, self.pidfd = self._pidfd_original, None, None
+            for resource, fd, pin in ((pidfd, pidfd, self._pidfd_pin), (sock, self._socket_fd, self._socket_pin)):
+                if resource is None:
+                    continue
+                try:
+                    if pin is not None and self._fd_pin(fd) != pin:
+                        require(False, "OBSERVER_CLOSE_FD_REUSED")
+                    if resource is sock:
+                        require(fd is None or sock.fileno() == fd, "OBSERVER_CLOSE_SOCKET_CHANGED")
+                        sock.close()
+                    else:
+                        os.close(fd)
+                except BaseException as exc:
+                    self.cleanup_failure = self.cleanup_failure or exc
+                    if resource is sock:
+                        try:
+                            sock.detach()  # no destructor close after uncertain identity/close
+                        except BaseException:
+                            pass  # preserve the first error; never retry close
+        if self.cleanup_failure is not None:
+            raise self.cleanup_failure
 
 
 class _State:

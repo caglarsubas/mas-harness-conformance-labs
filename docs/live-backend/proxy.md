@@ -797,6 +797,44 @@ that pre-existing deadline from the separate two-second sample deadline. This
 does not retroactively diagnose or accept the interrupted candidate. Earlier
 accepted suites also ran more slowly in that replay; cause remains unproven.
 
+## Retained observer transport — source increment
+
+Preceding heada853c67 completed all8 LOCAL commands /818 tests in activation218
+and required localhost CI34714164106 attempt2 /activation219. Runner57 retired,
+zero registered runners/artifacts. The two earlier900-second local timeouts and
+cancelled attempt1 remain historical non-passes; the successful replay did not
+change source bytes or deadlines. This evidence does not accept the increment
+below or complete packet003.
+
+Source inspection found that observer send/receive exceptions skipped post-I/O
+custody checks, and later checks did not resample SO_PEERCRED or retain socket/
+pidfd descriptor identities. The fixed observer now pins its original socket,
+pidfd and process identity, rechecks peer credentials, exceptional pidfd liveness,
+non-inheritance and socket-path identity, and brackets successful AND failed
+datagrams with retained authority/peer checks. No reconnection or ambiguous-send
+retry exists. One original two-second phase includes initial checks, send,
+receive, parsing and final checks within the unchanged signed session deadline.
+
+Newly acquired descriptors are retained before post-I/O refusal. Cleanup closes
+only original resources, keeps uncertain failure sticky, and does not close a
+reused descriptor or a substituted socket object. Received SCM_RIGHTS descriptors
+are drained/rejected before a subsequent authority check can fail. Observation
+history is pinned as immutable canonical bytes; returned data cannot mutate its
+hash chain, and local history substitution refuses rather than re-enrolling it.
+
+Twenty-five new methods drive the real observer factory and message validator
+with OS mocks and explicit server-owner/legacy-containment component doubles.
+They do NOT exercise the full NativeProxyServer or completed kernel qualification
+factory. All818 previous test bodies and127 accepted files remain unchanged;
+source target843 methods. All8 exact-commit LOCAL and required CI checks remain
+mandatory; only external logs establish results.
+
+The legacy containment hooks, retained proc readers and complete peer/native
+qualification integration still require replacement/completion as listed above.
+This transport correction grants no containment, observation-derived lease,
+credential eligibility or execution permission. No actual socket/proc read,
+native syscall, credential, host policy, installation or live campaign is run.
+
 ## Verification boundary
 
 This is an in-progress source snapshot, not a self-attested run result. Exact
@@ -841,7 +879,8 @@ probe, live launcher, runtime download or cloud/billable service is authorized.
 | Alpha 2 | CONF-LIVE-003 reader-boundary custody / lifetime | LOCAL_AND_CI_PASS_RECORDED | Head87c743a,733 tests,all8 commands; runner53 retired; failed fixture replay retained |
 | Alpha 2 | CONF-LIVE-003 retained policy epoch | LOCAL_AND_CI_PASS_RECORDED | Head99652a1,760 tests,all8 commands; runner54 retired; failed fixture replay retained |
 | Alpha 2 | CONF-LIVE-003 epoch mount custody | LOCAL_AND_CI_PASS_RECORDED | Heada196f32,784 tests,all8 commands; runner56 retired; failed local replay and failed pre-listener startup preserved |
-| Alpha 2 | CONF-LIVE-003 reader-boundary root ancestry | IMPLEMENTED_NOT_ACCEPTED | Seven retained/fixed-name root comparisons; fresh full8 required |
+| Alpha 2 | CONF-LIVE-003 reader-boundary root ancestry | LOCAL_AND_CI_PASS_RECORDED | Heada853c67 /818 tests/all8; CI34714164106 attempt2; earlier timeouts retained |
+| Alpha 2 | CONF-LIVE-003 retained observer transport | IMPLEMENTED_NOT_ACCEPTED | Original peer/FD custody, failed-I/O guards and history isolation; fresh full8 required |
 | Alpha 2 | CONF-LIVE-003 native inspector / broker / API | ONGOING | Required implementation listed above |
 | Alpha 2 | CONF-LIVE-003 required CI | WAITING | Fresh exact-head localhost evidence required; prior failures retained |
 | Alpha 2 | CONF-LIVE-003 source completion / merge / exact-main | NOT_RUN | Packet is incomplete; no completion claim |

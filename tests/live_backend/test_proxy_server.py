@@ -5536,6 +5536,332 @@ class ProxyQualificationTests(unittest.TestCase):
             admission.retained_qualification_record(*args, {"tree": [row]}, {admission.QUALIFICATION_PATH: raw + b"\n"})
 
 
+class ObserverTransportCustodyTests(unittest.TestCase):
+    """Real observer factory/codec, OS mocks and explicit owner/containment doubles.
+
+    These transport tests do not complete or bypass native qualification in
+    production. No real socket, process reader, credential or probe is used.
+    """
+    def setUp(self):
+        self.stack = ExitStack()
+        self.addCleanup(self.stack.close)
+        self.now, self.wall = 100.0, "2026-09-08T00:00:02.000000Z"
+        self.events, self.replies = [], []
+        self.fixture = deepcopy(VECTORS["observation"]["positive"])
+        self.peer = (811, 0, 0)
+        self.process = dict(pid=811, start=71, parent=1, uid=(0,) * 4, gid=(0,) * 4,
+            capabilities=(0,) * 5, seccomp=2, noNewPrivs=1, cgroup="0::/planeon-live/policy-observer\n",
+            namespaces=dict(user=1, mnt=2, pid=3, net=4))
+        def info(inode, mode):
+            return SimpleNamespace(st_dev=1, st_ino=inode, st_uid=0, st_gid=0, st_mode=mode,
+                st_nlink=1, st_size=1, st_mtime_ns=1, st_ctime_ns=1)
+        self.path = info(21, stat.S_IFSOCK | 0o600)
+        self.exe = info(22, stat.S_IFREG | 0o555)
+        self.fds = {71: info(31, stat.S_IFSOCK | 0o600), 72: info(32, stat.S_IFREG | 0o600)}
+        self.socket = Mock()
+        self.socket.fileno.return_value = 71
+        self.socket.getsockopt.side_effect = lambda *args: server.struct.pack("3i", *self.peer)
+        self.socket.send.side_effect = self.send
+        self.socket.recvmsg.side_effect = self.receive
+        self.owner = object.__new__(server.NativeProxyServer)
+        self.owner.deadline = 500
+        self.owner._base_check = Mock(side_effect=lambda: self.events.append("owner"))
+        self.owner.files = Mock()
+        self.owner.files.raw = {server.OBSERVER: b"\x7fELFunit-only"}
+        self.owner.files.rows = {server.OBSERVER: [75, None, "observer", server._custody_identity(self.exe)]}
+        self.owner.files._open.return_value = 75
+        self.owner.observation_binding = deepcopy(self.fixture["binding"])
+        self.owner.profile = deepcopy(VECTORS["proxy"]["positive"])
+        self.owner.envelope = {"nonce": self.fixture["request"]["runNonce"]}
+        self.subject = self.owner.observer = object.__new__(server._Observer)
+        self.containment = Mock(return_value=None)
+        patches = ((server.time, "monotonic", dict(side_effect=lambda: self.now)),
+            (server, "utc_now", dict(side_effect=lambda: self.wall)),
+            (server, "_manifest", dict(return_value=({}, self.fixture["binding"]["observer"]["manifestDigest"],
+                self.fixture["binding"]["observer"]["executableDigest"]))),
+            (server, "_fixed_probes", dict(return_value=SimpleNamespace(require_observer_containment=self.containment))),
+            (server, "process_identity", dict(side_effect=lambda pid: deepcopy(self.process))),
+            (server.os, "stat", dict(side_effect=lambda path, **kw: self.path if path == "policy-observer.sock" else self.exe)),
+            (server.os, "fstat", dict(side_effect=lambda fd: self.fds[fd])),
+            (server.os, "get_inheritable", dict(return_value=False)),
+            (server.os, "pidfd_open", dict(return_value=72, create=True)),
+            (server.os, "close", dict(side_effect=lambda fd: self.events.append(("close", fd)))),
+            (server.os, "urandom", dict(side_effect=[b"\xaa" * 32, b"\xbb" * 32, b"\xcc" * 32])),
+            (server.socket, "socket", dict(return_value=self.socket)),
+            (server.socket, "SO_PEERCRED", dict(new=17, create=True)),
+            (server.select, "select", dict(return_value=([], [], []))))
+        self.mocks = {}
+        for obj, name, arguments in patches:
+            self.mocks[name] = self.stack.enter_context(patch.object(obj, name, **arguments))
+        self.stack.callback(self.cleanup)
+
+    def cleanup(self):
+        if hasattr(self.subject, "closed"):
+            if self.subject.cleanup_failure is None:
+                self.subject.close()
+            else:
+                with self.assertRaises(type(self.subject.cleanup_failure)):
+                    self.subject.close()
+
+    def start(self):
+        self.subject.__init__(self.owner)
+        return self.subject
+
+    def send(self, raw):
+        self.events.append("send")
+        request = json.loads(raw)
+        response = deepcopy(self.fixture["observation"])
+        for key in ("bindingDigest", "runNonce", "challenge", "sequence", "previousObservationDigest"):
+            response[key] = request[key]
+        self.replies.append(canonical_bytes(response))
+        return len(raw)
+
+    def receive(self, *args):
+        self.events.append("receive")
+        return self.replies.pop(0), [(server.socket.SOL_SOCKET, 2, server.struct.pack("3i", *self.peer))], 0, None
+
+    def test_fixed_factory_observes_two_bound_datagrams_without_history_alias(self):
+        subject = self.start()
+        first = subject.observe()
+        original = deepcopy(first)
+        first["projections"]["rbac"]["resourceVersion"] = "caller-change"
+        self.assertEqual(subject.previous, original)
+        second = subject.observe()
+        self.assertEqual(second["sequence"], 2)
+        self.assertEqual(second["previousObservationDigest"], server.canonical_digest(original))
+        self.assertNotEqual(first["challenge"], second["challenge"])
+        self.mocks["socket"].assert_called_once_with(server.socket.AF_UNIX, server.socket.SOCK_SEQPACKET)
+        self.socket.connect.assert_called_once_with(server.OBSERVER_SOCKET)
+        self.assertEqual(self.socket.send.call_count, 2)
+        self.assertFalse(self.owner.files.read.called)
+
+    def test_each_send_exception_runs_post_io_custody_without_retry(self):
+        subject = self.start()
+        def failed(raw):
+            self.events.append("failed-send")
+            raise TimeoutError("unit ambiguous send")
+        self.socket.send.side_effect = failed
+        with self.assertRaises(TimeoutError):
+            subject.observe()
+        self.assertIn("owner", self.events[self.events.index("failed-send") + 1:])
+        self.assertTrue(subject.failed)
+        with self.assertRaises(ConformanceError):
+            subject.observe()
+        self.socket.send.assert_called_once()
+        self.socket.recvmsg.assert_not_called()
+
+    def test_receive_exception_runs_post_io_custody_without_retry(self):
+        subject = self.start()
+        def failed(*args):
+            self.events.append("failed-receive")
+            raise OSError("unit receive")
+        self.socket.recvmsg.side_effect = failed
+        with self.assertRaises(OSError):
+            subject.observe()
+        self.assertIn("owner", self.events[self.events.index("failed-receive") + 1:])
+        self.socket.recvmsg.assert_called_once()
+        self.assertIsNone(subject.previous)
+        self.assertTrue(subject.failed)
+
+    def test_partial_datagram_send_is_ambiguous_and_never_replayed(self):
+        subject = self.start()
+        self.socket.send.side_effect = lambda raw: len(raw) - 1
+        with self.assertRaisesRegex(ConformanceError, "OBSERVER_SEND_AMBIGUOUS"):
+            subject.observe()
+        self.socket.send.assert_called_once()
+        self.socket.recvmsg.assert_not_called()
+        self.assertTrue(subject.failed)
+
+    def test_socket_peer_credentials_rechecked_after_receive(self):
+        subject = self.start()
+        def changed(*args):
+            result = self.receive(*args)
+            self.peer = (812, 0, 0)
+            return result
+        self.socket.recvmsg.side_effect = changed
+        with self.assertRaisesRegex(ConformanceError, "OBSERVER_PEER_CHANGED"):
+            subject.observe()
+        self.assertIsNone(subject.previous)
+
+    def test_pidfd_exceptional_liveness_refuses_before_send(self):
+        subject = self.start()
+        self.mocks["select"].return_value = ([], [], [72])
+        with self.assertRaisesRegex(ConformanceError, "OBSERVER_PEER_CHANGED"):
+            subject.observe()
+        self.socket.send.assert_not_called()
+
+    def test_changed_process_start_time_refuses_before_send(self):
+        subject = self.start()
+        self.process["start"] += 1
+        with self.assertRaisesRegex(ConformanceError, "OBSERVER_PEER_CHANGED"):
+            subject.observe()
+        self.socket.send.assert_not_called()
+
+    def test_socket_path_replacement_refuses_before_send(self):
+        subject = self.start()
+        self.path.st_ino += 1
+        with self.assertRaisesRegex(ConformanceError, "OBSERVER_PEER_CHANGED"):
+            subject.observe()
+        self.socket.send.assert_not_called()
+
+    def test_inheritable_retained_descriptors_refuse_before_send(self):
+        subject = self.start()
+        self.mocks["get_inheritable"].side_effect = lambda fd: fd == 72
+        with self.assertRaisesRegex(ConformanceError, "OBSERVER_DESCRIPTOR_CHANGED"):
+            subject.observe()
+        self.socket.send.assert_not_called()
+
+    def test_mutated_local_process_pin_is_not_new_enrollment(self):
+        subject = self.start()
+        subject.identity["namespaces"]["net"] += 1
+        with self.assertRaisesRegex(ConformanceError, "OBSERVER_RETAINED_PEER_CHANGED"):
+            subject.check()
+
+    def test_mutated_observation_history_is_not_accepted_as_a_chain(self):
+        subject = self.start()
+        subject.observe()
+        subject.previous["sequence"] += 1
+        with self.assertRaisesRegex(ConformanceError, "OBSERVER_HISTORY_CHANGED"):
+            subject.observe()
+        self.socket.send.assert_called_once()
+
+    def test_one_phase_budget_includes_initial_check_send_receive_and_final_check(self):
+        subject = self.start()
+        def delayed_send(raw):
+            self.now += 1.5
+            return self.send(raw)
+        def delayed_receive(*args):
+            self.now += 0.5
+            return self.receive(*args)
+        self.socket.send.side_effect = delayed_send
+        self.socket.recvmsg.side_effect = delayed_receive
+        with self.assertRaisesRegex(ConformanceError, "OBSERVER_CLOCK_OR_DEADLINE"):
+            subject.observe()
+        self.assertEqual(subject.end, 102)
+        self.assertIsNone(subject.previous)
+
+    def test_session_deadline_is_not_extended_by_new_exchange(self):
+        subject = self.start()
+        self.now = 499.5
+        def late(*args):
+            self.now = 500
+            return self.receive(*args)
+        self.socket.recvmsg.side_effect = late
+        with self.assertRaisesRegex(ConformanceError, "OBSERVER_CLOCK_OR_DEADLINE"):
+            subject.observe()
+        self.assertEqual(subject.end, 500)
+
+    def test_monotonic_rollback_is_sticky(self):
+        subject = self.start()
+        self.now = 99
+        with self.assertRaisesRegex(ConformanceError, "OBSERVER_CLOCK_OR_DEADLINE"):
+            subject.check()
+        self.now = 100
+        with self.assertRaises(ConformanceError):
+            subject.check()
+
+    def test_wall_rollback_is_sticky(self):
+        subject = self.start()
+        self.wall = "2026-09-08T00:00:01Z"
+        with self.assertRaisesRegex(ConformanceError, "OBSERVER_CLOCK_OR_DEADLINE"):
+            subject.check()
+
+    def test_received_rights_closed_even_when_post_io_authority_fails(self):
+        subject = self.start()
+        def injected(*args):
+            raw, ancillary, flags, address = self.receive(*args)
+            ancillary.append((server.socket.SOL_SOCKET, server.socket.SCM_RIGHTS, server.struct.pack("i", 99)))
+            self.owner._base_check.side_effect = ConformanceError("UNIT_AUTHORITY_DRIFT", "unit")
+            return raw, ancillary, flags, address
+        self.socket.recvmsg.side_effect = injected
+        with self.assertRaises(ConformanceError):
+            subject.observe()
+        self.assertIn(("close", 99), self.events)
+        self.assertIsNone(subject.previous)
+
+    def test_truncated_datagram_is_rejected_by_real_ancillary_parser(self):
+        subject = self.start()
+        def truncated(*args):
+            raw, ancillary, _, address = self.receive(*args)
+            return raw, ancillary, server.socket.MSG_TRUNC, address
+        self.socket.recvmsg.side_effect = truncated
+        with self.assertRaisesRegex(ConformanceError, "PEER_CHANNEL_INVALID"):
+            subject.observe()
+
+    def test_invalid_response_never_advances_history(self):
+        subject = self.start()
+        self.socket.recvmsg.side_effect = lambda *args: (b"{}", [(server.socket.SOL_SOCKET, 2,
+            server.struct.pack("3i", *self.peer))], 0, None)
+        with self.assertRaises(ConformanceError):
+            subject.observe()
+        self.assertIsNone(subject.previous)
+        self.assertTrue(subject.failed)
+
+    def test_partial_constructor_connect_error_closes_only_acquired_socket(self):
+        self.socket.connect.side_effect = OSError("unit connect")
+        with self.assertRaises(OSError):
+            self.start()
+        self.socket.close.assert_called_once()
+        self.mocks["pidfd_open"].assert_not_called()
+        self.owner.files.close.assert_not_called()
+        self.assertTrue(self.subject.closed and self.subject.failed)
+
+    def test_post_pidfd_acquisition_failure_keeps_cleanup_ownership(self):
+        def acquired(*args):
+            self.owner._base_check.side_effect = OSError("unit post acquisition")
+            return 72
+        self.mocks["pidfd_open"].side_effect = acquired
+        with self.assertRaises(OSError):
+            self.start()
+        self.assertEqual(self.events.count(("close", 72)), 1)
+        self.socket.close.assert_called_once()
+
+    def test_replaced_socket_object_is_refused_and_foreign_socket_not_closed(self):
+        subject = self.start()
+        foreign = Mock()
+        subject.sock = foreign
+        with self.assertRaisesRegex(ConformanceError, "OBSERVER_RETAINED_PEER_CHANGED"):
+            subject.check()
+        subject.close()
+        self.socket.close.assert_called_once()
+        foreign.close.assert_not_called()
+
+    def test_reused_socket_descriptor_detaches_without_closing_foreign_fd(self):
+        subject = self.start()
+        self.fds[71].st_ino += 1
+        with self.assertRaisesRegex(ConformanceError, "OBSERVER_DESCRIPTOR_CHANGED"):
+            subject.check()
+        with self.assertRaisesRegex(ConformanceError, "OBSERVER_CLOSE_FD_REUSED"):
+            subject.close()
+        self.socket.detach.assert_called_once()
+        self.socket.close.assert_not_called()
+        self.assertEqual(self.events.count(("close", 72)), 1)
+
+    def test_reused_pidfd_is_not_closed_and_socket_cleanup_continues(self):
+        subject = self.start()
+        self.fds[72].st_ino += 1
+        with self.assertRaisesRegex(ConformanceError, "OBSERVER_CLOSE_FD_REUSED"):
+            subject.close()
+        self.assertNotIn(("close", 72), self.events)
+        self.socket.close.assert_called_once()
+
+    def test_close_error_is_sticky_without_retry_and_other_cleanup_continues(self):
+        subject = self.start()
+        self.mocks["close"].side_effect = OSError("unit uncertain close")
+        for _ in range(2):
+            with self.assertRaises(OSError):
+                subject.close()
+        self.mocks["close"].assert_called_once_with(72)
+        self.socket.close.assert_called_once()
+
+    def test_owner_replacement_refuses_before_transport(self):
+        subject = self.start()
+        self.owner.observer = Mock()
+        with self.assertRaisesRegex(ConformanceError, "OBSERVER_OWNER_CHANGED"):
+            subject.observe()
+        self.socket.send.assert_not_called()
+
+
 class ProxyServerCustodyTests(unittest.TestCase):
     def accept_owner(self):
         owner = object.__new__(server.NativeProxyServer)
