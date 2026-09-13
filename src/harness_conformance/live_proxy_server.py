@@ -3619,7 +3619,8 @@ class _Broker:
             api, self._api_original, self.api = self._api_original, None, None
             if api is not None:
                 try:
-                    api.close()
+                    require(type(api) is _BrokerApi, "BROKER_CLOSE_API_OWNER_CHANGED")
+                    _BrokerApi.close(api)
                 except BaseException as exc:
                     self.cleanup_failure = self.cleanup_failure or exc
             inspection, self._inspection_original, self.inspection = self._inspection_original, None, None
@@ -4610,6 +4611,8 @@ class _BrokerCreateRetirement:
             self.intent, self.exchange, self.api = self.created.intent, self.created.exchange, self.created.api
             self.events, self.start = self.result.events, self.result.start
             self.log, self.storage, self.secrets = self.created.log, self.created.storage, self.api.secrets
+            self.socket = self._socket_original = self.api._socket_original
+            self.tls = self._tls_original = self.api._tls_original
             self.before, self.after, self.frame_raw = self.result.before, self.result.after, self.result.frame_raw
             self.ledger_raw, self.deadline = self.result.ledger_raw, broker.deadline
             self.data_pin = self._retained_data()
@@ -4645,6 +4648,10 @@ class _BrokerCreateRetirement:
 
     def _retained_data(self):
         result, created, intent, exchange, api = self.result, self.created, self.intent, self.exchange, self.api
+        require(type(api._socket_pin) is tuple and type(api._memfd_pin) is tuple
+                and len(api._socket_pin) == len(api._memfd_pin) == 3
+                and all(type(value) is int for value in (*api._socket_pin, *api._memfd_pin)),
+                "BROKER_RETIREMENT_DESCRIPTOR_PIN")
         values = (result.before, result.after, result.frame_raw, result.response_raw, result.record_raw,
             result.action_raw, result.ledger_raw, result.deadline, result.complete, result.attempted,
             created.before, created.after, created.row_raw, created._row_original, created.digest,
@@ -4654,7 +4661,8 @@ class _BrokerCreateRetirement:
             intent.committed, intent.writing, intent.advanced,
             exchange.request_raw, exchange.response_raw, exchange._response_original, exchange.action_raw,
             exchange.deadline, exchange.complete, exchange.attempted,
-            api.action_raw, api.endpoint_raw, api.ca, api.deadline,
+            api.action_raw, api.endpoint_raw, api.ca, api.deadline, api._socket_fd,
+            *api._socket_pin, *api._memfd_pin,
             canonical_bytes(api.endpoint), canonical_bytes(self.owner.profile))
         require(all(type(value) in (bytes, str, int, float, bool, type(None)) for value in values),
                 "BROKER_RETIREMENT_DATA_TYPE")
@@ -4720,6 +4728,10 @@ class _BrokerCreateRetirement:
         else:
             require(api.closed is False and api.ready is True and api.cleanup_failure is None,
                     "BROKER_RETIREMENT_API_NOT_READY")
+            require(api.sock is api._socket_original is self.socket is self._socket_original
+                    and api.tls is api._tls_original is self.tls is self._tls_original
+                    and api.memfd is api._memfd_original is None,
+                    "BROKER_RETIREMENT_TRANSPORT_CHANGED")
 
     def _check(self, closing=False):
         # Fresh independently owned authority/history/observer/peer checks bracket

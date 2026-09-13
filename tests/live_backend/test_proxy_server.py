@@ -9327,6 +9327,55 @@ class BrokerCreateRetirementTests(_BrokerEventFixture, unittest.TestCase):
         self.assertTrue(self.subject.failed and self.owner.log.poisoned)
 
 
+    def test_socket_substitution_after_live_check_cannot_retire_or_close_foreign(self):
+        self.delivered()
+        foreign = Mock()
+        def replace():
+            retired = self.subject.retirement
+            if retired is not None and hasattr(retired, "data_pin"):
+                self.api.sock = foreign
+        self.on_observe = replace
+        self.refuse_retirement("BROKER_RETIREMENT_TRANSPORT_CHANGED")
+        foreign.close.assert_not_called()
+        foreign.fileno.assert_not_called()
+        self.api_socket.close.assert_called_once()
+        self.assertEqual(self.subject.events.transcript_raw, self.retire_before)
+
+    def test_tls_substitution_after_live_check_cannot_retire(self):
+        self.delivered()
+        foreign = Mock()
+        def replace():
+            retired = self.subject.retirement
+            if retired is not None and hasattr(retired, "data_pin"):
+                self.api.tls = foreign
+        self.on_observe = replace
+        self.refuse_retirement("BROKER_RETIREMENT_TRANSPORT_CHANGED")
+        foreign.close.assert_not_called()
+        self.api_socket.close.assert_called_once()
+        self.assertEqual(self.subject.events.transcript_raw, self.retire_before)
+
+    def test_descriptor_pin_substitution_after_live_check_refuses_before_close(self):
+        self.delivered()
+        def replace():
+            retired = self.subject.retirement
+            if retired is not None and hasattr(retired, "data_pin"):
+                self.api._socket_pin = (9, 99, stat.S_IFSOCK)
+        self.on_observe = replace
+        self.refuse_retirement("BROKER_RETIREMENT_DATA_CHANGED")
+        self.api_socket.close.assert_not_called()
+        self.api_socket.detach.assert_called_once()
+        self.assertEqual(self.subject.events.transcript_raw, self.retire_before)
+
+    def test_closed_descriptor_metadata_is_pinned_without_reopening_it(self):
+        self.delivered()
+        self.subject.retire_create_result()
+        self.api._socket_fd = 89
+        with self.assertRaisesRegex(ConformanceError, "BROKER_RETIREMENT_DATA_CHANGED"):
+            self.subject.retirement.check()
+        self.api_socket.close.assert_called_once()
+        self.api_socket.connect.assert_called_once()
+
+
 class BrokerApiZeroResourceTests(_BrokerEventFixture, unittest.TestCase):
     profile_index = 0
 

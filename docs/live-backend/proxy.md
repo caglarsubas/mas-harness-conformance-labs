@@ -1275,6 +1275,14 @@ OS/TLS/storage doubles. All 1,237 predecessor test bodies, 127 baseline files an
 fixture bytes remain unchanged. Fresh full signed LOCAL and localhost CI are
 required; this source document does not self-attest those future results.
 
+The first candidate `e3ea986` ran all 1,273 tests but failed one new test during
+cleanup: retirement correctly bypassed an instance-shadowed API close method,
+while the later broker cleanup invoked that shadow. The correction makes broker
+cleanup type-check the original API owner and use its fixed class close method;
+the failing test remains unchanged. The full failed replay is retained externally.
+Additional guards/tests pin original socket/TLS references and descriptor metadata
+between the last live-API check and closure, without querying a closed descriptor.
+
 ## Verification boundary
 
 This is an in-progress source snapshot, not a self-attested run result. Exact
