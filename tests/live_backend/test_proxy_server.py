@@ -5770,6 +5770,661 @@ class KernelObserverInspectionTests(unittest.TestCase):
             self.on_close = lambda name, resource: None
 
 
+class KernelBrokerInspectionTests(unittest.TestCase):
+    """Real signed binding/composition; OS channel and typed reader doubles.
+
+    Component OS-edge coverage remains separate. This is not a native or
+    combined all-kernel-readers qualification, and creates no production bypass.
+    """
+    CLASSES = KernelSelfInspectionTests.CLASSES
+    fail = KernelSelfInspectionTests.fail
+
+    def environment(self, stack):
+        self.server_inspection = KernelSelfInspectionTests.environment(self, stack)
+        self.server_inspection.__init__(self.owner)
+        self.peer = object.__new__(server._Broker)
+        peer, self.owner.broker = self.peer, self.peer
+        self.owner._broker_original = peer
+        peer.owner, peer.closed, peer.failed, peer.busy = self.owner, False, False, True
+        peer.deadline, peer.end = self.owner.deadline, self.fixture.mono + 2
+        peer.sock = peer._socket_original = Mock()
+        peer.sock.fileno.return_value = 71
+        peer._socket_fd, peer._socket_pin = 71, (1, 31, stat.S_IFSOCK)
+        peer.pidfd = peer._pidfd_original = 72
+        peer._pidfd_pin = (1, 32, stat.S_IFREG)
+        peer.peer = peer._peer_original = (811, 0, 0)
+        role = self.fixture.record["roles"]["BROKER"]
+        peer.identity = dict(pid=811, start=71, parent=1, uid=(0,) * 4, gid=(0,) * 4,
+            capabilities=(0,) * 5, seccomp=2, noNewPrivs=1,
+            cgroup="0::/planeon-live/capacity-broker\n", namespaces=deepcopy(role["namespaceInodes"]))
+        peer._process_original = server._Broker._process_pin(peer.identity)
+        peer.parent = 75
+        self.path = SimpleNamespace(st_dev=1, st_ino=21, st_uid=0, st_gid=0, st_mode=stat.S_IFSOCK | 0o600,
+            st_nlink=1, st_size=1, st_mtime_ns=1, st_ctime_ns=1)
+        peer.socket_identity = server._custody_identity(self.path)
+        self.fd_rows = {71: SimpleNamespace(st_dev=1, st_ino=31, st_mode=stat.S_IFSOCK | 0o600),
+                        72: SimpleNamespace(st_dev=1, st_ino=32, st_mode=stat.S_IFREG | 0o600)}
+        old_stat, old_fstat = server.os.stat, server.os.fstat
+        stack.enter_context(patch.object(server.os, "stat", side_effect=lambda name, **kw:
+            self.path if name == "capacity-broker.sock" and kw.get("dir_fd") == 75 else old_stat(name, **kw)))
+        stack.enter_context(patch.object(server.os, "fstat", side_effect=lambda fd:
+            self.fd_rows[fd] if fd in self.fd_rows else old_fstat(fd)))
+        stack.enter_context(patch.object(server.socket, "SO_PEERCRED", 17, create=True))
+        self.poll = stack.enter_context(patch.object(server.select, "select", return_value=([], [], [])))
+        self.peer_credentials = (811, 0, 0)
+        peer.sock.getsockopt.side_effect = lambda *args: server.struct.pack("3i", *self.peer_credentials)
+        self.native_process = dict(pid=811, startTicks=71, parent=1, uid=(0,) * 4, gid=(0,) * 4,
+                                   capabilities=(0,) * 5, seccompMode=2, noNewPrivs=1)
+        def on_build(name, resource):
+            if name == "process":
+                resource.original = deepcopy(self.native_process)
+                resource.cgroup = peer.identity["cgroup"].encode()
+                resource.pin = (0, 0, role["processLabel"], tuple(role["namespaceInodes"][k]
+                    for k in ("user", "mnt", "pid", "net")))
+        self.on_build = on_build
+        self.events.clear()
+        subject = peer.inspection = peer._inspection_original = object.__new__(server._KernelBrokerInspection)
+        def cleanup():
+            if hasattr(subject, "closed"):
+                if subject.cleanup_failure is None:
+                    subject.close()
+                else:
+                    with self.assertRaises(type(subject.cleanup_failure)):
+                        subject.close()
+        stack.callback(cleanup)
+        return subject
+
+    def start(self, stack):
+        subject = self.environment(stack)
+        subject.__init__(self.peer)
+        return subject
+
+    def test_fixed_broker_role_uses_original_peer_not_server_pid(self):
+        with ExitStack() as stack:
+            subject = self.start(stack)
+            self.assertEqual([n for event, n in self.events if event == "acquire"], [n for n, _ in self.CLASSES])
+            self.assertEqual(self.args["process"], (subject.roots, 811, "BROKER", self.fixture.record["roles"]["BROKER"]))
+            self.assertEqual(self.args["code"][1], self.fixture.record["files"])
+            self.assertEqual(self.args["mappings"][2], {k: self.fixture.record["roles"]["BROKER"][k]
+                for k in ("executable", "artifactDigest", "interpreterPath", "filePaths")})
+            self.assertIsNone(subject.check())
+            self.assertFalse(self.fixture.socket.called)
+            self.peer.sock.send.assert_not_called()
+            self.peer.sock.recvmsg.assert_not_called()
+            self.assertNotIn(server.IDENTITY, self.fixture.read_paths)
+
+    def test_proc_start_must_join_original_socket_process_before_code_reads(self):
+        with ExitStack() as stack:
+            subject = self.environment(stack)
+            self.native_process["startTicks"] += 1
+            with self.assertRaisesRegex(ConformanceError, "KERNEL_BROKER_PROCESS_CHANGED"):
+                subject.__init__(self.peer)
+            self.assertNotIn(("acquire", "code"), self.events)
+            self.assertTrue(subject.closed and subject.failed)
+
+    def test_each_partial_reader_is_owned_before_constructor_failure(self):
+        for index, (fault, _) in enumerate(self.CLASSES):
+            with self.subTest(reader=fault), ExitStack() as stack:
+                subject = self.environment(stack)
+                original = self.on_build
+                def build(name, resource):
+                    original(name, resource)
+                    if name == fault:
+                        self.fail()
+                self.on_build = build
+                with self.assertRaises(ConformanceError):
+                    subject.__init__(self.peer)
+                self.assertEqual([n for event, n in self.events if event == "close"],
+                                 [n for n, _ in reversed(self.CLASSES[:index + 1])])
+
+    def test_failed_reader_poisoned_and_cleanup_does_not_own_channel_or_server(self):
+        with ExitStack() as stack:
+            subject = self.start(stack)
+            self.on_check = lambda name, resource: self.fail() if name == "filters" else None
+            with self.assertRaises(ConformanceError):
+                subject.check()
+            self.assertTrue(subject.closed and subject.failed)
+            self.assertFalse(self.server_inspection.closed or self.owner.files.closed)
+            self.peer.sock.close.assert_not_called()
+
+    def test_original_socket_credentials_are_checked_at_reader_boundaries(self):
+        with ExitStack() as stack:
+            subject = self.start(stack)
+            with self.assertRaisesRegex(ConformanceError, "KERNEL_BROKER_PEER_CHANGED"):
+                with subject._phase():
+                    self.peer_credentials = (812, 0, 0)
+                    server._kernel_inspection_tick(subject.filters)
+            self.assertTrue(subject.failed)
+
+    def test_nonroot_peer_credentials_are_not_role_enrollment(self):
+        with ExitStack() as stack:
+            subject = self.environment(stack)
+            self.peer.peer = self.peer._peer_original = self.peer_credentials = (811, 10000, 10000)
+            with self.assertRaisesRegex(ConformanceError, "KERNEL_BROKER_ROLE"):
+                subject.__init__(self.peer)
+            self.assertNotIn(("acquire", "roots"), self.events)
+
+    def test_replaced_pidfd_is_not_adopted(self):
+        with ExitStack() as stack:
+            subject = self.start(stack)
+            self.peer.pidfd = 73
+            with self.assertRaisesRegex(ConformanceError, "KERNEL_BROKER_PEER_SUBSTITUTED"):
+                subject.check()
+
+    def test_reused_descriptor_is_refused_without_closing_borrowed_fd(self):
+        with ExitStack() as stack:
+            subject = self.start(stack)
+            self.fd_rows[72].st_ino += 1
+            with self.assertRaisesRegex(ConformanceError, "KERNEL_BROKER_DESCRIPTOR_CHANGED"):
+                subject.check()
+            self.assertNotIn(72, self.fixture.closed_fds)
+
+    def test_exceptional_pidfd_liveness_refuses(self):
+        with ExitStack() as stack:
+            subject = self.start(stack)
+            self.poll.return_value = ([], [], [72])
+            with self.assertRaisesRegex(ConformanceError, "KERNEL_BROKER_PEER_CHANGED"):
+                subject.check()
+
+    def test_named_broker_socket_replacement_refuses(self):
+        with ExitStack() as stack:
+            subject = self.start(stack)
+            self.path.st_ino += 1
+            with self.assertRaisesRegex(ConformanceError, "KERNEL_BROKER_PEER_CHANGED"):
+                subject.check()
+
+    def test_broker_phase_deadline_cannot_be_renewed_by_inspection(self):
+        with ExitStack() as stack:
+            subject = self.start(stack)
+            self.fixture.mono = self.peer.end
+            with self.assertRaisesRegex(ConformanceError, "KERNEL_BROKER_DEADLINE"):
+                subject.check()
+
+    def test_late_channel_query_is_rechecked_even_on_exception(self):
+        with ExitStack() as stack:
+            subject = self.start(stack)
+            def late(*args):
+                self.fixture.mono += 2
+                raise OSError("unit late query")
+            self.peer.sock.getsockopt.side_effect = late
+            with self.assertRaisesRegex(ConformanceError, "KERNEL_BROKER_DEADLINE"):
+                subject.check()
+
+    def test_replaced_self_inspector_refuses_before_peer_reader_check(self):
+        with ExitStack() as stack:
+            subject = self.start(stack)
+            self.owner.self_inspection = Mock()
+            with self.assertRaisesRegex(ConformanceError, "KERNEL_BROKER_OWNER_CHANGED"):
+                subject.check()
+            self.owner.self_inspection = self.server_inspection
+
+    def test_poisoned_server_self_inspection_cannot_support_peer_qualification(self):
+        with ExitStack() as stack:
+            subject = self.start(stack)
+            self.server_inspection.failed = True
+            with self.assertRaisesRegex(ConformanceError, "KERNEL_BROKER_OWNER_CHANGED"):
+                subject.check()
+
+    def test_detached_peer_inspection_is_not_an_ambient_capability(self):
+        with ExitStack() as stack:
+            subject = self.start(stack)
+            self.peer.busy = False
+            with self.assertRaisesRegex(ConformanceError, "KERNEL_BROKER_OWNER_CHANGED"):
+                subject.check()
+
+    def test_copied_owner_and_subclass_are_refused(self):
+        with ExitStack() as stack:
+            subject = self.environment(stack)
+            class Substitute(server._KernelBrokerInspection):
+                pass
+            impostor = object.__new__(Substitute)
+            with self.assertRaisesRegex(ConformanceError, "KERNEL_BROKER_OWNER"):
+                impostor.__init__(self.peer)
+            self.peer.inspection = Mock()
+            with self.assertRaisesRegex(ConformanceError, "KERNEL_BROKER_OWNER"):
+                subject.__init__(self.peer)
+
+    def test_record_change_remains_sticky_and_cannot_reenroll_peer(self):
+        with ExitStack() as stack:
+            subject = self.start(stack)
+            self.owner.qualification_binding._record_raw += b" "
+            with self.assertRaises(ConformanceError):
+                subject.check()
+            self.assertTrue(subject.failed)
+
+    def test_cleanup_error_preserves_other_reader_closes_without_retry(self):
+        with ExitStack() as stack:
+            subject = self.start(stack)
+            self.events.clear()
+            self.on_close = lambda name, resource: self.fail() if name == "mappings" else None
+            for _ in range(2):
+                with self.assertRaises(ConformanceError):
+                    subject.close()
+            self.assertEqual([n for event, n in self.events if event == "close"],
+                             [n for n, _ in reversed(self.CLASSES)])
+            self.on_close = lambda name, resource: None
+
+
+    def test_server_original_channel_pin_cannot_be_rebound(self):
+        with ExitStack() as stack:
+            subject = self.start(stack)
+            self.owner._broker_original = Mock()
+            with self.assertRaisesRegex(ConformanceError, "KERNEL_BROKER_OWNER_CHANGED"):
+                subject.check()
+
+    def test_observer_peer_type_cannot_supply_broker_native_inspection(self):
+        with ExitStack() as stack:
+            subject = self.environment(stack)
+            foreign = object.__new__(server._Observer)
+            with self.assertRaisesRegex(ConformanceError, "KERNEL_BROKER_OWNER"):
+                subject.__init__(foreign)
+            self.assertNotIn(("acquire", "roots"), self.events)
+
+
+class BrokerTransportCustodyTests(unittest.TestCase):
+    """Real fixed broker channel; OS and binding/native-inspector doubles.
+
+    No frame, worker, API operation or credential is used. These component
+    tests are not combined native-reader or installed-service qualification.
+    """
+    def setUp(self):
+        self.stack = ExitStack()
+        self.addCleanup(self.stack.close)
+        self.now, self.wall = 100.0, "2026-09-08T00:00:02.000000Z"
+        self.events = []
+        self.fixture = deepcopy(VECTORS["broker"]["positive"][0])
+        self.peer = (811, 0, 0)
+        self.process = dict(pid=811, start=71, parent=1, uid=(0,) * 4, gid=(0,) * 4,
+            capabilities=(0,) * 5, seccomp=2, noNewPrivs=1, cgroup="0::/planeon-live/capacity-broker\n",
+            namespaces=dict(user=1, mnt=2, pid=3, net=4))
+        def info(inode, mode):
+            return SimpleNamespace(st_dev=1, st_ino=inode, st_uid=0, st_gid=0, st_mode=mode,
+                st_nlink=1, st_size=1, st_mtime_ns=1, st_ctime_ns=1)
+        self.path = info(21, stat.S_IFSOCK | 0o600)
+        self.exe = info(22, stat.S_IFREG | 0o555)
+        self.fds = {71: info(31, stat.S_IFSOCK | 0o600), 72: info(32, stat.S_IFREG | 0o600)}
+        self.socket = Mock()
+        self.socket.fileno.return_value = 71
+        self.socket.getsockopt.side_effect = lambda *args: server.struct.pack("3i", *self.peer)
+        self.owner = object.__new__(server.NativeProxyServer)
+        self.owner.deadline = 500
+        self.owner._base_check = Mock(side_effect=lambda: self.events.append("owner"))
+        self.owner.files = Mock()
+        self.owner.files.raw = {server.BROKER: b"\x7fELFunit-only"}
+        self.owner.files.rows = {server.BROKER: [75, None, "broker", server._custody_identity(self.exe)]}
+        self.owner.files._open.return_value = 75
+        self.owner.profile = deepcopy(VECTORS["proxy"]["positive"])
+        # Explicit signed-binding owner double; native composition tests above
+        # exercise the real authenticated binding. No runtime bypass is added.
+        binding = self.owner.qualification_binding = object.__new__(server._ServerQualificationBinding)
+        binding.owner = self.owner
+        binding._broker_raw = canonical_bytes(self.fixture["binding"])
+        self.binding_check = Mock(return_value=None)
+        self.stack.enter_context(patch.object(server._ServerQualificationBinding, "check", self.binding_check))
+        self.subject = self.owner.broker = self.owner._broker_original = object.__new__(server._Broker)
+        self.containment = Mock(return_value=None)
+        # This existing class tests transport, not native reader qualification.
+        # Keep its explicit containment double at the new fixed owned component.
+        def inspection_init(resource, peer):
+            resource.peer, resource.closed = peer, False
+        self.stack.enter_context(patch.object(server._KernelBrokerInspection, "__init__", inspection_init))
+        self.stack.enter_context(patch.object(server._KernelBrokerInspection, "check", self.containment))
+        self.stack.enter_context(patch.object(server._KernelBrokerInspection, "close",
+            lambda resource: setattr(resource, "closed", True)))
+        patches = ((server.time, "monotonic", dict(side_effect=lambda: self.now)),
+            (server, "utc_now", dict(side_effect=lambda: self.wall)),
+            (server, "_manifest", dict(return_value=({}, self.fixture["binding"]["brokerManifestDigest"],
+                self.fixture["binding"]["brokerExecutableDigest"]))),
+            (server, "process_identity", dict(side_effect=lambda pid: deepcopy(self.process))),
+            (server.os, "stat", dict(side_effect=lambda path, **kw: self.path if path == "capacity-broker.sock" else self.exe)),
+            (server.os, "fstat", dict(side_effect=lambda fd: self.fds[fd])),
+            (server.os, "get_inheritable", dict(return_value=False)),
+            (server.os, "pidfd_open", dict(return_value=72, create=True)),
+            (server.os, "close", dict(side_effect=lambda fd: self.events.append(("close", fd)))),
+            (server.socket, "socket", dict(return_value=self.socket)),
+            (server.socket, "SO_PEERCRED", dict(new=17, create=True)),
+            (server.select, "select", dict(return_value=([], [], []))))
+        self.mocks = {}
+        for obj, name, arguments in patches:
+            self.mocks[name] = self.stack.enter_context(patch.object(obj, name, **arguments))
+        self.stack.callback(self.cleanup)
+
+    def cleanup(self):
+        if hasattr(self.subject, "closed"):
+            if self.subject.cleanup_failure is None:
+                self.subject.close()
+            else:
+                with self.assertRaises(type(self.subject.cleanup_failure)):
+                    self.subject.close()
+
+    def start(self):
+        self.subject.__init__(self.owner)
+        return self.subject
+
+    def test_pidfd_exceptional_liveness_refuses_before_send(self):
+        subject = self.start()
+        self.mocks["select"].return_value = ([], [], [72])
+        with self.assertRaisesRegex(ConformanceError, "BROKER_PEER_CHANGED"):
+            subject.check()
+        self.socket.send.assert_not_called()
+
+    def test_changed_process_start_time_refuses_before_send(self):
+        subject = self.start()
+        self.process["start"] += 1
+        with self.assertRaisesRegex(ConformanceError, "BROKER_PEER_CHANGED"):
+            subject.check()
+        self.socket.send.assert_not_called()
+
+    def test_socket_path_replacement_refuses_before_send(self):
+        subject = self.start()
+        self.path.st_ino += 1
+        with self.assertRaisesRegex(ConformanceError, "BROKER_PEER_CHANGED"):
+            subject.check()
+        self.socket.send.assert_not_called()
+
+    def test_inheritable_retained_descriptors_refuse_before_send(self):
+        subject = self.start()
+        self.mocks["get_inheritable"].side_effect = lambda fd: fd == 72
+        with self.assertRaisesRegex(ConformanceError, "BROKER_DESCRIPTOR_CHANGED"):
+            subject.check()
+        self.socket.send.assert_not_called()
+
+    def test_mutated_local_process_pin_is_not_new_enrollment(self):
+        subject = self.start()
+        subject.identity["namespaces"]["net"] += 1
+        with self.assertRaisesRegex(ConformanceError, "BROKER_RETAINED_PEER_CHANGED"):
+            subject.check()
+
+    def test_monotonic_rollback_is_sticky(self):
+        subject = self.start()
+        self.now = 99
+        with self.assertRaisesRegex(ConformanceError, "BROKER_CLOCK_OR_DEADLINE"):
+            subject.check()
+        self.now = 100
+        with self.assertRaises(ConformanceError):
+            subject.check()
+
+    def test_wall_rollback_is_sticky(self):
+        subject = self.start()
+        self.wall = "2026-09-08T00:00:01Z"
+        with self.assertRaisesRegex(ConformanceError, "BROKER_CLOCK_OR_DEADLINE"):
+            subject.check()
+
+    def test_partial_constructor_connect_error_closes_only_acquired_socket(self):
+        self.socket.connect.side_effect = OSError("unit connect")
+        with self.assertRaises(OSError):
+            self.start()
+        self.socket.close.assert_called_once()
+        self.mocks["pidfd_open"].assert_not_called()
+        self.owner.files.close.assert_not_called()
+        self.assertTrue(self.subject.closed and self.subject.failed)
+
+    def test_post_pidfd_acquisition_failure_keeps_cleanup_ownership(self):
+        def acquired(*args):
+            self.owner._base_check.side_effect = OSError("unit post acquisition")
+            return 72
+        self.mocks["pidfd_open"].side_effect = acquired
+        with self.assertRaises(OSError):
+            self.start()
+        self.assertEqual(self.events.count(("close", 72)), 1)
+        self.socket.close.assert_called_once()
+
+    def test_replaced_socket_object_is_refused_and_foreign_socket_not_closed(self):
+        subject = self.start()
+        foreign = Mock()
+        subject.sock = foreign
+        with self.assertRaisesRegex(ConformanceError, "BROKER_RETAINED_PEER_CHANGED"):
+            subject.check()
+        subject.close()
+        self.socket.close.assert_called_once()
+        foreign.close.assert_not_called()
+
+    def test_reused_socket_descriptor_detaches_without_closing_foreign_fd(self):
+        subject = self.start()
+        self.fds[71].st_ino += 1
+        with self.assertRaisesRegex(ConformanceError, "BROKER_DESCRIPTOR_CHANGED"):
+            subject.check()
+        with self.assertRaisesRegex(ConformanceError, "BROKER_CLOSE_FD_REUSED"):
+            subject.close()
+        self.socket.detach.assert_called_once()
+        self.socket.close.assert_not_called()
+        self.assertEqual(self.events.count(("close", 72)), 1)
+
+    def test_reused_pidfd_is_not_closed_and_socket_cleanup_continues(self):
+        subject = self.start()
+        self.fds[72].st_ino += 1
+        with self.assertRaisesRegex(ConformanceError, "BROKER_CLOSE_FD_REUSED"):
+            subject.close()
+        self.assertNotIn(("close", 72), self.events)
+        self.socket.close.assert_called_once()
+
+    def test_close_error_is_sticky_without_retry_and_other_cleanup_continues(self):
+        subject = self.start()
+        self.mocks["close"].side_effect = OSError("unit uncertain close")
+        for _ in range(2):
+            with self.assertRaises(OSError):
+                subject.close()
+        self.mocks["close"].assert_called_once_with(72)
+        self.socket.close.assert_called_once()
+
+    def test_owner_replacement_refuses_before_transport(self):
+        subject = self.start()
+        self.owner.broker = Mock()
+        with self.assertRaisesRegex(ConformanceError, "BROKER_OWNER_CHANGED"):
+            subject.check()
+        self.socket.send.assert_not_called()
+
+
+class BrokerInspectionWiringTests(unittest.TestCase):
+    """Fixed channel with explicit boundary doubles, not a native startup PASS."""
+    setUp = BrokerTransportCustodyTests.setUp
+    cleanup = BrokerTransportCustodyTests.cleanup
+    start = BrokerTransportCustodyTests.start
+
+    def test_fixed_factory_retains_one_channel_without_sending_frames(self):
+        subject = self.start()
+        self.assertIsNone(subject.check())
+        self.mocks["socket"].assert_called_once_with(server.socket.AF_UNIX, server.socket.SOCK_SEQPACKET)
+        self.socket.connect.assert_called_once_with(server.BROKER_SOCKET)
+        self.mocks["_manifest"].assert_called_once_with(self.owner.files, server.BROKER_MANIFEST, server.BROKER)
+        self.owner.files._open.assert_called_once_with("/run/planeon/live-proxy", True, 0o700)
+        self.socket.setsockopt.assert_called_once_with(server.socket.SOL_SOCKET, 16, 1)
+        self.socket.send.assert_not_called()
+        self.socket.sendmsg.assert_not_called()
+        self.socket.recvmsg.assert_not_called()
+        self.owner.files.read.assert_not_called()
+
+    def test_manifest_mismatch_refuses_before_socket_or_inspector(self):
+        for index in (1, 2):
+            with self.subTest(digest=index):
+                values = list(self.mocks["_manifest"].return_value)
+                values[index] = admission.ZERO
+                self.mocks["_manifest"].return_value = tuple(values)
+                with self.assertRaisesRegex(ConformanceError, "BROKER_ENROLLMENT_MISMATCH"):
+                    self.start()
+        self.mocks["socket"].assert_not_called()
+        self.containment.assert_not_called()
+
+    def test_wrong_socket_mode_or_owner_refuses_before_connect(self):
+        for field, value in (("st_mode", stat.S_IFSOCK | 0o666), ("st_uid", 1), ("st_gid", 1)):
+            original = getattr(self.path, field)
+            with self.subTest(field=field):
+                setattr(self.path, field, value)
+                with self.assertRaisesRegex(ConformanceError, "BROKER_SOCKET_CUSTODY"):
+                    self.start()
+                setattr(self.path, field, original)
+        self.mocks["socket"].assert_not_called()
+
+    def test_nonroot_peer_never_gets_a_pidfd_or_native_inspector(self):
+        self.peer = (811, 10000, 10000)
+        with self.assertRaisesRegex(ConformanceError, "BROKER_PEER_INVALID"):
+            self.start()
+        self.mocks["pidfd_open"].assert_not_called()
+        self.containment.assert_not_called()
+        self.socket.close.assert_called_once()
+
+    def test_non_elf_peer_is_not_a_broker_wrapper_fallback(self):
+        self.owner.files.raw[server.BROKER] = b"#!/bin/sh\n"
+        with self.assertRaisesRegex(ConformanceError, "BROKER_NATIVE_ELF_REQUIRED"):
+            self.start()
+        self.containment.assert_not_called()
+        self.socket.close.assert_called_once()
+        self.assertEqual(self.events.count(("close", 72)), 1)
+
+    def test_binding_success_boolean_is_not_accepted(self):
+        self.binding_check.return_value = True
+        with self.assertRaisesRegex(ConformanceError, "BROKER_BINDING_CHECK_RESULT"):
+            self.start()
+        self.mocks["_manifest"].assert_not_called()
+        self.mocks["socket"].assert_not_called()
+
+    def test_binding_object_and_enrollment_bytes_cannot_be_replaced(self):
+        subject = self.start()
+        self.owner.qualification_binding._broker_raw += b" "
+        with self.assertRaisesRegex(ConformanceError, "BROKER_BINDING_CHANGED"):
+            subject.check()
+        self.owner.qualification_binding = Mock()
+        with self.assertRaises(ConformanceError):
+            subject.check()
+        self.socket.connect.assert_called_once()
+
+    def test_binding_owner_replacement_refuses_before_peer_queries(self):
+        subject = self.start()
+        self.owner.qualification_binding = Mock()
+        self.socket.getsockopt.reset_mock()
+        with self.assertRaisesRegex(ConformanceError, "BROKER_OWNER_CHANGED"):
+            subject.check()
+        self.socket.getsockopt.assert_not_called()
+
+    def test_server_original_channel_slot_cannot_be_rebound(self):
+        subject = self.start()
+        self.owner._broker_original = Mock()
+        with self.assertRaisesRegex(ConformanceError, "BROKER_OWNER_CHANGED"):
+            subject.check()
+
+    def test_original_peer_credentials_are_rechecked_after_connection(self):
+        subject = self.start()
+        self.peer = (812, 0, 0)
+        with self.assertRaisesRegex(ConformanceError, "BROKER_PEER_CHANGED"):
+            subject.check()
+        self.socket.send.assert_not_called()
+
+    def test_executable_inode_substitution_refuses(self):
+        subject = self.start()
+        self.exe.st_ino += 1
+        with self.assertRaisesRegex(ConformanceError, "BROKER_EXECUTABLE_CHANGED"):
+            subject.check()
+
+    def test_inspector_constructor_failure_retains_partial_cleanup(self):
+        with patch.object(server._KernelBrokerInspection, "__init__", side_effect=ConformanceError("UNIT_INSPECTOR", "unit")):
+            with self.assertRaisesRegex(ConformanceError, "UNIT_INSPECTOR"):
+                self.start()
+        self.socket.close.assert_called_once()
+        self.assertEqual(self.events.count(("close", 72)), 1)
+        self.socket.send.assert_not_called()
+
+    def test_inspector_refusal_is_sticky_without_reconnect(self):
+        subject = self.start()
+        self.containment.side_effect = ConformanceError("UNIT_INSPECTOR", "unit")
+        with self.assertRaisesRegex(ConformanceError, "UNIT_INSPECTOR"):
+            subject.check()
+        self.containment.side_effect = None
+        with self.assertRaisesRegex(ConformanceError, "BROKER_UNAVAILABLE"):
+            subject.check()
+        self.socket.connect.assert_called_once()
+
+    def test_truthy_inspector_result_is_not_containment(self):
+        self.containment.return_value = True
+        with self.assertRaisesRegex(ConformanceError, "BROKER_CONTAINMENT_UNAVAILABLE"):
+            self.start()
+        self.socket.send.assert_not_called()
+
+    def test_replaced_inspector_refuses_and_foreign_inspector_is_not_closed(self):
+        subject = self.start()
+        original, foreign = subject.inspection, Mock()
+        subject.inspection = foreign
+        with self.assertRaisesRegex(ConformanceError, "BROKER_INSPECTION_CHANGED"):
+            subject.check()
+        subject.close()
+        self.assertTrue(original.closed)
+        foreign.close.assert_not_called()
+
+    def test_inspector_close_error_keeps_channel_cleanup_without_retry(self):
+        subject = self.start()
+        with patch.object(server._KernelBrokerInspection, "close", side_effect=OSError("unit cleanup")) as closed:
+            for _ in range(2):
+                with self.assertRaises(OSError):
+                    subject.close()
+            closed.assert_called_once()
+        self.socket.close.assert_called_once()
+        self.assertEqual(self.events.count(("close", 72)), 1)
+
+    def test_late_connect_error_rechecks_budget_and_never_reconnects(self):
+        def late(*args):
+            self.now += 2
+            raise OSError("unit late connect")
+        self.socket.connect.side_effect = late
+        with self.assertRaisesRegex(ConformanceError, "BROKER_CLOCK_OR_DEADLINE"):
+            self.start()
+        self.socket.connect.assert_called_once()
+        self.socket.close.assert_called_once()
+        self.mocks["pidfd_open"].assert_not_called()
+
+    def test_timeout_setter_cannot_extend_connection_phase(self):
+        self.socket.settimeout.side_effect = lambda timeout: setattr(self, "now", self.subject.end)
+        with self.assertRaisesRegex(ConformanceError, "BROKER_CLOCK_OR_DEADLINE"):
+            self.start()
+        self.socket.connect.assert_not_called()
+
+    def test_native_check_cannot_extend_two_second_phase(self):
+        subject = self.start()
+        self.containment.side_effect = lambda: setattr(self, "now", self.now + 2)
+        with self.assertRaisesRegex(ConformanceError, "BROKER_CLOCK_OR_DEADLINE"):
+            subject.check()
+        self.assertEqual(subject.end, 102)
+
+    def test_session_deadline_caps_later_check(self):
+        subject = self.start()
+        self.now = 499.5
+        self.containment.side_effect = lambda: setattr(self, "now", 500)
+        with self.assertRaisesRegex(ConformanceError, "BROKER_CLOCK_OR_DEADLINE"):
+            subject.check()
+        self.assertEqual(subject.end, 500)
+
+    def test_transport_refuses_bad_broker_before_observation_or_storage(self):
+        self.start()
+        self.owner._owner_check = Mock(return_value=None)
+        self.owner.storage, self.owner.observer = Mock(), Mock()
+        self.containment.side_effect = ConformanceError("UNIT_INSPECTOR", "unit")
+        with self.assertRaisesRegex(ConformanceError, "UNIT_INSPECTOR"):
+            server.NativeProxyServer._transport_check(self.owner)
+        self.owner.storage.check.assert_not_called()
+        self.owner.observer.observe.assert_not_called()
+
+    def test_server_close_uses_only_original_broker_and_continues_after_failure(self):
+        original = self.start()
+        foreign = self.owner.broker = Mock()
+        self.owner.closed, self.owner.memfd = False, None
+        with patch.object(server._KernelBrokerInspection, "close", side_effect=OSError("unit cleanup")):
+            with self.assertRaises(OSError):
+                self.owner.close()
+        foreign.close.assert_not_called()
+        self.assertTrue(original.closed)
+        self.socket.close.assert_called_once()
+        self.assertEqual(self.events.count(("close", 72)), 1)
+
+    def test_server_constructor_order_keeps_broker_before_credentials(self):
+        import inspect
+        source = inspect.getsource(server.NativeProxyServer.__init__)
+        positions = [source.index(fragment) for fragment in (
+            'require_server_containment(self)', 'self.observer.__init__(self)',
+            'self.broker.__init__(self)', 'self.files.sealed = True',
+            'self._transport_check()', 'self.secrets.read(IDENTITY')]
+        self.assertEqual(positions, sorted(positions))
+        # Source ordering is not execution of the complete native factory.
+        self.assertIn('self.broker = self._broker_original = object.__new__(_Broker)', source)
+
+
 class ObserverTransportCustodyTests(unittest.TestCase):
     """Real observer factory/codec, OS mocks and explicit owner/containment doubles.
 

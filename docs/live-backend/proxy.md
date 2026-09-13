@@ -879,6 +879,40 @@ before a datagram is sent. Two added regressions retain the original two-second
 exchange bound. Earlier exact-commit replay evidence is preserved separately
 and cannot accept these later bytes. Current source target869 methods.
 
+## Retained broker peer continuation
+
+The preceding observer increment at `dc7f728976bc4460c97e9b746e09ddb842087f7b`
+passed all869 tests and the full eight-command recipe in signed LOCAL acceptance
+and required localhost CI34737704899 attempt3. The exact CI merge was
+`216bd546023b0c5787201d566898bdc6b80baf02`; runner61 was retired. Earlier dispatch
+failures remain recorded and are not product test passes. This evidence does
+not accept the broker changes below.
+
+The fixed broker channel now pins the signed broker manifest/enrollment, root
+SO_PEERCRED identity, original socket object/descriptor, pidfd, PID start and
+native executable. It connects only to
+`/run/planeon/live-proxy/capacity-broker.sock` using AF_UNIX/SOCK_SEQPACKET;
+there is no selectable path, role, reconnect, frame send, worker dispatch or API
+operation in this component. Every check retains the original two-second phase
+and overall session deadline. Partial acquisition retains cleanup ownership;
+substituted objects and recycled descriptor numbers are not adopted or closed.
+
+The broker-specific inspector composes the existing seven native read components
+against the authenticated BROKER role and original peer. It joins retained proc
+identity to that original socket process before code reads and repeats policy,
+root, channel and deadline checks at reader boundaries. Reader cleanup owns
+neither the borrowed channel nor server authority. Startup and transport checks
+require the original broker before server credential use; the existing independent
+server-containment refusal remains in place. This is not the completed qualifier,
+dispatch protocol, per-message credential verification or execution fence.
+
+New tests use real signed binding/composition with typed reader/OS doubles, plus
+the real channel with explicit binding/inspector doubles. They cover enrollment,
+peer substitution, deadlines, constructor failures and cleanup without changing
+any of the869 preceding test bodies. Source-order checks are labeled as source
+checks, not full native startup evidence. Fresh exact-head full8 LOCAL and required
+localhost CI remain pending externally for these bytes.
+
 ## Verification boundary
 
 This is an in-progress source snapshot, not a self-attested run result. Exact
@@ -925,7 +959,8 @@ probe, live launcher, runtime download or cloud/billable service is authorized.
 | Alpha 2 | CONF-LIVE-003 epoch mount custody | LOCAL_AND_CI_PASS_RECORDED | Heada196f32,784 tests,all8 commands; runner56 retired; failed local replay and failed pre-listener startup preserved |
 | Alpha 2 | CONF-LIVE-003 reader-boundary root ancestry | LOCAL_AND_CI_PASS_RECORDED | Heada853c67 /818 tests/all8; CI34714164106 attempt2; earlier timeouts retained |
 | Alpha 2 | CONF-LIVE-003 retained observer transport | LOCAL_AND_CI_PASS_RECORDED | Head9e1a706 /843 tests/all8; CI34733027083; runner58 retired |
-| Alpha 2 | CONF-LIVE-003 fixed observer-role inspection | IMPLEMENTED_NOT_ACCEPTED | Original peer joined to authenticated native-reader composition; fresh full8 required |
+| Alpha 2 | CONF-LIVE-003 fixed observer-role inspection | LOCAL_AND_CI_PASS_RECORDED | Headdc7f728 /869 tests/all8; CI34737704899 attempt3; runner61 retired |
+| Alpha 2 | CONF-LIVE-003 retained broker peer / native composition | IMPLEMENTED_NOT_ACCEPTED | Fixed original channel and broker-role inspection; fresh full8 required; no dispatch |
 | Alpha 2 | CONF-LIVE-003 native inspector / broker / API | ONGOING | Required implementation listed above |
 | Alpha 2 | CONF-LIVE-003 required CI | WAITING | Fresh exact-head localhost evidence required; prior failures retained |
 | Alpha 2 | CONF-LIVE-003 source completion / merge / exact-main | NOT_RUN | Packet is incomplete; no completion claim |

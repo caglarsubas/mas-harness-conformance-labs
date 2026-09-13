@@ -49,6 +49,7 @@ OBSERVER_MANIFEST = "/etc/planeon/harness-policy-observer-manifest.json"
 OBSERVER_SOCKET = "/run/planeon/live-proxy/policy-observer.sock"
 BROKER = "/opt/planeon/bin/harness-capacity-broker"
 BROKER_MANIFEST = "/etc/planeon/harness-capacity-broker-manifest.json"
+BROKER_SOCKET = "/run/planeon/live-proxy/capacity-broker.sock"
 WORKER = "/opt/planeon/bin/harness-live-probe-exec"
 WORKER_MANIFEST = "/etc/planeon/harness-live-probe-manifest.json"
 _ACTIVE = None
@@ -293,7 +294,8 @@ def _kernel_inspection_tick(reader):
     if owner is None:
         require(_ACTIVE is None, "KERNEL_INSPECTION_READER_UNBOUND")
         return
-    require(type(owner) in (_KernelSelfInspection, _KernelObserverInspection), "KERNEL_INSPECTION_READER_OWNER")
+    require(type(owner) in (_KernelSelfInspection, _KernelObserverInspection, _KernelBrokerInspection),
+            "KERNEL_INSPECTION_READER_OWNER")
     owner._reader_tick(reader)
 
 
@@ -2895,6 +2897,140 @@ class _KernelObserverInspection(_KernelSelfInspection):
         self._process_binding()
 
 
+class _KernelBrokerInspection(_KernelSelfInspection):
+    """Fixed broker-role reader composition, not an execution permit.
+
+    Borrows only the original installed server binding and broker channel.
+    Owns its own seven kernel/code readers. No caller role, PID, record, FD or
+    containment callback is accepted. Broker execution/fencing is separate.
+    """
+    def __init__(self, peer):
+        self.owned = []
+        self.closed = self.failed = self.busy = False
+        self.cleanup_failure = None
+        self.epoch_ready = self.epoch_sampling = False
+        for name in ("roots", "policy", "process", "code", "mappings", "cgroup", "filters"):
+            setattr(self, name, None)
+        try:
+            require(type(self) is _KernelBrokerInspection and type(peer) is _Broker,
+                    "KERNEL_BROKER_OWNER")
+            self.peer, self.owner = peer, peer.owner
+            require(type(self.owner) is NativeProxyServer and self.owner.broker is peer
+                    and self.owner._broker_original is peer and peer.inspection is self, "KERNEL_BROKER_OWNER")
+            self.owner._owner_check()
+            self.binding, self.server_inspection = self.owner.qualification_binding, self.owner.self_inspection
+            require(type(self.binding) is _ServerQualificationBinding and self.binding.owner is self.owner
+                    and type(self.server_inspection) is _KernelSelfInspection
+                    and self.server_inspection.owner is self.owner, "KERNEL_BROKER_BINDING")
+            self.deadline = self.owner.deadline
+            self.last, self.wall = time.monotonic(), require_time(utc_now(), "now")
+            require(self.last < self.deadline <= self.last + 900, "KERNEL_INSPECTION_LIFETIME")
+            self.socket = peer._socket_original
+            self.peer_pins = (peer._socket_fd, peer._socket_pin, peer._pidfd_original,
+                peer._pidfd_pin, peer._peer_original, peer._process_original,
+                peer.parent, peer.socket_identity)
+            with self._phase():
+                record = self.binding.record
+                self.authority = self.binding.authority
+                self.session_raw = canonical_bytes(self.owner.binding)
+                self.authority_window = (_time(self.owner.binding["notBefore"]), _time(self.owner.binding["notAfter"]))
+                self.record_raw, self.scope = canonical_bytes(record), record["scope"]
+                self.role = record["roles"]["BROKER"]
+                require(self.peer_pins[4][1:] == (self.role["uid"], self.role["gid"])
+                        and self.role["executable"] == BROKER and self.role["interpreterPath"] is None,
+                        "KERNEL_BROKER_ROLE")
+                self._own("roots", _KernelRootViews)
+                self._own("policy", _KernelPolicyView, self.roots, record["host"], record["selinux"])
+                require(self.policy._retain_epoch() is None, "KERNEL_EPOCH_CHECK_RESULT")
+                self.epoch_ready = True
+                self._policy_check()
+                self._own("process", _KernelProcessView, self.roots, self.peer_pins[4][0], "BROKER", self.role)
+                self._process_binding()
+                self._policy_check()
+                self._tick()
+                page_size = os.sysconf("SC_PAGESIZE")
+                self._tick()
+                require(type(page_size) is int and page_size in (4096, 16384, 65536), "KERNEL_INSPECTION_PAGE_SIZE")
+                self._own("code", _KernelCodeFiles, self.roots, record["files"], page_size)
+                self._policy_check()
+                code_pins = {k: self.role[k] for k in ("executable", "artifactDigest", "interpreterPath", "filePaths")}
+                self._own("mappings", _KernelProcessCode, self.process, self.code, code_pins)
+                self._policy_check()
+                self._own("cgroup", _KernelCgroupView, self.process, self.role["cgroup"])
+                self._policy_check()
+                self._own("filters", _KernelBpfView, self.cgroup, self.role["bpfPrograms"])
+                self._observe()
+        except BaseException:
+            self.failed = True
+            try:
+                self.close()
+            except BaseException:
+                pass
+            raise
+
+    def _clock_and_owner(self):
+        require(type(self) is _KernelBrokerInspection and not self.closed and not self.failed and self.busy,
+                "KERNEL_BROKER_UNAVAILABLE")
+        self.owner._owner_check()
+        peer = self.peer
+        require(self.owner.broker is peer and self.owner._broker_original is peer and peer.owner is self.owner and peer.inspection is self
+                and not peer.closed and not peer.failed and peer.busy and peer.deadline == self.deadline
+                and self.owner.qualification_binding is self.binding and self.binding.owner is self.owner
+                and not self.binding.closed and not self.binding.poisoned
+                and self.owner.files is self.binding.files and self.owner.deadline == self.deadline
+                and self.owner.self_inspection is self.server_inspection
+                and not self.server_inspection.closed and not self.server_inspection.failed,
+                "KERNEL_BROKER_OWNER_CHANGED")
+        require(all(getattr(self, name) is resource for name, resource in self.owned), "KERNEL_INSPECTION_VIEW_REPLACED")
+        now, wall = time.monotonic(), require_time(utc_now(), "now")
+        require(self.last <= now < min(self.end, peer.end) and self.wall <= wall
+                and 0 <= (wall - self.phase_wall).total_seconds() < 2,
+                "KERNEL_BROKER_DEADLINE")
+        if hasattr(self, "record_raw"):
+            require(self.binding._record_raw == self.record_raw, "KERNEL_INSPECTION_RECORD_CHANGED")
+            require(_time(self.scope["validFrom"]) <= wall < _time(self.scope["expiresAt"]), "KERNEL_INSPECTION_EXPIRED")
+        self.last, self.wall = now, wall
+
+    def _tick(self):
+        # Deliberately no peer.check/_base_check: that would recurse into the
+        # inspector or broker transport. These are original-channel queries.
+        self._clock_and_owner()
+        peer = self.peer
+        socket_fd, socket_pin, pidfd, pidfd_pin, credentials_pin, process_pin, parent, path_pin = self.peer_pins
+        require(peer.sock is peer._socket_original is self.socket and peer.pidfd == pidfd
+                and (peer._socket_fd, peer._socket_pin, peer._pidfd_original, peer._pidfd_pin,
+                     peer._peer_original, peer._process_original, peer.parent, peer.socket_identity) == self.peer_pins
+                and peer.peer == credentials_pin and _Broker._process_pin(peer.identity) == process_pin,
+                "KERNEL_BROKER_PEER_SUBSTITUTED")
+        try:
+            self.binding.files.check()
+            require(self.socket.fileno() == socket_fd and _Broker._fd_pin(socket_fd) == socket_pin
+                    and _Broker._fd_pin(pidfd) == pidfd_pin and not os.get_inheritable(socket_fd)
+                    and not os.get_inheritable(pidfd), "KERNEL_BROKER_DESCRIPTOR_CHANGED")
+            require(struct.unpack("3i", self.socket.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12)) == credentials_pin
+                    and select.select([pidfd], [], [pidfd], 0) == ([], [], [])
+                    and _custody_identity(os.stat("capacity-broker.sock", dir_fd=parent, follow_symlinks=False)) == path_pin,
+                    "KERNEL_BROKER_PEER_CHANGED")
+        finally:
+            self._clock_and_owner()
+            self.binding.files.check()
+            self._clock_and_owner()
+
+    def _process_binding(self):
+        # Join the independently retained proc reader to the process originally
+        # observed on this socket, not merely a matching PID/role record.
+        self._tick()
+        value = self.process.original
+        actual = (value["pid"], value["startTicks"], value["parent"], value["uid"], value["gid"],
+            value["capabilities"], value["seccompMode"], value["noNewPrivs"], self.process.cgroup.decode("ascii"),
+            tuple(sorted(zip(("user", "mnt", "pid", "net"), self.process.pin[3]))))
+        require(actual == self.peer_pins[5], "KERNEL_BROKER_PROCESS_CHANGED")
+
+    def _observe(self):
+        super()._observe()
+        self._process_binding()
+
+
 def _fixed_probes():
     try:
         from . import live_fixed_probes as module
@@ -3126,6 +3262,207 @@ class _Observer:
             raise self.cleanup_failure
 
 
+class _Broker:
+    """Fixed retained broker peer, not dispatch or an execution grant.
+
+    Only the installed server constructs this channel. No frame, credential,
+    worker or API operation is sent by this bootstrap/check component.
+    """
+    def __init__(self, owner):
+        self.owner, self.sock, self.pidfd = owner, None, None
+        self.closed = self.failed = self.busy = False
+        self.cleanup_failure = None
+        self._socket_original = self._pidfd_original = None
+        self._socket_fd = self._socket_pin = self._pidfd_pin = None
+        self.binding = owner.qualification_binding
+        self._binding_raw = None
+        self.inspection = self._inspection_original = None
+        self.deadline = owner.deadline
+        self.last_wall, self.last_mono = None, time.monotonic()
+        try:
+            with self._phase():
+                self._connect()
+        except BaseException:
+            self.failed = True
+            try:
+                self.close()
+            except BaseException:
+                pass  # retain the original refusal and sticky cleanup failure
+            raise
+
+    def _connect(self):
+        owner = self.owner
+        value, manifest_digest, executable_digest = self._io(_manifest, owner.files, BROKER_MANIFEST, BROKER)
+        binding = self._io(getattr, self.binding, "broker_binding")
+        require(binding["brokerManifestDigest"] == manifest_digest
+                and binding["brokerExecutableDigest"] == executable_digest,
+                "BROKER_ENROLLMENT_MISMATCH")
+        self._binding_raw = canonical_bytes(binding)
+        self.parent = self._io(owner.files._open, BROKER_SOCKET.rsplit("/", 1)[0], True, 0o700)
+        info = self._io(os.stat, "capacity-broker.sock", dir_fd=self.parent, follow_symlinks=False)
+        self.socket_identity = _custody_identity(info)
+        require(stat.S_ISSOCK(info.st_mode) and info.st_uid == info.st_gid == 0
+                and stat.S_IMODE(info.st_mode) == 0o600, "BROKER_SOCKET_CUSTODY")
+        # Retain newly acquired resources BEFORE any post-I/O guard can fail.
+        try:
+            self.sock = self._socket_original = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
+            self._socket_fd = self.sock.fileno()
+            self._socket_pin = self._fd_pin(self._socket_fd)
+        finally:
+            self._guard()
+        self._io(self.sock.set_inheritable, False)
+        self._io(self.sock.setsockopt, socket.SOL_SOCKET, 16, 1)
+        self._prepare_wait()
+        try:
+            self.sock.connect(BROKER_SOCKET)
+        finally:
+            self._guard()
+        self.peer = struct.unpack("3i", self._io(self.sock.getsockopt, socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
+        require(self.peer[0] > 1 and self.peer[1:] == (0, 0), "BROKER_PEER_INVALID")
+        self._peer_original = self.peer
+        self.identity = self._io(process_identity, self.peer[0])
+        self._process_original = self._process_pin(self.identity)
+        try:
+            self.pidfd = self._pidfd_original = os.pidfd_open(self.peer[0], 0)
+            self._pidfd_pin = self._fd_pin(self.pidfd)
+        finally:
+            self._guard()
+        require(owner.files.raw[BROKER].startswith(b"\x7fELF"), "BROKER_NATIVE_ELF_REQUIRED")
+        self.inspection = self._inspection_original = object.__new__(_KernelBrokerInspection)
+        self.inspection.__init__(self)
+        self._check_peer()
+
+    @staticmethod
+    def _fd_pin(fd):
+        require(type(fd) is int and 2 < fd < 1048576, "BROKER_DESCRIPTOR_INVALID")
+        info = os.fstat(fd)
+        return info.st_dev, info.st_ino, stat.S_IFMT(info.st_mode)
+
+    @staticmethod
+    def _process_pin(value):
+        return (value["pid"], value["start"], value["parent"], tuple(value["uid"]), tuple(value["gid"]),
+                tuple(value["capabilities"]), value["seccomp"], value["noNewPrivs"], value["cgroup"],
+                tuple(sorted(value["namespaces"].items())))
+
+    def _guard(self):
+        require(type(self) is _Broker and not self.closed and not self.failed and self.busy
+                and type(self.owner) is NativeProxyServer and self.owner.broker is self
+                and self.owner._broker_original is self and self.owner.deadline == self.deadline
+                and type(self.binding) is _ServerQualificationBinding
+                and self.owner.qualification_binding is self.binding and self.binding.owner is self.owner,
+                "BROKER_OWNER_CHANGED")
+        self.owner._base_check()  # no broker/observer I/O or credential acquisition
+        require(self.binding.check() is None, "BROKER_BINDING_CHECK_RESULT")
+        require(self._binding_raw is None or self.binding._broker_raw == self._binding_raw,
+                "BROKER_BINDING_CHANGED")
+        now, wall = time.monotonic(), require_time(utc_now(), "now")
+        require(self.last_mono <= now < self.end
+                and (self.last_wall is None or self.last_wall <= wall)
+                and 0 <= (wall - self.phase_wall).total_seconds() < 2, "BROKER_CLOCK_OR_DEADLINE")
+        self.last_mono, self.last_wall = now, wall
+
+    @contextmanager
+    def _phase(self):
+        require(not self.closed and not self.failed and not self.busy, "BROKER_UNAVAILABLE")
+        self.busy = True
+        self.end = min(self.deadline, time.monotonic() + 2)
+        self.phase_wall = require_time(utc_now(), "now")
+        try:
+            self._guard()
+            yield
+            self._guard()
+        except BaseException:
+            self.failed = True
+            raise
+        finally:
+            self.busy = False
+
+    def _io(self, function, *args, **kwargs):
+        self._guard()
+        try:
+            return function(*args, **kwargs)
+        finally:
+            self._guard()  # unsuccessful I/O never skips retained authority
+
+    def _prepare_wait(self):
+        # Calculate the relative socket timeout AFTER expensive qualification
+        # and authority checks. No further inspector runs before the I/O starts.
+        self._guard()
+        before = time.monotonic()
+        require(self.last_mono <= before < self.end, "BROKER_CLOCK_OR_DEADLINE")
+        try:
+            self.sock.settimeout(self.end - before)
+        except BaseException:
+            self._guard()
+            raise
+        # settimeout itself is nonblocking, but still reject late/rollback OS
+        # returns before starting a connection, send or receive.
+        now, wall = time.monotonic(), require_time(utc_now(), "now")
+        require(before <= now < self.end and self.last_wall <= wall
+                and 0 <= (wall - self.phase_wall).total_seconds() < 2, "BROKER_CLOCK_OR_DEADLINE")
+        self.last_mono, self.last_wall = now, wall
+
+    def _check_peer(self):
+        require(self.sock is self._socket_original and self.pidfd == self._pidfd_original
+                and self.peer == self._peer_original and self._process_pin(self.identity) == self._process_original,
+                "BROKER_RETAINED_PEER_CHANGED")
+        require(self._io(self.sock.fileno) == self._socket_fd
+                and self._io(self._fd_pin, self._socket_fd) == self._socket_pin
+                and self._io(self._fd_pin, self.pidfd) == self._pidfd_pin
+                and not self._io(os.get_inheritable, self._socket_fd)
+                and not self._io(os.get_inheritable, self.pidfd), "BROKER_DESCRIPTOR_CHANGED")
+        require(struct.unpack("3i", self._io(self.sock.getsockopt, socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
+                == self._peer_original, "BROKER_PEER_CHANGED")
+        require(_custody_identity(self._io(os.stat, "capacity-broker.sock", dir_fd=self.parent, follow_symlinks=False))
+                == self.socket_identity and self._io(select.select, [self.pidfd], [], [self.pidfd], 0) == ([], [], [])
+                and self._process_pin(self._io(process_identity, self.peer[0])) == self._process_original,
+                "BROKER_PEER_CHANGED")
+        actual = self._io(os.stat, f"/proc/{self.peer[0]}/exe")
+        expected = self.owner.files.rows[BROKER][3]
+        require((actual.st_dev, actual.st_ino) == expected[:2], "BROKER_EXECUTABLE_CHANGED")
+        require(type(self.inspection) is _KernelBrokerInspection
+                and self.inspection is self._inspection_original and self.inspection.peer is self,
+                "BROKER_INSPECTION_CHANGED")
+        require(self._io(self.inspection.check) is None, "BROKER_CONTAINMENT_UNAVAILABLE")
+        require(self._process_pin(self.identity) == self._process_original, "BROKER_RETAINED_PEER_CHANGED")
+
+    def check(self):
+        with self._phase():
+            self._check_peer()
+
+    def close(self):
+        if not self.closed:
+            self.closed = True
+            inspection, self._inspection_original, self.inspection = self._inspection_original, None, None
+            if inspection is not None:
+                try:
+                    inspection.close()  # borrowed socket/files remain separately owned
+                except BaseException as exc:
+                    self.cleanup_failure = self.cleanup_failure or exc
+            sock, self._socket_original, self.sock = self._socket_original, None, None
+            pidfd, self._pidfd_original, self.pidfd = self._pidfd_original, None, None
+            for resource, fd, pin in ((pidfd, pidfd, self._pidfd_pin), (sock, self._socket_fd, self._socket_pin)):
+                if resource is None:
+                    continue
+                try:
+                    if pin is not None and self._fd_pin(fd) != pin:
+                        require(False, "BROKER_CLOSE_FD_REUSED")
+                    if resource is sock:
+                        require(fd is None or sock.fileno() == fd, "BROKER_CLOSE_SOCKET_CHANGED")
+                        sock.close()
+                    else:
+                        os.close(fd)
+                except BaseException as exc:
+                    self.cleanup_failure = self.cleanup_failure or exc
+                    if resource is sock:
+                        try:
+                            sock.detach()  # no destructor close after uncertain identity/close
+                        except BaseException:
+                            pass  # preserve the first error; never retry close
+        if self.cleanup_failure is not None:
+            raise self.cleanup_failure
+
+
 class _State:
     """Exclusive precreated store. Never create, truncate, repair or rotate it."""
     def __init__(self, owner):
@@ -3212,6 +3549,7 @@ class NativeProxyServer:
         self.pid, self.thread, self.closed = os.getpid(), threading.get_ident(), False
         self.files, self.secrets = _Files(self), _Files(self)
         self.observer = self.storage = self.listener = self.connection = None
+        self.broker = self._broker_original = None
         self.qualification_binding = None
         self.self_inspection = None
         self.memfd = None
@@ -3265,6 +3603,8 @@ class NativeProxyServer:
             self.log = _AdmissionLog(self.storage)
             self.observer = object.__new__(_Observer)
             self.observer.__init__(self)
+            self.broker = self._broker_original = object.__new__(_Broker)
+            self.broker.__init__(self)
             self.files.sealed = True
             self.observer.observe()
             self.reservation = admission_binding(self.envelope, self.capacity, self.profile)
@@ -3327,8 +3667,15 @@ class NativeProxyServer:
         self.self_inspection.check()
         require(_fixed_probes().require_server_containment(self) is None, "PROXY_CONTAINMENT_UNAVAILABLE")
 
+    def _broker_check(self):
+        self._owner_check()
+        require(type(self.broker) is _Broker and self.broker is self._broker_original
+                and self.broker.owner is self, "PROXY_BROKER_REQUIRED")
+        require(self.broker.check() is None, "PROXY_BROKER_CHECK_RESULT")
+
     def _transport_check(self):
         self._base_check()
+        self._broker_check()
         require(self.reserved and not self.log.poisoned, "PROXY_RESERVATION_REQUIRED")
         self.storage.check()
         self.observer.observe()
@@ -3403,6 +3750,10 @@ class NativeProxyServer:
             return
         self.closed = True
         operations, failure = [], None
+        broker = getattr(self, "_broker_original", None)
+        self.broker = self._broker_original = None
+        if broker is not None:
+            operations.append(broker.close)  # never close a substituted current attribute
         for attr in ("connection", "listener", "observer", "storage", "self_inspection", "qualification_binding", "secrets", "files"):
             resource = getattr(self, attr, None)
             setattr(self, attr, None)
