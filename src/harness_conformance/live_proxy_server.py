@@ -3284,6 +3284,7 @@ class _Broker:
         self.api = self._api_original = None
         self.intent = self._intent_original = None
         self.exchange = self._exchange_original = None
+        self.created = self._created_original = None
         self._attempted_cases = set()
         self.deadline = owner.deadline
         self.last_wall, self.last_mono = None, time.monotonic()
@@ -3536,6 +3537,31 @@ class _Broker:
                 self.close()
             except BaseException:
                 pass  # intent/possible effect stays held, never retry or adopt
+            raise
+
+    def record_api_created(self):
+        """Persist the original returned identity; no caller data or broker reply."""
+        try:
+            require(not self.closed and not self.failed and not self.busy
+                    and self.created is self._created_original is None,
+                    "BROKER_CREATED_ALREADY_ATTEMPTED")
+            self.created = self._created_original = object.__new__(_BrokerCreated)
+            self.created.__init__(self)
+            require(type(self.created) is _BrokerCreated and self.created is self._created_original
+                    and not self.created.failed and self.created.advanced,
+                    "BROKER_CREATED_PUBLICATION_CHANGED")
+            self.created._state_check()
+            self.created.committed = True  # durable accounting only; action stays pending
+        except BaseException:
+            self.failed = True
+            if self._created_original is not None:
+                self._created_original._poison()
+            if self._intent_original is not None:
+                self._intent_original._poison()
+            try:
+                self.close()
+            except BaseException:
+                pass  # preserve the exact held record and first refusal; never retry
             raise
 
     def close(self):
@@ -3887,10 +3913,22 @@ class _BrokerIntent:
 
     def _check(self):
         self._pending_check()
-        require(self.start.ledger_raw == (self.after if self.advanced else self.before),
-                "BROKER_INTENT_HISTORY_CHANGED")
+        self._history_check()
         self.events._check()
         self._pending_check()
+
+    def _history_check(self):
+        # Only the original, exact CREATED append may advance this intent's
+        # history. Arbitrary external appends still fail the dispatch guard.
+        created = self.broker._created_original
+        if created is not None or self.broker.created is not None:
+            require(type(created) is _BrokerCreated and self.broker.created is created
+                    and created.intent is self and self.advanced and self.committed,
+                    "BROKER_CREATED_OWNER_CHANGED")
+            _BrokerCreated._state_check(created)
+        else:
+            require(self.start.ledger_raw == (self.after if self.advanced else self.before),
+                    "BROKER_INTENT_HISTORY_CHANGED")
 
     def check(self):
         try:
@@ -4218,11 +4256,11 @@ class _BrokerCreateExchange:
                 and broker.intent is broker._intent_original is intent and type(intent) is _BrokerIntent
                 and intent.broker is broker and intent.owner is self.owner and intent.events is self.events
                 and intent.committed and not intent.failed and not intent.log.poisoned
-                and intent.start.ledger_raw == intent.after
                 and self.action_raw == intent.action_raw == api.action_raw
                 and canonical_bytes(self.events.transcript.pending) == self.action_raw
                 and self.deadline == broker.deadline == api.deadline == self.owner.deadline,
                 "API_EXCHANGE_STATE_CHANGED")
+        intent._history_check()
         require(type(self.request_raw) is bytes and self.request_raw == self._request(), "API_EXCHANGE_REQUEST_CHANGED")
         require(self.response_raw == self._response_original
                 and (self.response_raw is None or type(self.response_raw) is bytes), "API_EXCHANGE_RESPONSE_CHANGED")
@@ -4242,6 +4280,127 @@ class _BrokerCreateExchange:
             except BaseException:
                 pass
             raise
+
+
+class _BrokerCreated:
+    """Exact durable accounting for the original validated CREATE response.
+
+    Borrows the existing owners and advances only the exact expected history.
+    No API I/O, broker result, cleanup permission or capacity release is issued.
+    """
+    def __init__(self, broker):
+        self.failed = self.committed = self.writing = self.advanced = False
+        self.log = None
+        try:
+            require(type(self) is _BrokerCreated and type(broker) is _Broker
+                    and broker.created is broker._created_original is self, "BROKER_CREATED_OWNER")
+            self.broker, self.owner = broker, broker.owner
+            self.exchange, self.intent = broker.exchange, broker.intent
+            require(type(self.exchange) is _BrokerCreateExchange
+                    and self.exchange is broker._exchange_original and self.exchange.complete
+                    and self.exchange.attempted and not self.exchange.failed,
+                    "BROKER_CREATED_EXCHANGE_REQUIRED")
+            require(type(self.intent) is _BrokerIntent and self.intent is broker._intent_original
+                    and self.intent.committed and self.intent.advanced and not self.intent.failed,
+                    "BROKER_CREATED_INTENT_REQUIRED")
+            self.events, self.start = self.intent.events, self.intent.start
+            self.api, self.storage, self.log = self.exchange.api, self.intent.storage, self.intent.log
+            self.before = self.intent.after
+            self.response_raw = self.exchange.response_raw
+            self.action_raw, self.deadline = self.intent.action_raw, broker.deadline
+            now = utc_now()
+            resource = _create_record(document(self.intent.reservation_raw), self.intent.operation,
+                self.intent.profile_raw, self.intent.binding_raw, document(self.action_raw), observed=self.response_raw)
+            _, previous, count = parse_reservations(self.before)
+            self.row_raw = self._row_original = canonical_bytes(dict(sequence=count + 1,
+                previousDigest=previous, binding=document(self.intent.reservation_raw), state="CREATED",
+                operation=self.intent.operation, observedAt=now, cleanup=None, resource=resource))
+            self.after = self.before + self.row_raw + b"\n"
+            parse_reservations(self.after)
+            self.digest = byte_digest(self.row_raw)
+            self._check()  # original response, API owner, history, observer and peer
+            with broker._phase():
+                self.events._check()
+                self._state_check()
+                self.writing = True
+                result = broker._io(_AdmissionLog.record_resource, self.log,
+                    document(self.intent.reservation_raw), "CREATED", self.intent.operation, now,
+                    self.intent.profile_raw, self.intent.binding_raw, document(self.action_raw),
+                    expected_history=self.before, observed=self.response_raw)
+                require(type(result) is str and result == self.digest, "BROKER_CREATED_COMMIT_MISMATCH")
+                require(broker._io(self.storage.read) == self.after, "BROKER_CREATED_READBACK_MISMATCH")
+                self.intent._pending_check()
+                self._state_check()  # old pin is still required until exact readback
+                self.start.ledger_raw = self.after
+                self.advanced = True
+                self.events._check()  # full exact new history and current observation
+                self._state_check()
+            self._check()  # post-phase API custody and current peer; no HTTP sent
+        except BaseException:
+            self._poison()
+            raise
+
+    def _state_check(self):
+        broker, intent, exchange = self.broker, self.intent, self.exchange
+        require(type(self) is _BrokerCreated and not self.failed
+                and type(broker) is _Broker and broker.created is broker._created_original is self
+                and broker.owner is self.owner and self.owner.broker is self.owner._broker_original is broker
+                and broker.intent is broker._intent_original is intent and type(intent) is _BrokerIntent
+                and intent.broker is broker and intent.owner is self.owner and intent.committed
+                and intent.advanced and not intent.failed
+                and broker.exchange is broker._exchange_original is exchange
+                and type(exchange) is _BrokerCreateExchange and exchange.broker is broker
+                and exchange.owner is self.owner and exchange.intent is intent
+                and exchange.complete and exchange.attempted and not exchange.failed
+                and broker.api is broker._api_original is self.api and type(self.api) is _BrokerApi
+                and exchange.api is self.api and self.api.ready and not self.api.closed and not self.api.failed
+                and broker.events is broker._events_original is self.events
+                and self.events is intent.events is exchange.events is self.api.events
+                and broker.dispatch is broker._dispatch_original is self.start
+                and self.start is intent.start is self.events.start
+                and self.owner.storage is self.storage is intent.storage is self.start.storage
+                and self.owner.log is self.log is intent.log is self.start.log
+                and self.log.storage is self.storage and not self.log.poisoned,
+                "BROKER_CREATED_OWNER_CHANGED")
+        require(type(self.response_raw) is bytes and 0 < len(self.response_raw) <= 16384
+                and self.response_raw == exchange.response_raw == exchange._response_original
+                and self.action_raw == exchange.action_raw == intent.action_raw == self.api.action_raw
+                and canonical_bytes(self.events.transcript.pending) == self.action_raw
+                and self.deadline == broker.deadline == self.owner.deadline == self.api.deadline,
+                "BROKER_CREATED_INPUT_CHANGED")
+        require(type(self.before) is bytes and self.before == intent.after
+                and type(self.row_raw) is bytes and self.row_raw == self._row_original
+                and self.digest == byte_digest(self.row_raw)
+                and self.after == self.before + self.row_raw + b"\n"
+                and type(self.advanced) is bool and type(self.writing) is bool
+                and (not self.advanced or self.writing)
+                and self.start.ledger_raw == (self.after if self.advanced else self.before),
+                "BROKER_CREATED_HISTORY_CHANGED")
+
+    def _check(self):
+        self._state_check()
+        _BrokerCreateExchange.check(self.exchange)
+        self._state_check()
+
+    def check(self):
+        """Revalidate durable accounting only; not a result or cleanup grant."""
+        try:
+            require(self.committed and self.advanced, "BROKER_CREATED_NOT_COMMITTED")
+            self._check()
+        except BaseException:
+            self._poison()
+            self.intent._poison()
+            self.broker.failed = True
+            try:
+                self.broker.close()
+            except BaseException:
+                pass  # no repair, adoption, retry or foreign resource cleanup
+            raise
+
+    def _poison(self):
+        self.failed = True
+        if self.writing and self.log is not None:
+            self.log.poisoned = True
 
 
 class _State:

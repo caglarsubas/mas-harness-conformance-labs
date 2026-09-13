@@ -1172,6 +1172,39 @@ parsing with explicit OS/OpenSSL/observer/storage doubles. All 1,132 preceding
 tests and the 127 baseline files remain unchanged. Full signed LOCAL and required
 localhost CI remain mandatory; mocks do not qualify native effects or durability.
 
+## Returned-identity accounting checkpoint (source-only)
+
+`_Broker.record_api_created()` persists the original completed CREATE exchange's
+validated UID/resourceVersion using the existing `_AdmissionLog.record_resource`
+algorithm. No caller identity, response, history, path or backend is accepted.
+The original intent, API owner, pending action and response remain bound together;
+the response is revalidated against the signed manifest before deriving one exact
+CREATED row. The original journal transaction compares the expected history,
+appends, fsyncs and reads back. Only that exact append may advance the dispatch
+history pin. The intent's original `after` bytes remain unchanged; its guard
+recognizes only this separately retained CREATED owner, not arbitrary new history.
+
+Current ownership, peer, observer, API custody and deadline checks bracket the
+transaction and publication. Partial append, sync/readback/unlock ambiguity,
+generation loss, changed response/owner or a late return poisons the original
+journal owner and closes the original broker. An already-written UID remains
+held, including when post-write checks fail. No automatic retry, history repair,
+resource adoption or capacity release follows. Repeated/reentrant calls refuse.
+The retained no-argument `check()` revalidates this accounting but grants no
+cleanup or action permission.
+
+The broker action remains pending: this step sends no RESOURCE_RESULT, HTTP
+request, GET/DELETE, cleanup receipt or terminal frame and reads no new credential.
+Result acknowledgement, connection retirement/next-action lifecycle, exact-UID
+cleanup and full native factory/serve integration remain unfinished. This is
+not wired into `NativeProxyServer.serve` and is not native durability evidence.
+
+New tests use the actual broker/exchange/journal algorithms with explicit
+OS/OpenSSL/observer/storage doubles, covering exact append ordering, contention,
+write and unlock failures, changed history/identity, deadlines and lost policy.
+All 1,167 predecessor test bodies, 127 baseline files and fixture bytes are
+preserved. Fresh full signed LOCAL and required localhost CI are mandatory.
+
 ## Verification boundary
 
 This is an in-progress source snapshot, not a self-attested run result. Exact
@@ -1223,6 +1256,8 @@ probe, live launcher, runtime download or cloud/billable service is authorized.
 | Alpha 2 | CONF-LIVE-003 broker dispatch / first STARTED | LOCAL_AND_CI_PASS_RECORDED | Head fd64ffa / 965 tests / all eight; CI 34745275207; runner 63 retired |
 | Alpha 2 | CONF-LIVE-003 bounded inbound events | LOCAL_AND_CI_PASS_RECORDED | Head1419ff3 /1,013 tests/all8; CI34747686579; runner64 retired |
 | Alpha 2 | CONF-LIVE-003 server-only API authentication | IMPLEMENTED_NOT_ACCEPTED | Original pending action, separate credential/socket/TLS; no HTTP/effect/cleanup |
+| Alpha 2 | CONF-LIVE-003 CREATE exchange | LOCAL_AND_CI_PASS_RECORDED | Head13e716f /1,167 tests/all8; CI34756347888; runner68 retired |
+| Alpha 2 | CONF-LIVE-003 returned-identity accounting | IMPLEMENTED_NOT_ACCEPTED | Exact CREATED journal append; action still pending; fresh full acceptance required |
 | Alpha 2 | CONF-LIVE-003 native inspector / broker / API | ONGOING | Required implementation listed above |
 | Alpha 2 | CONF-LIVE-003 required CI | WAITING | Fresh exact-head localhost evidence required; prior failures retained |
 | Alpha 2 | CONF-LIVE-003 source completion / merge / exact-main | NOT_RUN | Packet is incomplete; no completion claim |

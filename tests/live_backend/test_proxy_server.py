@@ -8230,6 +8230,358 @@ class BrokerCreateExchangeTests(_BrokerEventFixture, unittest.TestCase):
         foreign.close.assert_not_called()
 
 
+class BrokerCreatedTests(_BrokerEventFixture, unittest.TestCase):
+    """Actual journal/transport owners; OS, TLS and storage are unit-only doubles."""
+    start = BrokerCreateExchangeTests.start
+    action = BrokerCreateExchangeTests.action
+    read_secret = BrokerCreateExchangeTests.read_secret
+    connect_api = BrokerCreateExchangeTests.connect_api
+    write_memfd = BrokerCreateExchangeTests.write_memfd
+    make_context = BrokerCreateExchangeTests.make_context
+    wrap = BrokerCreateExchangeTests.wrap
+    handshake = BrokerCreateExchangeTests.handshake
+    read_intent = BrokerCreateExchangeTests.read_intent
+    append_intent = BrokerCreateExchangeTests.append_intent
+    sync_intent = BrokerCreateExchangeTests.sync_intent
+    held = BrokerCreateExchangeTests.held
+    reply = BrokerCreateExchangeTests.reply
+    http_write = BrokerCreateExchangeTests.http_write
+    http_read = BrokerCreateExchangeTests.http_read
+    prepare = BrokerCreateExchangeTests.prepare
+
+    def setUp(self):
+        from contextlib import contextmanager
+        BrokerCreateExchangeTests.setUp(self)
+        self.locked = False
+        self.on_lock = self.on_exit = lambda: None
+        @contextmanager
+        def transaction(resource):
+            self.assertIs(resource, self.owner.storage)
+            if self.locked:
+                raise ConformanceError("UNIT_STORAGE_BUSY", "unit contention")
+            self.locked = True
+            self.io_events.append("lock")
+            try:
+                self.on_lock()
+                yield resource
+            finally:
+                self.io_events.append("unlock")
+                self.locked = False
+                self.on_exit()
+        self.stack.enter_context(patch.object(server._State, "transaction", transaction))
+
+    def complete(self):
+        self.prepare()
+        self.subject.exchange_api_create()
+        self.before_created = self.ledger
+        self.io_events.clear()
+
+    def refuse_created(self, reason=".+"):
+        with self.assertRaisesRegex((ConformanceError, OSError), reason):
+            self.subject.record_api_created()
+        self.assertTrue(self.subject.failed and self.subject.closed)
+        if self.subject._created_original is not None:
+            self.assertTrue(self.subject._created_original.failed)
+            self.assertFalse(self.subject._created_original.committed)
+        self.socket.send.assert_not_called()
+
+    def test_validated_identity_is_exactly_recorded_under_original_lock(self):
+        self.complete()
+        seen = []
+        self.on_append = self.on_sync = lambda: seen.append(self.subject.dispatch.ledger_raw)
+        self.assertIsNone(self.subject.record_api_created())
+        created = self.subject.created
+        self.assertIs(created, self.subject._created_original)
+        self.assertTrue(created.committed and created.advanced and created.writing)
+        self.assertEqual(seen, [self.before_created, self.before_created])
+        self.assertEqual(self.ledger, created.after)
+        self.assertEqual(self.subject.dispatch.ledger_raw, created.after)
+        self.assertEqual(self.subject.intent.after, self.before_created)
+        row = json.loads(self.writes[1])
+        self.assertEqual(row["state"], "CREATED")
+        self.assertEqual(row["resource"], dict(actionId=self.event_frame["payload"]["actionId"],
+            apiVersion="v1", kind="ConfigMap", namespace=self.manifest["metadata"]["namespace"],
+            name=self.manifest["metadata"]["name"], manifestDigest=self.event_frame["payload"]["manifestDigest"],
+            uid="created-unit-uid", resourceVersion="123"))
+        self.assertEqual(self.io_events[self.io_events.index("lock"):self.io_events.index("unlock") + 1],
+                         ["lock", "read", "append", "fsync", "read", "unlock"])
+
+    def test_created_is_accounting_not_ack_cleanup_or_capacity_release(self):
+        self.complete()
+        transcript = self.subject.events.transcript_raw
+        self.subject.record_api_created()
+        self.assertEqual(self.subject.events.transcript_raw, transcript)
+        self.assertIsNotNone(self.subject.events.transcript.pending)
+        self.assertIsNone(self.subject.events.transcript.cleanup)
+        self.assertIsNone(self.subject.events.transcript.terminal)
+        self.assertTrue(self.held()["held"])
+        self.assertTrue(all(r["state"] == "CREATED" for r in self.held()["resources"].values()))
+        self.socket.send.assert_not_called()
+        self.socket.recvmsg.assert_not_called()
+        self.assertEqual(len(self.plain_requests), 1)
+        self.assertEqual(len(self.wire_requests), 1)
+        self.assertEqual(self.secret_reads.call_count, 1)
+        self.api_socket.connect.assert_called_once()
+
+    def test_original_intent_exchange_and_created_checks_keep_exact_new_history(self):
+        self.complete()
+        self.subject.record_api_created()
+        before, observations = self.ledger, len(self.observations)
+        self.assertIsNone(self.subject.intent.check())
+        self.assertIsNone(self.subject.exchange.check())
+        self.assertIsNone(self.subject.created.check())
+        self.assertGreater(len(self.observations), observations)
+        self.assertEqual(self.ledger, before)
+        self.assertEqual(len(self.writes), 2)
+        self.assertEqual(len(self.plain_requests), 1)
+
+    def test_no_caller_identity_response_history_or_backend(self):
+        for value in ({}, b"response", "foreign-uid", Mock()):
+            with self.subTest(value=type(value).__name__), self.assertRaises(TypeError):
+                self.subject.record_api_created(value)
+        self.assertIsNone(self.subject.created)
+        self.assertEqual(self.writes, [])
+
+    def test_unowned_constructor_never_writes(self):
+        with self.assertRaisesRegex(ConformanceError, "BROKER_CREATED_OWNER"):
+            server._BrokerCreated(self.subject)
+        self.assertEqual(self.writes, [])
+
+    def test_missing_exchange_never_invents_returned_identity(self):
+        self.subject.record_create_intent()
+        self.refuse_created("BROKER_CREATED_EXCHANGE_REQUIRED")
+        self.assertEqual(len(self.writes), 1)
+        self.assertTrue(all(r["uid"] is None for r in self.held()["resources"].values()))
+
+    def test_incomplete_exchange_is_not_durable_ownership(self):
+        self.complete()
+        self.subject.exchange.complete = False
+        self.refuse_created("BROKER_CREATED_EXCHANGE_REQUIRED")
+        self.assertEqual(self.ledger, self.before_created)
+
+    def test_uncommitted_intent_cannot_be_promoted(self):
+        self.complete()
+        self.subject.intent.committed = False
+        self.refuse_created("BROKER_CREATED_INTENT_REQUIRED")
+        self.assertEqual(self.ledger, self.before_created)
+
+    def test_response_replacement_is_rejected_without_append(self):
+        self.complete()
+        different = deepcopy(self.actual)
+        different["metadata"]["uid"] = "foreign-uid"
+        self.subject.exchange.response_raw = canonical_bytes(different)
+        self.refuse_created("BROKER_CREATED_INPUT_CHANGED")
+        self.assertEqual(self.ledger, self.before_created)
+
+    def test_response_is_revalidated_against_signed_manifest(self):
+        self.complete()
+        self.actual["metadata"]["labels"]["foreign"] = "injected"
+        self.subject.exchange.response_raw = self.subject.exchange._response_original = canonical_bytes(self.actual)
+        self.refuse_created("ADMISSION_POST_MUTATION_MISMATCH")
+        self.assertEqual(self.ledger, self.before_created)
+
+    def test_response_without_resource_version_is_not_recorded(self):
+        self.complete()
+        del self.actual["metadata"]["resourceVersion"]
+        self.subject.exchange.response_raw = self.subject.exchange._response_original = canonical_bytes(self.actual)
+        self.refuse_created("ADMISSION_IDENTITY_MISSING")
+        self.assertEqual(self.ledger, self.before_created)
+
+    def test_foreign_exchange_is_not_called(self):
+        self.complete()
+        foreign = self.subject.exchange = Mock()
+        self.refuse_created("BROKER_CREATED_EXCHANGE_REQUIRED")
+        foreign.check.assert_not_called()
+        foreign.close.assert_not_called()
+
+    def test_foreign_storage_is_not_read_or_written(self):
+        self.complete()
+        foreign = self.owner.storage = Mock()
+        self.refuse_created("BROKER_CREATED_OWNER_CHANGED")
+        foreign.read.assert_not_called()
+        foreign.transaction.assert_not_called()
+        self.assertEqual(self.ledger, self.before_created)
+
+    def test_foreign_log_is_not_an_execution_hook(self):
+        self.complete()
+        foreign = self.owner.log = Mock()
+        self.refuse_created("BROKER_CREATED_OWNER_CHANGED")
+        foreign.record_resource.assert_not_called()
+        self.assertEqual(self.ledger, self.before_created)
+
+    def test_instance_shadow_writer_and_checker_are_not_used(self):
+        self.complete()
+        self.owner.log.record_resource = Mock(side_effect=AssertionError("shadow writer"))
+        self.subject.exchange.check = Mock(side_effect=AssertionError("shadow check"))
+        self.subject.record_api_created()
+        self.owner.log.record_resource.assert_not_called()
+        self.subject.exchange.check.assert_not_called()
+        self.assertEqual(len(self.writes), 2)
+
+    def test_unknown_history_before_write_is_not_adopted(self):
+        self.complete()
+        self.ledger += b"unexpected"
+        self.refuse_created("BROKER_RUNNING_CHANGED")
+        self.assertEqual(len(self.writes), 1)
+
+    def test_history_change_under_lock_cannot_be_rebased(self):
+        self.complete()
+        self.on_lock = lambda: setattr(self, "ledger", self.ledger + b"unexpected")
+        self.refuse_created("ADMISSION_RESOURCE_HISTORY_CHANGED")
+        self.assertEqual(self.subject.dispatch.ledger_raw, self.before_created)
+        self.assertEqual(len(self.writes), 1)
+
+    def test_lock_contention_does_not_append(self):
+        self.complete()
+        self.locked = True
+        self.refuse_created("UNIT_STORAGE_BUSY")
+        self.assertEqual(self.ledger, self.before_created)
+        self.assertTrue(self.owner.log.poisoned)
+
+    def test_every_write_ambiguity_stays_held_without_pin_advance_or_retry(self):
+        for fault in ("before", "partial", "after", "sync", "readback"):
+            with self.subTest(fault=fault):
+                self.complete()
+                self.fail = fault
+                self.refuse_created()
+                created = self.subject.created
+                self.assertFalse(created.committed or created.advanced)
+                self.assertTrue(self.owner.log.poisoned)
+                self.assertEqual(self.subject.dispatch.ledger_raw, self.before_created)
+                history, writes = self.ledger, len(self.writes)
+                with self.assertRaises(ConformanceError):
+                    self.subject.record_api_created()
+                self.assertEqual(self.ledger, history)
+                self.assertEqual(len(self.writes), writes)
+                self.assertEqual(len(self.plain_requests), 1)
+            if fault != "readback":
+                self.stack.close()
+                self.setUp()
+
+    def test_unlock_failure_does_not_publish_durable_success(self):
+        self.complete()
+        def fail():
+            raise OSError("unit unlock ambiguity")
+        self.on_exit = fail
+        self.refuse_created("unit unlock ambiguity")
+        self.assertEqual(len(self.writes), 2)
+        self.assertTrue(self.held()["held"])
+        self.assertTrue(self.owner.log.poisoned)
+        self.assertFalse(self.subject.created.advanced)
+
+    def test_wrong_returned_digest_does_not_advance_pin(self):
+        self.complete()
+        original = server._AdmissionLog.record_resource
+        def wrong(log, *args, **kwargs):
+            original(log, *args, **kwargs)
+            return admission.ZERO
+        with patch.object(server._AdmissionLog, "record_resource", wrong):
+            self.refuse_created("BROKER_CREATED_COMMIT_MISMATCH")
+        self.assertEqual(len(self.writes), 2)
+        self.assertEqual(self.subject.dispatch.ledger_raw, self.before_created)
+
+    def test_fsync_generation_loss_keeps_uid_held_without_ack(self):
+        self.complete()
+        self.on_sync = lambda: self.observed.update(generation="f" * 64)
+        self.refuse_created("BROKER_GENERATION_CHANGED")
+        self.assertEqual(len(self.writes), 2)
+        self.assertTrue(self.held()["held"])
+        self.assertTrue(all(r["uid"] == "created-unit-uid" for r in self.held()["resources"].values()))
+        self.assertTrue(self.owner.log.poisoned)
+
+    def test_fsync_cannot_extend_two_second_phase(self):
+        self.complete()
+        self.on_sync = lambda: setattr(self, "now", self.subject.end)
+        self.refuse_created("BROKER_CLOCK_OR_DEADLINE")
+        self.assertFalse(self.subject.created.advanced)
+        self.assertTrue(self.owner.log.poisoned)
+        self.assertEqual(len(self.writes), 2)
+
+    def test_api_peer_change_refuses_before_write(self):
+        self.complete()
+        self.api_peer = ("127.0.0.3", 7443)
+        self.refuse_created("API_PEER_CHANGED")
+        self.assertEqual(self.ledger, self.before_created)
+
+    def test_api_peer_change_at_fsync_cannot_publish_success(self):
+        self.complete()
+        self.on_sync = lambda: setattr(self, "api_peer", ("127.0.0.3", 7443))
+        self.refuse_created("API_PEER_CHANGED")
+        self.assertEqual(len(self.writes), 2)
+        self.assertTrue(self.held()["held"])
+
+    def test_pending_action_change_at_fsync_is_not_acknowledged(self):
+        self.complete()
+        self.on_sync = lambda: self.subject.events.transcript.pending.update(verb="DELETE")
+        self.refuse_created("BROKER_TRANSCRIPT_CHANGED")
+        self.assertEqual(len(self.writes), 2)
+        self.assertTrue(self.owner.log.poisoned)
+
+    def test_reentrant_record_never_repeats_create_or_append(self):
+        self.complete()
+        self.on_append = self.subject.record_api_created
+        self.refuse_created("BROKER_CREATED_ALREADY_ATTEMPTED")
+        self.assertEqual(self.ledger, self.before_created)
+        self.assertEqual(len(self.plain_requests), 1)
+
+    def test_repeated_committed_record_never_appends_again(self):
+        self.complete()
+        self.subject.record_api_created()
+        before = self.ledger
+        with self.assertRaisesRegex(ConformanceError, "BROKER_CREATED_ALREADY_ATTEMPTED"):
+            self.subject.record_api_created()
+        self.assertEqual(self.ledger, before)
+        self.assertTrue(self.owner.log.poisoned)
+        self.assertEqual(len(self.plain_requests), 1)
+
+    def test_retained_check_refuses_unknown_append_after_created(self):
+        self.complete()
+        self.subject.record_api_created()
+        self.ledger += b"unexpected"
+        with self.assertRaisesRegex(ConformanceError, "BROKER_RUNNING_CHANGED"):
+            self.subject.created.check()
+        self.assertTrue(self.owner.log.poisoned)
+
+    def test_retained_check_refuses_rollback_to_intent_history(self):
+        self.complete()
+        self.subject.record_api_created()
+        self.ledger = self.before_created
+        with self.assertRaisesRegex(ConformanceError, "BROKER_RUNNING_CHANGED"):
+            self.subject.created.check()
+        self.assertTrue(self.owner.log.poisoned)
+
+    def test_retained_check_refuses_changed_row(self):
+        self.complete()
+        self.subject.record_api_created()
+        self.subject.created.row_raw = b"{}"
+        with self.assertRaisesRegex(ConformanceError, "BROKER_CREATED_HISTORY_CHANGED"):
+            self.subject.created.check()
+        self.assertTrue(self.owner.log.poisoned)
+
+    def test_foreign_created_owner_is_not_checked_or_closed(self):
+        self.complete()
+        self.subject.record_api_created()
+        original = self.subject.created
+        foreign = self.subject.created = Mock()
+        with self.assertRaisesRegex(ConformanceError, "BROKER_CREATED_OWNER_CHANGED"):
+            original.check()
+        foreign.check.assert_not_called()
+        foreign.close.assert_not_called()
+
+    def test_final_publication_cannot_target_a_replacement(self):
+        self.complete()
+        original = server._BrokerCreated.__init__
+        foreign = Mock()
+        def completed(resource, broker):
+            original(resource, broker)
+            broker.created = foreign
+        with patch.object(server._BrokerCreated, "__init__", completed):
+            self.refuse_created("BROKER_CREATED_PUBLICATION_CHANGED")
+        self.assertNotIn("committed", vars(foreign))
+        foreign.close.assert_not_called()
+        self.assertEqual(len(self.writes), 2)
+
+
 class BrokerApiZeroResourceTests(_BrokerEventFixture, unittest.TestCase):
     profile_index = 0
 
