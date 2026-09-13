@@ -7112,6 +7112,13 @@ class BrokerZeroResourceEventTests(_BrokerEventFixture, unittest.TestCase):
 
 class BrokerIntentTests(_BrokerEventFixture, unittest.TestCase):
     """Real broker/event/intent/journal code; explicit OS and storage doubles."""
+    def start(self):
+        # Align these unit-only inputs BEFORE the real broker pins its request,
+        # reservation and observation. Keep all predecessor fixtures untouched.
+        nonce = VECTORS["broker"]["positive"][self.profile_index]["profile"]["binding"]["runNonce"]
+        self.owner.envelope["nonce"] = self.observed["runNonce"] = nonce
+        return _BrokerEventFixture.start(self)
+
     def setUp(self):
         from contextlib import contextmanager
         _BrokerEventFixture.setUp(self)
@@ -7282,7 +7289,7 @@ class BrokerIntentTests(_BrokerEventFixture, unittest.TestCase):
         self.assertEqual(self.writes, [])
 
     def test_expired_observation_prevents_append(self):
-        self.observed["expiresAt"] = self.wall
+        self.observed["expiresAt"] = "2026-09-08T00:00:02Z"
         self.refuse_intent("BROKER_OBSERVATION_EXPIRED")
         self.assertEqual(self.writes, [])
 
