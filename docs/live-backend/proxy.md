@@ -922,6 +922,13 @@ by this fixture correction; all eight commands must be rerun on the new commit.
 
 ## Broker dispatch/start continuation
 
+Candidate `64e2858dae44fa7ef7d6b1726c1db5b1e534106f` failed its signed full
+offline replay: the37 new cases loaded fixture files after installing fd-only
+transport doubles, so setup raised `KeyError` before testing the new behavior.
+Load those fixtures before installing the doubles; no inherited test body or
+production acceptance boundary changes. The failed log remains external
+operator evidence, not PASS. The corrected head requires a fresh full8 replay.
+
 Preceding head `acb2da5cba9fef6f35b3316f5c005534a8e8b20b` passed926 tests,
 zero skips and all8 commands in signed LOCAL activation228 and required localhost
 CI34741454274/activation229. Runner62 retired, zero runners/artifacts verified.

@@ -6425,9 +6425,10 @@ class BrokerDispatchStartTests(unittest.TestCase):
     start = BrokerTransportCustodyTests.start
 
     def setUp(self):
-        BrokerTransportCustodyTests.setUp(self)
         from _fixtures import backend_fixture
+        # Load signed fixture files before the transport's fd-only OS doubles.
         fixture = backend_fixture()
+        BrokerTransportCustodyTests.setUp(self)
         owner = self.owner
         owner.envelope, owner.capacity, owner.plan = fixture.envelope, fixture.capacity, fixture.plan
         owner.profile = deepcopy(self.fixture["profile"])
