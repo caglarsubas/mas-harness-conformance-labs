@@ -3283,6 +3283,7 @@ class _Broker:
         self.events = self._events_original = None
         self.api = self._api_original = None
         self.intent = self._intent_original = None
+        self.exchange = self._exchange_original = None
         self._attempted_cases = set()
         self.deadline = owner.deadline
         self.last_wall, self.last_mono = None, time.monotonic()
@@ -3511,6 +3512,30 @@ class _Broker:
                 self.close()
             except BaseException:
                 pass  # retained journal is never rolled back; keep first refusal
+            raise
+
+    def exchange_api_create(self):
+        """One original pending CREATE exchange; no caller bytes or result grant."""
+        try:
+            require(not self.closed and not self.failed and not self.busy
+                    and self.exchange is self._exchange_original is None,
+                    "BROKER_EXCHANGE_ALREADY_ATTEMPTED")
+            self.exchange = self._exchange_original = object.__new__(_BrokerCreateExchange)
+            self.exchange.__init__(self)
+            require(type(self.exchange) is _BrokerCreateExchange
+                    and self.exchange is self._exchange_original and not self.exchange.failed
+                    and self.exchange.response_raw is not None, "BROKER_EXCHANGE_PUBLICATION_CHANGED")
+            self.exchange.complete = True  # data only; CREATED still needs durable accounting
+        except BaseException:
+            self.failed = True
+            if self._exchange_original is not None:
+                self._exchange_original.failed = True
+            if self._intent_original is not None:
+                self._intent_original._poison()
+            try:
+                self.close()
+            except BaseException:
+                pass  # intent/possible effect stays held, never retry or adopt
             raise
 
     def close(self):
@@ -4055,6 +4080,11 @@ class _BrokerApi:
                     and self.deadline == broker.deadline == owner.deadline, "API_OWNER_CHANGED")
             with broker._phase():
                 self.events._check()
+                if broker.exchange is not None or broker._exchange_original is not None:
+                    require(type(broker.exchange) is _BrokerCreateExchange
+                            and broker.exchange is broker._exchange_original, "API_EXCHANGE_OWNER_CHANGED")
+                    broker.exchange._state_check()
+                    broker.exchange.intent._check()
             self.secrets.check()
             require(canonical_bytes(self.events.transcript.pending) == self.action_raw
                     and self._inputs() == (self.endpoint_raw, self.ca)
@@ -4075,6 +4105,10 @@ class _BrokerApi:
             now = time.monotonic()
             require(self.last <= now < self.deadline, "API_CLOCK_OR_DEADLINE")
             self.last = now
+            if broker.exchange is not None or broker._exchange_original is not None:
+                require(type(broker.exchange) is _BrokerCreateExchange
+                        and broker.exchange is broker._exchange_original, "API_EXCHANGE_OWNER_CHANGED")
+                broker.exchange._state_check()
         finally:
             self.checking = False
 
@@ -4117,6 +4151,97 @@ class _BrokerApi:
                         pass  # preserve the first cleanup error; no retry
         if self.cleanup_failure is not None:
             raise self.cleanup_failure
+
+
+class _BrokerCreateExchange:
+    """Retained request/response data for one CREATE on the original API owner.
+
+    This is not a CREATED journal record, action acknowledgement, cleanup proof
+    or native execution grant. The exact intent remains held throughout.
+    """
+    def __init__(self, broker):
+        self.failed = self.complete = self.attempted = False
+        self.response_raw = self._response_original = None
+        try:
+            require(type(self) is _BrokerCreateExchange and type(broker) is _Broker
+                    and broker.exchange is broker._exchange_original is self, "API_EXCHANGE_OWNER")
+            self.broker, self.owner = broker, broker.owner
+            self.api, self.intent, self.events = broker.api, broker.intent, broker.events
+            require(type(self.api) is _BrokerApi and self.api is broker._api_original and self.api.ready,
+                    "API_EXCHANGE_AUTHENTICATION_REQUIRED")
+            require(type(self.intent) is _BrokerIntent and self.intent is broker._intent_original
+                    and self.intent.committed and not self.intent.failed, "API_EXCHANGE_INTENT_REQUIRED")
+            self.action_raw, self.deadline = self.intent.action_raw, broker.deadline
+            self.request_raw = self._request()
+            self._state_check()
+            self.api._transport_check()  # includes original intent, observer and peer
+            self.attempted = True  # even partial writes/late returns never retry
+            _TLS.write(self.api.tls, self.request_raw)
+            self.api._transport_check()
+            _, raw = read_http(self.api.tls, response=True)
+            self.api._transport_check()
+            # Preserve the existing strict HTTP/canonical-object profile. No new
+            # success codes, normalization, endpoint or response wrapper is added.
+            require(type(raw) is bytes and 0 < len(raw) <= 16384, "API_EXCHANGE_RESPONSE_SIZE")
+            _create_record(document(self.intent.reservation_raw), self.intent.operation,
+                self.intent.profile_raw, self.intent.binding_raw, document(self.action_raw), observed=raw)
+            self.response_raw = self._response_original = raw
+            self.api._transport_check()
+        except BaseException:
+            self.failed = True
+            raise
+
+    def _request(self):
+        action = document(self.action_raw, 16384)
+        require(action.get("verb") == "CREATE", "API_EXCHANGE_CREATE_REQUIRED")
+        profile = document(self.intent.profile_raw)
+        resources = [r for r in profile["resources"] if r["manifestDigest"] == action["manifestDigest"]]
+        require(len(resources) == 1, "API_EXCHANGE_MANIFEST_REQUIRED")
+        manifest = resources[0]["manifest"]
+        plural = {"Pod": "pods", "ConfigMap": "configmaps", "Service": "services"}[manifest["kind"]]
+        namespace = manifest["metadata"]["namespace"]
+        require(manifest["apiVersion"] == "v1" and namespace == profile["binding"]["namespace"]
+                and re.fullmatch(r"[a-z0-9][a-z0-9.-]{0,62}", namespace), "API_EXCHANGE_PATH_SCOPE")
+        body = canonical_bytes(manifest)
+        require(0 < len(body) <= 16384 and byte_digest(body) == action["manifestDigest"], "API_EXCHANGE_BODY_SCOPE")
+        return http_message("POST /api/v1/namespaces/" + namespace + "/" + plural + " HTTP/1.1",
+                            body, self.api.endpoint["tls"]["serverName"])
+
+    def _state_check(self):
+        broker, api, intent = self.broker, self.api, self.intent
+        require(type(self) is _BrokerCreateExchange and not self.failed
+                and type(broker) is _Broker and broker.exchange is broker._exchange_original is self
+                and broker.owner is self.owner and self.owner.broker is self.owner._broker_original is broker
+                and broker.api is broker._api_original is api and type(api) is _BrokerApi
+                and api.broker is broker and api.owner is self.owner and api.ready
+                and broker.events is broker._events_original is self.events and api.events is self.events
+                and broker.intent is broker._intent_original is intent and type(intent) is _BrokerIntent
+                and intent.broker is broker and intent.owner is self.owner and intent.events is self.events
+                and intent.committed and not intent.failed and not intent.log.poisoned
+                and intent.start.ledger_raw == intent.after
+                and self.action_raw == intent.action_raw == api.action_raw
+                and canonical_bytes(self.events.transcript.pending) == self.action_raw
+                and self.deadline == broker.deadline == api.deadline == self.owner.deadline,
+                "API_EXCHANGE_STATE_CHANGED")
+        require(type(self.request_raw) is bytes and self.request_raw == self._request(), "API_EXCHANGE_REQUEST_CHANGED")
+        require(self.response_raw == self._response_original
+                and (self.response_raw is None or type(self.response_raw) is bytes), "API_EXCHANGE_RESPONSE_CHANGED")
+
+    def check(self):
+        """Recheck retained candidate data; never return a resource or permission."""
+        try:
+            require(self.complete, "API_EXCHANGE_NOT_COMPLETE")
+            self._state_check()
+            self.api._transport_check()
+            self._state_check()
+        except BaseException:
+            self.failed = self.broker.failed = True
+            self.intent._poison()
+            try:
+                self.broker.close()
+            except BaseException:
+                pass
+            raise
 
 
 class _State:

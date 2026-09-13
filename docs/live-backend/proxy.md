@@ -1141,6 +1141,37 @@ native filesystem durability, atomic generation enforcement or tenant acceptance
 All1,097 preceding test methods,127 accepted files and fixture bytes are preserved.
 Fresh exact-commit full signed LOCAL and required localhost CI remain mandatory.
 
+## One-shot CREATE exchange checkpoint (source-only)
+
+`_Broker.exchange_api_create()` now owns one bounded exchange on the original
+authenticated API connection, after the original CREATE_INTENT is committed.
+The method takes no caller request, URL, resource, response, or backend. It derives
+the fixed namespaced v1 POST path and canonical body only from the retained
+profile/action. The API transport guard now also checks the exact exchange and
+intent before and after I/O; generation, peer, history, ownership and deadline
+loss cannot publish a successful candidate. Partial sends never restart a request.
+
+The existing strict HTTP profile is unchanged: one request/connection, fixed Host,
+exact length, no redirects/chunking/pipelining, bounded header/body and absolute
+deadlines, canonical observed object, and only HTTP 200 success transport. In
+particular, 201 is not silently enabled and 409 is never adopted. This is not a
+claim of compatibility with an unqualified raw Kubernetes API; any different
+API-proxy response profile requires explicit contract review before support.
+
+The returned object is checked against the exact signed manifest, including
+UID/resourceVersion and post-defaulting restrictions, and retained as private
+candidate bytes only. No CREATED journal row, RESOURCE_RESULT, next action,
+cleanup, terminal, capacity release or tenant/native acceptance is emitted here.
+The durable intent remains held, including when a response is lost or malformed.
+Guarded returned-identity persistence and result/retirement lifecycle must follow
+before the complete server driver can use this candidate. It is not wired into
+`NativeProxyServer.serve` yet. No live request runs in coding or CI.
+
+New tests exercise actual broker, journal, API owner, MemoryBIO transport and HTTP
+parsing with explicit OS/OpenSSL/observer/storage doubles. All 1,132 preceding
+tests and the 127 baseline files remain unchanged. Full signed LOCAL and required
+localhost CI remain mandatory; mocks do not qualify native effects or durability.
+
 ## Verification boundary
 
 This is an in-progress source snapshot, not a self-attested run result. Exact

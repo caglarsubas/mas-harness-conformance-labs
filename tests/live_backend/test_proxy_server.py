@@ -7895,6 +7895,341 @@ class BrokerApiConnectionTests(_BrokerEventFixture, unittest.TestCase):
             api.check()
         self.api_socket.close.assert_called_once()
 
+class BrokerCreateExchangeTests(_BrokerEventFixture, unittest.TestCase):
+    """Real broker/intent/API/TLS/HTTP code; OS, OpenSSL and storage doubles."""
+    read_secret = BrokerApiConnectionTests.read_secret
+    connect_api = BrokerApiConnectionTests.connect_api
+    write_memfd = BrokerApiConnectionTests.write_memfd
+    make_context = BrokerApiConnectionTests.make_context
+    wrap = BrokerApiConnectionTests.wrap
+    handshake = BrokerApiConnectionTests.handshake
+    read_intent = BrokerIntentTests.read_intent
+    append_intent = BrokerIntentTests.append_intent
+    sync_intent = BrokerIntentTests.sync_intent
+    held = BrokerIntentTests.held
+
+    def start(self):
+        nonce = VECTORS["broker"]["positive"][1]["profile"]["binding"]["runNonce"]
+        self.owner.envelope["nonce"] = self.observed["runNonce"] = nonce
+        return BrokerApiConnectionTests.start(self)
+
+    def action(self, digest=None):
+        _BrokerEventFixture.action(self, digest)
+        self.event_frame["payload"]["verb"] = "CREATE"
+
+    def setUp(self):
+        from contextlib import contextmanager
+        BrokerApiConnectionTests.setUp(self)
+        self.io_events, self.writes = [], []
+        self.fail = None
+        self.on_read = self.on_append = self.on_sync = lambda: None
+        @contextmanager
+        def transaction(resource):
+            self.assertIs(resource, self.owner.storage)
+            yield resource
+        self.stack.enter_context(patch.object(server._State, "transaction", transaction))
+        self.stack.enter_context(patch.object(server._State, "append", side_effect=self.append_intent))
+        self.stack.enter_context(patch.object(server._State, "sync", side_effect=self.sync_intent))
+        self.read_store.side_effect = self.read_intent
+        self.on_http_write = self.on_http_read = lambda: None
+        self.plain_requests, self.wire_requests = [], []
+        self.ssl.write.side_effect = self.http_write
+        self.ssl.read.side_effect = self.http_read
+        self.ssl.pending.return_value = 0
+        self.manifest = deepcopy(self.owner.profile["resources"][0]["manifest"])
+        self.actual = deepcopy(self.manifest)
+        self.actual["metadata"].update(uid="created-unit-uid", resourceVersion="123")
+        self.reply(canonical_bytes(self.actual))
+
+    def reply(self, body, status="HTTP/1.1 200 OK"):
+        self.http_bytes = bytearray(server.http_message(status, body))
+
+    def http_write(self, raw):
+        self.on_http_write()
+        self.plain_requests.append(bytes(raw))
+        self.outgoing.write(b"unit-encrypted-api-request")
+        return len(raw)
+
+    def http_read(self, maximum):
+        self.on_http_read()
+        part = bytes(self.http_bytes[:maximum])
+        del self.http_bytes[:maximum]
+        return part
+
+    def prepare(self, intent=True):
+        if intent:
+            self.subject.record_create_intent()
+        BrokerApiConnectionTests.prepare(self)
+        self.api_socket.send.reset_mock()
+        self.api_socket.send.side_effect = lambda raw: self.wire_requests.append(bytes(raw)) or len(raw)
+        self.socket.send.reset_mock()
+        self.socket.recvmsg.reset_mock()
+        return self.api
+
+    def refuse_exchange(self, reason=".+"):
+        with self.assertRaisesRegex((ConformanceError, OSError), reason):
+            self.subject.exchange_api_create()
+        self.assertTrue(self.subject.failed and self.subject.closed)
+        if self.subject._exchange_original is not None:
+            self.assertTrue(self.subject._exchange_original.failed)
+        self.socket.send.assert_not_called()
+
+    def test_original_intent_precedes_exact_fixed_create_request(self):
+        self.prepare()
+        before = self.ledger
+        seen = []
+        self.on_http_write = lambda: seen.append(self.held()["resources"])
+        self.assertIsNone(self.subject.exchange_api_create())
+        exchange = self.subject.exchange
+        self.assertTrue(exchange.complete and exchange.attempted)
+        self.assertIs(exchange, self.subject._exchange_original)
+        expected = server.http_message("POST /api/v1/namespaces/" + self.manifest["metadata"]["namespace"]
+            + "/configmaps HTTP/1.1", canonical_bytes(self.manifest), "proxy.unit")
+        self.assertEqual(self.plain_requests, [expected])
+        self.assertEqual(self.wire_requests, [b"unit-encrypted-api-request"])
+        self.assertEqual(exchange.response_raw, canonical_bytes(self.actual))
+        self.assertEqual(self.ledger, before)
+        self.assertTrue(all(r["state"] == "CREATE_INTENT" and r["uid"] is None for r in seen[0].values()))
+        self.assertEqual(len(self.writes), 1)
+
+    def test_success_remains_candidate_not_broker_result_or_created_record(self):
+        self.prepare()
+        snapshot = self.subject.events.transcript_raw
+        self.subject.exchange_api_create()
+        self.assertEqual(self.subject.events.transcript_raw, snapshot)
+        self.assertIsNotNone(self.subject.events.transcript.pending)
+        self.assertIsNone(self.subject.events.transcript.cleanup)
+        self.assertIsNone(self.subject.events.transcript.terminal)
+        self.assertTrue(self.held()["held"])
+        self.socket.send.assert_not_called()
+        self.socket.recvmsg.assert_not_called()
+        self.assertEqual(self.secret_reads.call_count, 1)
+        self.api_socket.connect.assert_called_once()
+
+    def test_fresh_candidate_check_does_not_resend_or_reconnect(self):
+        self.prepare()
+        self.subject.exchange_api_create()
+        observations = len(self.observations)
+        self.assertIsNone(self.subject.exchange.check())
+        self.assertGreater(len(self.observations), observations)
+        self.assertEqual(len(self.plain_requests), 1)
+        self.assertEqual(self.secret_reads.call_count, 1)
+
+    def test_no_caller_request_response_path_or_backend_argument(self):
+        for value in ({}, b"request", "https://untrusted.invalid", Mock()):
+            with self.subTest(value=type(value).__name__), self.assertRaises(TypeError):
+                self.subject.exchange_api_create(value)
+        self.assertIsNone(self.subject.exchange)
+        self.assertEqual(self.plain_requests, [])
+
+    def test_unowned_exchange_constructor_never_sends(self):
+        self.prepare()
+        with self.assertRaisesRegex(ConformanceError, "API_EXCHANGE_OWNER"):
+            server._BrokerCreateExchange(self.subject)
+        self.assertEqual(self.plain_requests, [])
+
+    def test_missing_api_authentication_refuses_before_request(self):
+        self.subject.record_create_intent()
+        self.refuse_exchange("API_EXCHANGE_AUTHENTICATION_REQUIRED")
+        self.assertEqual(self.plain_requests, [])
+        self.secret_reads.assert_not_called()
+
+    def test_authenticated_api_without_intent_cannot_send(self):
+        self.prepare(intent=False)
+        self.refuse_exchange("API_EXCHANGE_INTENT_REQUIRED")
+        self.assertEqual(self.plain_requests, [])
+
+    def test_uncommitted_intent_cannot_send(self):
+        self.prepare()
+        self.subject.intent.committed = False
+        self.refuse_exchange("API_EXCHANGE_INTENT_REQUIRED")
+        self.assertEqual(self.plain_requests, [])
+
+    def test_changed_action_refuses_without_http_write(self):
+        self.prepare()
+        self.subject.events.transcript.pending["verb"] = "GET"
+        self.refuse_exchange("API_EXCHANGE_STATE_CHANGED")
+        self.assertEqual(self.plain_requests, [])
+
+    def test_changed_durable_history_refuses_without_http_write(self):
+        self.prepare()
+        self.ledger += b"unknown"
+        self.refuse_exchange("BROKER_RUNNING_CHANGED")
+        self.assertEqual(self.plain_requests, [])
+
+    def test_revoked_generation_refuses_before_http_write(self):
+        self.prepare()
+        self.observed["generation"] = "f" * 64
+        self.refuse_exchange("BROKER_GENERATION_CHANGED")
+        self.assertEqual(self.plain_requests, [])
+
+    def test_peer_change_refuses_before_http_write(self):
+        self.prepare()
+        self.api_peer = ("127.0.0.3", 7443)
+        self.refuse_exchange("API_PEER_CHANGED")
+        self.assertEqual(self.plain_requests, [])
+
+    def test_signed_deadline_refuses_before_http_write(self):
+        self.prepare()
+        self.now = self.subject.deadline
+        self.refuse_exchange("BROKER_CLOCK_OR_DEADLINE")
+        self.assertEqual(self.plain_requests, [])
+
+    def test_short_or_ambiguous_write_never_retries(self):
+        self.prepare()
+        self.api_socket.send.side_effect = OSError("unit lost send")
+        self.refuse_exchange("unit lost send")
+        self.api_socket.send.assert_called_once()
+        with self.assertRaises(ConformanceError):
+            self.subject.exchange_api_create()
+        self.api_socket.send.assert_called_once()
+        self.assertTrue(self.owner.log.poisoned)
+        self.assertTrue(self.held()["held"])
+
+    def test_partial_send_then_error_does_not_restart_http(self):
+        self.prepare()
+        self.api_socket.send.side_effect = [1, OSError("unit partial send")]
+        self.refuse_exchange("unit partial send")
+        self.assertEqual(self.api_socket.send.call_count, 2)
+        self.assertEqual(len(self.plain_requests), 1)
+
+    def test_write_time_revocation_blocks_outgoing_ciphertext(self):
+        self.prepare()
+        self.on_http_write = lambda: self.observed.update(generation="f" * 64)
+        self.refuse_exchange("BROKER_GENERATION_CHANGED")
+        self.assertEqual(self.wire_requests, [])
+
+    def test_lost_response_keeps_unknown_uid_and_capacity_held(self):
+        self.prepare()
+        self.http_bytes = bytearray()
+        self.refuse_exchange("HTTP_TRUNCATED_HEADERS")
+        self.assertEqual(len(self.plain_requests), 1)
+        self.assertTrue(all(r["uid"] is None for r in self.held()["resources"].values()))
+        self.assertTrue(self.owner.log.poisoned)
+
+    def test_conflict_is_not_adopted_or_deleted(self):
+        self.prepare()
+        self.reply(b"{}", "HTTP/1.1 409 Conflict")
+        self.refuse_exchange("HTTP_STATUS_INVALID")
+        self.assertEqual(len(self.plain_requests), 1)
+        self.assertEqual(len(self.writes), 1)
+
+    def test_non_200_created_response_is_not_silently_added_to_profile(self):
+        self.prepare()
+        self.reply(canonical_bytes(self.actual), "HTTP/1.1 201 Created")
+        self.refuse_exchange("HTTP_STATUS_INVALID")
+
+    def test_redirect_does_not_follow_or_reconnect(self):
+        self.prepare()
+        self.reply(b"{}", "HTTP/1.1 302 Found")
+        self.refuse_exchange("HTTP_STATUS_INVALID")
+        self.api_socket.connect.assert_called_once()
+
+    def test_duplicate_response_header_refuses(self):
+        self.prepare()
+        self.http_bytes = self.http_bytes.replace(b"Connection: close", b"Connection: close\r\nConnection: close")
+        self.refuse_exchange("HTTP_HEADER_FORBIDDEN")
+
+    def test_truncated_response_body_refuses(self):
+        self.prepare()
+        del self.http_bytes[-1]
+        self.refuse_exchange("HTTP_TRUNCATED_BODY")
+
+    def test_surplus_response_refuses(self):
+        self.prepare()
+        self.http_bytes.extend(b"extra")
+        self.refuse_exchange("HTTP_SURPLUS")
+
+    def test_missing_uid_cannot_be_created_candidate(self):
+        self.prepare()
+        del self.actual["metadata"]["uid"]
+        self.reply(canonical_bytes(self.actual))
+        self.refuse_exchange("ADMISSION_IDENTITY_MISSING")
+
+    def test_post_defaulting_manifest_change_refuses(self):
+        self.prepare()
+        self.actual["metadata"]["labels"]["untrusted"] = "injected"
+        self.reply(canonical_bytes(self.actual))
+        self.refuse_exchange("ADMISSION_POST_MUTATION_MISMATCH")
+
+    def test_noncanonical_response_is_not_normalized(self):
+        self.prepare()
+        self.reply(json.dumps(self.actual).encode())
+        self.refuse_exchange()
+
+    def test_response_time_revocation_never_publishes_candidate(self):
+        self.prepare()
+        self.on_http_read = lambda: self.observed.update(generation="f" * 64)
+        self.refuse_exchange("BROKER_GENERATION_CHANGED")
+        self.assertIsNone(self.subject.exchange.response_raw)
+        self.assertTrue(self.held()["held"])
+
+    def test_slow_response_cannot_extend_original_deadline(self):
+        self.prepare()
+        self.on_http_read = lambda: setattr(self, "now", self.subject.deadline)
+        self.refuse_exchange("BROKER_CLOCK_OR_DEADLINE")
+        self.assertIsNone(self.subject.exchange.response_raw)
+
+    def test_header_phase_keeps_ten_second_cap(self):
+        self.prepare()
+        start = self.now
+        def trickle(maximum):
+            self.now += 1
+            return b"H"
+        self.ssl.read.side_effect = trickle
+        self.refuse_exchange("TLS_DEADLINE")
+        self.assertEqual(self.now, start + 10)
+
+    def test_repeated_completed_exchange_never_sends_again(self):
+        self.prepare()
+        self.subject.exchange_api_create()
+        self.refuse_exchange("BROKER_EXCHANGE_ALREADY_ATTEMPTED")
+        self.assertEqual(len(self.plain_requests), 1)
+
+    def test_reentrant_exchange_does_not_send_or_reconnect(self):
+        self.prepare()
+        self.on_http_write = self.subject.exchange_api_create
+        self.refuse_exchange("BROKER_EXCHANGE_ALREADY_ATTEMPTED")
+        self.assertEqual(self.wire_requests, [])
+        self.api_socket.connect.assert_called_once()
+
+    def test_request_substitution_during_write_is_refused(self):
+        self.prepare()
+        self.on_http_write = lambda: setattr(self.subject.exchange, "request_raw", b"foreign")
+        self.refuse_exchange("API_EXCHANGE_REQUEST_CHANGED")
+        self.assertEqual(self.wire_requests, [])
+
+    def test_original_candidate_refuses_foreign_exchange_without_using_it(self):
+        self.prepare()
+        self.subject.exchange_api_create()
+        original = self.subject.exchange
+        foreign = self.subject.exchange = Mock()
+        with self.assertRaisesRegex(ConformanceError, "API_EXCHANGE_STATE_CHANGED"):
+            original.check()
+        foreign.check.assert_not_called()
+        foreign.close.assert_not_called()
+
+    def test_candidate_response_change_is_detected(self):
+        self.prepare()
+        self.subject.exchange_api_create()
+        self.subject.exchange.response_raw = b"{}"
+        with self.assertRaisesRegex(ConformanceError, "API_EXCHANGE_RESPONSE_CHANGED"):
+            self.subject.exchange.check()
+
+    def test_final_check_cannot_replace_publication_target(self):
+        self.prepare()
+        original = server._BrokerCreateExchange.__init__
+        foreign = Mock()
+        def completed(resource, broker):
+            original(resource, broker)
+            broker.exchange = foreign
+        with patch.object(server._BrokerCreateExchange, "__init__", completed):
+            self.refuse_exchange("BROKER_EXCHANGE_PUBLICATION_CHANGED")
+        self.assertFalse(self.subject._exchange_original.complete)
+        self.assertNotIn("complete", vars(foreign))
+        foreign.close.assert_not_called()
+
+
 class BrokerApiZeroResourceTests(_BrokerEventFixture, unittest.TestCase):
     profile_index = 0
 
