@@ -5536,6 +5536,240 @@ class ProxyQualificationTests(unittest.TestCase):
             admission.retained_qualification_record(*args, {"tree": [row]}, {admission.QUALIFICATION_PATH: raw + b"\n"})
 
 
+class KernelObserverInspectionTests(unittest.TestCase):
+    """Real signed binding/composition; OS channel and typed reader doubles.
+
+    Component OS-edge coverage remains separate. This is not a native or
+    combined all-kernel-readers qualification, and creates no production bypass.
+    """
+    CLASSES = KernelSelfInspectionTests.CLASSES
+    fail = KernelSelfInspectionTests.fail
+
+    def environment(self, stack):
+        self.server_inspection = KernelSelfInspectionTests.environment(self, stack)
+        self.server_inspection.__init__(self.owner)
+        self.peer = object.__new__(server._Observer)
+        peer, self.owner.observer = self.peer, self.peer
+        peer.owner, peer.closed, peer.failed, peer.busy = self.owner, False, False, True
+        peer.deadline, peer.end = self.owner.deadline, self.fixture.mono + 2
+        peer.sock = peer._socket_original = Mock()
+        peer.sock.fileno.return_value = 71
+        peer._socket_fd, peer._socket_pin = 71, (1, 31, stat.S_IFSOCK)
+        peer.pidfd = peer._pidfd_original = 72
+        peer._pidfd_pin = (1, 32, stat.S_IFREG)
+        peer.peer = peer._peer_original = (811, 0, 0)
+        role = self.fixture.record["roles"]["OBSERVER"]
+        peer.identity = dict(pid=811, start=71, parent=1, uid=(0,) * 4, gid=(0,) * 4,
+            capabilities=(0,) * 5, seccomp=2, noNewPrivs=1,
+            cgroup="0::/planeon-live/policy-observer\n", namespaces=deepcopy(role["namespaceInodes"]))
+        peer._process_original = server._Observer._process_pin(peer.identity)
+        peer.parent = 75
+        self.path = SimpleNamespace(st_dev=1, st_ino=21, st_uid=0, st_gid=0, st_mode=stat.S_IFSOCK | 0o600,
+            st_nlink=1, st_size=1, st_mtime_ns=1, st_ctime_ns=1)
+        peer.socket_identity = server._custody_identity(self.path)
+        self.fd_rows = {71: SimpleNamespace(st_dev=1, st_ino=31, st_mode=stat.S_IFSOCK | 0o600),
+                        72: SimpleNamespace(st_dev=1, st_ino=32, st_mode=stat.S_IFREG | 0o600)}
+        old_stat, old_fstat = server.os.stat, server.os.fstat
+        stack.enter_context(patch.object(server.os, "stat", side_effect=lambda name, **kw:
+            self.path if name == "policy-observer.sock" and kw.get("dir_fd") == 75 else old_stat(name, **kw)))
+        stack.enter_context(patch.object(server.os, "fstat", side_effect=lambda fd:
+            self.fd_rows[fd] if fd in self.fd_rows else old_fstat(fd)))
+        stack.enter_context(patch.object(server.socket, "SO_PEERCRED", 17, create=True))
+        self.poll = stack.enter_context(patch.object(server.select, "select", return_value=([], [], [])))
+        self.peer_credentials = (811, 0, 0)
+        peer.sock.getsockopt.side_effect = lambda *args: server.struct.pack("3i", *self.peer_credentials)
+        self.native_process = dict(pid=811, startTicks=71, parent=1, uid=(0,) * 4, gid=(0,) * 4,
+                                   capabilities=(0,) * 5, seccompMode=2, noNewPrivs=1)
+        def on_build(name, resource):
+            if name == "process":
+                resource.original = deepcopy(self.native_process)
+                resource.cgroup = peer.identity["cgroup"].encode()
+                resource.pin = (0, 0, role["processLabel"], tuple(role["namespaceInodes"][k]
+                    for k in ("user", "mnt", "pid", "net")))
+        self.on_build = on_build
+        self.events.clear()
+        subject = peer.inspection = peer._inspection_original = object.__new__(server._KernelObserverInspection)
+        def cleanup():
+            if hasattr(subject, "closed"):
+                if subject.cleanup_failure is None:
+                    subject.close()
+                else:
+                    with self.assertRaises(type(subject.cleanup_failure)):
+                        subject.close()
+        stack.callback(cleanup)
+        return subject
+
+    def start(self, stack):
+        subject = self.environment(stack)
+        subject.__init__(self.peer)
+        return subject
+
+    def test_fixed_observer_role_uses_original_peer_not_server_pid(self):
+        with ExitStack() as stack:
+            subject = self.start(stack)
+            self.assertEqual([n for event, n in self.events if event == "acquire"], [n for n, _ in self.CLASSES])
+            self.assertEqual(self.args["process"], (subject.roots, 811, "OBSERVER", self.fixture.record["roles"]["OBSERVER"]))
+            self.assertEqual(self.args["code"][1], self.fixture.record["files"])
+            self.assertEqual(self.args["mappings"][2], {k: self.fixture.record["roles"]["OBSERVER"][k]
+                for k in ("executable", "artifactDigest", "interpreterPath", "filePaths")})
+            self.assertIsNone(subject.check())
+            self.assertFalse(self.fixture.socket.called)
+            self.peer.sock.send.assert_not_called()
+            self.peer.sock.recvmsg.assert_not_called()
+            self.assertNotIn(server.IDENTITY, self.fixture.read_paths)
+
+    def test_proc_start_must_join_original_socket_process_before_code_reads(self):
+        with ExitStack() as stack:
+            subject = self.environment(stack)
+            self.native_process["startTicks"] += 1
+            with self.assertRaisesRegex(ConformanceError, "KERNEL_OBSERVER_PROCESS_CHANGED"):
+                subject.__init__(self.peer)
+            self.assertNotIn(("acquire", "code"), self.events)
+            self.assertTrue(subject.closed and subject.failed)
+
+    def test_each_partial_reader_is_owned_before_constructor_failure(self):
+        for index, (fault, _) in enumerate(self.CLASSES):
+            with self.subTest(reader=fault), ExitStack() as stack:
+                subject = self.environment(stack)
+                original = self.on_build
+                def build(name, resource):
+                    original(name, resource)
+                    if name == fault:
+                        self.fail()
+                self.on_build = build
+                with self.assertRaises(ConformanceError):
+                    subject.__init__(self.peer)
+                self.assertEqual([n for event, n in self.events if event == "close"],
+                                 [n for n, _ in reversed(self.CLASSES[:index + 1])])
+
+    def test_failed_reader_poisoned_and_cleanup_does_not_own_channel_or_server(self):
+        with ExitStack() as stack:
+            subject = self.start(stack)
+            self.on_check = lambda name, resource: self.fail() if name == "filters" else None
+            with self.assertRaises(ConformanceError):
+                subject.check()
+            self.assertTrue(subject.closed and subject.failed)
+            self.assertFalse(self.server_inspection.closed or self.owner.files.closed)
+            self.peer.sock.close.assert_not_called()
+
+    def test_original_socket_credentials_are_checked_at_reader_boundaries(self):
+        with ExitStack() as stack:
+            subject = self.start(stack)
+            with self.assertRaisesRegex(ConformanceError, "KERNEL_OBSERVER_PEER_CHANGED"):
+                with subject._phase():
+                    self.peer_credentials = (812, 0, 0)
+                    server._kernel_inspection_tick(subject.filters)
+            self.assertTrue(subject.failed)
+
+    def test_nonroot_peer_credentials_are_not_role_enrollment(self):
+        with ExitStack() as stack:
+            subject = self.environment(stack)
+            self.peer.peer = self.peer._peer_original = self.peer_credentials = (811, 10000, 10000)
+            with self.assertRaisesRegex(ConformanceError, "KERNEL_OBSERVER_ROLE"):
+                subject.__init__(self.peer)
+            self.assertNotIn(("acquire", "roots"), self.events)
+
+    def test_replaced_pidfd_is_not_adopted(self):
+        with ExitStack() as stack:
+            subject = self.start(stack)
+            self.peer.pidfd = 73
+            with self.assertRaisesRegex(ConformanceError, "KERNEL_OBSERVER_PEER_SUBSTITUTED"):
+                subject.check()
+
+    def test_reused_descriptor_is_refused_without_closing_borrowed_fd(self):
+        with ExitStack() as stack:
+            subject = self.start(stack)
+            self.fd_rows[72].st_ino += 1
+            with self.assertRaisesRegex(ConformanceError, "KERNEL_OBSERVER_DESCRIPTOR_CHANGED"):
+                subject.check()
+            self.assertNotIn(72, self.fixture.closed_fds)
+
+    def test_exceptional_pidfd_liveness_refuses(self):
+        with ExitStack() as stack:
+            subject = self.start(stack)
+            self.poll.return_value = ([], [], [72])
+            with self.assertRaisesRegex(ConformanceError, "KERNEL_OBSERVER_PEER_CHANGED"):
+                subject.check()
+
+    def test_named_observer_socket_replacement_refuses(self):
+        with ExitStack() as stack:
+            subject = self.start(stack)
+            self.path.st_ino += 1
+            with self.assertRaisesRegex(ConformanceError, "KERNEL_OBSERVER_PEER_CHANGED"):
+                subject.check()
+
+    def test_observer_phase_deadline_cannot_be_renewed_by_inspection(self):
+        with ExitStack() as stack:
+            subject = self.start(stack)
+            self.fixture.mono = self.peer.end
+            with self.assertRaisesRegex(ConformanceError, "KERNEL_OBSERVER_DEADLINE"):
+                subject.check()
+
+    def test_late_channel_query_is_rechecked_even_on_exception(self):
+        with ExitStack() as stack:
+            subject = self.start(stack)
+            def late(*args):
+                self.fixture.mono += 2
+                raise OSError("unit late query")
+            self.peer.sock.getsockopt.side_effect = late
+            with self.assertRaisesRegex(ConformanceError, "KERNEL_OBSERVER_DEADLINE"):
+                subject.check()
+
+    def test_replaced_self_inspector_refuses_before_peer_reader_check(self):
+        with ExitStack() as stack:
+            subject = self.start(stack)
+            self.owner.self_inspection = Mock()
+            with self.assertRaisesRegex(ConformanceError, "KERNEL_OBSERVER_OWNER_CHANGED"):
+                subject.check()
+            self.owner.self_inspection = self.server_inspection
+
+    def test_poisoned_server_self_inspection_cannot_support_peer_qualification(self):
+        with ExitStack() as stack:
+            subject = self.start(stack)
+            self.server_inspection.failed = True
+            with self.assertRaisesRegex(ConformanceError, "KERNEL_OBSERVER_OWNER_CHANGED"):
+                subject.check()
+
+    def test_detached_peer_inspection_is_not_an_ambient_capability(self):
+        with ExitStack() as stack:
+            subject = self.start(stack)
+            self.peer.busy = False
+            with self.assertRaisesRegex(ConformanceError, "KERNEL_OBSERVER_OWNER_CHANGED"):
+                subject.check()
+
+    def test_copied_owner_and_subclass_are_refused(self):
+        with ExitStack() as stack:
+            subject = self.environment(stack)
+            class Substitute(server._KernelObserverInspection):
+                pass
+            impostor = object.__new__(Substitute)
+            with self.assertRaisesRegex(ConformanceError, "KERNEL_OBSERVER_OWNER"):
+                impostor.__init__(self.peer)
+            self.peer.inspection = Mock()
+            with self.assertRaisesRegex(ConformanceError, "KERNEL_OBSERVER_OWNER"):
+                subject.__init__(self.peer)
+
+    def test_record_change_remains_sticky_and_cannot_reenroll_peer(self):
+        with ExitStack() as stack:
+            subject = self.start(stack)
+            self.owner.qualification_binding._record_raw += b" "
+            with self.assertRaises(ConformanceError):
+                subject.check()
+            self.assertTrue(subject.failed)
+
+    def test_cleanup_error_preserves_other_reader_closes_without_retry(self):
+        with ExitStack() as stack:
+            subject = self.start(stack)
+            self.events.clear()
+            self.on_close = lambda name, resource: self.fail() if name == "mappings" else None
+            for _ in range(2):
+                with self.assertRaises(ConformanceError):
+                    subject.close()
+            self.assertEqual([n for event, n in self.events if event == "close"],
+                             [n for n, _ in reversed(self.CLASSES)])
+            self.on_close = lambda name, resource: None
+
+
 class ObserverTransportCustodyTests(unittest.TestCase):
     """Real observer factory/codec, OS mocks and explicit owner/containment doubles.
 
@@ -5575,6 +5809,14 @@ class ObserverTransportCustodyTests(unittest.TestCase):
         self.owner.envelope = {"nonce": self.fixture["request"]["runNonce"]}
         self.subject = self.owner.observer = object.__new__(server._Observer)
         self.containment = Mock(return_value=None)
+        # This existing class tests transport, not native reader qualification.
+        # Keep its explicit containment double at the new fixed owned component.
+        def inspection_init(resource, peer):
+            resource.peer, resource.closed = peer, False
+        self.stack.enter_context(patch.object(server._KernelObserverInspection, "__init__", inspection_init))
+        self.stack.enter_context(patch.object(server._KernelObserverInspection, "check", self.containment))
+        self.stack.enter_context(patch.object(server._KernelObserverInspection, "close",
+            lambda resource: setattr(resource, "closed", True)))
         patches = ((server.time, "monotonic", dict(side_effect=lambda: self.now)),
             (server, "utc_now", dict(side_effect=lambda: self.wall)),
             (server, "_manifest", dict(return_value=({}, self.fixture["binding"]["observer"]["manifestDigest"],
@@ -5860,6 +6102,64 @@ class ObserverTransportCustodyTests(unittest.TestCase):
         with self.assertRaisesRegex(ConformanceError, "OBSERVER_OWNER_CHANGED"):
             subject.observe()
         self.socket.send.assert_not_called()
+
+
+class ObserverInspectionWiringTests(unittest.TestCase):
+    """Real channel factory; explicit inspector double for ownership failures."""
+    setUp = ObserverTransportCustodyTests.setUp
+    cleanup = ObserverTransportCustodyTests.cleanup
+    start = ObserverTransportCustodyTests.start
+    send = ObserverTransportCustodyTests.send
+    receive = ObserverTransportCustodyTests.receive
+
+    def test_inspector_constructor_failure_closes_channel_before_any_datagram(self):
+        with patch.object(server._KernelObserverInspection, "__init__", side_effect=ConformanceError("UNIT_INSPECTOR", "unit")):
+            with self.assertRaisesRegex(ConformanceError, "UNIT_INSPECTOR"):
+                self.start()
+        self.socket.close.assert_called_once()
+        self.assertEqual(self.events.count(("close", 72)), 1)
+        self.socket.send.assert_not_called()
+
+    def test_inspector_check_failure_prevents_observation(self):
+        subject = self.start()
+        self.containment.side_effect = ConformanceError("UNIT_INSPECTOR", "unit")
+        with self.assertRaisesRegex(ConformanceError, "UNIT_INSPECTOR"):
+            subject.observe()
+        self.socket.send.assert_not_called()
+        self.assertTrue(subject.failed)
+
+    def test_truthy_inspector_result_is_not_containment(self):
+        self.containment.return_value = True
+        with self.assertRaisesRegex(ConformanceError, "OBSERVER_CONTAINMENT_UNAVAILABLE"):
+            self.start()
+        self.socket.send.assert_not_called()
+
+    def test_replaced_inspector_is_refused_without_closing_foreign_owner(self):
+        subject = self.start()
+        original = subject.inspection
+        foreign = Mock()
+        subject.inspection = foreign
+        with self.assertRaisesRegex(ConformanceError, "OBSERVER_INSPECTION_CHANGED"):
+            subject.check()
+        subject.close()
+        self.assertTrue(original.closed)
+        foreign.close.assert_not_called()
+
+    def test_inspector_close_error_does_not_skip_channel_cleanup(self):
+        subject = self.start()
+        with patch.object(server._KernelObserverInspection, "close", side_effect=OSError("unit cleanup")) as closed:
+            for _ in range(2):
+                with self.assertRaises(OSError):
+                    subject.close()
+            closed.assert_called_once()
+        self.socket.close.assert_called_once()
+        self.assertEqual(self.events.count(("close", 72)), 1)
+
+    def test_observer_no_longer_requests_legacy_probe_containment(self):
+        with patch.object(server, "_fixed_probes", side_effect=AssertionError("no legacy observer hook")):
+            subject = self.start()
+            self.assertEqual(subject.observe()["sequence"], 1)
+        self.assertGreater(self.containment.call_count, 0)
 
 
 class ProxyServerCustodyTests(unittest.TestCase):

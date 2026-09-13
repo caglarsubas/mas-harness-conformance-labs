@@ -293,7 +293,7 @@ def _kernel_inspection_tick(reader):
     if owner is None:
         require(_ACTIVE is None, "KERNEL_INSPECTION_READER_UNBOUND")
         return
-    require(type(owner) is _KernelSelfInspection, "KERNEL_INSPECTION_READER_OWNER")
+    require(type(owner) in (_KernelSelfInspection, _KernelObserverInspection), "KERNEL_INSPECTION_READER_OWNER")
     owner._reader_tick(reader)
 
 
@@ -2761,6 +2761,140 @@ class _KernelSelfInspection:
             raise self.cleanup_failure
 
 
+class _KernelObserverInspection(_KernelSelfInspection):
+    """Fixed observer-role reader composition, not an execution permit.
+
+    Borrows only the original installed server binding and observer channel.
+    Owns its own seven kernel/code readers. No caller role, PID, record, FD or
+    containment callback is accepted. Broker/fleet qualification is separate.
+    """
+    def __init__(self, peer):
+        self.owned = []
+        self.closed = self.failed = self.busy = False
+        self.cleanup_failure = None
+        self.epoch_ready = self.epoch_sampling = False
+        for name in ("roots", "policy", "process", "code", "mappings", "cgroup", "filters"):
+            setattr(self, name, None)
+        try:
+            require(type(self) is _KernelObserverInspection and type(peer) is _Observer,
+                    "KERNEL_OBSERVER_OWNER")
+            self.peer, self.owner = peer, peer.owner
+            require(type(self.owner) is NativeProxyServer and self.owner.observer is peer
+                    and peer.inspection is self, "KERNEL_OBSERVER_OWNER")
+            self.owner._owner_check()
+            self.binding, self.server_inspection = self.owner.qualification_binding, self.owner.self_inspection
+            require(type(self.binding) is _ServerQualificationBinding and self.binding.owner is self.owner
+                    and type(self.server_inspection) is _KernelSelfInspection
+                    and self.server_inspection.owner is self.owner, "KERNEL_OBSERVER_BINDING")
+            self.deadline = self.owner.deadline
+            self.last, self.wall = time.monotonic(), require_time(utc_now(), "now")
+            require(self.last < self.deadline <= self.last + 900, "KERNEL_INSPECTION_LIFETIME")
+            self.socket = peer._socket_original
+            self.peer_pins = (peer._socket_fd, peer._socket_pin, peer._pidfd_original,
+                peer._pidfd_pin, peer._peer_original, peer._process_original,
+                peer.parent, peer.socket_identity)
+            with self._phase():
+                record = self.binding.record
+                self.authority = self.binding.authority
+                self.session_raw = canonical_bytes(self.owner.binding)
+                self.authority_window = (_time(self.owner.binding["notBefore"]), _time(self.owner.binding["notAfter"]))
+                self.record_raw, self.scope = canonical_bytes(record), record["scope"]
+                self.role = record["roles"]["OBSERVER"]
+                require(self.peer_pins[4][1:] == (self.role["uid"], self.role["gid"])
+                        and self.role["executable"] == OBSERVER and self.role["interpreterPath"] is None,
+                        "KERNEL_OBSERVER_ROLE")
+                self._own("roots", _KernelRootViews)
+                self._own("policy", _KernelPolicyView, self.roots, record["host"], record["selinux"])
+                require(self.policy._retain_epoch() is None, "KERNEL_EPOCH_CHECK_RESULT")
+                self.epoch_ready = True
+                self._policy_check()
+                self._own("process", _KernelProcessView, self.roots, self.peer_pins[4][0], "OBSERVER", self.role)
+                self._process_binding()
+                self._policy_check()
+                self._tick()
+                page_size = os.sysconf("SC_PAGESIZE")
+                self._tick()
+                require(type(page_size) is int and page_size in (4096, 16384, 65536), "KERNEL_INSPECTION_PAGE_SIZE")
+                self._own("code", _KernelCodeFiles, self.roots, record["files"], page_size)
+                self._policy_check()
+                code_pins = {k: self.role[k] for k in ("executable", "artifactDigest", "interpreterPath", "filePaths")}
+                self._own("mappings", _KernelProcessCode, self.process, self.code, code_pins)
+                self._policy_check()
+                self._own("cgroup", _KernelCgroupView, self.process, self.role["cgroup"])
+                self._policy_check()
+                self._own("filters", _KernelBpfView, self.cgroup, self.role["bpfPrograms"])
+                self._observe()
+        except BaseException:
+            self.failed = True
+            try:
+                self.close()
+            except BaseException:
+                pass
+            raise
+
+    def _clock_and_owner(self):
+        require(type(self) is _KernelObserverInspection and not self.closed and not self.failed and self.busy,
+                "KERNEL_OBSERVER_UNAVAILABLE")
+        self.owner._owner_check()
+        peer = self.peer
+        require(self.owner.observer is peer and peer.owner is self.owner and peer.inspection is self
+                and not peer.closed and not peer.failed and peer.busy and peer.deadline == self.deadline
+                and self.owner.qualification_binding is self.binding and self.binding.owner is self.owner
+                and not self.binding.closed and not self.binding.poisoned
+                and self.owner.files is self.binding.files and self.owner.deadline == self.deadline
+                and self.owner.self_inspection is self.server_inspection
+                and not self.server_inspection.closed and not self.server_inspection.failed,
+                "KERNEL_OBSERVER_OWNER_CHANGED")
+        require(all(getattr(self, name) is resource for name, resource in self.owned), "KERNEL_INSPECTION_VIEW_REPLACED")
+        now, wall = time.monotonic(), require_time(utc_now(), "now")
+        require(self.last <= now < min(self.end, peer.end) and self.wall <= wall
+                and 0 <= (wall - self.phase_wall).total_seconds() < 2,
+                "KERNEL_OBSERVER_DEADLINE")
+        if hasattr(self, "record_raw"):
+            require(self.binding._record_raw == self.record_raw, "KERNEL_INSPECTION_RECORD_CHANGED")
+            require(_time(self.scope["validFrom"]) <= wall < _time(self.scope["expiresAt"]), "KERNEL_INSPECTION_EXPIRED")
+        self.last, self.wall = now, wall
+
+    def _tick(self):
+        # Deliberately no peer.check/_base_check: that would recurse into the
+        # inspector or observer transport. These are original-channel queries.
+        self._clock_and_owner()
+        peer = self.peer
+        socket_fd, socket_pin, pidfd, pidfd_pin, credentials_pin, process_pin, parent, path_pin = self.peer_pins
+        require(peer.sock is peer._socket_original is self.socket and peer.pidfd == pidfd
+                and (peer._socket_fd, peer._socket_pin, peer._pidfd_original, peer._pidfd_pin,
+                     peer._peer_original, peer._process_original, peer.parent, peer.socket_identity) == self.peer_pins
+                and peer.peer == credentials_pin and _Observer._process_pin(peer.identity) == process_pin,
+                "KERNEL_OBSERVER_PEER_SUBSTITUTED")
+        try:
+            self.binding.files.check()
+            require(self.socket.fileno() == socket_fd and _Observer._fd_pin(socket_fd) == socket_pin
+                    and _Observer._fd_pin(pidfd) == pidfd_pin and not os.get_inheritable(socket_fd)
+                    and not os.get_inheritable(pidfd), "KERNEL_OBSERVER_DESCRIPTOR_CHANGED")
+            require(struct.unpack("3i", self.socket.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12)) == credentials_pin
+                    and select.select([pidfd], [], [pidfd], 0) == ([], [], [])
+                    and _custody_identity(os.stat("policy-observer.sock", dir_fd=parent, follow_symlinks=False)) == path_pin,
+                    "KERNEL_OBSERVER_PEER_CHANGED")
+        finally:
+            self._clock_and_owner()
+            self.binding.files.check()
+            self._clock_and_owner()
+
+    def _process_binding(self):
+        # Join the independently retained proc reader to the process originally
+        # observed on this socket, not merely a matching PID/role record.
+        self._tick()
+        value = self.process.original
+        actual = (value["pid"], value["startTicks"], value["parent"], value["uid"], value["gid"],
+            value["capabilities"], value["seccompMode"], value["noNewPrivs"], self.process.cgroup.decode("ascii"),
+            tuple(sorted(zip(("user", "mnt", "pid", "net"), self.process.pin[3]))))
+        require(actual == self.peer_pins[5], "KERNEL_OBSERVER_PROCESS_CHANGED")
+
+    def _observe(self):
+        super()._observe()
+        self._process_binding()
+
+
 def _fixed_probes():
     try:
         from . import live_fixed_probes as module
@@ -2768,7 +2902,7 @@ def _fixed_probes():
         raise ConformanceError("PROXY_FIXED_PROBES_UNAVAILABLE", "CONF-LIVE-004 is not installed") from exc
     require(getattr(getattr(module, "__loader__", None), "archive", None) == EXECUTABLE,
             "PROXY_PROBE_CUSTODY")
-    for name in ("require_server_containment", "require_observer_containment", "execute_server_probe"):
+    for name in ("require_server_containment", "execute_server_probe"):
         require(type(getattr(module, name, None)) is FunctionType, "PROXY_FIXED_PROBES_UNAVAILABLE")
     return module
 
@@ -2781,6 +2915,7 @@ class _Observer:
         self._socket_original = self._pidfd_original = None
         self._socket_fd = self._socket_pin = self._pidfd_pin = None
         self._previous_raw = None
+        self.inspection = self._inspection_original = None
         self.deadline = owner.deadline
         self.last_wall, self.last_mono = None, time.monotonic()
         try:
@@ -2826,6 +2961,8 @@ class _Observer:
         finally:
             self._guard()
         require(owner.files.raw[OBSERVER].startswith(b"\x7fELF"), "OBSERVER_NATIVE_ELF_REQUIRED")
+        self.inspection = self._inspection_original = object.__new__(_KernelObserverInspection)
+        self.inspection.__init__(self)
         self._check_peer()
 
     @staticmethod
@@ -2892,8 +3029,10 @@ class _Observer:
         actual = self._io(os.stat, f"/proc/{self.peer[0]}/exe")
         expected = self.owner.files.rows[OBSERVER][3]
         require((actual.st_dev, actual.st_ino) == expected[:2], "OBSERVER_EXECUTABLE_CHANGED")
-        require(self._io(_fixed_probes().require_observer_containment, self.owner, self.peer[0], self.identity) is None,
-                "OBSERVER_CONTAINMENT_UNAVAILABLE")
+        require(type(self.inspection) is _KernelObserverInspection
+                and self.inspection is self._inspection_original and self.inspection.peer is self,
+                "OBSERVER_INSPECTION_CHANGED")
+        require(self._io(self.inspection.check) is None, "OBSERVER_CONTAINMENT_UNAVAILABLE")
         require(self._process_pin(self.identity) == self._process_original, "OBSERVER_RETAINED_PEER_CHANGED")
 
     def check(self):
@@ -2936,6 +3075,12 @@ class _Observer:
     def close(self):
         if not self.closed:
             self.closed = True
+            inspection, self._inspection_original, self.inspection = self._inspection_original, None, None
+            if inspection is not None:
+                try:
+                    inspection.close()  # borrowed socket/files remain separately owned
+                except BaseException as exc:
+                    self.cleanup_failure = self.cleanup_failure or exc
             sock, self._socket_original, self.sock = self._socket_original, None, None
             pidfd, self._pidfd_original, self.pidfd = self._pidfd_original, None, None
             for resource, fd, pin in ((pidfd, pidfd, self._pidfd_pin), (sock, self._socket_fd, self._socket_pin)):

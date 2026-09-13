@@ -835,6 +835,43 @@ This transport correction grants no containment, observation-derived lease,
 credential eligibility or execution permission. No actual socket/proc read,
 native syscall, credential, host policy, installation or live campaign is run.
 
+## Fixed observer-role inspection — source increment
+
+Preceding head9e1a706 passed843 tests/all8 commands in LOCAL activation220 and
+required localhost CI34733027083 /activation221; runner58 retired with zero
+registered runners and artifacts. Those logs are external historical evidence,
+not acceptance of the new source below. All127 accepted files and843 preceding
+test bodies remain unchanged; meta/packet/native authority is unchanged.
+
+The observer now owns a fixed `_KernelObserverInspection` instead of calling
+`require_observer_containment` from a future probe module. This private component
+consumes only the original server's authenticated binding and OBSERVER role; no
+caller PID, role, descriptor, callback or record selects its scope. It owns its
+own root, active-policy, retained-process, code, mapping, cgroup and filter
+readers. Their existing custody/epoch machinery is reused without changing the
+server-only reader's exact owner checks or allowing arbitrary subclasses.
+
+The retained proc snapshot must match the process originally observed on the
+socket, including start time, UID/GID, capabilities, namespace set and cgroup.
+The original socket/pidfd, SO_PEERCRED, named socket identity and liveness are
+checked at reader boundaries. These checks never call observer transport or the
+server's recursive base guard. Inspection cannot outlive either its own two-
+second phase or the containing observer exchange. Acquired readers close in
+reverse order; socket, server and binding-file ownership remain separate. A
+failed inspector constructor/check/close cannot be replaced with a success flag,
+foreign inspector or legacy callback. The server-containment and execution
+callbacks remain unfinished and are NOT enabled by this observer increment.
+
+New tests exercise the real authenticated binding/observer composition with
+typed component doubles and mocked channel queries, plus actual observer-factory
+failure wiring. They do not claim combined OS-only/native qualification or a
+complete NativeProxyServer startup. Prior transport tests keep their explicit
+containment double at the new fixed inspector boundary; every old test body is
+preserved. Independent native ordering/performance, full all-reader factories,
+broker/server qualification, API integration and execution-fence evidence remain
+required. No credential, live endpoint, native probe, policy change or installation
+is used. Fresh exact-commit full8 LOCAL/CI acceptance is pending externally.
+
 ## Verification boundary
 
 This is an in-progress source snapshot, not a self-attested run result. Exact
@@ -880,7 +917,8 @@ probe, live launcher, runtime download or cloud/billable service is authorized.
 | Alpha 2 | CONF-LIVE-003 retained policy epoch | LOCAL_AND_CI_PASS_RECORDED | Head99652a1,760 tests,all8 commands; runner54 retired; failed fixture replay retained |
 | Alpha 2 | CONF-LIVE-003 epoch mount custody | LOCAL_AND_CI_PASS_RECORDED | Heada196f32,784 tests,all8 commands; runner56 retired; failed local replay and failed pre-listener startup preserved |
 | Alpha 2 | CONF-LIVE-003 reader-boundary root ancestry | LOCAL_AND_CI_PASS_RECORDED | Heada853c67 /818 tests/all8; CI34714164106 attempt2; earlier timeouts retained |
-| Alpha 2 | CONF-LIVE-003 retained observer transport | IMPLEMENTED_NOT_ACCEPTED | Original peer/FD custody, failed-I/O guards and history isolation; fresh full8 required |
+| Alpha 2 | CONF-LIVE-003 retained observer transport | LOCAL_AND_CI_PASS_RECORDED | Head9e1a706 /843 tests/all8; CI34733027083; runner58 retired |
+| Alpha 2 | CONF-LIVE-003 fixed observer-role inspection | IMPLEMENTED_NOT_ACCEPTED | Original peer joined to authenticated native-reader composition; fresh full8 required |
 | Alpha 2 | CONF-LIVE-003 native inspector / broker / API | ONGOING | Required implementation listed above |
 | Alpha 2 | CONF-LIVE-003 required CI | WAITING | Fresh exact-head localhost evidence required; prior failures retained |
 | Alpha 2 | CONF-LIVE-003 source completion / merge / exact-main | NOT_RUN | Packet is incomplete; no completion claim |
