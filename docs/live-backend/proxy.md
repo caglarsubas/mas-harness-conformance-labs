@@ -872,6 +872,13 @@ broker/server qualification, API integration and execution-fence evidence remain
 required. No credential, live endpoint, native probe, policy change or installation
 is used. Fresh exact-commit full8 LOCAL/CI acceptance is pending externally.
 
+Final timing review identified a relative socket timeout calculated before the
+new inspector ran. The remaining connect/send/receive budget is now set after
+the last expensive check, immediately before I/O; a late timeout setter refuses
+before a datagram is sent. Two added regressions retain the original two-second
+exchange bound. Earlier exact-commit replay evidence is preserved separately
+and cannot accept these later bytes. Current source target869 methods.
+
 ## Verification boundary
 
 This is an in-progress source snapshot, not a self-attested run result. Exact

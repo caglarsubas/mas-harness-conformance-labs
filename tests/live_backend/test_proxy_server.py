@@ -6161,6 +6161,26 @@ class ObserverInspectionWiringTests(unittest.TestCase):
             self.assertEqual(subject.observe()["sequence"], 1)
         self.assertGreater(self.containment.call_count, 0)
 
+    def test_socket_wait_budgets_exclude_time_spent_in_inspection(self):
+        subject = self.start()
+        def delayed_check():
+            self.now += 0.25
+        self.containment.side_effect = delayed_check
+        self.socket.settimeout.reset_mock()
+        subject.observe()
+        self.assertEqual(self.socket.settimeout.call_args_list,
+                         [unittest.mock.call(1.5), unittest.mock.call(1.0)])
+
+    def test_late_timeout_setter_refuses_before_datagram_send(self):
+        subject = self.start()
+        def late(timeout):
+            self.now = subject.end
+        self.socket.settimeout.side_effect = late
+        with self.assertRaisesRegex(ConformanceError, "OBSERVER_CLOCK_OR_DEADLINE"):
+            subject.observe()
+        self.socket.send.assert_not_called()
+        self.assertTrue(subject.failed)
+
 
 class ProxyServerCustodyTests(unittest.TestCase):
     def accept_owner(self):

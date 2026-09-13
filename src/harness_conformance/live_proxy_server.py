@@ -2948,8 +2948,11 @@ class _Observer:
             self._guard()
         self._io(self.sock.set_inheritable, False)
         self._io(self.sock.setsockopt, socket.SOL_SOCKET, 16, 1)
-        self._io(self.sock.settimeout, self.end - time.monotonic())
-        self._io(self.sock.connect, OBSERVER_SOCKET)
+        self._prepare_wait()
+        try:
+            self.sock.connect(OBSERVER_SOCKET)
+        finally:
+            self._guard()
         self.peer = struct.unpack("3i", self._io(self.sock.getsockopt, socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
         require(self.peer[0] > 1 and self.peer[1:] == (0, 0), "OBSERVER_PEER_INVALID")
         self._peer_original = self.peer
@@ -3011,6 +3014,24 @@ class _Observer:
         finally:
             self._guard()  # unsuccessful I/O never skips retained authority
 
+    def _prepare_wait(self):
+        # Calculate the relative socket timeout AFTER expensive qualification
+        # and authority checks. No further inspector runs before the I/O starts.
+        self._guard()
+        before = time.monotonic()
+        require(self.last_mono <= before < self.end, "OBSERVER_CLOCK_OR_DEADLINE")
+        try:
+            self.sock.settimeout(self.end - before)
+        except BaseException:
+            self._guard()
+            raise
+        # settimeout itself is nonblocking, but still reject late/rollback OS
+        # returns before starting a connection, send or receive.
+        now, wall = time.monotonic(), require_time(utc_now(), "now")
+        require(before <= now < self.end and self.last_wall <= wall
+                and 0 <= (wall - self.phase_wall).total_seconds() < 2, "OBSERVER_CLOCK_OR_DEADLINE")
+        self.last_mono, self.last_wall = now, wall
+
     def _check_peer(self):
         require(self.sock is self._socket_original and self.pidfd == self._pidfd_original
                 and self.peer == self._peer_original and self._process_pin(self.identity) == self._process_original,
@@ -3050,14 +3071,14 @@ class _Observer:
                 "challenge": self._io(os.urandom, 32).hex(), "sequence": 1 if previous is None else previous["sequence"] + 1,
                 "previousObservationDigest": ZERO if previous is None else canonical_digest(previous)}
             encoded = canonical_bytes(request)
-            self._io(self.sock.settimeout, self.end - time.monotonic())
             self._check_peer()
+            self._prepare_wait()
             try:
                 require(self.sock.send(encoded) == len(encoded), "OBSERVER_SEND_AMBIGUOUS")
             finally:
                 self._check_peer()  # no replay, including timeout or partial send
-            self._io(self.sock.settimeout, self.end - time.monotonic())
             self._check_peer()
+            self._prepare_wait()
             try:
                 raw, ancillary, flags, _ = self.sock.recvmsg(65537, socket.CMSG_SPACE(12) + socket.CMSG_SPACE(253 * 4))
                 # Drain/reject received rights even if the subsequent custody
