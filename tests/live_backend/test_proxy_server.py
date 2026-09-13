@@ -8617,6 +8617,343 @@ class BrokerCreatedTests(_BrokerEventFixture, unittest.TestCase):
         self.assertTrue(self.owner.log.poisoned)
 
 
+class BrokerCreateResultTests(_BrokerEventFixture, unittest.TestCase):
+    """Real broker/result/accounting code with explicit unit-only OS/TLS/store I/O."""
+    start = BrokerCreatedTests.start
+    action = BrokerCreatedTests.action
+    read_secret = BrokerCreatedTests.read_secret
+    connect_api = BrokerCreatedTests.connect_api
+    write_memfd = BrokerCreatedTests.write_memfd
+    make_context = BrokerCreatedTests.make_context
+    wrap = BrokerCreatedTests.wrap
+    handshake = BrokerCreatedTests.handshake
+    read_intent = BrokerCreatedTests.read_intent
+    append_intent = BrokerCreatedTests.append_intent
+    sync_intent = BrokerCreatedTests.sync_intent
+    held = BrokerCreatedTests.held
+    reply = BrokerCreatedTests.reply
+    http_write = BrokerCreatedTests.http_write
+    http_read = BrokerCreatedTests.http_read
+    prepare = BrokerCreatedTests.prepare
+
+    def setUp(self):
+        BrokerCreatedTests.setUp(self)
+        self.sent_results = []
+        self.on_result_send = lambda raw: None
+        self.result_count = None
+
+    def accounted(self):
+        BrokerCreatedTests.complete(self)
+        self.subject.record_api_created()
+        self.before_result = self.ledger
+        self.transcript_before = self.subject.events.transcript_raw
+        self.socket.send.side_effect = self.result_send
+
+    def result_send(self, raw):
+        self.on_result_send(raw)
+        self.sent_results.append(bytes(raw))
+        return len(raw) if self.result_count is None else self.result_count
+
+    def refuse_result(self, reason=".+"):
+        with self.assertRaisesRegex((ConformanceError, OSError), reason) as caught:
+            self.subject.send_create_result()
+        self.assertTrue(self.subject.failed and self.subject.closed)
+        if self.subject._result_original is not None:
+            self.assertTrue(self.subject._result_original.failed)
+            self.assertFalse(self.subject._result_original.complete)
+        return caught.exception
+
+    def test_exact_created_frame_uses_recorded_identity_and_original_chain(self):
+        import base64
+        self.accounted()
+        seen = []
+        self.on_result_send = lambda raw: seen.append(deepcopy(self.held()["resources"]))
+        self.assertIsNone(self.subject.send_create_result())
+        result = self.subject.result
+        self.assertIs(result, self.subject._result_original)
+        self.assertTrue(result.complete and result.attempted)
+        self.assertEqual(self.sent_results, [result.frame_raw])
+        frame = json.loads(result.frame_raw)
+        before = json.loads(self.transcript_before)
+        self.assertEqual(frame["kind"], "RESOURCE_RESULT")
+        self.assertEqual(frame["sequence"], before["sequence"] + 1)
+        self.assertEqual(frame["previousDigest"], before["previous"])
+        for field in ("bindingDigest", "reservationDigest", "runNonce", "caseId", "requestDigest",
+                      "observationDigest", "generation", "challenge", "executionId"):
+            self.assertEqual(frame[field], self.last_event[field])
+        self.assertEqual(frame["payload"], dict(actionId=self.event_frame["payload"]["actionId"],
+            outcome="CREATED", objectBase64=base64.b64encode(canonical_bytes(self.actual)).decode("ascii")))
+        self.assertTrue(all(r["state"] == "CREATED" and r["uid"] == "created-unit-uid"
+                            for r in seen[0].values()))
+        self.socket.send.assert_called_once_with(result.frame_raw)
+
+    def test_local_send_does_not_advance_original_transcript_or_release_capacity(self):
+        self.accounted()
+        self.subject.send_create_result()
+        self.assertEqual(self.subject.events.transcript_raw, self.transcript_before)
+        self.assertIsNotNone(self.subject.events.transcript.pending)
+        self.assertIsNone(json.loads(self.subject.result.after)["pending"])
+        self.assertIsNone(self.subject.events.transcript.cleanup)
+        self.assertIsNone(self.subject.events.transcript.terminal)
+        self.assertEqual(self.ledger, self.before_result)
+        self.assertTrue(self.held()["held"])
+        self.assertFalse(self.api.closed)
+        self.assertEqual(len(self.writes), 2)
+
+    def test_delivery_reads_no_new_credential_or_api_response(self):
+        self.accounted()
+        reads, sends = self.ssl.read.call_count, self.api_socket.send.call_count
+        self.subject.send_create_result()
+        self.assertEqual(self.secret_reads.call_count, 1)
+        self.assertEqual(self.ssl.read.call_count, reads)
+        self.assertEqual(self.api_socket.send.call_count, sends)
+        self.api_socket.connect.assert_called_once()
+        self.socket.recvmsg.assert_not_called()
+
+    def test_original_accounting_and_result_checks_do_not_resend(self):
+        self.accounted()
+        self.subject.send_create_result()
+        observations = len(self.observations)
+        self.assertIsNone(self.subject.result.check())
+        self.assertIsNone(self.subject.created.check())
+        self.assertIsNone(self.subject.intent.check())
+        self.assertIsNone(self.subject.exchange.check())
+        self.assertGreater(len(self.observations), observations)
+        self.socket.send.assert_called_once()
+        self.assertEqual(self.ledger, self.before_result)
+
+    def test_next_event_is_blocked_until_separate_retirement_transition(self):
+        self.accounted()
+        self.subject.send_create_result()
+        with self.assertRaisesRegex(ConformanceError, "BROKER_RESOURCE_RESULT_REQUIRED"):
+            self.subject.poll()
+        self.socket.recvmsg.assert_not_called()
+        self.assertTrue(self.held()["held"])
+
+    def test_no_caller_frame_outcome_identity_or_backend(self):
+        for value in ({}, b"frame", "CREATED", Mock()):
+            with self.subTest(value=type(value).__name__), self.assertRaises(TypeError):
+                self.subject.send_create_result(value)
+        self.socket.send.assert_not_called()
+        self.assertIsNone(self.subject.result)
+
+    def test_unowned_constructor_never_sends(self):
+        self.accounted()
+        with self.assertRaisesRegex(ConformanceError, "BROKER_RESULT_OWNER"):
+            server._BrokerCreateResult(self.subject)
+        self.socket.send.assert_not_called()
+        self.assertFalse(self.owner.log.poisoned)
+
+    def test_intent_without_returned_identity_cannot_send_created(self):
+        self.subject.record_create_intent()
+        self.refuse_result("BROKER_RESULT_CREATED_REQUIRED")
+        self.socket.send.assert_not_called()
+        self.assertTrue(all(r["uid"] is None for r in self.held()["resources"].values()))
+
+    def test_response_candidate_without_durable_created_record_cannot_send(self):
+        BrokerCreatedTests.complete(self)
+        self.refuse_result("BROKER_RESULT_CREATED_REQUIRED")
+        self.socket.send.assert_not_called()
+        self.assertEqual(len(self.writes), 1)
+
+    def test_uncommitted_created_record_is_not_a_delivery_grant(self):
+        self.accounted()
+        self.subject.created.committed = False
+        self.refuse_result("BROKER_RESULT_CREATED_REQUIRED")
+        self.socket.send.assert_not_called()
+
+    def test_changed_created_record_is_not_sent(self):
+        self.accounted()
+        self.subject.created.row_raw = b"{}"
+        self.refuse_result("BROKER_CREATED_HISTORY_CHANGED")
+        self.socket.send.assert_not_called()
+
+    def test_changed_returned_object_is_not_sent(self):
+        self.accounted()
+        different = deepcopy(self.actual)
+        different["metadata"]["uid"] = "foreign-uid"
+        self.subject.created.response_raw = canonical_bytes(different)
+        self.refuse_result("BROKER_CREATED_INPUT_CHANGED")
+        self.socket.send.assert_not_called()
+
+    def test_rollback_to_intent_history_refuses_before_send(self):
+        self.accounted()
+        self.ledger = self.before_created
+        self.refuse_result("BROKER_RUNNING_CHANGED")
+        self.socket.send.assert_not_called()
+
+    def test_unexpected_append_refuses_before_send(self):
+        self.accounted()
+        self.ledger += b"unexpected"
+        self.refuse_result("BROKER_RUNNING_CHANGED")
+        self.socket.send.assert_not_called()
+
+    def test_revoked_generation_refuses_before_send(self):
+        self.accounted()
+        self.observed["generation"] = "f" * 64
+        self.refuse_result("BROKER_GENERATION_CHANGED")
+        self.socket.send.assert_not_called()
+
+    def test_broker_peer_replacement_refuses_before_send(self):
+        self.accounted()
+        self.process["start"] += 1
+        self.refuse_result("BROKER_PEER_CHANGED")
+        self.socket.send.assert_not_called()
+
+    def test_api_peer_replacement_refuses_before_send(self):
+        self.accounted()
+        self.api_peer = ("127.0.0.3", 7443)
+        self.refuse_result("API_PEER_CHANGED")
+        self.socket.send.assert_not_called()
+
+    def test_original_deadline_refuses_before_send(self):
+        self.accounted()
+        self.now = self.subject.deadline
+        self.refuse_result("BROKER_CLOCK_OR_DEADLINE")
+        self.socket.send.assert_not_called()
+
+    def test_short_zero_boolean_or_float_send_is_ambiguous_and_never_retried(self):
+        for count in (0, 1, True, 1.0):
+            with self.subTest(count=count):
+                self.accounted()
+                self.result_count = count
+                self.refuse_result("BROKER_RESULT_SEND_AMBIGUOUS")
+                self.socket.send.assert_called_once()
+                self.assertEqual(self.ledger, self.before_result)
+                self.assertTrue(self.owner.log.poisoned and self.held()["held"])
+                with self.assertRaises(ConformanceError):
+                    self.subject.send_create_result()
+                self.socket.send.assert_called_once()
+            if type(count) is not float:
+                self.stack.close()
+                self.setUp()
+
+    def test_send_error_keeps_created_uid_without_retry(self):
+        self.accounted()
+        def fail(raw):
+            raise OSError("unit lost datagram")
+        self.on_result_send = fail
+        self.refuse_result("unit lost datagram")
+        self.socket.send.assert_called_once()
+        self.assertEqual(self.ledger, self.before_result)
+        self.assertTrue(self.owner.log.poisoned)
+
+    def test_generation_loss_during_send_prevents_success_publication(self):
+        self.accounted()
+        self.on_result_send = lambda raw: self.observed.update(generation="f" * 64)
+        self.refuse_result("BROKER_GENERATION_CHANGED")
+        self.assertEqual(len(self.sent_results), 1)
+        self.assertEqual(self.subject.events.transcript_raw, self.transcript_before)
+        self.assertTrue(self.owner.log.poisoned)
+
+    def test_broker_peer_loss_during_send_prevents_success_publication(self):
+        self.accounted()
+        self.on_result_send = lambda raw: self.process.update(start=self.process["start"] + 1)
+        self.refuse_result("BROKER_PEER_CHANGED")
+        self.assertEqual(len(self.sent_results), 1)
+
+    def test_api_peer_loss_during_send_prevents_success_publication(self):
+        self.accounted()
+        self.on_result_send = lambda raw: setattr(self, "api_peer", ("127.0.0.3", 7443))
+        self.refuse_result("API_PEER_CHANGED")
+        self.assertEqual(len(self.sent_results), 1)
+        self.assertTrue(self.owner.log.poisoned)
+
+    def test_late_send_cannot_extend_two_second_control_phase(self):
+        self.accounted()
+        self.on_result_send = lambda raw: setattr(self, "now", self.subject.end)
+        self.refuse_result("BROKER_CLOCK_OR_DEADLINE")
+        self.assertEqual(len(self.sent_results), 1)
+        self.assertEqual(self.ledger, self.before_result)
+
+    def test_frame_substitution_during_send_cannot_be_published(self):
+        self.accounted()
+        self.on_result_send = lambda raw: setattr(self.subject.result, "frame_raw", b"foreign")
+        self.refuse_result("BROKER_RESULT_CANDIDATE_CHANGED")
+        self.assertNotEqual(self.sent_results, [b"foreign"])
+
+    def test_proposed_transcript_substitution_is_detected(self):
+        self.accounted()
+        self.on_result_send = lambda raw: setattr(self.subject.result, "after", b"{}")
+        self.refuse_result("BROKER_RESULT_CANDIDATE_CHANGED")
+        self.assertEqual(self.subject.events.transcript_raw, self.transcript_before)
+
+    def test_history_loss_during_send_cannot_be_published(self):
+        self.accounted()
+        self.on_result_send = lambda raw: setattr(self, "ledger", self.before_created)
+        self.refuse_result("BROKER_RUNNING_CHANGED")
+        self.assertEqual(len(self.sent_results), 1)
+
+    def test_repeated_completed_send_never_retransmits(self):
+        self.accounted()
+        self.subject.send_create_result()
+        with self.assertRaisesRegex(ConformanceError, "BROKER_RESULT_ALREADY_ATTEMPTED"):
+            self.subject.send_create_result()
+        self.socket.send.assert_called_once()
+        self.assertTrue(self.owner.log.poisoned)
+
+    def test_reentrant_send_is_refused_without_second_datagram(self):
+        self.accounted()
+        self.on_result_send = lambda raw: self.subject.send_create_result()
+        self.refuse_result()
+        self.socket.send.assert_called_once()
+        self.assertEqual(self.sent_results, [])
+        self.assertEqual(self.ledger, self.before_result)
+
+    def test_foreign_created_owner_is_not_called_or_poisoned(self):
+        self.accounted()
+        self.subject.send_create_result()
+        original = self.subject.result
+        foreign = original.created = Mock()
+        with self.assertRaisesRegex(ConformanceError, "BROKER_RESULT_OWNER_CHANGED"):
+            original.check()
+        foreign.check.assert_not_called()
+        foreign._poison.assert_not_called()
+        self.assertTrue(self.owner.log.poisoned)
+
+    def test_foreign_broker_is_not_closed(self):
+        self.accounted()
+        self.subject.send_create_result()
+        original = self.subject.result
+        foreign = original.broker = Mock()
+        with self.assertRaisesRegex(ConformanceError, "BROKER_RESULT_OWNER_CHANGED"):
+            original.check()
+        foreign.close.assert_not_called()
+        self.assertNotIn("failed", vars(foreign))
+        self.assertTrue(self.subject.closed and self.subject.failed)
+
+    def test_foreign_result_is_not_checked_or_closed(self):
+        self.accounted()
+        self.subject.send_create_result()
+        original = self.subject.result
+        foreign = self.subject.result = Mock()
+        with self.assertRaisesRegex(ConformanceError, "BROKER_RESULT_OWNER_CHANGED"):
+            original.check()
+        foreign.check.assert_not_called()
+        foreign.close.assert_not_called()
+        self.assertTrue(self.owner.log.poisoned)
+
+    def test_instance_shadow_created_check_is_not_used(self):
+        self.accounted()
+        self.subject.created.check = Mock(side_effect=AssertionError("foreign check"))
+        self.subject.send_create_result()
+        self.subject.created.check.assert_not_called()
+        self.socket.send.assert_called_once()
+
+    def test_final_publication_cannot_target_replacement_result(self):
+        self.accounted()
+        original = server._BrokerCreateResult.__init__
+        foreign = Mock()
+        def completed(resource, broker):
+            original(resource, broker)
+            broker.result = foreign
+        with patch.object(server._BrokerCreateResult, "__init__", completed):
+            self.refuse_result("BROKER_RESULT_PUBLICATION_CHANGED")
+        self.assertNotIn("complete", vars(foreign))
+        foreign.close.assert_not_called()
+        self.socket.send.assert_called_once()
+
+
 class BrokerApiZeroResourceTests(_BrokerEventFixture, unittest.TestCase):
     profile_index = 0
 

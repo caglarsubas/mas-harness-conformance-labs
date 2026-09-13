@@ -3285,6 +3285,7 @@ class _Broker:
         self.intent = self._intent_original = None
         self.exchange = self._exchange_original = None
         self.created = self._created_original = None
+        self.result = self._result_original = None
         self._attempted_cases = set()
         self.deadline = owner.deadline
         self.last_wall, self.last_mono = None, time.monotonic()
@@ -3562,6 +3563,29 @@ class _Broker:
                 self.close()
             except BaseException:
                 pass  # preserve the exact held record and first refusal; never retry
+            raise
+
+    def send_create_result(self):
+        """Send the original durable CREATED fact once; no caller frame or grant."""
+        try:
+            require(not self.closed and not self.failed and not self.busy
+                    and self.result is self._result_original is None,
+                    "BROKER_RESULT_ALREADY_ATTEMPTED")
+            self.result = self._result_original = object.__new__(_BrokerCreateResult)
+            self.result.__init__(self)
+            require(type(self.result) is _BrokerCreateResult and self.result is self._result_original
+                    and not self.result.failed and self.result.attempted,
+                    "BROKER_RESULT_PUBLICATION_CHANGED")
+            self.result._state_check()
+            self.result.complete = True  # local send completion, not peer receipt/retirement
+        except BaseException:
+            if self._result_original is not None:
+                _BrokerCreateResult._poison(self._result_original)
+            self.failed = True
+            try:
+                _Broker.close(self)
+            except BaseException:
+                pass  # preserve the first refusal and held accounting; never retry
             raise
 
     def close(self):
@@ -4411,6 +4435,127 @@ class _BrokerCreated:
         self.failed = True
         if self.writing and type(self._log_original) is _AdmissionLog:
             self._log_original.poisoned = True
+
+
+class _BrokerCreateResult:
+    """One original-channel CREATED datagram, not a distributed commit.
+
+    Retains proposed transcript data but does not advance the original parser,
+    retire an API connection, receive another action or release any capacity.
+    Those transitions require a separately guarded continuation of this owner.
+    """
+    def __init__(self, broker):
+        self.failed = self.complete = self.attempted = False
+        self.broker = self._broker_original = None
+        self.created = self._created_original = None
+        self.intent = None
+        try:
+            require(type(self) is _BrokerCreateResult and type(broker) is _Broker
+                    and broker.result is broker._result_original is self, "BROKER_RESULT_OWNER")
+            self.broker = self._broker_original = broker
+            self.owner = broker.owner
+            self.created = self._created_original = broker.created
+            require(type(self.created) is _BrokerCreated and self.created is broker._created_original
+                    and self.created.committed and self.created.advanced and not self.created.failed,
+                    "BROKER_RESULT_CREATED_REQUIRED")
+            self.intent, self.events, self.start = self.created.intent, self.created.events, self.created.start
+            self.before = self.events.transcript_raw
+            self.response_raw, self.record_raw = self.created.response_raw, self.created.row_raw
+            self.action_raw, self.ledger_raw = self.created.action_raw, self.created.after
+            self.deadline = broker.deadline
+            self.frame_raw, self.after = self._candidate()
+            self._check()  # exact durable accounting, API custody and original pending action
+            with broker._phase():
+                self._guard()
+                raw = self.frame_raw  # immutable bytes captured before preparing I/O
+                broker._prepare_wait()
+                self.attempted = True  # short/error/late sends never restart a datagram
+                try:
+                    sent = broker.sock.send(raw)
+                    require(type(sent) is int and sent == len(raw), "BROKER_RESULT_SEND_AMBIGUOUS")
+                finally:
+                    self._guard()
+            self._check()  # last current API/observer/peer checks before publication
+        except BaseException:
+            self._poison()
+            raise
+
+    def _candidate(self):
+        import base64
+        before = document(self.before)
+        action = document(self.action_raw, 16384)
+        require(before["pending"] == action and action["verb"] == "CREATE"
+                and not before["chunks"] and before["cleanup"] is None and before["terminal"] is None,
+                "BROKER_RESULT_PHASE_INVALID")
+        # Reconstruct only detached, validated DATA for the existing codec.
+        # No original parser is advanced and no native owner is constructed.
+        candidate = BrokerTranscript(self.events.binding_raw, self.events.dispatch_raw)
+        for field in ("sequence", "previous", "execution", "pending", "cleanup", "terminal",
+                      "receipt_size", "failed_action", "poisoned"):
+            setattr(candidate, field, before[field])
+        candidate.actions = set(before["actions"])
+        require(_BrokerEvents._snapshot(candidate) == self.before, "BROKER_RESULT_TRANSCRIPT_CHANGED")
+        frame = {**document(self.start.started_raw, 16384), "sequence": candidate.sequence + 1,
+            "previousDigest": candidate.previous, "kind": "RESOURCE_RESULT",
+            "payload": {"actionId": action["actionId"], "outcome": "CREATED",
+                        "objectBase64": base64.b64encode(self.response_raw).decode("ascii")}}
+        raw = canonical_bytes(frame)
+        require(0 < len(raw) <= 65536, "BROKER_RESULT_FRAME_SIZE")
+        BrokerTranscript.accept(candidate, raw, "SERVER")
+        return raw, _BrokerEvents._snapshot(candidate)
+
+    def _state_check(self):
+        broker, created = self.broker, self.created
+        require(type(self) is _BrokerCreateResult and not self.failed
+                and type(broker) is _Broker and broker is self._broker_original
+                and broker.result is broker._result_original is self
+                and broker.owner is self.owner and self.owner.broker is self.owner._broker_original is broker
+                and type(created) is _BrokerCreated and created is self._created_original
+                and broker.created is broker._created_original is created
+                and created.broker is broker and created.owner is self.owner
+                and created.committed and created.advanced and not created.failed
+                and created.intent is self.intent and broker.intent is broker._intent_original is self.intent
+                and created.events is self.events and broker.events is broker._events_original is self.events
+                and created.start is self.start and broker.dispatch is broker._dispatch_original is self.start,
+                "BROKER_RESULT_OWNER_CHANGED")
+        _BrokerCreated._state_check(created)
+        require(self.before == self.events.transcript_raw == _BrokerEvents._snapshot(self.events.transcript)
+                and self.action_raw == created.action_raw and self.response_raw == created.response_raw
+                and self.record_raw == created.row_raw and self.ledger_raw == created.after == self.start.ledger_raw
+                and self.deadline == broker.deadline == self.owner.deadline,
+                "BROKER_RESULT_INPUT_CHANGED")
+        require((self.frame_raw, self.after) == self._candidate(), "BROKER_RESULT_CANDIDATE_CHANGED")
+
+    def _guard(self):
+        self._state_check()
+        self.events._check()  # original broker phase: full current history, observer and peer
+        self._state_check()
+
+    def _check(self):
+        self._state_check()
+        _BrokerCreated.check(self.created)
+        self._state_check()
+
+    def check(self):
+        """Recheck the retained send; no retransmit, acknowledgement or retirement."""
+        try:
+            require(self.complete and self.attempted, "BROKER_RESULT_NOT_COMPLETE")
+            self._check()
+        except BaseException:
+            self._poison()
+            broker = self._broker_original
+            if type(broker) is _Broker:
+                broker.failed = True
+                try:
+                    _Broker.close(broker)
+                except BaseException:
+                    pass  # only original resources; no broad cleanup or resend
+            raise
+
+    def _poison(self):
+        self.failed = True
+        if type(self._created_original) is _BrokerCreated:
+            _BrokerCreated._poison(self._created_original)
 
 
 class _State:

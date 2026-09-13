@@ -1208,6 +1208,37 @@ write and unlock failures, changed history/identity, deadlines and lost policy.
 All 1,167 predecessor test bodies, 127 baseline files and fixture bytes are
 preserved. Fresh full signed LOCAL and required localhost CI are mandatory.
 
+## One-shot CREATED result delivery checkpoint (source-only)
+
+`_Broker.send_create_result()` sends one bounded RESOURCE_RESULT datagram on the
+original authenticated broker channel, only after original CREATED accounting
+has committed. There is no caller frame, outcome, identity, URL or backend.
+The action ID, sequence, previous-frame digest and execution/scope bindings come
+from the retained transcript; the object is exactly the validated, recorded
+response. The existing BrokerTranscript codec validates a detached proposed
+transition before any send. This data copy is not an execution authority.
+
+Original durable history, pending action, owner, API custody, current observation,
+broker peer and deadlines are rechecked before and after I/O and publication.
+The datagram is attempted only once inside the original two-second control phase.
+Short/error/late delivery, lost policy, changed objects or reentrancy closes the
+original broker and poisons/holds the original accounting. There is no automatic
+resend, reconnect, UID adoption, repair or quota release. Refusal cleanup never
+uses substituted result, broker or created-record references as callbacks.
+
+This checkpoint records local send completion, **not broker receipt, distributed
+commit or a completed action lifecycle**. The detached proposed transcript is
+retained, but the original parser and pending action remain unchanged. Receiving
+another event still refuses until the separately guarded transcript-advancement
+and connection-retirement step is implemented. No additional API request,
+credential read, GET/DELETE, absence/cleanup/terminal evidence or native grant is
+added. NativeProxyServer.serve is still not wired to this in-progress driver.
+
+Tests use real result/accounting/codec code with explicit OS/TLS/observer/storage
+doubles. All 1,203 predecessor test bodies, 127 baseline files and fixture bytes
+remain unchanged; exact full signed LOCAL and localhost CI are required anew.
+No source test or successful local send establishes native broker enforcement.
+
 ## Verification boundary
 
 This is an in-progress source snapshot, not a self-attested run result. Exact
@@ -1261,6 +1292,8 @@ probe, live launcher, runtime download or cloud/billable service is authorized.
 | Alpha 2 | CONF-LIVE-003 server-only API authentication | IMPLEMENTED_NOT_ACCEPTED | Original pending action, separate credential/socket/TLS; no HTTP/effect/cleanup |
 | Alpha 2 | CONF-LIVE-003 CREATE exchange | LOCAL_AND_CI_PASS_RECORDED | Head13e716f /1,167 tests/all8; CI34756347888; runner68 retired |
 | Alpha 2 | CONF-LIVE-003 returned-identity accounting | IMPLEMENTED_NOT_ACCEPTED | Exact CREATED journal append; action still pending; fresh full acceptance required |
+| Alpha 2 | CONF-LIVE-003 identity-accounting checkpoint | LOCAL_AND_CI_PASS_RECORDED | Headb8c5c10 /1,203 tests/all8; CI34761635544; runner69 retired |
+| Alpha 2 | CONF-LIVE-003 CREATED result delivery | IMPLEMENTED_NOT_ACCEPTED | One-shot bound datagram; transcript advancement and retirement remain gated |
 | Alpha 2 | CONF-LIVE-003 native inspector / broker / API | ONGOING | Required implementation listed above |
 | Alpha 2 | CONF-LIVE-003 required CI | WAITING | Fresh exact-head localhost evidence required; prior failures retained |
 | Alpha 2 | CONF-LIVE-003 source completion / merge / exact-main | NOT_RUN | Packet is incomplete; no completion claim |
