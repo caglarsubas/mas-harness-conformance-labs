@@ -34,7 +34,7 @@ from .live_linux_boundary import credentials, process_identity, _custody_identit
 from .live_mutation_admission import (require, document, retained_profile, validate_messages,
     _time, ZERO, admission_binding, _AdmissionLog, parse_reservations, cleanup_receipt,
     retained_qualification_record, retained_broker_binding, QUALIFICATION_PATH,
-    BrokerTranscript, broker_document)
+    BrokerTranscript, broker_document, _create_record)
 from .live_proxy_client import (_TLS, tls_context, credential_leaf, _check_certificate,
                                 read_http, http_message)
 from .live_supervisor import utc_now, _verify_reference_authority
@@ -3282,6 +3282,7 @@ class _Broker:
         self.dispatch = self._dispatch_original = None
         self.events = self._events_original = None
         self.api = self._api_original = None
+        self.intent = self._intent_original = None
         self._attempted_cases = set()
         self.deadline = owner.deadline
         self.last_wall, self.last_mono = None, time.monotonic()
@@ -3488,6 +3489,28 @@ class _Broker:
                 self.close()
             except BaseException:
                 pass  # original cleanup failure stays sticky; never reconnect
+            raise
+
+    def record_create_intent(self):
+        """Retain this pending CREATE's durable intent; no caller data or effect."""
+        try:
+            with self._phase():
+                require(self.intent is self._intent_original is None, "BROKER_INTENT_ALREADY_ATTEMPTED")
+                self.intent = self._intent_original = object.__new__(_BrokerIntent)
+                self.intent.__init__(self)
+            require(type(self.intent) is _BrokerIntent and self.intent is self._intent_original
+                    and not self.intent.failed and not self.intent.log.poisoned
+                    and self.intent.start.ledger_raw == self.intent.after,
+                    "BROKER_INTENT_PUBLICATION_CHANGED")
+            self.intent.committed = True  # only after the enclosing phase guard
+        except BaseException:
+            self.failed = True
+            if self._intent_original is not None:
+                self._intent_original._poison()
+            try:
+                self.close()
+            except BaseException:
+                pass  # retained journal is never rolled back; keep first refusal
             raise
 
     def close(self):
@@ -3762,6 +3785,106 @@ class _BrokerEvents:
         except BaseException:
             self.failed = True
             raise
+
+
+class _BrokerIntent:
+    """One original pending CREATE, durably recorded without granting API use.
+
+    No caller supplies a row, resource, observed response or new history. The
+    immutable expected append is derived before writing, and only that exact
+    durable result may advance the original dispatch's retained history pin.
+    """
+    def __init__(self, broker):
+        self.failed = self.committed = self.writing = self.advanced = False
+        self.log = None
+        try:
+            require(type(self) is _BrokerIntent and type(broker) is _Broker
+                    and broker.intent is broker._intent_original is self, "BROKER_INTENT_OWNER")
+            self.broker, self.owner = broker, broker.owner
+            self.events = broker.events
+            require(type(self.events) is _BrokerEvents and self.events is broker._events_original,
+                    "BROKER_INTENT_EVENTS_REQUIRED")
+            self.events._check()
+            self.start = self.events.start
+            self.storage, self.log = self.start.storage, self.start.log
+            self.before = self.start.ledger_raw
+            self.action_raw = canonical_bytes(self.events.transcript.pending)
+            self.profile_raw = canonical_bytes(self.owner.profile)
+            self.reservation_raw, self.binding_raw = self.start.reservation_raw, self.start.binding_raw
+            self.operation, self.deadline = self.start.operation, broker.deadline
+            self._check()
+            action = document(self.action_raw, 16384)
+            require(type(action) is dict and action.get("verb") == "CREATE", "BROKER_CREATE_INTENT_REQUIRED")
+            now = utc_now()
+            resource = _create_record(document(self.reservation_raw), self.operation,
+                self.profile_raw, self.binding_raw, action)
+            _, previous, count = parse_reservations(self.before)
+            self.row_raw = canonical_bytes(dict(sequence=count + 1, previousDigest=previous,
+                binding=document(self.reservation_raw), state="CREATE_INTENT", operation=self.operation,
+                observedAt=now, cleanup=None, resource=resource))
+            self.after = self.before + self.row_raw + b"\n"
+            parse_reservations(self.after)
+            self.digest = byte_digest(self.row_raw)
+            self._check()  # exact original history, current peer/observer before write
+            self.writing = True
+            result = broker._io(_AdmissionLog.record_resource, self.log,
+                document(self.reservation_raw), "CREATE_INTENT", self.operation, now,
+                self.profile_raw, self.binding_raw, action, expected_history=self.before)
+            require(type(result) is str and result == self.digest, "BROKER_INTENT_COMMIT_MISMATCH")
+            require(broker._io(self.storage.read) == self.after, "BROKER_INTENT_READBACK_MISMATCH")
+            # Until this point the old history guard is unchanged. Validate
+            # original objects and pending action before advancing its pin.
+            self._pending_check()
+            require(self.start.ledger_raw == self.before, "BROKER_INTENT_HISTORY_CHANGED")
+            self.start.ledger_raw = self.after
+            self.advanced = True
+            self._check()  # fresh observer/peer and full exact new history guard
+        except BaseException:
+            self._poison()
+            raise
+
+    def _pending_check(self):
+        broker, owner = self.broker, self.owner
+        require(type(self) is _BrokerIntent and not self.failed
+                and type(broker) is _Broker and broker.intent is broker._intent_original is self
+                and broker.owner is owner and owner.broker is owner._broker_original is broker
+                and broker.events is broker._events_original is self.events
+                and broker.dispatch is broker._dispatch_original is self.start
+                and self.events.start is self.start and self.start.owner is owner
+                and owner.storage is self.start.storage is self.storage
+                and owner.log is self.start.log is self.log and self.log.storage is self.storage
+                and not self.log.poisoned and self.start.operation == self.operation
+                and self.start.reservation_raw == self.reservation_raw and self.start.binding_raw == self.binding_raw
+                and canonical_bytes(owner.profile) == self.profile_raw
+                and self.deadline == broker.deadline == owner.deadline, "BROKER_INTENT_OWNER_CHANGED")
+        self.events._state_check()
+        require(canonical_bytes(self.events.transcript.pending) == self.action_raw, "BROKER_INTENT_ACTION_CHANGED")
+
+    def _check(self):
+        self._pending_check()
+        require(self.start.ledger_raw == (self.after if self.advanced else self.before),
+                "BROKER_INTENT_HISTORY_CHANGED")
+        self.events._check()
+        self._pending_check()
+
+    def check(self):
+        try:
+            require(self.committed, "BROKER_INTENT_NOT_COMMITTED")
+            with self.broker._phase():
+                self._check()
+        except BaseException:
+            self._poison()
+            self.broker.failed = True
+            try:
+                self.broker.close()
+            except BaseException:
+                pass  # borrowed state remains held, never repaired or released
+            raise
+
+    def _poison(self):
+        self.failed = True
+        if self.writing and self.log is not None:
+            self.log.poisoned = True
 
 
 class _BrokerApi:

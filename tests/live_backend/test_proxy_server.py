@@ -7110,6 +7110,360 @@ class BrokerZeroResourceEventTests(_BrokerEventFixture, unittest.TestCase):
         self.owner.files.read.assert_not_called()
 
 
+class BrokerIntentTests(_BrokerEventFixture, unittest.TestCase):
+    """Real broker/event/intent/journal code; explicit OS and storage doubles."""
+    def setUp(self):
+        from contextlib import contextmanager
+        _BrokerEventFixture.setUp(self)
+        self.action()
+        self.event_frame["payload"]["verb"] = "CREATE"
+        self.take()
+        self.original_history = self.ledger
+        self.io_events, self.writes = [], []
+        self.locked = False
+        self.fail = None
+        self.on_lock = self.on_append = self.on_sync = self.on_exit = lambda: None
+        self.on_read = lambda: None
+        @contextmanager
+        def transaction(resource):
+            self.assertIs(resource, self.owner.storage)
+            if self.locked:
+                raise ConformanceError("UNIT_STORAGE_BUSY", "unit contention")
+            self.locked = True
+            self.io_events.append("lock")
+            try:
+                self.on_lock()
+                yield resource
+            finally:
+                self.io_events.append("unlock")
+                self.locked = False
+                self.on_exit()
+        self.stack.enter_context(patch.object(server._State, "transaction", transaction))
+        self.append_call = self.stack.enter_context(patch.object(server._State, "append", side_effect=self.append_intent))
+        self.sync_call = self.stack.enter_context(patch.object(server._State, "sync", side_effect=self.sync_intent))
+        self.read_store.side_effect = self.read_intent
+        self.socket.send.reset_mock()
+        self.socket.recvmsg.reset_mock()
+
+    def read_intent(self):
+        self.io_events.append("read")
+        self.on_read()
+        return self.ledger
+
+    def append_intent(self, raw):
+        self.io_events.append("append")
+        self.on_append()
+        if self.fail == "before":
+            raise OSError("unit before append")
+        if self.fail == "partial":
+            self.ledger += raw[:20]
+            raise OSError("unit torn append")
+        self.ledger += raw
+        self.writes.append(raw)
+        if self.fail == "after":
+            raise OSError("unit after append")
+
+    def sync_intent(self):
+        self.io_events.append("fsync")
+        self.on_sync()
+        if self.fail == "sync":
+            raise OSError("unit fsync ambiguity")
+        if self.fail == "readback":
+            self.ledger += b"corrupt"
+
+    def refuse_intent(self, reason=".+"):
+        with self.assertRaisesRegex((ConformanceError, OSError), reason):
+            self.subject.record_create_intent()
+        self.assertTrue(self.subject.closed and self.subject.failed)
+        self.assertTrue(self.subject._intent_original is None or self.subject._intent_original.failed)
+        self.socket.send.assert_not_called()
+        self.owner.files.read.assert_not_called()
+
+    def held(self):
+        return admission.parse_reservations(self.ledger)[0][(self.owner.envelope["tenantId"], self.owner.envelope["nonce"])]
+
+    def test_bound_create_intent_commits_before_retained_history_advances(self):
+        seen = []
+        self.on_append = lambda: seen.append(self.subject.dispatch.ledger_raw)
+        self.on_sync = lambda: seen.append(self.subject.dispatch.ledger_raw)
+        self.assertIsNone(self.subject.record_create_intent())
+        intent = self.subject.intent
+        self.assertEqual(seen, [self.original_history, self.original_history])
+        self.assertTrue(intent.committed and intent.advanced)
+        self.assertIs(intent, self.subject._intent_original)
+        self.assertEqual(self.subject.dispatch.ledger_raw, intent.after)
+        self.assertEqual(self.ledger, intent.after)
+        row = json.loads(self.writes[0])
+        self.assertEqual(row["state"], "CREATE_INTENT")
+        self.assertEqual(row["resource"]["manifestDigest"], self.event_frame["payload"]["manifestDigest"])
+        self.assertIsNone(row["resource"]["uid"])
+        self.assertIsNone(row["resource"]["resourceVersion"])
+        self.assertEqual(self.io_events[self.io_events.index("lock"):self.io_events.index("unlock") + 1],
+                         ["lock", "read", "append", "fsync", "read", "unlock"])
+        self.assertTrue(self.held()["held"])
+
+    def test_committed_intent_rechecks_original_live_owners_without_more_writes(self):
+        self.subject.record_create_intent()
+        before = self.ledger
+        observations = len(self.observations)
+        self.assertIsNone(self.subject.intent.check())
+        self.assertGreater(len(self.observations), observations)
+        self.assertEqual(self.ledger, before)
+        self.assertEqual(len(self.writes), 1)
+        self.socket.send.assert_not_called()
+
+    def test_method_accepts_no_caller_resource_history_or_backend(self):
+        for value in ({}, self.original_history, self.event_frame, Mock()):
+            with self.subTest(value=type(value).__name__), self.assertRaises(TypeError):
+                self.subject.record_create_intent(value)
+        self.assertEqual(self.io_events, [])
+        self.assertIsNone(self.subject.intent)
+
+    def test_unowned_constructor_cannot_append(self):
+        with self.assertRaisesRegex(ConformanceError, "BROKER_INTENT_OWNER"):
+            server._BrokerIntent(self.subject)
+        self.assertEqual(self.io_events, [])
+
+    def test_missing_event_owner_refuses_before_write(self):
+        self.subject.events = self.subject._events_original = None
+        self.refuse_intent("BROKER_INTENT_EVENTS_REQUIRED")
+        self.assertEqual(self.writes, [])
+
+    def test_get_action_cannot_be_promoted_to_create_intent(self):
+        # Rebuild the legitimate GET transcript before asking for an intent.
+        original = self.subject.events
+        transcript = admission.BrokerTranscript(original.binding_raw, original.dispatch_raw)
+        transcript.accept(original.started_raw, "BROKER")
+        frame = deepcopy(self.event_frame)
+        frame["payload"]["verb"] = "GET"
+        transcript.accept(frame, "BROKER")
+        original.transcript = self.subject.dispatch.transcript = self.subject.dispatch._transcript_original = transcript
+        original.transcript_raw = original._snapshot(transcript)
+        self.refuse_intent("BROKER_CREATE_INTENT_REQUIRED")
+        self.assertEqual(self.writes, [])
+
+    def test_changed_pending_action_is_not_accepted_as_new_scope(self):
+        self.subject.events.transcript.pending["manifestDigest"] = admission.ZERO
+        self.refuse_intent("BROKER_TRANSCRIPT_CHANGED")
+        self.assertEqual(self.writes, [])
+
+    def test_stale_running_history_is_not_adopted(self):
+        self.ledger = self.original_history + b"unknown"
+        self.refuse_intent("BROKER_RUNNING_CHANGED")
+        self.assertEqual(self.writes, [])
+
+    def test_foreign_store_is_never_used(self):
+        foreign = self.owner.storage = Mock()
+        self.refuse_intent("BROKER_START_STATE_CHANGED")
+        foreign.read.assert_not_called()
+        foreign.transaction.assert_not_called()
+        self.assertEqual(self.writes, [])
+
+    def test_foreign_log_is_never_used(self):
+        foreign = self.owner.log = Mock()
+        self.refuse_intent("BROKER_START_STATE_CHANGED")
+        foreign.record_resource.assert_not_called()
+        self.assertEqual(self.writes, [])
+
+    def test_instance_shadow_writer_is_not_an_execution_hook(self):
+        self.owner.log.record_resource = Mock(side_effect=AssertionError("untrusted shadow must not run"))
+        self.subject.record_create_intent()
+        self.owner.log.record_resource.assert_not_called()
+        self.assertEqual(len(self.writes), 1)
+
+    def test_revoked_generation_before_write_prevents_append(self):
+        self.on_observe = lambda: self.observed.update(generation="f" * 64)
+        self.refuse_intent("BROKER_GENERATION_CHANGED")
+        self.assertEqual(self.writes, [])
+
+    def test_expired_operation_prevents_append(self):
+        self.now = self.subject.deadline
+        self.refuse_intent("BROKER_CLOCK_OR_DEADLINE")
+        self.assertEqual(self.writes, [])
+
+    def test_expired_observation_prevents_append(self):
+        self.observed["expiresAt"] = self.wall
+        self.refuse_intent("BROKER_OBSERVATION_EXPIRED")
+        self.assertEqual(self.writes, [])
+
+    def test_peer_identity_loss_prevents_append(self):
+        self.process["start"] += 1
+        self.refuse_intent("BROKER_PEER_CHANGED")
+        self.assertEqual(self.writes, [])
+
+    def test_all_write_ambiguities_poison_without_retry_or_pin_advance(self):
+        # Separate fresh fixture/ExitStack per fault; all original tests remain.
+        for fault in ("before", "partial", "after", "sync", "readback"):
+            with self.subTest(fault=fault):
+                self.fail = fault
+                self.refuse_intent()
+                intent = self.subject._intent_original
+                self.assertTrue(self.owner.log.poisoned)
+                self.assertFalse(intent.committed or intent.advanced)
+                self.assertEqual(self.subject.dispatch.ledger_raw, self.original_history)
+                attempts = self.append_call.call_count
+                with self.assertRaises(ConformanceError):
+                    self.subject.record_create_intent()
+                self.assertEqual(self.append_call.call_count, attempts)
+            if fault != "readback":
+                self.stack.close()
+                self.setUp()
+
+    def test_fsync_revocation_retains_intent_but_never_publishes_success(self):
+        self.on_sync = lambda: self.observed.update(generation="f" * 64)
+        self.refuse_intent("BROKER_GENERATION_CHANGED")
+        self.assertEqual(len(self.writes), 1)
+        self.assertTrue(self.held()["held"])
+        self.assertTrue(self.owner.log.poisoned)
+        self.assertFalse(self.subject.intent.committed)
+
+    def test_late_transaction_cannot_extend_two_second_phase(self):
+        self.on_sync = lambda: setattr(self, "now", self.subject.end)
+        self.refuse_intent("BROKER_CLOCK_OR_DEADLINE")
+        self.assertEqual(len(self.writes), 1)
+        self.assertFalse(self.subject.intent.committed or self.subject.intent.advanced)
+        self.assertTrue(self.owner.log.poisoned)
+
+    def test_lock_contention_refuses_without_append(self):
+        self.locked = True
+        self.refuse_intent("UNIT_STORAGE_BUSY")
+        self.assertEqual(self.writes, [])
+
+    def test_history_changed_under_lock_is_not_accepted(self):
+        self.on_lock = lambda: setattr(self, "ledger", self.ledger + b"unexpected")
+        self.refuse_intent("ADMISSION_RESOURCE_HISTORY_CHANGED")
+        self.assertEqual(self.writes, [])
+        self.assertEqual(self.subject.dispatch.ledger_raw, self.original_history)
+
+    def test_unlock_failure_is_ambiguous_after_durable_write(self):
+        def fail():
+            raise OSError("unit unlock ambiguity")
+        self.on_exit = fail
+        self.refuse_intent("unit unlock ambiguity")
+        self.assertEqual(len(self.writes), 1)
+        self.assertTrue(self.owner.log.poisoned)
+        self.assertEqual(self.subject.dispatch.ledger_raw, self.original_history)
+
+    def test_post_transaction_extra_bytes_refuse_without_repin(self):
+        self.on_exit = lambda: setattr(self, "ledger", self.ledger + b"unexpected")
+        self.refuse_intent("BROKER_INTENT_READBACK_MISMATCH")
+        self.assertEqual(self.subject.dispatch.ledger_raw, self.original_history)
+        self.assertTrue(self.owner.log.poisoned)
+
+    def test_fake_commit_digest_without_write_is_not_durable_evidence(self):
+        with patch.object(server._AdmissionLog, "record_resource", side_effect=lambda *a, **k: self.subject.intent.digest):
+            self.refuse_intent("BROKER_INTENT_READBACK_MISMATCH")
+        self.assertEqual(self.writes, [])
+        self.assertEqual(self.subject.dispatch.ledger_raw, self.original_history)
+
+    def test_wrong_commit_result_refuses_even_when_original_append_happened(self):
+        original = server._AdmissionLog.record_resource
+        def wrong(*args, **kwargs):
+            original(*args, **kwargs)
+            return admission.ZERO
+        with patch.object(server._AdmissionLog, "record_resource", wrong):
+            self.refuse_intent("BROKER_INTENT_COMMIT_MISMATCH")
+        self.assertEqual(len(self.writes), 1)
+        self.assertEqual(self.subject.dispatch.ledger_raw, self.original_history)
+
+    def test_pending_action_change_during_commit_refuses_before_repin(self):
+        self.on_sync = lambda: self.subject.events.transcript.pending.update(actionId=2)
+        self.refuse_intent("BROKER_TRANSCRIPT_CHANGED")
+        self.assertEqual(self.subject.dispatch.ledger_raw, self.original_history)
+        self.assertTrue(self.owner.log.poisoned)
+
+    def test_dispatch_pin_change_during_commit_is_not_repaired(self):
+        self.on_sync = lambda: setattr(self.subject.dispatch, "ledger_raw", b"foreign")
+        self.refuse_intent("BROKER_INTENT_HISTORY_CHANGED")
+        self.assertEqual(self.subject.dispatch.ledger_raw, b"foreign")
+        self.assertTrue(self.owner.log.poisoned)
+
+    def test_reentrant_attempt_closes_owner_and_never_retries(self):
+        self.on_sync = self.subject.record_create_intent
+        self.refuse_intent("BROKER_UNAVAILABLE|BROKER_OWNER_CHANGED")
+        self.assertEqual(self.append_call.call_count, 1)
+        self.assertTrue(self.owner.log.poisoned)
+        self.assertFalse(self.subject.intent.committed)
+
+    def test_repeated_committed_create_is_refused_without_second_append(self):
+        self.subject.record_create_intent()
+        before = self.ledger
+        self.refuse_intent("BROKER_INTENT_ALREADY_ATTEMPTED")
+        self.assertEqual(self.ledger, before)
+        self.assertEqual(self.append_call.call_count, 1)
+
+    def test_fresh_check_detects_post_commit_history_substitution(self):
+        self.subject.record_create_intent()
+        self.ledger += b"foreign"
+        with self.assertRaisesRegex(ConformanceError, "BROKER_RUNNING_CHANGED"):
+            self.subject.intent.check()
+        self.assertTrue(self.subject.closed and self.owner.log.poisoned)
+
+    def test_fresh_check_detects_post_commit_generation_loss(self):
+        self.subject.record_create_intent()
+        self.observed["generation"] = "f" * 64
+        with self.assertRaisesRegex(ConformanceError, "BROKER_GENERATION_CHANGED"):
+            self.subject.intent.check()
+        self.assertTrue(self.subject.closed and self.owner.log.poisoned)
+        self.assertTrue(self.held()["held"])
+
+    def test_intent_replacement_does_not_close_or_use_foreign_object(self):
+        self.subject.record_create_intent()
+        original, foreign = self.subject.intent, Mock()
+        self.subject.intent = foreign
+        with self.assertRaisesRegex(ConformanceError, "BROKER_INTENT_OWNER_CHANGED"):
+            original.check()
+        foreign.check.assert_not_called()
+        foreign.close.assert_not_called()
+        self.assertTrue(original.failed)
+
+    def test_accounting_does_not_acknowledge_action_or_acquire_api(self):
+        before = self.subject.events.transcript_raw
+        self.subject.record_create_intent()
+        self.assertEqual(self.subject.events.transcript_raw, before)
+        self.assertEqual(self.subject.events.transcript.pending["verb"], "CREATE")
+        self.assertIsNone(self.subject.api)
+        self.assertIsNone(self.subject.events.transcript.cleanup)
+        self.assertIsNone(self.subject.events.transcript.terminal)
+        self.socket.send.assert_not_called()
+        self.socket.recvmsg.assert_not_called()
+        self.owner.files.read.assert_not_called()
+        self.mocks["socket"].assert_called_once()  # original broker channel only
+
+    def test_cleanup_failure_preserves_first_refusal_and_durable_intent(self):
+        self.on_sync = lambda: self.observed.update(generation="f" * 64)
+        self.socket.close.side_effect = OSError("unit socket close")
+        self.refuse_intent("BROKER_GENERATION_CHANGED")
+        self.assertIsInstance(self.subject.cleanup_failure, OSError)
+        self.assertTrue(self.held()["held"])
+        self.socket.close.assert_called_once()
+
+    def test_final_enclosing_guard_failure_never_publishes_committed_intent(self):
+        original = server._BrokerIntent.__init__
+        def complete_then_revoke(resource, broker):
+            original(resource, broker)
+            self.owner._base_check.side_effect = ConformanceError("UNIT_FINAL_GUARD", "unit revocation")
+        with patch.object(server._BrokerIntent, "__init__", complete_then_revoke):
+            self.refuse_intent("UNIT_FINAL_GUARD")
+        self.assertTrue(self.subject.intent.advanced)
+        self.assertFalse(self.subject.intent.committed)
+        self.assertTrue(self.owner.log.poisoned)
+        self.assertTrue(self.held()["held"])
+
+    def test_final_guard_cannot_replace_the_owned_publication_target(self):
+        original = server._BrokerIntent.__init__
+        foreign = Mock()
+        def complete_then_replace(resource, broker):
+            original(resource, broker)
+            self.owner._base_check.side_effect = lambda: setattr(broker, "intent", foreign)
+        with patch.object(server._BrokerIntent, "__init__", complete_then_replace):
+            self.refuse_intent("BROKER_INTENT_PUBLICATION_CHANGED")
+        self.assertFalse(self.subject._intent_original.committed)
+        self.assertTrue(self.owner.log.poisoned)
+        foreign.close.assert_not_called()
+        self.assertNotIn("committed", vars(foreign))
+
+
 class BrokerApiConnectionTests(_BrokerEventFixture, unittest.TestCase):
     """Actual broker/API factory and MemoryBIO codec; OS/OpenSSL are doubles.
 

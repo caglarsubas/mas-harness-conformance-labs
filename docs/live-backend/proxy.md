@@ -1102,6 +1102,45 @@ generation enforcement or tenant acceptance. All1,060 preceding tests and the127
 accepted baseline files remain unchanged; a fresh full signed LOCAL and required
 localhost CI run must validate this exact increment.
 
+## Guarded create-intent checkpoint (source-only)
+
+The fixed, no-argument `_Broker.record_create_intent()` now connects a pending
+broker CREATE action to the existing server-owned journal. `_BrokerIntent` is
+retained before any write and derives the entire expected row from the original
+admission/profile/case/action binding. Callers cannot supply a resource, observed
+object, history, backend or replacement writer. The original journal class method
+is used, not an instance-supplied callback.
+
+The full original event/peer/observer/history guard runs before the transaction.
+The existing storage owner checks protect its individual storage operations;
+the complete transaction remains inside the original two-second broker phase.
+Only a matching digest, exact readback of the single expected append and original
+owner/pending-action checks can advance the dispatch's retained history pin.
+Full policy/observer/peer/history checks run again after that advance; publication
+waits for the enclosing phase's final guard. This does not relax or replace
+`_BrokerStart._state_check`: unexpected history changes still refuse.
+
+Write, sync, readback, unlock, late return or post-write policy/ownership ambiguity
+closes the original broker and poisons the original journal owner. A conservative
+intent already on disk stays held even when the call fails; its nonce, name and
+quota are not repaired or released. Repeated or reentrant calls do not retry.
+The retained intent's no-argument `check()` revalidates current ownership, history,
+policy and deadline before subsequent use; it is not an API permission token.
+
+This checkpoint writes **only CREATE_INTENT**. It sends no HTTP request or broker
+RESOURCE_RESULT, records no CREATED/absence/cleanup/terminal result, opens no API
+connection and reads no upstream credential. The action stays pending. The API
+driver, guarded response accounting, independent exact-UID cleanup, completed
+qualification/native factory and `NativeProxyServer.serve` integration remain
+unfinished. Native generation enforcement is an external prerequisite, not a
+claim established by observing before and after a journal write.
+
+Tests exercise the real broker/event/intent and journal algorithms with explicit
+OS, installed-boundary, observer and in-memory storage doubles. They do not prove
+native filesystem durability, atomic generation enforcement or tenant acceptance.
+All1,097 preceding test methods,127 accepted files and fixture bytes are preserved.
+Fresh exact-commit full signed LOCAL and required localhost CI remain mandatory.
+
 ## Verification boundary
 
 This is an in-progress source snapshot, not a self-attested run result. Exact
