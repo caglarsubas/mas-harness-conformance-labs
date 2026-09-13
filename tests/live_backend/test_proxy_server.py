@@ -6974,14 +6974,19 @@ class BrokerEventTests(_BrokerEventFixture, unittest.TestCase):
 
     def test_oversized_decoded_chunk_is_rejected(self):
         self.chunk(0, b"x" * 24577)
-        self.refused("BROKER_BASE64_INVALID")
+        self.refused("PROXY_SHAPE_INVALID")  # encoded size already violates the closed wire schema
+
+    def test_chunk_index_outside_wire_schema_is_rejected(self):
+        self.chunk(171, b"x")
+        self.refused("PROXY_SHAPE_INVALID")
 
     def test_at_most_171_chunks_even_when_total_bytes_are_small(self):
         for index in range(171):
             self.chunk(index, b"x")
             self.take()
         self.assertEqual(len(self.subject.events.transcript.chunks), 171)
-        self.chunk(171, b"x")
+        # A schema-valid index reaches the independent transport count guard.
+        self.chunk(170, b"x")
         self.refused("BROKER_RECEIPT_CHUNK_LIMIT")
 
     def test_full_receipt_size_limit_applies_to_transport(self):
@@ -6992,9 +6997,16 @@ class BrokerEventTests(_BrokerEventFixture, unittest.TestCase):
         self.refused("BROKER_RECEIPT_SIZE")
 
     def test_terminal_cannot_bypass_unimplemented_server_cleanup(self):
-        self.queue("TERMINAL", {"status": "COMPLETED", "receiptSize": 1,
-            "receiptDigest": admission.ZERO, "cleanupDigest": admission.ZERO})
+        payload = deepcopy(self.fixture["frames"][-1]["payload"])
+        self.assertTrue(payload["workerReaped"])
+        self.queue("TERMINAL", payload)
         self.refused("BROKER_INBOUND_KIND_UNAVAILABLE")
+
+    def test_terminal_without_worker_reaping_field_is_rejected(self):
+        payload = deepcopy(self.fixture["frames"][-1]["payload"])
+        del payload["workerReaped"]
+        self.queue("TERMINAL", payload)
+        self.refused("PROXY_SHAPE_INVALID")
 
     def test_replayed_started_frame_cannot_reset_the_stream(self):
         self.event_frame = deepcopy(self.last_event)

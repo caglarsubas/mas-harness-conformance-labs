@@ -1012,6 +1012,15 @@ terminal exchange, fixed qualifier and complete native factory integration are
 still unfinished; `NativeProxyServer.serve` is not connected to this receiver.
 Fresh exact-head full LOCAL and required localhost CI remain mandatory.
 
+Candidate `16ff3ed3798e0ccc38e0edede8302d41f9d71b78` completed all six suites
+with three new-test failures: the chunk-count vector exceeded the wire index
+range before its intended transport guard, the oversized encoded chunk was
+correctly rejected by the earlier schema guard, and the terminal vector lacked
+the mandatory `workerReaped` field. Correct only these new vectors/expectations;
+retain separate malformed-index/terminal cases and the entire failed replay.
+Production code, all predecessor tests and the acceptance recipe are unchanged.
+The corrected exact head requires a fresh full eight-command replay.
+
 ## Verification boundary
 
 This is an in-progress source snapshot, not a self-attested run result. Exact
