@@ -408,14 +408,79 @@ def admission_binding(envelope, capacity, profile):
         "profileDigest": canonical_digest(profile)}
 
 
+def _create_record(binding, operation, profile, broker_binding, action, observed=None):
+    """Derive detached journal data, never authority to send or adopt a resource."""
+    binding = document(binding, 16384)
+    closed(binding, BINDING_FIELDS)
+    profile = validate_profile(profile)
+    broker_binding = broker_document(broker_binding, "binding")
+    action = document(action, 16384)
+    closed(action, ("actionId", "verb", "manifestDigest"))
+    require(type(operation) is str and operation in CASES
+            and type(action["actionId"]) is int and 1 <= action["actionId"] <= 256
+            and action["verb"] == "CREATE", "ADMISSION_CREATE_ACTION")
+    require_digest(action["manifestDigest"], "manifestDigest")
+    require(binding["profileDigest"] == canonical_digest(profile) == broker_binding["profileDigest"]
+            and all(binding[k] == profile["binding"][k] for k in BINDING_FIELDS if not k.endswith("Digest")),
+            "ADMISSION_CREATE_BINDING")
+    assigned = [digest for case in CASES for digest in broker_binding["caseResourceDigests"][case]]
+    require(len(assigned) == len(set(assigned))
+            and set(assigned) == {r["manifestDigest"] for r in profile["resources"]}
+            and action["manifestDigest"] in broker_binding["caseResourceDigests"][operation],
+            "ADMISSION_CREATE_OWNERSHIP")
+    manifest = next(r["manifest"] for r in profile["resources"]
+                    if r["manifestDigest"] == action["manifestDigest"])
+    uid, version = (None, None) if observed is None else validate_observed_manifest(observed, manifest)
+    return {"actionId": action["actionId"], "apiVersion": manifest["apiVersion"], "kind": manifest["kind"],
+            "namespace": manifest["metadata"]["namespace"], "name": manifest["metadata"]["name"],
+            "manifestDigest": action["manifestDigest"], "uid": uid, "resourceVersion": version}
+
+
+def _resource_transition(prior, row):
+    """Replay only intent/identity facts. Neither fact permits cleanup or release."""
+    resource = row["resource"]
+    closed(resource, ("actionId", "apiVersion", "kind", "namespace", "name", "manifestDigest", "uid", "resourceVersion"))
+    require(row["cleanup"] is None and prior["current"] == row["operation"]
+            and type(resource["actionId"]) is int and 1 <= resource["actionId"] <= 256
+            and resource["apiVersion"] == "v1" and resource["kind"] in ("Pod", "ConfigMap", "Service"),
+            "ADMISSION_RESOURCE_SCOPE")
+    for field in ("namespace", "name"):
+        require(type(resource[field]) is str and re.fullmatch("[a-z0-9][a-z0-9.-]{0,62}", resource[field]),
+                "ADMISSION_RESOURCE_SCOPE")
+    require_digest(resource["manifestDigest"], "manifestDigest")
+    resources = prior.setdefault("resources", {})
+    key = (resource["apiVersion"], resource["kind"], resource["namespace"], resource["name"])
+    if row["state"] == "CREATE_INTENT":
+        require(resource["uid"] is None and resource["resourceVersion"] is None,
+                "ADMISSION_INTENT_IDENTITY")
+        require(len(resources) < 32 and key not in resources
+                and all(r["state"] != "CREATE_INTENT" for r in resources.values())
+                and all(r["manifestDigest"] != resource["manifestDigest"] for r in resources.values())
+                and all(r["actionId"] < resource["actionId"] for r in resources.values()
+                        if r["operation"] == row["operation"]), "ADMISSION_CREATE_REPLAY")
+    else:
+        original = resources.get(key)
+        require(original is not None and original["state"] == "CREATE_INTENT"
+                and original["operation"] == row["operation"]
+                and all(original[k] == v for k, v in resource.items() if k not in ("uid", "resourceVersion")),
+                "ADMISSION_CREATED_WITHOUT_INTENT")
+        require(type(resource["uid"]) is str and re.fullmatch("[A-Za-z0-9-]{1,128}", resource["uid"])
+                and type(resource["resourceVersion"]) is str
+                and re.fullmatch("[A-Za-z0-9._:-]{1,128}", resource["resourceVersion"])
+                and all(r["uid"] != resource["uid"] for r in resources.values()), "ADMISSION_CREATED_IDENTITY")
+    resources[key] = {**resource, "operation": row["operation"], "state": row["state"]}
+
+
 def parse_reservations(raw):
     require(type(raw) is bytes and len(raw) <= 4194304 and (not raw or raw.endswith(b"\n")), "ADMISSION_HISTORY_INVALID")
     lines = raw.splitlines()
     require(len(lines) <= 4096, "ADMISSION_HISTORY_FULL")
-    previous, reservations = ZERO, {}
+    previous, reservations, recorded = ZERO, {}, set()
     for index, line in enumerate(lines, 1):
         row = document(line, 32768)
-        closed(row, LEDGER_FIELDS)
+        require(type(row) is dict, "ADMISSION_HISTORY_INVALID")
+        resource_row = row.get("state") in ("CREATE_INTENT", "CREATED")
+        closed(row, LEDGER_FIELDS + ("resource",) if resource_row else LEDGER_FIELDS)
         binding = row["binding"]
         closed(binding, BINDING_FIELDS)
         for field in BINDING_FIELDS:
@@ -442,7 +507,10 @@ def parse_reservations(raw):
                     "ADMISSION_HISTORY_TRANSITION")
             operation = row["operation"]
             require(type(operation) is str and operation in CASES, "ADMISSION_OPERATION_INVALID")
-            if row["state"] == "RUNNING":
+            if resource_row:
+                require((key, operation) not in recorded, "ADMISSION_RESOURCE_AFTER_CLEANUP")
+                _resource_transition(prior, row)
+            elif row["state"] == "RUNNING":
                 require(prior["current"] is None and operation not in prior["done"] and row["cleanup"] is None,
                         "ADMISSION_OPERATION_REPLAY")
                 prior["current"] = operation
@@ -453,6 +521,16 @@ def parse_reservations(raw):
                 expected = cleanup_receipt(canonical_digest(binding), operation, row["observedAt"],
                                            receipt.get("remainingResources"), prior["cleanupDigest"])
                 require(receipt == expected, "ADMISSION_CLEANUP_INVALID")
+                resources = [r for r in prior.get("resources", {}).values() if r["operation"] == operation]
+                if resources:
+                    # Until independent absence accounting is implemented, every
+                    # intent/created identity remains held, including a lost reply.
+                    fields = ("apiVersion", "kind", "namespace", "name", "uid", "manifestDigest")
+                    remaining = receipt["remainingResources"]
+                    require(len(remaining) == len(resources)
+                            and {tuple(r[k] for k in fields) for r in remaining}
+                            == {tuple(r[k] for k in fields) for r in resources}, "ADMISSION_RESOURCE_NOT_CLEAN")
+                recorded.add((key, operation))
                 prior["cleanupDigest"] = canonical_digest(receipt)
                 prior["current"] = None if receipt["state"] == "CLEAN" else operation
                 # The process remains one-run exclusive. All ten operations and
@@ -487,6 +565,41 @@ class _AdmissionLog:
                 self.poisoned = True
                 raise
             return canonical_digest(row)
+
+    def record_resource(self, binding, state, operation, now, profile, broker_binding, action,
+                        *, expected_history, observed=None):
+        """Durable source-only accounting; the native owner must guard every use.
+
+        The exact caller-retained history must still match under the existing
+        journal lock. No extra state file, automatic repair, retry or API I/O.
+        """
+        require(not self.poisoned, "ADMISSION_STORAGE_AMBIGUOUS")
+        require(state in ("CREATE_INTENT", "CREATED") and (observed is None) == (state == "CREATE_INTENT"),
+                "ADMISSION_RESOURCE_STATE")
+        require(type(expected_history) is bytes and len(expected_history) <= 4194304,
+                "ADMISSION_HISTORY_INVALID")
+        binding = document(binding, 16384)
+        resource = _create_record(binding, operation, profile, broker_binding, action, observed)
+        writing = False
+        try:
+            with self.storage.transaction() as io:
+                before = io.read()
+                require(before == expected_history, "ADMISSION_RESOURCE_HISTORY_CHANGED")
+                _, previous, count = parse_reservations(before)
+                row = {"sequence": count + 1, "previousDigest": previous, "binding": binding,
+                       "state": state, "operation": operation, "observedAt": now, "cleanup": None,
+                       "resource": resource}
+                after = before + canonical_bytes(row) + b"\n"
+                parse_reservations(after)
+                writing = True
+                io.append(after[len(before):])
+                io.sync()
+                require(io.read() == after, "ADMISSION_READBACK_FAILED")
+            return canonical_digest(row)
+        except BaseException:
+            if writing:
+                self.poisoned = True
+            raise
 
 # Fixed, source-owned MET-REPAIR-014 message schema. This is validation data;
 # neither a valid message nor this parser can construct an installed execution.

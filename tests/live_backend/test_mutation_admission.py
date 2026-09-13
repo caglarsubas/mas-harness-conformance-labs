@@ -267,3 +267,414 @@ class ProxyReservationTests(unittest.TestCase):
         with self.assertRaises(ConformanceError):
             self.subject.record({**self.binding, "environmentId": "other"}, "RUNNING", admission.CASES[0], NOW)
         self.assertEqual(self.io.raw, original)
+
+
+class ResourceJournalTests(unittest.TestCase):
+    """Real journal algorithms, explicitly in-memory storage; no API effects."""
+    def setUp(self):
+        sample = deepcopy(VECTORS["broker"]["positive"][1])
+        self.profile, self.broker_binding = sample["profile"], sample["binding"]
+        self.operation = admission.CASES[0]
+        self.binding = {k: admission.ZERO if k.endswith("Digest") else self.profile["binding"][k]
+                        for k in admission.BINDING_FIELDS}
+        self.binding["profileDigest"] = canonical_digest(self.profile)
+        self.action = {"actionId": 1, "verb": "CREATE",
+                       "manifestDigest": self.profile["resources"][0]["manifestDigest"]}
+        self.observed = deepcopy(self.profile["resources"][0]["manifest"])
+        self.observed["metadata"].update(uid="unit-created-uid", resourceVersion="17")
+        self.io = MemoryJournal()
+        self.log = admission._AdmissionLog(self.io)
+        self.log.record(self.binding, "RESERVED", None, NOW)
+        self.log.record(self.binding, "RUNNING", self.operation, NOW)
+        self.initial = self.io.raw
+        self.io.events.clear()
+
+    def record(self, state="CREATE_INTENT", **changes):
+        args = dict(binding=self.binding, state=state, operation=self.operation, now=NOW,
+                    profile=self.profile, broker_binding=self.broker_binding, action=self.action,
+                    expected_history=self.io.raw, observed=self.observed if state == "CREATED" else None)
+        args.update(changes)
+        return self.log.record_resource(**args)
+
+    def state(self):
+        return admission.parse_reservations(self.io.raw)[0][(self.binding["tenantId"], self.binding["runNonce"])]
+
+    def resource(self):
+        return next(iter(self.state()["resources"].values()))
+
+    def raw_row(self, state, resource, **changes):
+        rows = self.io.raw.splitlines()
+        row = dict(sequence=len(rows) + 1, previousDigest=canonical_digest(json.loads(rows[-1])),
+                   binding=self.binding, state=state, operation=self.operation, observedAt=NOW,
+                   cleanup=None, resource=resource)
+        row.update(changes)
+        return self.io.raw + canonical_bytes(row) + b"\n"
+
+    def payload(self):
+        return {k: v for k, v in self.resource().items() if k not in ("operation", "state")}
+
+    def pending(self, reason="IO_AMBIGUOUS"):
+        fields = ("apiVersion", "kind", "namespace", "name", "uid", "manifestDigest")
+        remaining = [{**{k: self.resource()[k] for k in fields}, "reasonCode": reason}]
+        return admission.cleanup_receipt(canonical_digest(self.binding), self.operation, NOW, remaining)
+
+    def test_intent_fsync_readback_before_return_and_null_identity(self):
+        digest = self.record()
+        self.assertEqual(self.io.events, ["lock", "read", "append", "fsync", "read", "unlock"])
+        self.assertEqual(digest, canonical_digest(json.loads(self.io.raw.splitlines()[-1])))
+        self.assertEqual(self.resource()["state"], "CREATE_INTENT")
+        self.assertIsNone(self.resource()["uid"])
+        self.assertIsNone(self.resource()["resourceVersion"])
+        self.assertTrue(self.state()["held"])
+
+    def test_observed_uid_version_persist_only_after_validated_intent(self):
+        self.record()
+        self.io.events.clear()
+        self.record("CREATED")
+        self.assertEqual(self.io.events, ["lock", "read", "append", "fsync", "read", "unlock"])
+        self.assertEqual((self.resource()["uid"], self.resource()["resourceVersion"]), ("unit-created-uid", "17"))
+        self.assertEqual(self.resource()["state"], "CREATED")
+        self.assertTrue(self.state()["held"])
+        self.assertEqual(self.state()["current"], self.operation)
+
+    def test_returned_state_is_detached_and_restart_does_not_adopt(self):
+        self.record()
+        detached = self.state()
+        next(iter(detached["resources"].values()))["uid"] = "invented"
+        self.assertIsNone(self.resource()["uid"])
+        self.log = admission._AdmissionLog(self.io)
+        before = self.io.raw
+        with self.assertRaises(ConformanceError):
+            self.record()
+        self.assertEqual(self.io.raw, before)
+        self.assertTrue(self.state()["held"])
+
+    def test_intent_write_sync_readback_faults_poison_and_never_retry(self):
+        for fault in ("before", "partial", "after", "sync", "readback"):
+            self.setUp()
+            self.io.fail = fault
+            with self.subTest(fault=fault), self.assertRaises((OSError, ConformanceError)):
+                self.record()
+            self.assertTrue(self.log.poisoned)
+            events = list(self.io.events)
+            with self.assertRaises(ConformanceError):
+                self.record()
+            with self.assertRaises(ConformanceError):
+                self.log.record(self.binding, "RUNNING", admission.CASES[1], NOW)
+            self.assertEqual(self.io.events, events)
+
+    def test_created_write_faults_preserve_intent_without_retry(self):
+        for fault in ("before", "partial", "after", "sync", "readback"):
+            self.setUp()
+            self.record()
+            intent = self.io.raw
+            self.io.fail = fault
+            with self.subTest(fault=fault), self.assertRaises((OSError, ConformanceError)):
+                self.record("CREATED")
+            self.assertTrue(self.log.poisoned)
+            self.assertTrue(self.io.raw.startswith(intent))
+            events = list(self.io.events)
+            with self.assertRaises(ConformanceError):
+                self.record("CREATED")
+            self.assertEqual(events, self.io.events)
+
+    def test_transaction_exit_failure_is_ambiguous_even_after_readback(self):
+        from contextlib import contextmanager
+        original = self.io.transaction
+        @contextmanager
+        def ambiguous_exit():
+            with original() as io:
+                yield io
+            raise OSError("unit unlock ambiguity")
+        self.io.transaction = ambiguous_exit
+        with self.assertRaises(OSError):
+            self.record()
+        self.assertTrue(self.log.poisoned)
+        self.assertEqual(self.resource()["state"], "CREATE_INTENT")
+
+    def test_requires_existing_exact_running_reservation(self):
+        for raw in (b"", self.initial.splitlines(keepends=True)[0]):
+            self.io.raw = raw
+            with self.subTest(raw=raw[:16]), self.assertRaises(ConformanceError):
+                self.record()
+            self.assertEqual(self.io.raw, raw)
+
+    def test_wrong_active_case_and_foreign_case_ownership_rejected(self):
+        with self.assertRaises(ConformanceError):
+            self.record(operation=admission.CASES[1])
+        self.broker_binding["caseResourceDigests"][admission.CASES[1]] = self.broker_binding["caseResourceDigests"][self.operation]
+        self.broker_binding["caseResourceDigests"][self.operation] = []
+        with self.assertRaises(ConformanceError):
+            self.record(operation=admission.CASES[1])
+        self.assertEqual(self.io.raw, self.initial)
+
+    def test_all_reservation_binding_substitutions_refused(self):
+        for key in self.binding:
+            value = "sha256:" + "f" * 64 if key.endswith("Digest") else "foreign"
+            with self.subTest(key=key), self.assertRaises(ConformanceError):
+                self.record(binding={**self.binding, key: value})
+        self.assertEqual(self.io.raw, self.initial)
+
+    def test_invalid_or_substituted_profile_cannot_write(self):
+        for profile in ({}, {**self.profile, "profileId": "unknown"},
+                        altered(self.profile, ["resources", 0, "manifest", "data", "fixture.json"], "changed")):
+            with self.subTest(profile=profile.get("profileId")), self.assertRaises(ConformanceError):
+                self.record(profile=profile)
+        self.assertEqual(self.io.raw, self.initial)
+
+    def test_broker_binding_requires_exact_disjoint_complete_resource_sets(self):
+        for fault in ("missing", "duplicate", "profile"):
+            binding = deepcopy(self.broker_binding)
+            if fault == "missing":
+                binding["caseResourceDigests"][self.operation] = []
+            elif fault == "duplicate":
+                binding["caseResourceDigests"][admission.CASES[1]] = [self.action["manifestDigest"]]
+            else:
+                binding["profileDigest"] = admission.ZERO
+            with self.subTest(fault=fault), self.assertRaises(ConformanceError):
+                self.record(broker_binding=binding)
+        self.assertEqual(self.io.raw, self.initial)
+
+    def test_unknown_manifest_digest_refused_without_storage_write(self):
+        with self.assertRaises(ConformanceError):
+            self.record(action={**self.action, "manifestDigest": admission.ZERO})
+        self.assertNotIn("append", self.io.events)
+
+    def test_action_is_closed_create_only_and_bounded_exact_integer(self):
+        actions = [{**self.action, "verb": value} for value in ("GET", "DELETE", "PATCH", None)]
+        actions += [{**self.action, "actionId": value} for value in (True, 0, 257, "1", 1.0)]
+        actions += [{**self.action, "url": "https://unit.invalid"}]
+        for action in actions:
+            with self.subTest(action=action), self.assertRaises(ConformanceError):
+                self.record(action=action)
+        self.assertEqual(self.io.raw, self.initial)
+
+    def test_observed_object_is_required_only_for_created(self):
+        for state, observed in (("CREATE_INTENT", self.observed), ("CREATED", None), ("UNKNOWN", None)):
+            with self.subTest(state=state), self.assertRaises(ConformanceError):
+                self.record(state, observed=observed)
+        self.assertEqual(self.io.events, [])
+
+    def test_stale_history_and_nonbytes_history_never_append(self):
+        self.record()
+        before = self.io.raw
+        self.io.events.clear()
+        for history in (self.initial, b"", bytearray(before), before.decode(), b"x" * 4194305):
+            with self.subTest(kind=type(history).__name__), self.assertRaises(ConformanceError):
+                self.record("CREATED", expected_history=history)
+        self.assertNotIn("append", self.io.events)
+        self.assertEqual(self.io.raw, before)
+
+    def test_concurrent_owner_cannot_append_intent(self):
+        with self.io.transaction(), self.assertRaises(ConformanceError):
+            self.record()
+        self.assertEqual(self.io.raw, self.initial)
+
+    def test_second_create_cannot_reuse_name_even_with_new_action_id(self):
+        self.record()
+        before = self.io.raw
+        with self.assertRaises(ConformanceError):
+            self.record(action={**self.action, "actionId": 2})
+        self.assertEqual(self.io.raw, before)
+
+    def test_created_without_intent_cannot_adopt_existing_object(self):
+        with self.assertRaises(ConformanceError):
+            self.record("CREATED")
+        self.assertEqual(self.io.raw, self.initial)
+
+    def test_created_identity_cannot_be_overwritten_or_recorded_twice(self):
+        self.record()
+        self.record("CREATED")
+        before = self.io.raw
+        for uid in ("unit-created-uid", "replacement-uid"):
+            observed = altered(self.observed, ["metadata", "uid"], uid)
+            with self.subTest(uid=uid), self.assertRaises(ConformanceError):
+                self.record("CREATED", observed=observed)
+        self.assertEqual(self.io.raw, before)
+
+    def test_post_defaulting_substitution_and_missing_identity_preserve_null_intent(self):
+        self.record()
+        before = self.io.raw
+        for path, value in ((["kind"], "Pod"), (["metadata", "name"], "foreign"),
+                            (["metadata", "namespace"], "foreign"),
+                            (["metadata", "labels", "planeon.ai/tenant-id"], "foreign"),
+                            (["metadata", "uid"], ""), (["metadata", "resourceVersion"], ""),
+                            (["data", "fixture.json"], "changed")):
+            with self.subTest(path=path), self.assertRaises(ConformanceError):
+                self.record("CREATED", observed=altered(self.observed, path, value))
+        self.assertEqual(self.io.raw, before)
+        self.assertIsNone(self.resource()["uid"])
+
+    def test_created_must_match_original_action_id(self):
+        self.record()
+        before = self.io.raw
+        with self.assertRaises(ConformanceError):
+            self.record("CREATED", action={**self.action, "actionId": 2})
+        self.assertEqual(self.io.raw, before)
+
+    def test_parser_refuses_intent_with_guessed_uid_or_resource_version(self):
+        self.record()
+        payload = self.payload()
+        self.io.raw = self.initial
+        for key, value in (("uid", "guessed"), ("resourceVersion", "1")):
+            with self.subTest(key=key), self.assertRaises(ConformanceError):
+                admission.parse_reservations(self.raw_row("CREATE_INTENT", {**payload, key: value}))
+
+    def test_parser_validates_created_uid_and_version_not_just_writer(self):
+        self.record()
+        payload = {**self.payload(), "uid": "unit-created-uid", "resourceVersion": "17"}
+        for key, value in (("uid", None), ("uid", "x/y"), ("uid", "x" * 129),
+                           ("resourceVersion", None), ("resourceVersion", 17), ("resourceVersion", "x" * 129)):
+            with self.subTest(key=key, value=value), self.assertRaises(ConformanceError):
+                admission.parse_reservations(self.raw_row("CREATED", {**payload, key: value}))
+
+    def test_parser_rejects_unknown_fields_noncanonical_torn_and_nondict_rows(self):
+        self.record()
+        payload = self.payload()
+        self.io.raw = self.initial
+        variants = [self.raw_row("CREATE_INTENT", {**payload, "delete": True}),
+                    self.raw_row("CREATE_INTENT", payload, arbitrary=True),
+                    self.raw_row("UNKNOWN", payload), self.raw_row("RUNNING", payload),
+                    self.raw_row("CREATE_INTENT", payload)[:-1],
+                    self.initial + b"[]\n", self.initial + b"null\n",
+                    self.raw_row("CREATE_INTENT", payload).replace(b'"actionId":1', b'"actionId": 1')]
+        for raw in variants:
+            with self.subTest(tail=raw[-20:]), self.assertRaises(ConformanceError):
+                admission.parse_reservations(raw)
+
+    def test_parser_rejects_cross_binding_time_chain_scope_and_nonnull_cleanup(self):
+        self.record()
+        payload = self.payload()
+        self.io.raw = self.initial
+        for changes in ({"binding": {**self.binding, "runNonce": "foreign"}}, {"observedAt": "2026-09-07T00:00:00Z"},
+                        {"sequence": 1}, {"previousDigest": admission.ZERO}, {"cleanup": {}},
+                        {"operation": admission.CASES[1]}):
+            with self.subTest(changes=changes), self.assertRaises(ConformanceError):
+                admission.parse_reservations(self.raw_row("CREATE_INTENT", payload, **changes))
+
+    def test_parser_bounds_total_resources_and_prevents_action_or_manifest_reuse(self):
+        self.record()
+        self.record("CREATED")
+        payload = self.payload()
+        for action in range(2, 33):
+            row = {**payload, "actionId": action, "name": "unit-" + str(action),
+                   "manifestDigest": "sha256:" + format(action, "064x"), "uid": None, "resourceVersion": None}
+            self.io.raw = self.raw_row("CREATE_INTENT", row)
+            self.io.raw = self.raw_row("CREATED", {**row, "uid": "uid-" + str(action), "resourceVersion": "1"})
+        self.assertEqual(len(self.state()["resources"]), 32)
+        with self.assertRaises(ConformanceError):
+            admission.parse_reservations(self.raw_row("CREATE_INTENT", {**payload, "actionId": 33,
+                "name": "unit-33", "manifestDigest": "sha256:" + format(33, "064x"),
+                "uid": None, "resourceVersion": None}))
+        self.io.raw = self.initial
+        self.record()
+        self.record("CREATED")
+        payload = {**payload, "uid": None, "resourceVersion": None}
+        for row in ({**payload, "name": "different", "manifestDigest": admission.ZERO},
+                    {**payload, "actionId": 2, "name": "different"}):
+            with self.subTest(row=row), self.assertRaises(ConformanceError):
+                admission.parse_reservations(self.raw_row("CREATE_INTENT", row))
+
+    def test_parser_refuses_uid_reuse_between_distinct_created_resources(self):
+        self.record()
+        self.record("CREATED")
+        second = {**self.payload(), "name": "second", "actionId": 2,
+                  "manifestDigest": admission.ZERO, "uid": None, "resourceVersion": None}
+        self.io.raw = self.raw_row("CREATE_INTENT", second)
+        with self.assertRaises(ConformanceError):
+            admission.parse_reservations(self.raw_row("CREATED", {**second, "uid": "unit-created-uid", "resourceVersion": "18"}))
+
+    def test_clean_receipt_cannot_erase_unresolved_intent_or_created_uid(self):
+        self.record()
+        for state in ("CREATE_INTENT", "CREATED"):
+            if state == "CREATED":
+                self.record(state)
+            before = self.io.raw
+            receipt = admission.cleanup_receipt(canonical_digest(self.binding), self.operation, NOW, [])
+            with self.subTest(state=state), self.assertRaises(ConformanceError):
+                self.log.record(self.binding, "RECORDED", self.operation, NOW, receipt)
+            self.assertEqual(self.io.raw, before)
+            self.assertTrue(self.state()["held"])
+
+    def test_lost_response_pending_receipt_retains_exact_name_and_null_uid(self):
+        self.record()
+        receipt = self.pending()
+        self.log.record(self.binding, "RECORDED", self.operation, NOW, receipt)
+        self.assertEqual(self.state()["cleanupDigest"], canonical_digest(receipt))
+        self.assertTrue(self.state()["held"])
+        self.assertIsNone(self.resource()["uid"])
+        self.assertEqual(receipt["state"], "CLEANUP_PENDING")
+
+    def test_known_uid_pending_receipt_retains_version_and_capacity(self):
+        self.record()
+        self.record("CREATED")
+        receipt = self.pending("DELETE_DENIED")
+        self.log.record(self.binding, "RECORDED", self.operation, NOW, receipt)
+        self.assertEqual(self.resource()["resourceVersion"], "17")
+        self.assertTrue(self.state()["held"])
+        self.assertEqual(self.state()["current"], self.operation)
+
+    def test_cleanup_cannot_omit_substitute_or_invent_owned_resources(self):
+        self.record()
+        self.record("CREATED")
+        remaining = self.pending("DELETE_DENIED")["remainingResources"]
+        for changed in ([], [{**remaining[0], "uid": "foreign"}], [{**remaining[0], "name": "foreign"}],
+                        [{**remaining[0], "manifestDigest": admission.ZERO}],
+                        remaining + [{**remaining[0], "name": "extra"}]):
+            receipt = admission.cleanup_receipt(canonical_digest(self.binding), self.operation, NOW, changed)
+            with self.subTest(changed=changed), self.assertRaises(ConformanceError):
+                self.log.record(self.binding, "RECORDED", self.operation, NOW, receipt)
+        self.assertTrue(self.state()["held"])
+
+    def test_no_resource_rows_after_cleanup_record_even_if_pending(self):
+        self.record()
+        self.log.record(self.binding, "RECORDED", self.operation, NOW, self.pending())
+        before = self.io.raw
+        with self.assertRaises(ConformanceError):
+            self.record("CREATED")
+        with self.assertRaises(ConformanceError):
+            self.record(action={**self.action, "actionId": 2})
+        self.assertEqual(self.io.raw, before)
+
+    def test_unresolved_resources_block_other_case_and_other_run(self):
+        self.record()
+        for binding, state, operation in ((self.binding, "RUNNING", admission.CASES[1]),
+                                         ({**self.binding, "runNonce": "other"}, "RESERVED", None)):
+            with self.subTest(state=state), self.assertRaises(ConformanceError):
+                self.log.record(binding, state, operation, NOW)
+        self.assertTrue(self.state()["held"])
+
+    def test_input_mutation_after_commit_cannot_rewrite_durable_identity(self):
+        self.record()
+        self.record("CREATED")
+        before = self.io.raw
+        self.observed["metadata"]["uid"] = "replacement"
+        self.action["actionId"] = 17
+        self.profile["resources"][0]["manifest"]["metadata"]["name"] = "foreign"
+        self.assertEqual(self.io.raw, before)
+        self.assertEqual(self.resource()["uid"], "unit-created-uid")
+        self.assertEqual(self.resource()["actionId"], 1)
+
+    def test_zero_resource_profile_cannot_create_an_intent(self):
+        sample = VECTORS["broker"]["positive"][0]
+        binding = {**self.binding, "profileDigest": canonical_digest(sample["profile"])}
+        with self.assertRaises(ConformanceError):
+            self.record(binding=binding, profile=sample["profile"], broker_binding=sample["binding"])
+        self.assertEqual(self.io.events, [])
+
+    def test_unresolved_intent_blocks_another_create_not_just_name_reuse(self):
+        self.record()
+        second = {**self.payload(), "name": "second", "actionId": 2, "manifestDigest": admission.ZERO}
+        with self.assertRaisesRegex(ConformanceError, "ADMISSION_CREATE_REPLAY"):
+            admission.parse_reservations(self.raw_row("CREATE_INTENT", second))
+        self.assertIsNone(self.resource()["uid"])
+
+    def test_replayed_resource_scope_is_closed_and_bounded(self):
+        self.record()
+        payload = self.payload()
+        self.io.raw = self.initial
+        for key, value in (("actionId", True), ("actionId", 0), ("actionId", 257),
+                           ("apiVersion", "apps/v1"), ("kind", "PersistentVolumeClaim"),
+                           ("namespace", "../foreign"), ("name", "x" * 64), ("manifestDigest", "latest")):
+            with self.subTest(key=key), self.assertRaises(ConformanceError):
+                admission.parse_reservations(self.raw_row("CREATE_INTENT", {**payload, key: value}))

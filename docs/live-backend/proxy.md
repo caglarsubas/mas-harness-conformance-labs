@@ -1060,6 +1060,48 @@ session. Tests do not establish native containment, chain trust or API effects.
 All1,013 predecessor methods,127 accepted files and existing fixture bytes remain
 unchanged. Fresh exact-commit full LOCAL and required localhost CI are mandatory.
 
+## Durable create-accounting checkpoint (source-only)
+
+The existing `reservations.jsonl` journal now accepts two closed, private
+resource-record variants: `CREATE_INTENT` and `CREATED`. They retain the same
+sequence/hash chain, binding, operation, time, transaction lock, size limits and
+precreated store. No new file, migration, public schema or installation is added.
+Existing reservation/cleanup row bytes remain valid and are never rewritten.
+
+`_AdmissionLog.record_resource` derives identity from the validated profile,
+its exact admission binding, disjoint broker case ownership and a bounded CREATE
+action. It compares the caller-retained history under the journal lock and returns
+only after append, fsync, exact readback and transaction exit. Any write, sync,
+readback or exit ambiguity poisons the owner and forbids retry. Storage is still
+owned by the original server; this data algorithm is not an execution grant.
+
+Intent stores an exact name/manifest/action with null UID and resourceVersion.
+CREATED must follow that same intent and validates the actual returned manifest
+before retaining UID/resourceVersion. Repeated creates, name/action/manifest
+reuse, identity replacement, unsupported scope, adoption without intent and
+cross-case/run substitutions refuse. Replay checks the same closed transitions;
+at most32 resource identities are retained for the whole reserved run.
+Another create intent is refused while an earlier intent remains unresolved.
+
+An unresolved intent remains a held name, with null UID and `IO_AMBIGUOUS` when
+recorded in a pending cleanup receipt. Known identities likewise remain held.
+A cleanup receipt cannot silently omit, substitute or invent these resources;
+an empty list cannot release them. No new resource record is accepted after
+that operation's cleanup record. Independent absence accounting is deliberately
+not implemented yet, so these new resource states cannot reach CLEAN in this
+checkpoint. Crash/restart is not reconciliation and never reopens a nonce.
+
+This increment does not send an API request, acknowledge a broker action, delete
+a resource or wire the journal into `_BrokerStart`/`NativeProxyServer.serve`.
+The original RUNNING-history guard still refuses changed history; a subsequent
+guarded driver must adopt only its own successfully committed journal transition.
+Connecting that driver, independently verifying absence and completing the native
+factory remain mandatory before API effects. Existing macOS unit tests exercise
+the real data/journal algorithms with in-memory storage, not native durability,
+generation enforcement or tenant acceptance. All1,060 preceding tests and the127
+accepted baseline files remain unchanged; a fresh full signed LOCAL and required
+localhost CI run must validate this exact increment.
+
 ## Verification boundary
 
 This is an in-progress source snapshot, not a self-attested run result. Exact
