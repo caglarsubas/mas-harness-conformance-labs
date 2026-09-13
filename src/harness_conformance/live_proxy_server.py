@@ -4495,7 +4495,7 @@ class _BrokerCreateResult:
             setattr(candidate, field, before[field])
         candidate.actions = set(before["actions"])
         require(_BrokerEvents._snapshot(candidate) == self.before, "BROKER_RESULT_TRANSCRIPT_CHANGED")
-        frame = {**document(self.start.started_raw, 16384), "sequence": candidate.sequence + 1,
+        frame = {**document(self.events.started_raw, 16384), "sequence": candidate.sequence + 1,
             "previousDigest": candidate.previous, "kind": "RESOURCE_RESULT",
             "payload": {"actionId": action["actionId"], "outcome": "CREATED",
                         "objectBase64": base64.b64encode(self.response_raw).decode("ascii")}}
