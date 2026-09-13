@@ -929,6 +929,16 @@ Load those fixtures before installing the doubles; no inherited test body or
 production acceptance boundary changes. The failed log remains external
 operator evidence, not PASS. The corrected head requires a fresh full8 replay.
 
+Candidate `676ef10aa3da8204ffc893d419e8974dc37f0ba6` then exposed a production
+clock-format error in the new handshake: the strict whole-second wire parser
+rejected the installed runtime clock's RFC3339 microseconds. Runtime comparisons
+now use the existing RFC3339 parser without rounding; observer wire timestamps
+retain their strict whole-second format. Two additional regressions distinguish
+these inputs. The new observer fixture uses canonical wire time, and its
+out-of-order action vector uses a schema-valid integer action ID so it reaches
+the intended ordering guard. The24 failures/five errors and the entire failed
+replay remain retained; no subset, inherited-test or acceptance-policy change.
+
 Preceding head `acb2da5cba9fef6f35b3316f5c005534a8e8b20b` passed926 tests,
 zero skips and all8 commands in signed LOCAL activation228 and required localhost
 CI34741454274/activation229. Runner62 retired, zero runners/artifacts verified.

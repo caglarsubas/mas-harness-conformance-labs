@@ -6448,7 +6448,7 @@ class BrokerDispatchStartTests(unittest.TestCase):
         self.stack.enter_context(patch.object(server._State, "read", self.read_store))
         self.observed = deepcopy(VECTORS["observation"]["positive"]["observation"])
         self.observed.update(bindingDigest=server.canonical_digest(owner.observation_binding),
-            runNonce=owner.envelope["nonce"], observedAt=self.wall, expiresAt="2026-09-08T00:00:05Z")
+            runNonce=owner.envelope["nonce"], observedAt="2026-09-08T00:00:02Z", expiresAt="2026-09-08T00:00:05Z")
         self.on_observe = lambda: None
         self.observations = []
         def observe(resource):
@@ -6600,8 +6600,19 @@ class BrokerDispatchStartTests(unittest.TestCase):
         self.refused("BROKER_GENERATION_CHANGED")
 
     def test_expired_observation_never_sends(self):
-        self.observed["expiresAt"] = self.wall
+        self.observed["expiresAt"] = "2026-09-08T00:00:02Z"
         self.refused("BROKER_OBSERVATION_EXPIRED")
+        self.socket.send.assert_not_called()
+
+    def test_subsecond_runtime_clock_accepts_current_whole_second_observation(self):
+        self.wall = "2026-09-08T00:00:02.125000Z"
+        self.subject.begin()
+        self.assertEqual(json.loads(self.subject.dispatch.started), self.frame)
+        self.socket.send.assert_called_once()
+
+    def test_fractional_wire_observation_is_not_relaxed_with_runtime_clock(self):
+        self.observed["observedAt"] = "2026-09-08T00:00:02.000000Z"
+        self.refused("PROXY_TIME_INVALID")
         self.socket.send.assert_not_called()
 
     def test_foreign_observation_nonce_never_sends(self):
@@ -6674,7 +6685,7 @@ class BrokerDispatchStartTests(unittest.TestCase):
 
     def test_first_resource_action_is_not_controlled_start(self):
         self.on_receive = lambda: self.frame.update(kind="RESOURCE_ACTION",
-            payload={"actionId": "d" * 64, "verb": "GET", "manifestDigest": admission.ZERO})
+            payload={"actionId": 1, "verb": "GET", "manifestDigest": admission.ZERO})
         self.refused("BROKER_CONTROLLED_START_REQUIRED")
 
     def test_oversize_response_is_bounded_before_parsing(self):

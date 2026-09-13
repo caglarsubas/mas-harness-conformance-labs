@@ -3519,7 +3519,7 @@ class _BrokerStart:
             states, _, _ = parse_reservations(self.ledger_raw)
             current = states.get((owner.envelope["tenantId"], owner.envelope["nonce"]))
             require(current is not None and current["current"] == self.operation and current["held"] is True
-                    and current["last"] <= _time(utc_now())
+                    and current["last"] <= require_time(utc_now(), "now")
                     and canonical_bytes(current["binding"]) == self.reservation_raw, "BROKER_RUNNING_REQUIRED")
             last = document(self.ledger_raw.splitlines()[-1], 32768)
             require(last["state"] == "RUNNING" and last["operation"] == self.operation
@@ -3599,7 +3599,9 @@ class _BrokerStart:
                 and canonical_bytes(self.observer.previous) == self.observer._previous_raw
                 and observed["bindingDigest"] == canonical_digest(owner.observation_binding)
                 and observed["runNonce"] == owner.envelope["nonce"], "BROKER_OBSERVATION_BINDING")
-        now, start, end = _time(utc_now()), _time(observed["observedAt"]), _time(observed["expiresAt"])
+        # Runtime UTC includes microseconds; only wire observations are seconds.
+        now = require_time(utc_now(), "now")
+        start, end = _time(observed["observedAt"]), _time(observed["expiresAt"])
         require(start <= now < end and 0 < (end - start).total_seconds() <= 5, "BROKER_OBSERVATION_EXPIRED")
         pin = (observed["observerBootId"], observed["generation"])
         require(self.observation_pin is None or self.observation_pin == pin, "BROKER_GENERATION_CHANGED")
