@@ -6063,20 +6063,23 @@ class BrokerTransportCustodyTests(unittest.TestCase):
         self.stack.enter_context(patch.object(server._ServerQualificationBinding, "check", self.binding_check))
         self.subject = self.owner.broker = self.owner._broker_original = object.__new__(server._Broker)
         self.containment = Mock(return_value=None)
-        # This existing class tests transport, not native reader qualification.
-        # Keep its explicit containment double at the new fixed owned component.
+        # This class tests transport, not native reader qualification.
+        # Keep the explicit containment double at the fixed owned component.
         def inspection_init(resource, peer):
             resource.peer, resource.closed = peer, False
         self.stack.enter_context(patch.object(server._KernelBrokerInspection, "__init__", inspection_init))
         self.stack.enter_context(patch.object(server._KernelBrokerInspection, "check", self.containment))
         self.stack.enter_context(patch.object(server._KernelBrokerInspection, "close",
             lambda resource: setattr(resource, "closed", True)))
+        real_stat = server.os.stat
         patches = ((server.time, "monotonic", dict(side_effect=lambda: self.now)),
             (server, "utc_now", dict(side_effect=lambda: self.wall)),
             (server, "_manifest", dict(return_value=({}, self.fixture["binding"]["brokerManifestDigest"],
                 self.fixture["binding"]["brokerExecutableDigest"]))),
             (server, "process_identity", dict(side_effect=lambda pid: deepcopy(self.process))),
-            (server.os, "stat", dict(side_effect=lambda path, **kw: self.path if path == "capacity-broker.sock" else self.exe)),
+            (server.os, "stat", dict(side_effect=lambda path, **kw:
+                self.path if path == "capacity-broker.sock" and kw.get("dir_fd") == 75
+                else self.exe if path == "/proc/811/exe" else real_stat(path, **kw))),
             (server.os, "fstat", dict(side_effect=lambda fd: self.fds[fd])),
             (server.os, "get_inheritable", dict(return_value=False)),
             (server.os, "pidfd_open", dict(return_value=72, create=True)),
@@ -6413,6 +6416,8 @@ class BrokerInspectionWiringTests(unittest.TestCase):
         self.socket.close.assert_called_once()
         self.assertEqual(self.events.count(("close", 72)), 1)
 
+class BrokerStartupSourceOrderTests(unittest.TestCase):
+    """Source ordering only; separate from every OS-mocked channel fixture."""
     def test_server_constructor_order_keeps_broker_before_credentials(self):
         import inspect
         source = inspect.getsource(server.NativeProxyServer.__init__)

@@ -913,6 +913,13 @@ any of the869 preceding test bodies. Source-order checks are labeled as source
 checks, not full native startup evidence. Fresh exact-head full8 LOCAL and required
 localhost CI remain pending externally for these bytes.
 
+The first broker candidate's replay stopped in a source-order test because its
+socket-stat fixture also intercepted Python source-file metadata and traceback
+formatting. The broker fixture now intercepts only its two declared peer paths;
+source ordering has its own unmocked test class. The failed exact-commit log is
+retained. Production code, original tests and acceptance commands are unchanged
+by this fixture correction; all eight commands must be rerun on the new commit.
+
 ## Verification boundary
 
 This is an in-progress source snapshot, not a self-attested run result. Exact
