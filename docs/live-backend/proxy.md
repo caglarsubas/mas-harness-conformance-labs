@@ -1239,6 +1239,42 @@ doubles. All 1,203 predecessor test bodies, 127 baseline files and fixture bytes
 remain unchanged; exact full signed LOCAL and localhost CI are required anew.
 No source test or successful local send establishes native broker enforcement.
 
+## Guarded CREATE retirement continuation — 2026-09-14
+
+The preceding result-delivery checkpoint `699a00c` passed all eight commands and
+1,237 tests, zero skips, in exact signed LOCAL and localhost PR CI. CI run
+34763907272 used runner70, which was retired. That is source/CI evidence, not
+acceptance of this new continuation or native execution.
+
+`_Broker.retire_create_result()` consumes only its original completed local
+CREATED send. It first revalidates the full original pending-action, durable
+identity and API-custody chain. It retains an immutable typed data snapshot and
+the exact original owners, closes that API through the fixed class method, and
+requires successful closure before advancing the original transcript with the
+exact already-sent frame. The transcript object is not replaced. Current history,
+authority, observer generation, peer and deadline checks surround closure and
+advancement; a final guarded phase precedes local completion publication.
+
+Short/ambiguous or failed closure, descriptor reuse, changed owners/data/history,
+expiry and reentrancy fail closed. A close error remains the first error while
+post-error guards still run. An advanced transcript is never rolled back after a
+later guard failure. The original CREATED accounting stays held and poisoned on
+failure; no retry, adoption, new credential, network request or journal write is
+added. A retained retirement check observes current original authority without
+reusing the now-closed API or applying old pending-action guards to retired state.
+
+This is **local retirement, not broker receipt, distributed commit, resource
+cleanup or next-action readiness**. Old action owners remain retained; receive
+refuses `BROKER_ACTION_HANDOFF_REQUIRED` until their separately guarded handoff
+is implemented. GET/exact-UID cleanup, absence/cleanup/terminal handling and the
+complete qualifier/factory/server integration remain unfinished. No installation,
+native probes, new public contracts or platform acceptance are introduced.
+
+New tests use the real retirement/result/accounting/codec code with explicit
+OS/TLS/storage doubles. All 1,237 predecessor test bodies, 127 baseline files and
+fixture bytes remain unchanged. Fresh full signed LOCAL and localhost CI are
+required; this source document does not self-attest those future results.
+
 ## Verification boundary
 
 This is an in-progress source snapshot, not a self-attested run result. Exact
@@ -1294,6 +1330,8 @@ probe, live launcher, runtime download or cloud/billable service is authorized.
 | Alpha 2 | CONF-LIVE-003 returned-identity accounting | IMPLEMENTED_NOT_ACCEPTED | Exact CREATED journal append; action still pending; fresh full acceptance required |
 | Alpha 2 | CONF-LIVE-003 identity-accounting checkpoint | LOCAL_AND_CI_PASS_RECORDED | Headb8c5c10 /1,203 tests/all8; CI34761635544; runner69 retired |
 | Alpha 2 | CONF-LIVE-003 CREATED result delivery | IMPLEMENTED_NOT_ACCEPTED | One-shot bound datagram; transcript advancement and retirement remain gated |
+| Alpha 2 | CONF-LIVE-003 result-delivery checkpoint | LOCAL_AND_CI_PASS_RECORDED | Head699a00c /1,237 tests/all8; CI34763907272; runner70 retired |
+| Alpha 2 | CONF-LIVE-003 local CREATE retirement | IMPLEMENTED_NOT_ACCEPTED | Original API close then exact transcript advancement; next-action handoff remains gated |
 | Alpha 2 | CONF-LIVE-003 native inspector / broker / API | ONGOING | Required implementation listed above |
 | Alpha 2 | CONF-LIVE-003 required CI | WAITING | Fresh exact-head localhost evidence required; prior failures retained |
 | Alpha 2 | CONF-LIVE-003 source completion / merge / exact-main | NOT_RUN | Packet is incomplete; no completion claim |

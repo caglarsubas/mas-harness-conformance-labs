@@ -3286,6 +3286,7 @@ class _Broker:
         self.exchange = self._exchange_original = None
         self.created = self._created_original = None
         self.result = self._result_original = None
+        self.retirement = self._retirement_original = None
         self._attempted_cases = set()
         self.deadline = owner.deadline
         self.last_wall, self.last_mono = None, time.monotonic()
@@ -3588,6 +3589,30 @@ class _Broker:
                 pass  # preserve the first refusal and held accounting; never retry
             raise
 
+    def retire_create_result(self):
+        """Retire one delivered CREATE locally; no next-action or cleanup grant."""
+        try:
+            require(not self.closed and not self.failed and not self.busy
+                    and self.retirement is self._retirement_original is None,
+                    "BROKER_RETIREMENT_ALREADY_ATTEMPTED")
+            self.retirement = self._retirement_original = object.__new__(_BrokerCreateRetirement)
+            self.retirement.__init__(self)
+            require(type(self.retirement) is _BrokerCreateRetirement
+                    and self.retirement is self._retirement_original
+                    and self.retirement.retired and self.retirement.advanced
+                    and not self.retirement.failed, "BROKER_RETIREMENT_PUBLICATION_CHANGED")
+            _BrokerCreateRetirement._state_check(self.retirement)
+            self.retirement.complete = True
+        except BaseException:
+            if self._retirement_original is not None:
+                _BrokerCreateRetirement._poison(self._retirement_original)
+            self.failed = True
+            try:
+                _Broker.close(self)
+            except BaseException:
+                pass  # never undo the transcript, retry a close, or release accounting
+            raise
+
     def close(self):
         if not self.closed:
             self.closed = True
@@ -3822,6 +3847,8 @@ class _BrokerEvents:
         try:
             self._check()
             transcript, broker = self.transcript, self.broker
+            require(broker.retirement is broker._retirement_original is None,
+                    "BROKER_ACTION_HANDOFF_REQUIRED")
             require(transcript.pending is None, "BROKER_RESOURCE_RESULT_REQUIRED")
             require(transcript.cleanup is None and transcript.terminal is None,
                     "BROKER_INBOUND_PHASE_CLOSED")
@@ -4556,6 +4583,176 @@ class _BrokerCreateResult:
         self.failed = True
         if type(self._created_original) is _BrokerCreated:
             _BrokerCreated._poison(self._created_original)
+
+
+class _BrokerCreateRetirement:
+    """One-way local retirement, not broker receipt or next-action authority.
+
+    Old pending-action guards are consumed before close. A sealed original-owner
+    record then guards the closed API and advanced transcript; it never reopens
+    the API, resets the action owners, writes the journal or releases capacity.
+    """
+    def __init__(self, broker):
+        self.failed = self.complete = self.retired = self.advanced = False
+        self.broker = self._broker_original = None
+        self.result = self._result_original = None
+        try:
+            require(type(self) is _BrokerCreateRetirement and type(broker) is _Broker
+                    and broker.retirement is broker._retirement_original is self,
+                    "BROKER_RETIREMENT_OWNER")
+            self.broker = self._broker_original = broker
+            self.result = self._result_original = broker.result
+            require(type(self.result) is _BrokerCreateResult and self.result is broker._result_original
+                    and self.result.complete is True and self.result.attempted is True
+                    and not self.result.failed, "BROKER_RETIREMENT_DELIVERY_REQUIRED")
+            _BrokerCreateResult.check(self.result)  # last full live-API/pending-action guard
+            self.owner, self.created = broker.owner, self.result.created
+            self.intent, self.exchange, self.api = self.created.intent, self.created.exchange, self.created.api
+            self.events, self.start = self.result.events, self.result.start
+            self.log, self.storage, self.secrets = self.created.log, self.created.storage, self.api.secrets
+            self.before, self.after, self.frame_raw = self.result.before, self.result.after, self.result.frame_raw
+            self.ledger_raw, self.deadline = self.result.ledger_raw, broker.deadline
+            self.data_pin = self._retained_data()
+            with broker._phase():
+                self._check()
+                try:
+                    require(_BrokerApi.close(self.api) is None, "BROKER_RETIREMENT_CLOSE_RESULT")
+                except BaseException:
+                    # Recheck even a failed close, without hiding its first error.
+                    try:
+                        self._check(closing=True)
+                    except BaseException:
+                        pass  # original close error and sticky cleanup remain authoritative
+                    raise
+                else:
+                    self._check(closing=True)
+                self.retired = True
+                self._check()
+                # This is the exact frame already attempted on the original channel.
+                # No send, receive, acknowledgement or detached parser substitution.
+                BrokerTranscript.accept(self.events.transcript, self.frame_raw, "SERVER")
+                require(_BrokerEvents._snapshot(self.events.transcript) == self.after,
+                        "BROKER_RETIREMENT_ADVANCE_MISMATCH")
+                self.events.transcript_raw = self.after
+                self.advanced = True
+                self._check()
+            # An independent final phase catches authority loss before publication.
+            with broker._phase():
+                self._check()
+        except BaseException:
+            self._poison()
+            raise
+
+    def _retained_data(self):
+        result, created, intent, exchange, api = self.result, self.created, self.intent, self.exchange, self.api
+        values = (result.before, result.after, result.frame_raw, result.response_raw, result.record_raw,
+            result.action_raw, result.ledger_raw, result.deadline, result.complete, result.attempted,
+            created.before, created.after, created.row_raw, created._row_original, created.digest,
+            created.response_raw, created.action_raw, created.deadline, created.committed, created.writing, created.advanced,
+            intent.before, intent.after, intent.row_raw, intent.digest, intent.action_raw, intent.profile_raw,
+            intent.reservation_raw, intent.binding_raw, intent.operation, intent.deadline,
+            intent.committed, intent.writing, intent.advanced,
+            exchange.request_raw, exchange.response_raw, exchange._response_original, exchange.action_raw,
+            exchange.deadline, exchange.complete, exchange.attempted,
+            api.action_raw, api.endpoint_raw, api.ca, api.deadline,
+            canonical_bytes(api.endpoint), canonical_bytes(self.owner.profile))
+        require(all(type(value) in (bytes, str, int, float, bool, type(None)) for value in values),
+                "BROKER_RETIREMENT_DATA_TYPE")
+        return tuple((type(value), value) for value in values)  # immutable, exact builtin types
+
+    def _owners_check(self):
+        broker, result, created, intent, exchange, api = (
+            self.broker, self.result, self.created, self.intent, self.exchange, self.api)
+        require(type(self) is _BrokerCreateRetirement and not self.failed
+                and type(broker) is _Broker and broker is self._broker_original
+                and not broker.closed and not broker.failed
+                and broker.retirement is broker._retirement_original is self
+                and broker.owner is self.owner and self.owner.broker is self.owner._broker_original is broker
+                and type(result) is _BrokerCreateResult and result is self._result_original
+                and broker.result is broker._result_original is result and not result.failed
+                and result.broker is result._broker_original is broker and result.owner is self.owner
+                and type(created) is _BrokerCreated and broker.created is broker._created_original is created
+                and result.created is result._created_original is created and not created.failed
+                and created.broker is created._broker_original is broker and created.owner is self.owner
+                and type(intent) is _BrokerIntent and broker.intent is broker._intent_original is intent
+                and result.intent is created.intent is created._intent_original is intent and not intent.failed
+                and intent.broker is broker and intent.owner is self.owner
+                and type(exchange) is _BrokerCreateExchange
+                and broker.exchange is broker._exchange_original is created.exchange is exchange
+                and exchange.broker is broker and exchange.owner is self.owner
+                and exchange.intent is intent and not exchange.failed
+                and type(api) is _BrokerApi and broker.api is broker._api_original is created.api is exchange.api is api
+                and api.broker is broker and api.owner is self.owner and not api.failed
+                and type(self.events) is _BrokerEvents and type(self.start) is _BrokerStart
+                and type(self.storage) is _State and type(self.log) is _AdmissionLog
+                and type(self.secrets) is _Files
+                and broker.events is broker._events_original is result.events is created.events is intent.events
+                    is exchange.events is api.events is self.events
+                and broker.dispatch is broker._dispatch_original is result.start is created.start is intent.start is self.start
+                and self.owner.storage is self.storage is created.storage is intent.storage is self.start.storage
+                and self.owner.log is self.log is created.log is created._log_original is intent.log is self.start.log
+                and self.log.storage is self.storage and not self.log.poisoned
+                and self.owner.secrets is api.secrets is self.secrets and self.secrets.owner is self.owner,
+                "BROKER_RETIREMENT_OWNER_CHANGED")
+
+    def _state_check(self, closing=False):
+        self._owners_check()
+        broker, result, api = self.broker, self.result, self.api
+        require(self._retained_data() == self.data_pin
+                and self.result.before == self.before and self.result.after == self.after
+                and self.result.frame_raw == self.frame_raw and self.result.ledger_raw == self.ledger_raw
+                and self.start.ledger_raw == self.ledger_raw
+                and self.deadline == broker.deadline == self.owner.deadline
+                and _BrokerCreateResult._candidate(result) == (self.frame_raw, self.after)
+                and _BrokerApi._inputs(api) == (api.endpoint_raw, api.ca)
+                and api.target == api._target_original, "BROKER_RETIREMENT_DATA_CHANGED")
+        expected = self.after if self.advanced else self.before
+        require(type(self.retired) is bool and type(self.advanced) is bool
+                and (not self.advanced or self.retired)
+                and self.events.transcript_raw == expected
+                and _BrokerEvents._snapshot(self.events.transcript) == expected,
+                "BROKER_RETIREMENT_TRANSCRIPT_CHANGED")
+        if closing or self.retired:
+            require(api.closed is True and api.ready is False and api.checking is False
+                    and api.cleanup_failure is None and api.sock is api._socket_original is None
+                    and api.tls is api._tls_original is None and api.memfd is api._memfd_original is None,
+                    "BROKER_RETIREMENT_API_NOT_CLOSED")
+        else:
+            require(api.closed is False and api.ready is True and api.cleanup_failure is None,
+                    "BROKER_RETIREMENT_API_NOT_READY")
+
+    def _check(self, closing=False):
+        # Fresh independently owned authority/history/observer/peer checks bracket
+        # the closed-owner data view. Never call the retired API's live checks.
+        self._owners_check()
+        _BrokerEvents._check(self.events)
+        self._state_check(closing)
+        _BrokerEvents._check(self.events)
+        self._state_check(closing)
+
+    def check(self):
+        try:
+            require(self.complete is True and self.retired is True and self.advanced is True,
+                    "BROKER_RETIREMENT_NOT_COMPLETE")
+            require(type(self.broker) is _Broker and self.broker is self._broker_original,
+                    "BROKER_RETIREMENT_OWNER_CHANGED")
+            with self.broker._phase():
+                self._check()
+        except BaseException:
+            self._poison()
+            broker = self._broker_original
+            if type(broker) is _Broker:
+                broker.failed = True
+                try:
+                    _Broker.close(broker)
+                except BaseException:
+                    pass  # retained journal and first cleanup failure survive
+            raise
+
+    def _poison(self):
+        self.failed = True
+        if type(self._result_original) is _BrokerCreateResult:
+            _BrokerCreateResult._poison(self._result_original)
 
 
 class _State:

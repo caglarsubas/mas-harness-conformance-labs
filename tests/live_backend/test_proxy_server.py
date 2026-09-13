@@ -8954,6 +8954,379 @@ class BrokerCreateResultTests(_BrokerEventFixture, unittest.TestCase):
         self.socket.send.assert_called_once()
 
 
+class BrokerCreateRetirementTests(_BrokerEventFixture, unittest.TestCase):
+    """Real retirement/result/codec owners, with unit-only OS/TLS/storage doubles."""
+    start = BrokerCreateResultTests.start
+    action = BrokerCreateResultTests.action
+    read_secret = BrokerCreateResultTests.read_secret
+    connect_api = BrokerCreateResultTests.connect_api
+    write_memfd = BrokerCreateResultTests.write_memfd
+    make_context = BrokerCreateResultTests.make_context
+    wrap = BrokerCreateResultTests.wrap
+    handshake = BrokerCreateResultTests.handshake
+    read_intent = BrokerCreateResultTests.read_intent
+    append_intent = BrokerCreateResultTests.append_intent
+    sync_intent = BrokerCreateResultTests.sync_intent
+    held = BrokerCreateResultTests.held
+    reply = BrokerCreateResultTests.reply
+    http_write = BrokerCreateResultTests.http_write
+    http_read = BrokerCreateResultTests.http_read
+    prepare = BrokerCreateResultTests.prepare
+    accounted = BrokerCreateResultTests.accounted
+    result_send = BrokerCreateResultTests.result_send
+
+    def setUp(self):
+        BrokerCreateResultTests.setUp(self)
+        self.on_api_close = lambda: None
+        self.api_socket.close.side_effect = self.close_api
+
+    def close_api(self):
+        self.events.append("retire-api-close")
+        self.on_api_close()
+
+    def delivered(self):
+        self.accounted()
+        self.subject.send_create_result()
+        self.result = self.subject.result
+        self.retire_ledger = self.ledger
+        self.retire_before = self.subject.events.transcript_raw
+        self.retire_after = self.result.after
+        self.parser = self.subject.events.transcript
+
+    def refuse_retirement(self, reason=".+"):
+        with self.assertRaisesRegex((ConformanceError, OSError), reason) as caught:
+            self.subject.retire_create_result()
+        self.assertTrue(self.subject.failed and self.subject.closed)
+        if self.subject._retirement_original is not None:
+            self.assertTrue(self.subject._retirement_original.failed)
+            self.assertFalse(self.subject._retirement_original.complete)
+        return caught.exception
+
+    def test_success_closes_original_api_then_advances_original_parser_once(self):
+        self.delivered()
+        seen = []
+        self.on_api_close = lambda: seen.append(self.subject.events.transcript_raw)
+        self.assertIsNone(self.subject.retire_create_result())
+        retired = self.subject.retirement
+        self.assertIs(retired, self.subject._retirement_original)
+        self.assertTrue(retired.complete and retired.retired and retired.advanced)
+        self.assertEqual(seen, [self.retire_before])
+        self.assertIs(self.subject.events.transcript, self.parser)
+        self.assertIs(self.subject.dispatch.transcript, self.parser)
+        self.assertEqual(self.subject.events.transcript_raw, self.retire_after)
+        self.assertIsNone(self.parser.pending)
+        self.assertEqual(self.parser.previous, server.byte_digest(self.result.frame_raw))
+        self.assertEqual(self.parser.sequence, json.loads(self.retire_before)["sequence"] + 1)
+        self.assertTrue(self.api.closed)
+        self.assertFalse(self.api.ready)
+        self.assertIsNone(self.api.sock)
+        self.assertIsNone(self.api.tls)
+        self.api_socket.close.assert_called_once_with()
+        self.socket.close.assert_not_called()
+        self.socket.send.assert_called_once_with(self.result.frame_raw)
+
+    def test_retirement_does_not_release_resources_write_history_or_claim_cleanup(self):
+        self.delivered()
+        writes = len(self.writes)
+        mutations = [event for event in self.io_events if event != "read"]
+        self.subject.retire_create_result()
+        self.assertEqual(self.ledger, self.retire_ledger)
+        self.assertEqual(len(self.writes), writes)
+        self.assertEqual([event for event in self.io_events if event != "read"], mutations)
+        self.assertTrue(self.held()["held"])
+        self.assertTrue(all(r["state"] == "CREATED" for r in self.held()["resources"].values()))
+        self.assertIsNone(self.parser.cleanup)
+        self.assertIsNone(self.parser.terminal)
+
+    def test_retirement_reads_no_new_credential_and_performs_no_transport_io(self):
+        self.delivered()
+        calls = self.secret_reads.call_count, self.ssl.read.call_count, self.api_socket.send.call_count
+        self.subject.retire_create_result()
+        self.assertEqual(calls, (self.secret_reads.call_count, self.ssl.read.call_count, self.api_socket.send.call_count))
+        self.socket.recvmsg.assert_not_called()
+        self.api_socket.connect.assert_called_once()
+        self.assertEqual(self.sent_results, [self.result.frame_raw])
+
+    def test_retained_checks_reobserve_without_reclosing_or_replaying(self):
+        self.delivered()
+        self.subject.retire_create_result()
+        before = len(self.observations)
+        self.assertIsNone(self.subject.retirement.check())
+        self.assertGreater(len(self.observations), before)
+        self.assertEqual(self.subject.events.transcript_raw, self.retire_after)
+        self.api_socket.close.assert_called_once()
+        self.socket.send.assert_called_once()
+
+    def test_next_event_waits_for_separate_action_owner_handoff(self):
+        self.delivered()
+        self.subject.retire_create_result()
+        with self.assertRaisesRegex(ConformanceError, "BROKER_ACTION_HANDOFF_REQUIRED"):
+            self.subject.poll()
+        self.socket.recvmsg.assert_not_called()
+        self.assertTrue(self.held()["held"])
+
+    def test_closed_api_cannot_be_reused_for_another_action(self):
+        self.delivered()
+        self.subject.retire_create_result()
+        with self.assertRaisesRegex(ConformanceError, "BROKER_API_ALREADY_ATTEMPTED"):
+            self.subject.prepare_api()
+        self.api_socket.connect.assert_called_once()
+        self.secret_reads.assert_called_once()
+
+    def test_no_caller_result_frame_or_cleanup_selector(self):
+        for value in ({}, b"frame", True, Mock()):
+            with self.subTest(kind=type(value).__name__), self.assertRaises(TypeError):
+                self.subject.retire_create_result(value)
+        self.assertIsNone(self.subject.retirement)
+        self.api_socket.close.assert_not_called()
+
+    def test_unowned_constructor_never_retires_or_advances(self):
+        self.delivered()
+        with self.assertRaisesRegex(ConformanceError, "BROKER_RETIREMENT_OWNER"):
+            server._BrokerCreateRetirement(self.subject)
+        self.api_socket.close.assert_not_called()
+        self.assertEqual(self.subject.events.transcript_raw, self.retire_before)
+        self.assertFalse(self.owner.log.poisoned)
+
+    def test_no_created_result_cannot_retire(self):
+        self.refuse_retirement("BROKER_RETIREMENT_DELIVERY_REQUIRED")
+        self.api_socket.close.assert_not_called()
+        self.socket.send.assert_not_called()
+
+    def test_recorded_but_unsent_result_cannot_retire(self):
+        self.accounted()
+        before = self.subject.events.transcript_raw
+        self.refuse_retirement("BROKER_RETIREMENT_DELIVERY_REQUIRED")
+        self.assertEqual(self.subject.events.transcript_raw, before)
+        self.socket.send.assert_not_called()
+
+    def test_unpublished_send_is_not_a_retirement_grant(self):
+        self.delivered()
+        self.result.complete = False
+        self.refuse_retirement("BROKER_RETIREMENT_DELIVERY_REQUIRED")
+        self.assertEqual(self.subject.events.transcript_raw, self.retire_before)
+
+    def test_ambiguous_send_cannot_be_retired_as_success(self):
+        self.accounted()
+        self.result_count = 1
+        with self.assertRaises(ConformanceError):
+            self.subject.send_create_result()
+        before = self.subject.events.transcript_raw
+        self.refuse_retirement("BROKER_RETIREMENT_ALREADY_ATTEMPTED")
+        self.assertEqual(self.subject.events.transcript_raw, before)
+        self.socket.send.assert_called_once()
+
+    def test_changed_result_frame_refuses_before_advancement(self):
+        self.delivered()
+        self.result.frame_raw = b"foreign"
+        self.refuse_retirement("BROKER_RESULT_CANDIDATE_CHANGED")
+        self.assertEqual(self.subject.events.transcript_raw, self.retire_before)
+
+    def test_changed_created_identity_refuses_before_advancement(self):
+        self.delivered()
+        self.subject.created.response_raw = b"{}"
+        self.refuse_retirement("BROKER_CREATED_INPUT_CHANGED")
+        self.assertEqual(self.subject.events.transcript_raw, self.retire_before)
+
+    def test_api_peer_replacement_before_close_is_rejected(self):
+        self.delivered()
+        self.api_peer = ("127.0.0.3", 7443)
+        self.refuse_retirement("API_PEER_CHANGED")
+        self.assertEqual(self.subject.events.transcript_raw, self.retire_before)
+
+    def test_history_rollback_before_close_is_rejected(self):
+        self.delivered()
+        self.ledger = self.before_created
+        self.refuse_retirement("BROKER_RUNNING_CHANGED")
+        self.assertEqual(self.subject.events.transcript_raw, self.retire_before)
+
+    def test_close_failure_preserves_first_error_and_holds_capacity(self):
+        self.delivered()
+        failure = OSError("unit close ambiguous")
+        def fail():
+            raise failure
+        self.on_api_close = fail
+        error = self.refuse_retirement("unit close ambiguous")
+        self.assertIs(error, failure)
+        self.assertIs(self.api.cleanup_failure, failure)
+        self.assertEqual(self.subject.events.transcript_raw, self.retire_before)
+        self.assertTrue(self.owner.log.poisoned and self.held()["held"])
+        self.api_socket.close.assert_called_once()
+        self.api_socket.detach.assert_called_once()
+        self.assertIn("observe", self.events[self.events.index("retire-api-close") + 1:])
+
+    def test_close_does_not_touch_recycled_descriptor(self):
+        self.delivered()
+        original = server._BrokerApi.close
+        def recycled(api):
+            self.fds[81].st_ino += 1
+            return original(api)
+        with patch.object(server._BrokerApi, "close", recycled):
+            self.refuse_retirement("API_CLOSE_FD_REUSED")
+        self.api_socket.close.assert_not_called()
+        self.api_socket.detach.assert_called_once()
+        self.assertEqual(self.subject.events.transcript_raw, self.retire_before)
+
+    def test_instance_shadow_close_is_not_invoked(self):
+        self.delivered()
+        self.api.close = Mock(side_effect=AssertionError("foreign close"))
+        self.subject.retire_create_result()
+        self.api.close.assert_not_called()
+        self.api_socket.close.assert_called_once()
+
+    def test_close_noop_cannot_advance_transcript(self):
+        self.delivered()
+        with patch.object(server._BrokerApi, "close", return_value=None):
+            self.refuse_retirement("BROKER_RETIREMENT_API_NOT_CLOSED")
+        self.assertEqual(self.subject.events.transcript_raw, self.retire_before)
+        # The deliberately inert unit close did not release its original owner.
+        server._BrokerApi.close(self.api)
+
+    def test_non_none_close_result_is_rejected(self):
+        self.delivered()
+        original = server._BrokerApi.close
+        def wrong(api):
+            original(api)
+            return True
+        with patch.object(server._BrokerApi, "close", wrong):
+            self.refuse_retirement("BROKER_RETIREMENT_CLOSE_RESULT")
+        self.assertEqual(self.subject.events.transcript_raw, self.retire_before)
+
+    def test_generation_loss_during_close_prevents_advancement(self):
+        self.delivered()
+        self.on_api_close = lambda: self.observed.update(generation="f" * 64)
+        self.refuse_retirement("BROKER_GENERATION_CHANGED")
+        self.assertEqual(self.subject.events.transcript_raw, self.retire_before)
+        self.api_socket.close.assert_called_once()
+
+    def test_peer_loss_during_close_prevents_advancement(self):
+        self.delivered()
+        self.on_api_close = lambda: self.process.update(start=self.process["start"] + 1)
+        self.refuse_retirement("BROKER_PEER_CHANGED")
+        self.assertEqual(self.subject.events.transcript_raw, self.retire_before)
+
+    def test_history_append_during_close_prevents_advancement(self):
+        self.delivered()
+        self.on_api_close = lambda: setattr(self, "ledger", self.ledger + b"unexpected")
+        self.refuse_retirement("BROKER_RUNNING_CHANGED")
+        self.assertEqual(self.subject.events.transcript_raw, self.retire_before)
+
+    def test_close_deadline_cannot_be_renewed(self):
+        self.delivered()
+        self.on_api_close = lambda: setattr(self, "now", self.subject.end)
+        self.refuse_retirement("BROKER_CLOCK_OR_DEADLINE")
+        self.assertEqual(self.subject.events.transcript_raw, self.retire_before)
+
+    def test_result_data_substitution_during_close_is_rejected(self):
+        self.delivered()
+        self.on_api_close = lambda: setattr(self.result, "record_raw", b"{}")
+        self.refuse_retirement("BROKER_RETIREMENT_DATA_CHANGED")
+        self.assertEqual(self.subject.events.transcript_raw, self.retire_before)
+
+    def test_reentrant_retirement_never_advances_or_closes_twice(self):
+        self.delivered()
+        self.on_api_close = lambda: self.subject.retire_create_result()
+        self.refuse_retirement("BROKER_RETIREMENT_ALREADY_ATTEMPTED")
+        self.api_socket.close.assert_called_once()
+        self.assertEqual(self.subject.events.transcript_raw, self.retire_before)
+
+    def test_repeated_retirement_never_replays_or_recloses(self):
+        self.delivered()
+        self.subject.retire_create_result()
+        with self.assertRaisesRegex(ConformanceError, "BROKER_RETIREMENT_ALREADY_ATTEMPTED"):
+            self.subject.retire_create_result()
+        self.assertEqual(self.subject.events.transcript_raw, self.retire_after)
+        self.api_socket.close.assert_called_once()
+        self.socket.send.assert_called_once()
+        self.assertTrue(self.owner.log.poisoned)
+
+    def test_codec_failure_leaves_closed_api_and_held_accounting(self):
+        self.delivered()
+        original = server.BrokerTranscript.accept
+        def fail(parser, raw, sender):
+            if parser is self.parser:
+                raise ConformanceError("UNIT_CODEC_REFUSED", "unit refusal")
+            return original(parser, raw, sender)
+        with patch.object(server.BrokerTranscript, "accept", fail):
+            self.refuse_retirement("UNIT_CODEC_REFUSED")
+        self.assertTrue(self.api.closed and self.held()["held"])
+        self.assertEqual(self.subject.events.transcript_raw, self.retire_before)
+
+    def test_post_advance_guard_failure_does_not_undo_transcript_or_publish(self):
+        self.delivered()
+        original = server.BrokerTranscript.accept
+        def revoke(parser, raw, sender):
+            value = original(parser, raw, sender)
+            if parser is self.parser:
+                self.observed["generation"] = "f" * 64
+            return value
+        with patch.object(server.BrokerTranscript, "accept", revoke):
+            self.refuse_retirement("BROKER_GENERATION_CHANGED")
+        self.assertEqual(self.subject.events.transcript_raw, self.retire_after)
+        self.assertTrue(self.api.closed and self.owner.log.poisoned)
+
+    def test_closed_owner_check_rejects_later_history_rollback(self):
+        self.delivered()
+        self.subject.retire_create_result()
+        self.ledger = self.before_created
+        with self.assertRaisesRegex(ConformanceError, "BROKER_RUNNING_CHANGED"):
+            self.subject.retirement.check()
+        self.assertTrue(self.subject.failed and self.owner.log.poisoned)
+        self.api_socket.close.assert_called_once()
+
+    def test_closed_owner_check_rejects_transcript_rewind(self):
+        self.delivered()
+        self.subject.retire_create_result()
+        self.subject.events.transcript_raw = self.retire_before
+        with self.assertRaisesRegex(ConformanceError, "BROKER_TRANSCRIPT_CHANGED"):
+            self.subject.retirement.check()
+        self.api_socket.close.assert_called_once()
+
+    def test_foreign_retirement_is_not_published_or_called(self):
+        self.delivered()
+        original = server._BrokerCreateRetirement.__init__
+        foreign = Mock()
+        def replace(resource, broker):
+            original(resource, broker)
+            broker.retirement = foreign
+        with patch.object(server._BrokerCreateRetirement, "__init__", replace):
+            self.refuse_retirement("BROKER_RETIREMENT_PUBLICATION_CHANGED")
+        self.assertNotIn("complete", vars(foreign))
+        foreign.check.assert_not_called()
+        foreign.close.assert_not_called()
+
+    def test_foreign_api_reference_is_not_checked_or_closed(self):
+        self.delivered()
+        self.subject.retire_create_result()
+        original = self.subject.retirement
+        foreign = original.api = Mock()
+        with self.assertRaisesRegex(ConformanceError, "BROKER_RETIREMENT_OWNER_CHANGED"):
+            original.check()
+        foreign.check.assert_not_called()
+        foreign.close.assert_not_called()
+        self.api_socket.close.assert_called_once()
+
+    def test_foreign_events_reference_is_not_checked(self):
+        self.delivered()
+        self.subject.retire_create_result()
+        original = self.subject.retirement
+        foreign = original.events = Mock()
+        with self.assertRaisesRegex(ConformanceError, "BROKER_RETIREMENT_OWNER_CHANGED"):
+            original.check()
+        foreign._check.assert_not_called()
+        foreign._state_check.assert_not_called()
+
+    def test_foreign_broker_reference_is_not_closed(self):
+        self.delivered()
+        self.subject.retire_create_result()
+        original = self.subject.retirement
+        foreign = original.broker = Mock()
+        with self.assertRaisesRegex(ConformanceError, "BROKER_RETIREMENT_OWNER_CHANGED"):
+            original.check()
+        foreign.close.assert_not_called()
+        self.assertTrue(self.subject.failed and self.owner.log.poisoned)
+
+
 class BrokerApiZeroResourceTests(_BrokerEventFixture, unittest.TestCase):
     profile_index = 0
 
