@@ -3280,6 +3280,7 @@ class _Broker:
         self._binding_raw = None
         self.inspection = self._inspection_original = None
         self.dispatch = self._dispatch_original = None
+        self.events = self._events_original = None
         self._attempted_cases = set()
         self.deadline = owner.deadline
         self.last_wall, self.last_mono = None, time.monotonic()
@@ -3453,6 +3454,26 @@ class _Broker:
                 pass  # sticky cleanup failure retained; preserve the first refusal
             raise
 
+    def poll(self):
+        """Receive one bounded event, or None for idle; never execute an action."""
+        try:
+            with self._phase():
+                if self.events is None and self._events_original is None:
+                    self.events = self._events_original = object.__new__(_BrokerEvents)
+                    self.events.__init__(self)
+                require(type(self.events) is _BrokerEvents and self.events is self._events_original,
+                        "BROKER_EVENTS_OWNER_CHANGED")
+                raw = self.events.receive()
+            return raw  # publish only after the enclosing phase's last guard
+        except BaseException:
+            if self._events_original is not None:
+                self._events_original.failed = True
+            try:
+                self.close()
+            except BaseException:
+                pass  # retained cleanup error is sticky; never reconnect/retry
+            raise
+
     def close(self):
         if not self.closed:
             self.closed = True
@@ -3609,6 +3630,116 @@ class _BrokerStart:
         # The observer call cannot change the durable operation or owned objects.
         self._state_check()
         return observed
+
+
+class _BrokerEvents:
+    """Original-channel inbound data after STARTED, not a resource/API grant.
+
+    This receiver cannot acknowledge an action or cleanup, accept completion,
+    release a reservation, start a worker or extend the operation's lifetime.
+    A pending action must be handled by the separately owned server driver.
+    """
+    def __init__(self, broker):
+        self.failed = False
+        try:
+            require(type(broker) is _Broker, "BROKER_EVENTS_OWNER")
+            self.broker, self.owner = broker, broker.owner
+            self.start = broker.dispatch
+            require(type(self.start) is _BrokerStart and self.start is broker._dispatch_original
+                    and type(self.start.started) is bytes and self.start.started == self.start._started_raw,
+                    "BROKER_STARTED_REQUIRED")
+            self.started_raw = self.start.started
+            self.binding_raw, self.dispatch_raw = self.start.binding_raw, self.start.dispatch_raw
+            self.deadline = broker.deadline
+            self.transcript = self.start.transcript
+            require(type(self.transcript) is BrokerTranscript
+                    and self.transcript is self.start._transcript_original, "BROKER_TRANSCRIPT_OWNER")
+            # Rebuild only the already received STARTED data, not an execution.
+            expected = BrokerTranscript(self.binding_raw, self.dispatch_raw)
+            expected.accept(self.started_raw, "BROKER")
+            self.transcript_raw = self._snapshot(expected)
+            self._check()
+        except BaseException:
+            self.failed = True
+            raise
+
+    @staticmethod
+    def _snapshot(transcript):
+        require(type(transcript) is BrokerTranscript, "BROKER_TRANSCRIPT_OWNER")
+        values = vars(transcript)
+        require(set(values) == {"binding", "dispatch", "sequence", "previous", "execution", "pending",
+                "cleanup", "terminal", "actions", "chunks", "receipt_size", "failed_action", "poisoned"}
+                and type(transcript.actions) is set
+                and all(type(action) is int for action in transcript.actions)
+                and type(transcript.chunks) is list
+                and all(type(chunk) is bytes for chunk in transcript.chunks), "BROKER_TRANSCRIPT_STATE")
+        return canonical_bytes({**values, "actions": sorted(transcript.actions),
+            "chunks": [{"size": len(chunk), "sha256": byte_digest(chunk)} for chunk in transcript.chunks]})
+
+    def _state_check(self):
+        broker, owner, start = self.broker, self.owner, self.start
+        require(type(self) is _BrokerEvents and not self.failed
+                and type(broker) is _Broker and type(owner) is NativeProxyServer
+                and broker.owner is owner and owner.broker is owner._broker_original is broker
+                and broker.events is broker._events_original is self
+                and broker.dispatch is broker._dispatch_original is start
+                and type(start) is _BrokerStart and start.broker is broker and start.owner is owner
+                and not start.failed and start.started == start._started_raw == self.started_raw
+                and start.binding_raw == self.binding_raw and start.dispatch_raw == self.dispatch_raw
+                and self.deadline == broker.deadline == owner.deadline
+                and self.transcript is start.transcript is start._transcript_original,
+                "BROKER_EVENTS_OWNER_CHANGED")
+        broker._guard()
+        require(self._snapshot(self.transcript) == self.transcript_raw
+                and not self.transcript.poisoned, "BROKER_TRANSCRIPT_CHANGED")
+
+    def _check(self):
+        self._state_check()
+        self.start._check()  # original RUNNING history, observer generation and native peer
+        self._state_check()
+
+    def receive(self):
+        try:
+            self._check()
+            transcript, broker = self.transcript, self.broker
+            require(transcript.pending is None, "BROKER_RESOURCE_RESULT_REQUIRED")
+            require(transcript.cleanup is None and transcript.terminal is None,
+                    "BROKER_INBOUND_PHASE_CLOSED")
+            before = time.monotonic()
+            require(broker.last_mono <= before < broker.end <= self.deadline,
+                    "BROKER_CLOCK_OR_DEADLINE")
+            # Idle readiness polls do not resend DISPATCH or renew the deadline.
+            # Leave time for the mandatory post-wait guards inside this phase.
+            wait = min(0.25, (broker.end - before) / 2)
+            try:
+                ready = select.select([broker.sock], [], [broker.sock], wait)
+            finally:
+                self._check()
+            require(type(ready) is tuple and len(ready) == 3 and ready[1:] == ([], [])
+                    and ready[0] in ([], [broker.sock]), "BROKER_READINESS_INVALID")
+            if not ready[0]:
+                return None
+            self._check()
+            broker._prepare_wait()
+            try:
+                raw, ancillary, flags, _ = broker.sock.recvmsg(65537, socket.CMSG_SPACE(12) + socket.CMSG_SPACE(253 * 4))
+                # Descriptors must be drained before any post-I/O refusal.
+                require(credentials(ancillary, flags) == broker._peer_original, "BROKER_MESSAGE_PEER")
+            finally:
+                self._check()
+            frame = broker_document(raw, "frame")
+            require(frame["kind"] in ("RESOURCE_ACTION", "RECEIPT_CHUNK"), "BROKER_INBOUND_KIND_UNAVAILABLE")
+            if frame["kind"] == "RESOURCE_ACTION":
+                require(len(raw) <= 16384, "BROKER_ACTION_SIZE")
+            else:
+                require(len(transcript.chunks) < 171, "BROKER_RECEIPT_CHUNK_LIMIT")
+            transcript.accept(raw, "BROKER")
+            self.transcript_raw = self._snapshot(transcript)
+            self._check()
+            return canonical_bytes(frame)  # immutable data, not an effect/receipt permit
+        except BaseException:
+            self.failed = True
+            raise
 
 
 class _State:

@@ -6738,6 +6738,365 @@ class BrokerDispatchStartTests(unittest.TestCase):
         store_close.assert_not_called()
 
 
+
+class _BrokerEventFixture:
+    """Actual handshake/receiver/parser; installed OS/store/observer doubles only."""
+    profile_index = 1
+    cleanup = BrokerDispatchStartTests.cleanup
+    append_row = BrokerDispatchStartTests.append_row
+    send = BrokerDispatchStartTests.send
+    receive = BrokerDispatchStartTests.receive
+
+    def start(self):
+        # Enroll the selected fixture BEFORE the real broker constructor pins it.
+        self.fixture = deepcopy(VECTORS["broker"]["positive"][self.profile_index])
+        owner = self.owner
+        owner.profile = deepcopy(self.fixture["profile"])
+        owner.observation_binding = deepcopy(self.fixture["observationBinding"])
+        owner.reservation = server.admission_binding(owner.envelope, owner.capacity, owner.profile)
+        owner.qualification_binding._broker_raw = canonical_bytes(self.fixture["binding"])
+        self.history = []
+        self.append_row("RESERVED", None)
+        self.append_row("RUNNING", owner.active_operation)
+        self.observed["bindingDigest"] = server.canonical_digest(owner.observation_binding)
+        return BrokerTransportCustodyTests.start(self)
+
+    def setUp(self):
+        BrokerDispatchStartTests.setUp(self)
+        self.subject.begin()
+        self.last_event = deepcopy(self.frame)
+        self.socket.send.reset_mock()
+        self.socket.recvmsg.reset_mock()
+        self.ready, self.waits = True, []
+        self.on_wait = self.on_event = lambda: None
+        self.raw_override = None
+        self.mocks["select"].side_effect = self.select
+        self.socket.recvmsg.side_effect = self.event_receive
+        self.chunk(0, b"unit receipt bytes")
+
+    def select(self, readers, writers, exceptional, timeout):
+        if readers == [self.socket]:
+            self.events.append("event-wait")
+            self.waits.append(timeout)
+            self.on_wait()
+            return ([self.socket] if self.ready else [], [], [])
+        self.assertEqual((readers, writers, exceptional, timeout), ([72], [], [72], 0))
+        return [], [], []
+
+    def event_receive(self, *args):
+        self.events.append("event-receive")
+        self.on_event()
+        raw = self.raw_override if self.raw_override is not None else canonical_bytes(self.event_frame)
+        return raw, [(server.socket.SOL_SOCKET, 2, server.struct.pack("3i", *self.message_peer)),
+                     *self.extra_ancillary], self.flags, None
+
+    def queue(self, kind, payload):
+        self.event_frame = {**deepcopy(self.last_event), "sequence": self.last_event["sequence"] + 1,
+            "previousDigest": server.canonical_digest(self.last_event), "kind": kind, "payload": payload}
+
+    def chunk(self, index, raw):
+        import base64
+        self.queue("RECEIPT_CHUNK", {"index": index, "dataBase64": base64.b64encode(raw).decode("ascii")})
+
+    def action(self, digest=None):
+        digest = digest or self.fixture["binding"]["caseResourceDigests"][self.owner.active_operation][0]
+        self.queue("RESOURCE_ACTION", {"actionId": 1, "verb": "GET", "manifestDigest": digest})
+
+    def take(self):
+        raw = self.subject.poll()
+        if raw is not None:
+            self.last_event = json.loads(raw)
+        return raw
+
+    def refused(self, reason):
+        with self.assertRaisesRegex(ConformanceError, reason):
+            self.subject.poll()
+        self.assertTrue(self.subject.failed)
+        if self.subject.events is not None:
+            self.assertTrue(self.subject.events.failed)
+
+
+class BrokerEventTests(_BrokerEventFixture, unittest.TestCase):
+    def test_one_chunk_is_immutable_data_not_a_complete_receipt_or_action(self):
+        raw = self.take()
+        self.assertIs(type(raw), bytes)
+        self.assertEqual(raw, canonical_bytes(self.event_frame))
+        self.assertEqual(self.subject.events.transcript.chunks, [b"unit receipt bytes"])
+        self.socket.send.assert_not_called()
+        self.owner.files.read.assert_not_called()
+        self.socket.recvmsg.assert_called_once()
+        with self.assertRaises(ConformanceError):
+            self.subject.events.transcript.receipt()
+
+    def test_contiguous_chunks_use_the_single_retained_transcript(self):
+        self.take()
+        original = self.subject.events
+        self.chunk(1, b"second")
+        self.take()
+        self.assertIs(self.subject.events, original)
+        self.assertIs(original.transcript, self.subject.dispatch.transcript)
+        self.assertEqual(original.transcript.chunks, [b"unit receipt bytes", b"second"])
+        self.assertEqual(original.transcript.sequence, 3)
+
+    def test_idle_wait_returns_none_without_resend_or_consumption(self):
+        self.ready = False
+        before = self.subject.dispatch.transcript.sequence
+        self.assertIsNone(self.take())
+        self.assertEqual(self.subject.dispatch.transcript.sequence, before)
+        self.assertEqual(self.waits, [0.25])
+        self.socket.send.assert_not_called()
+        self.socket.recvmsg.assert_not_called()
+        self.assertFalse(self.subject.failed)
+
+    def test_idle_then_event_keeps_original_deadline_and_channel(self):
+        self.ready = False
+        self.take()
+        self.now += 1
+        self.ready = True
+        self.take()
+        self.assertEqual(self.subject.events.deadline, 500)
+        self.assertEqual(self.subject.deadline, 500)
+        self.socket.send.assert_not_called()
+        self.assertIs(self.subject.sock, self.socket)
+
+    def test_session_expiry_cannot_be_extended_by_polling(self):
+        self.ready = False
+        self.take()
+        self.now = self.owner.deadline
+        self.refused("BROKER_CLOCK_OR_DEADLINE")
+        self.socket.recvmsg.assert_not_called()
+
+    def test_wait_budget_leaves_room_inside_short_remaining_lifetime(self):
+        self.now = 499.75
+        self.ready = False
+        self.take()
+        self.assertEqual(self.waits, [0.125])
+        self.assertEqual(self.subject.end, 500)
+
+    def test_late_readiness_result_is_rejected(self):
+        self.on_wait = lambda: setattr(self, "now", self.subject.end)
+        self.refused("BROKER_CLOCK_OR_DEADLINE")
+        self.socket.recvmsg.assert_not_called()
+
+    def test_late_received_event_is_not_returned(self):
+        self.on_event = lambda: setattr(self, "now", self.subject.end)
+        self.refused("BROKER_CLOCK_OR_DEADLINE")
+
+    def test_poll_does_not_accept_caller_backend_frame_or_timeout(self):
+        for value in ({}, Mock(), b"frame", 900):
+            with self.subTest(value=type(value).__name__), self.assertRaises(TypeError):
+                self.subject.poll(value)
+        self.socket.recvmsg.assert_not_called()
+
+    def test_start_observation_must_still_be_the_original_bytes(self):
+        self.subject.dispatch.started = b"{}"
+        self.refused("BROKER_STARTED_REQUIRED")
+        self.socket.recvmsg.assert_not_called()
+
+    def test_initial_transcript_tampering_cannot_bootstrap_a_receiver(self):
+        self.subject.dispatch.transcript.sequence = 8
+        self.refused("BROKER_TRANSCRIPT_CHANGED")
+        self.socket.recvmsg.assert_not_called()
+
+    def test_transcript_replacement_is_not_adopted(self):
+        self.ready = False
+        self.take()
+        self.subject.dispatch.transcript = Mock()
+        self.refused("BROKER_EVENTS_OWNER_CHANGED")
+
+    def test_retained_transcript_scalar_mutation_is_detected(self):
+        self.take()
+        self.subject.events.transcript.sequence += 1
+        self.refused("BROKER_TRANSCRIPT_CHANGED")
+
+    def test_retained_chunk_mutation_is_detected(self):
+        self.take()
+        self.subject.events.transcript.chunks[0] = b"changed"
+        self.refused("BROKER_TRANSCRIPT_CHANGED")
+
+    def test_retained_binding_mutation_is_detected(self):
+        self.take()
+        self.subject.events.transcript.binding["profileDigest"] = admission.ZERO
+        self.refused("BROKER_TRANSCRIPT_CHANGED")
+
+    def test_unknown_transcript_attribute_is_rejected(self):
+        self.take()
+        self.subject.events.transcript.extra = True
+        self.refused("BROKER_TRANSCRIPT_STATE")
+
+    def test_replaced_event_owner_is_not_adopted_or_closed(self):
+        self.ready = False
+        self.take()
+        original, foreign = self.subject.events, Mock()
+        self.subject.events = foreign
+        with self.assertRaisesRegex(ConformanceError, "BROKER_EVENTS_OWNER_CHANGED"):
+            self.subject.poll()
+        self.assertTrue(original.failed)
+        foreign.close.assert_not_called()
+
+    def test_valid_action_is_data_and_blocks_a_second_receive_until_response(self):
+        self.action()
+        self.assertEqual(json.loads(self.take())["kind"], "RESOURCE_ACTION")
+        self.assertEqual(self.subject.events.transcript.pending, self.event_frame["payload"])
+        self.refused("BROKER_RESOURCE_RESULT_REQUIRED")
+        self.socket.recvmsg.assert_called_once()
+        self.socket.send.assert_not_called()
+        self.owner.files.read.assert_not_called()
+
+    def test_unknown_manifest_action_is_rejected(self):
+        self.action(admission.ZERO)
+        self.refused("BROKER_RESOURCE_ACTION_INVALID")
+
+    def test_action_after_receipt_chunks_is_rejected(self):
+        self.take()
+        self.action()
+        self.refused("BROKER_RESOURCE_ACTION_INVALID")
+
+    def test_duplicate_chunk_sequence_is_rejected(self):
+        self.take()
+        self.refused("BROKER_TRANSCRIPT_BINDING")
+
+    def test_skipped_chunk_index_is_rejected(self):
+        self.chunk(1, b"skip")
+        self.refused("BROKER_CHUNK_ORDER")
+
+    def test_changed_challenge_is_rejected(self):
+        self.event_frame["challenge"] = "a" * 64
+        self.refused("BROKER_TRANSCRIPT_BINDING")
+
+    def test_changed_previous_digest_is_rejected(self):
+        self.event_frame["previousDigest"] = admission.ZERO
+        self.refused("BROKER_TRANSCRIPT_BINDING")
+
+    def test_changed_execution_id_is_rejected(self):
+        self.event_frame["executionId"] = "d" * 64
+        self.refused("BROKER_EXECUTION_REPLAY")
+
+    def test_oversized_decoded_chunk_is_rejected(self):
+        self.chunk(0, b"x" * 24577)
+        self.refused("BROKER_BASE64_INVALID")
+
+    def test_at_most_171_chunks_even_when_total_bytes_are_small(self):
+        for index in range(171):
+            self.chunk(index, b"x")
+            self.take()
+        self.assertEqual(len(self.subject.events.transcript.chunks), 171)
+        self.chunk(171, b"x")
+        self.refused("BROKER_RECEIPT_CHUNK_LIMIT")
+
+    def test_full_receipt_size_limit_applies_to_transport(self):
+        for index in range(170):
+            self.chunk(index, b"x" * 24576)
+            self.take()
+        self.chunk(170, b"x" * 24576)
+        self.refused("BROKER_RECEIPT_SIZE")
+
+    def test_terminal_cannot_bypass_unimplemented_server_cleanup(self):
+        self.queue("TERMINAL", {"status": "COMPLETED", "receiptSize": 1,
+            "receiptDigest": admission.ZERO, "cleanupDigest": admission.ZERO})
+        self.refused("BROKER_INBOUND_KIND_UNAVAILABLE")
+
+    def test_replayed_started_frame_cannot_reset_the_stream(self):
+        self.event_frame = deepcopy(self.last_event)
+        self.refused("BROKER_INBOUND_KIND_UNAVAILABLE")
+
+    def test_unsolicited_server_result_is_rejected(self):
+        self.queue("RESOURCE_RESULT", {"actionId": 1, "outcome": "ABSENT", "objectBase64": None})
+        self.refused("BROKER_INBOUND_KIND_UNAVAILABLE")
+
+    def test_wrong_message_credentials_are_rejected(self):
+        self.message_peer = (812, 0, 0)
+        self.refused("BROKER_MESSAGE_PEER")
+
+    def test_received_rights_are_closed_even_when_post_guard_refuses(self):
+        self.extra_ancillary = [(server.socket.SOL_SOCKET, server.socket.SCM_RIGHTS, server.struct.pack("i", 99))]
+        self.on_event = lambda: setattr(self.owner._base_check, "side_effect", ConformanceError("UNIT_REVOKED", "unit"))
+        self.refused("UNIT_REVOKED")
+        self.assertEqual(self.events.count(("close", 99)), 1)
+
+    def test_truncated_message_is_rejected(self):
+        self.flags = server.socket.MSG_TRUNC
+        self.refused("PEER_CHANNEL_INVALID")
+
+    def test_oversize_datagram_is_rejected(self):
+        self.raw_override = b"x" * 65537
+        self.refused("PROXY_DATA_SIZE")
+
+    def test_eof_is_not_idle_or_a_complete_receipt(self):
+        self.raw_override = b""
+        self.refused("PROXY_DATA_SIZE")
+
+    def test_receive_timeout_after_readiness_is_not_retried(self):
+        self.socket.recvmsg.side_effect = TimeoutError("unit lost readiness")
+        with self.assertRaises(TimeoutError):
+            self.subject.poll()
+        self.assertTrue(self.subject.failed)
+        self.socket.recvmsg.assert_called_once()
+        self.socket.send.assert_not_called()
+
+    def test_readiness_exception_keeps_post_wait_guards(self):
+        def fail():
+            self.events.append("wait-failed")
+            raise OSError("unit readiness")
+        self.on_wait = fail
+        with self.assertRaises(OSError):
+            self.subject.poll()
+        self.assertIn("observe", self.events[self.events.index("wait-failed") + 1:])
+        self.assertTrue(self.subject.failed)
+
+    def test_foreign_readiness_descriptor_is_rejected(self):
+        original = self.mocks["select"].side_effect
+        self.mocks["select"].side_effect = lambda r, w, e, t: ([Mock()], [], []) if r == [self.socket] else original(r, w, e, t)
+        self.refused("BROKER_READINESS_INVALID")
+
+    def test_generation_change_while_idle_is_rejected(self):
+        self.ready = False
+        self.on_wait = lambda: self.observed.update(generation="f" * 64)
+        self.refused("BROKER_GENERATION_CHANGED")
+
+    def test_journal_change_during_receive_is_rejected(self):
+        self.on_event = lambda: setattr(self, "ledger", self.ledger + b" ")
+        self.refused("BROKER_RUNNING_CHANGED")
+
+    def test_native_peer_change_after_readiness_is_rejected(self):
+        self.on_wait = lambda: setattr(self, "peer", (812, 0, 0))
+        self.refused("BROKER_PEER_CHANGED")
+
+    def test_last_phase_guard_failure_does_not_return_an_event(self):
+        def guard():
+            current = self.subject.events
+            if current is not None and hasattr(current, "transcript_raw") and current.transcript.sequence == 2:
+                # receive's own post-parse checks also refuse before publication.
+                raise ConformanceError("UNIT_LAST_GUARD", "unit")
+        self.owner._base_check.side_effect = guard
+        self.refused("UNIT_LAST_GUARD")
+
+    def test_poll_never_writes_or_releases_durable_state(self):
+        original = self.ledger
+        with patch.object(server._State, "append") as append, patch.object(server._State, "sync") as sync:
+            self.take()
+        append.assert_not_called()
+        sync.assert_not_called()
+        self.assertEqual(self.ledger, original)
+
+    def test_failure_closes_original_channel_not_borrowed_store(self):
+        self.message_peer = (812, 0, 0)
+        with patch.object(server._State, "close") as store_close:
+            self.refused("BROKER_MESSAGE_PEER")
+        self.socket.close.assert_called_once()
+        self.owner.files.close.assert_not_called()
+        store_close.assert_not_called()
+
+
+class BrokerZeroResourceEventTests(_BrokerEventFixture, unittest.TestCase):
+    profile_index = 0
+
+    def test_zero_resource_profile_refuses_actions_without_api_or_credentials(self):
+        self.action(admission.ZERO)
+        self.refused("BROKER_RESOURCE_ACTION_INVALID")
+        self.socket.send.assert_not_called()
+        self.owner.files.read.assert_not_called()
+
 class BrokerStartupSourceOrderTests(unittest.TestCase):
     """Source ordering only; separate from every OS-mocked channel fixture."""
     def test_server_constructor_order_keeps_broker_before_credentials(self):

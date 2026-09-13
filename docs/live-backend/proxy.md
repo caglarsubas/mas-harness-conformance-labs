@@ -975,6 +975,43 @@ credential/API endpoint, or prove a real durable transaction/native environment.
 All926 earlier test bodies and all127 accepted baseline files remain immutable.
 Fresh exact-head full8 LOCAL and required localhost CI must pass independently.
 
+## Broker inbound-event continuation
+
+Preceding head `fd64ffa5bd8ed7198a6bf16f46b1a9ab34afddb8` passed 965 tests,
+zero skips and all eight commands in signed LOCAL activation 232 and required
+localhost CI 34745275207 / activation 233. Runner 63 retired; zero runners and
+uploaded artifacts were independently verified. Its source tree and CI merge
+tree match. That checkpoint does not accept the following source changes.
+
+The original broker now has a no-argument `poll()` that receives at most one
+inbound event or returns `None` for a bounded idle wait. It reuses the original
+channel, STARTED observation, transcript and absolute session deadline; no
+DISPATCH resend, keepalive grant, reconnect or caller-selected timeout exists.
+Each phase stays within two seconds, with readiness waits capped at 250 ms and
+half the remaining phase budget so post-wait inspection remains mandatory.
+Original RUNNING history, current policy generation, native peer and retained
+transcript checks surround readiness/receive and precede returning event data.
+Unexpected descriptors are drained before post-I/O refusal. Any malformed,
+late, lost, substituted or out-of-order response closes the original channel
+without retrying or releasing the durable reservation.
+
+Only bounded RESOURCE_ACTION and RECEIPT_CHUNK data are admitted. A case-bound
+resource action is not executed and pauses further reception until the separate
+server response driver exists. Zero-resource profiles refuse every action.
+Receipt chunks enforce contiguous sequence/index/digest binding, 24 KiB decoded
+per chunk, at most 171 chunks and 4 MiB total; retained transcript mutations are
+rejected. No terminal or cleanup acknowledgement is accepted by this receiver.
+Polling writes no journal, reads no credential and opens no API connection.
+
+Tests exercise the real handshake, receiver and data parser with explicit OS,
+installed-owner, observer and durable-store doubles. They prove no native
+execution, resource effect, cleanup, completed receipt or tenant acceptance.
+All 965 prior test bodies, all 127 accepted baseline files and the published
+fixture bytes remain unchanged. The server driver/API/UID ledger, cleanup and
+terminal exchange, fixed qualifier and complete native factory integration are
+still unfinished; `NativeProxyServer.serve` is not connected to this receiver.
+Fresh exact-head full LOCAL and required localhost CI remain mandatory.
+
 ## Verification boundary
 
 This is an in-progress source snapshot, not a self-attested run result. Exact
@@ -1023,7 +1060,8 @@ probe, live launcher, runtime download or cloud/billable service is authorized.
 | Alpha 2 | CONF-LIVE-003 retained observer transport | LOCAL_AND_CI_PASS_RECORDED | Head9e1a706 /843 tests/all8; CI34733027083; runner58 retired |
 | Alpha 2 | CONF-LIVE-003 fixed observer-role inspection | LOCAL_AND_CI_PASS_RECORDED | Headdc7f728 /869 tests/all8; CI34737704899 attempt3; runner61 retired |
 | Alpha 2 | CONF-LIVE-003 retained broker peer / native composition | LOCAL_AND_CI_PASS_RECORDED | Headacb2da5 /926 tests/all8; CI34741454274; runner62 retired |
-| Alpha 2 | CONF-LIVE-003 broker dispatch / first STARTED | IMPLEMENTED_NOT_ACCEPTED | Durable RUNNING and fresh-observation binding; no full driver or native acceptance |
+| Alpha 2 | CONF-LIVE-003 broker dispatch / first STARTED | LOCAL_AND_CI_PASS_RECORDED | Head fd64ffa / 965 tests / all eight; CI 34745275207; runner 63 retired |
+| Alpha 2 | CONF-LIVE-003 bounded inbound events | IMPLEMENTED_NOT_ACCEPTED | Fixed-channel idle/action/chunk handling; no API effects or completion |
 | Alpha 2 | CONF-LIVE-003 native inspector / broker / API | ONGOING | Required implementation listed above |
 | Alpha 2 | CONF-LIVE-003 required CI | WAITING | Fresh exact-head localhost evidence required; prior failures retained |
 | Alpha 2 | CONF-LIVE-003 source completion / merge / exact-main | NOT_RUN | Packet is incomplete; no completion claim |
