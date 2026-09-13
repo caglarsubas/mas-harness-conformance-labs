@@ -920,6 +920,44 @@ source ordering has its own unmocked test class. The failed exact-commit log is
 retained. Production code, original tests and acceptance commands are unchanged
 by this fixture correction; all eight commands must be rerun on the new commit.
 
+## Broker dispatch/start continuation
+
+Preceding head `acb2da5cba9fef6f35b3316f5c005534a8e8b20b` passed926 tests,
+zero skips and all8 commands in signed LOCAL activation228 and required localhost
+CI34741454274/activation229. Runner62 retired, zero runners/artifacts verified.
+That checkpoint does not accept the following source changes.
+
+The original broker now owns a no-argument dispatch/start phase. It derives the
+fixed case/request, signed binding and reservation digests from the installed
+server, checks the exact held RUNNING journal record, and binds a fresh observation
+and random256-bit challenge. Caller requests, frames, paths and execution handles
+are not inputs. A mutable RUNNING flag or a schema-valid dictionary is insufficient.
+Journal/owner/observation changes, generation restart, expiry and failed native
+inspection refuse. This phase reads existing durable state; it does not append,
+repair, release or reconstruct the journal.
+
+One DISPATCH and first STARTED response use the original retained channel, within
+one two-second phase and the original session deadline. Both sides of blocking
+I/O recheck peer/authority, journal and current observer state. The receive path
+drains unexpected descriptors before post-I/O refusal, requires original message
+credentials, rejects truncation/oversize/malformed or rebound frames, and validates
+the first transcript sequence/echoes. A partial send or lost response consumes
+the attempted case locally and is never retried/reconnected. Failure closes the
+original channel without closing the borrowed journal or server files; uncertain
+cleanup remains a sticky failure. STARTED is published
+as data only after the last phase guard; it is not a local execution permit,
+worker qualification, successful receipt or tenant acceptance.
+
+This increment is intentionally not wired into `NativeProxyServer.serve` yet.
+The complete broker action/chunk/cleanup/terminal driver, server-only API and UID
+ledger, fixed qualifier replacement and full native factory composition are still
+unfinished. Existing startup/execution refusal remains. Tests exercise the real
+request/ledger/transcript parser and fixed channel with explicit installed-owner,
+observer, store and native-inspector doubles. They do not start a worker, open a
+credential/API endpoint, or prove a real durable transaction/native environment.
+All926 earlier test bodies and all127 accepted baseline files remain immutable.
+Fresh exact-head full8 LOCAL and required localhost CI must pass independently.
+
 ## Verification boundary
 
 This is an in-progress source snapshot, not a self-attested run result. Exact
@@ -967,7 +1005,8 @@ probe, live launcher, runtime download or cloud/billable service is authorized.
 | Alpha 2 | CONF-LIVE-003 reader-boundary root ancestry | LOCAL_AND_CI_PASS_RECORDED | Heada853c67 /818 tests/all8; CI34714164106 attempt2; earlier timeouts retained |
 | Alpha 2 | CONF-LIVE-003 retained observer transport | LOCAL_AND_CI_PASS_RECORDED | Head9e1a706 /843 tests/all8; CI34733027083; runner58 retired |
 | Alpha 2 | CONF-LIVE-003 fixed observer-role inspection | LOCAL_AND_CI_PASS_RECORDED | Headdc7f728 /869 tests/all8; CI34737704899 attempt3; runner61 retired |
-| Alpha 2 | CONF-LIVE-003 retained broker peer / native composition | IMPLEMENTED_NOT_ACCEPTED | Fixed original channel and broker-role inspection; fresh full8 required; no dispatch |
+| Alpha 2 | CONF-LIVE-003 retained broker peer / native composition | LOCAL_AND_CI_PASS_RECORDED | Headacb2da5 /926 tests/all8; CI34741454274; runner62 retired |
+| Alpha 2 | CONF-LIVE-003 broker dispatch / first STARTED | IMPLEMENTED_NOT_ACCEPTED | Durable RUNNING and fresh-observation binding; no full driver or native acceptance |
 | Alpha 2 | CONF-LIVE-003 native inspector / broker / API | ONGOING | Required implementation listed above |
 | Alpha 2 | CONF-LIVE-003 required CI | WAITING | Fresh exact-head localhost evidence required; prior failures retained |
 | Alpha 2 | CONF-LIVE-003 source completion / merge / exact-main | NOT_RUN | Packet is incomplete; no completion claim |

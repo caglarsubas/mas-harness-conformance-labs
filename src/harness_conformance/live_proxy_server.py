@@ -33,7 +33,8 @@ from .live_backend_authority import verify_backend_authority, binding_from_autho
 from .live_linux_boundary import credentials, process_identity, _custody_identity
 from .live_mutation_admission import (require, document, retained_profile, validate_messages,
     _time, ZERO, admission_binding, _AdmissionLog, parse_reservations, cleanup_receipt,
-    retained_qualification_record, retained_broker_binding, QUALIFICATION_PATH)
+    retained_qualification_record, retained_broker_binding, QUALIFICATION_PATH,
+    BrokerTranscript, broker_document)
 from .live_proxy_client import (_TLS, tls_context, credential_leaf, _check_certificate,
                                 read_http, http_message)
 from .live_supervisor import utc_now, _verify_reference_authority
@@ -3263,10 +3264,11 @@ class _Observer:
 
 
 class _Broker:
-    """Fixed retained broker peer, not dispatch or an execution grant.
+    """Fixed retained broker peer, never a local execution grant.
 
-    Only the installed server constructs this channel. No frame, credential,
-    worker or API operation is sent by this bootstrap/check component.
+    Only the installed server constructs this channel. Bootstrap/check sends
+    no frame. The separate begin phase sends only its internally bound DISPATCH;
+    the broker alone owns workers and no API operation is implemented here.
     """
     def __init__(self, owner):
         self.owner, self.sock, self.pidfd = owner, None, None
@@ -3277,6 +3279,8 @@ class _Broker:
         self.binding = owner.qualification_binding
         self._binding_raw = None
         self.inspection = self._inspection_original = None
+        self.dispatch = self._dispatch_original = None
+        self._attempted_cases = set()
         self.deadline = owner.deadline
         self.last_wall, self.last_mono = None, time.monotonic()
         try:
@@ -3430,6 +3434,25 @@ class _Broker:
         with self._phase():
             self._check_peer()
 
+    def begin(self):
+        # No caller request, observation, descriptor or backend. This does not
+        # return a worker handle or permit: only the broker owns execution.
+        try:
+            with self._phase():
+                require(self.dispatch is None and self._dispatch_original is None,
+                        "BROKER_DISPATCH_ALREADY_OWNED")
+                self.dispatch = self._dispatch_original = object.__new__(_BrokerStart)
+                self.dispatch.__init__(self)
+            self.dispatch.started = self.dispatch._started_raw
+        except BaseException:
+            if self._dispatch_original is not None:
+                self._dispatch_original.failed = True
+            try:
+                self.close()  # peer loss is not an implicit retry or lease renewal
+            except BaseException:
+                pass  # sticky cleanup failure retained; preserve the first refusal
+            raise
+
     def close(self):
         if not self.closed:
             self.closed = True
@@ -3461,6 +3484,129 @@ class _Broker:
                             pass  # preserve the first error; never retry close
         if self.cleanup_failure is not None:
             raise self.cleanup_failure
+
+
+class _BrokerStart:
+    """One fixed DISPATCH/STARTED phase, not a completed execution or API grant.
+
+    Borrows the original broker and server resources; owns only private data.
+    The complete receipt/action/cleanup driver and native factory integration
+    remain separate. No caller frame, action or operation is accepted here.
+    """
+    def __init__(self, broker):
+        self.failed, self.started = False, None
+        self.transcript = self._transcript_original = None
+        try:
+            require(type(self) is _BrokerStart and type(broker) is _Broker,
+                    "BROKER_START_OWNER")
+            self.broker, self.owner = broker, broker.owner
+            self._owner_check()
+            owner = self.owner
+            self.storage, self.log, self.observer = owner.storage, owner.log, owner.observer
+            require(type(self.storage) is _State and self.storage.owner is owner
+                    and type(self.log) is _AdmissionLog and self.log.storage is self.storage
+                    and type(self.observer) is _Observer and self.observer.owner is owner,
+                    "BROKER_START_PREREQUISITES")
+            self.operation = owner.active_operation
+            require(type(self.operation) is str and self.operation in CASES
+                    and type(broker._attempted_cases) is set
+                    and self.operation not in broker._attempted_cases, "BROKER_DISPATCH_REPLAY")
+            self.reservation_raw = canonical_bytes(admission_binding(owner.envelope, owner.capacity, owner.profile))
+            self.request_raw = canonical_bytes(build_probe_request(owner.envelope, owner.capacity, owner.plan, self.operation))
+            self.binding_raw = broker._binding_raw
+            broker._check_peer()
+            self.ledger_raw = broker._io(self.storage.read)
+            states, _, _ = parse_reservations(self.ledger_raw)
+            current = states.get((owner.envelope["tenantId"], owner.envelope["nonce"]))
+            require(current is not None and current["current"] == self.operation and current["held"] is True
+                    and current["last"] <= _time(utc_now())
+                    and canonical_bytes(current["binding"]) == self.reservation_raw, "BROKER_RUNNING_REQUIRED")
+            last = document(self.ledger_raw.splitlines()[-1], 32768)
+            require(last["state"] == "RUNNING" and last["operation"] == self.operation
+                    and last["cleanup"] is None and canonical_bytes(last["binding"]) == self.reservation_raw,
+                    "BROKER_RUNNING_REQUIRED")
+            self.observation_pin = None
+            observed = self._check()
+            challenge = broker._io(os.urandom, 32)
+            require(type(challenge) is bytes and len(challenge) == 32, "BROKER_CHALLENGE_INVALID")
+            dispatch = {"schemaVersion": "planeon.internal.broker-dispatch/v1",
+                "operation": "EXECUTE_FIXED_PROBE",
+                "bindingDigest": byte_digest(self.binding_raw), "reservationDigest": byte_digest(self.reservation_raw),
+                "runNonce": owner.envelope["nonce"], "caseId": self.operation,
+                "requestDigest": byte_digest(self.request_raw), "observationDigest": canonical_digest(observed),
+                "generation": observed["generation"], "challenge": challenge.hex()}
+            self.dispatch_raw = canonical_bytes(broker_document(dispatch, "dispatch"))
+            self._check()
+            broker._prepare_wait()
+            # Mark attempted BEFORE send, including timeout/partial delivery.
+            broker._attempted_cases.add(self.operation)
+            try:
+                require(broker.sock.send(self.dispatch_raw) == len(self.dispatch_raw), "BROKER_SEND_AMBIGUOUS")
+            finally:
+                self._check()
+            self._check()
+            broker._prepare_wait()
+            try:
+                raw, ancillary, flags, _ = broker.sock.recvmsg(65537, socket.CMSG_SPACE(12) + socket.CMSG_SPACE(253 * 4))
+                # Drain rights BEFORE a post-I/O refusal can lose ownership.
+                require(credentials(ancillary, flags) == broker._peer_original, "BROKER_MESSAGE_PEER")
+            finally:
+                self._check()
+            # Keep the data parser private until all post-I/O guards complete.
+            transcript = BrokerTranscript(self.binding_raw, self.dispatch_raw)
+            frame = transcript.accept(raw, "BROKER")
+            require(frame["kind"] == "STARTED", "BROKER_CONTROLLED_START_REQUIRED")
+            self._check()
+            self.transcript = self._transcript_original = transcript
+            # Publish only after the enclosing broker phase's last guard passes.
+            self._started_raw = canonical_bytes(frame)  # observation, never a permit
+        except BaseException:
+            self.failed = True
+            raise
+
+    def _owner_check(self):
+        broker, owner = self.broker, self.owner
+        require(type(self) is _BrokerStart and not self.failed
+                and type(broker) is _Broker and type(owner) is NativeProxyServer
+                and owner.broker is owner._broker_original is broker and broker.owner is owner
+                and broker.dispatch is broker._dispatch_original is self,
+                "BROKER_START_OWNER_CHANGED")
+        broker._guard()
+
+    def _state_check(self):
+        self._owner_check()
+        owner, broker = self.owner, self.broker
+        require(owner.storage is self.storage and self.storage.owner is owner
+                and owner.log is self.log and self.log.storage is self.storage and not self.log.poisoned
+                and owner.observer is self.observer and self.observer.owner is owner
+                and owner.reserved is True and owner.files.sealed is True
+                and owner.active_operation == self.operation
+                and canonical_bytes(owner.reservation) == self.reservation_raw
+                and canonical_bytes(admission_binding(owner.envelope, owner.capacity, owner.profile)) == self.reservation_raw
+                and canonical_bytes(build_probe_request(owner.envelope, owner.capacity, owner.plan, self.operation)) == self.request_raw
+                and broker._binding_raw == self.binding_raw, "BROKER_START_STATE_CHANGED")
+        require(broker._io(self.storage.read) == self.ledger_raw, "BROKER_RUNNING_CHANGED")
+
+    def _check(self):
+        self._state_check()
+        owner, broker = self.owner, self.broker
+        broker._check_peer()
+        try:
+            observed = self.observer.observe()
+        finally:
+            broker._check_peer()
+        require(type(observed) is dict and self.observer._previous_raw == canonical_bytes(observed)
+                and canonical_bytes(self.observer.previous) == self.observer._previous_raw
+                and observed["bindingDigest"] == canonical_digest(owner.observation_binding)
+                and observed["runNonce"] == owner.envelope["nonce"], "BROKER_OBSERVATION_BINDING")
+        now, start, end = _time(utc_now()), _time(observed["observedAt"]), _time(observed["expiresAt"])
+        require(start <= now < end and 0 < (end - start).total_seconds() <= 5, "BROKER_OBSERVATION_EXPIRED")
+        pin = (observed["observerBootId"], observed["generation"])
+        require(self.observation_pin is None or self.observation_pin == pin, "BROKER_GENERATION_CHANGED")
+        self.observation_pin = pin
+        # The observer call cannot change the durable operation or owned objects.
+        self._state_check()
+        return observed
 
 
 class _State:
