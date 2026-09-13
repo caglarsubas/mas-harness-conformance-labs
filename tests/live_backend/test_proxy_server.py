@@ -7109,6 +7109,444 @@ class BrokerZeroResourceEventTests(_BrokerEventFixture, unittest.TestCase):
         self.socket.send.assert_not_called()
         self.owner.files.read.assert_not_called()
 
+
+class BrokerApiConnectionTests(_BrokerEventFixture, unittest.TestCase):
+    """Actual broker/API factory and MemoryBIO codec; OS/OpenSSL are doubles.
+
+    Certificate bytes are deliberately unsigned DER data, not issued credentials.
+    No network service, private key, native containment or API effect is exercised.
+    """
+    def start(self):
+        import base64
+        from test_proxy_client import der, identity_data
+        self.fixture = deepcopy(VECTORS["broker"]["positive"][1])
+        owner = self.owner
+        profile = self.fixture["profile"]
+        scope = profile["binding"]
+        san = ("urn:planeon:capacity-proxy:" + ":".join(scope[k] for k in
+               ("tenantId", "environmentId", "runNonce", "apiEndpointId"))).encode()
+        extension = lambda oid, value: der(0x30, der(6, bytes.fromhex(oid)) + der(4, value))
+        extensions = der(0xA3, der(0x30, extension("551d13", der(0x30, b"")) +
+            extension("551d25", der(0x30, der(6, bytes.fromhex("2b06010505070302")))) +
+            extension("551d11", der(0x30, der(0x86, san)))))
+        spki = der(0x30, der(0x30, b"") + der(3, b"\0unit-api-not-a-key"))
+        algorithm = der(0x30, der(6, b"\x2b\x65\x70"))
+        tbs = der(0x30, b"\xa0\x03\x02\x01\x02" + der(2, b"\x01") + algorithm + der(0x30, b"") +
+                  der(0x30, der(0x17, b"260908000000Z") + der(0x17, b"260908001000Z")) +
+                  der(0x30, b"") + spki + extensions)
+        leaf = der(0x30, tbs + algorithm + der(3, b"\0unsigned"))
+        profile["capacityEntries"]["credentialIdentities"][1].update(
+            certificateDigest=server.byte_digest(leaf), clientSpkiDigest=server.byte_digest(spki))
+        self.api_pem = (b"-----BEGIN CERTIFICATE-----\n" + base64.b64encode(leaf) +
+                        b"\n-----END CERTIFICATE-----\n-----BEGIN PRIVATE KEY-----\n" +
+                        base64.b64encode(der(0x30, b"")) + b"\n-----END PRIVATE KEY-----\n")
+        self.peer_der, _, tls_endpoint = identity_data(False)
+        self.api_ca = b"-----BEGIN CERTIFICATE-----\nunit-only-ca\n-----END CERTIFICATE-----\n"
+        campaign = owner.envelope["endpoints"][0]
+        self.api_endpoint = deepcopy(campaign)
+        self.api_endpoint.update(endpointId=scope["apiEndpointId"], kind="KUBERNETES_API_PROXY",
+            addressFamily="IPV4", ipAddress="127.0.0.2", port=7443,
+            credentialFileReference="/etc/planeon/live-proxy/unit-api.pem")
+        self.api_endpoint["tls"] = {**tls_endpoint["tls"],
+            "caCertificateFileReference": owner.envelope["conformanceKitRoot"] + "/unit-api-ca.pem"}
+        owner.envelope["endpoints"] = [campaign, self.api_endpoint]
+        release = {"tree": [{"path": "unit-api-ca.pem", "mode": "0444", "size": len(self.api_ca),
+                             "sha256": server.byte_digest(self.api_ca)}]}
+        release_raw = canonical_bytes(release)
+        owner.files.raw[owner.envelope["campaignReleaseFileReference"]] = release_raw
+        owner.envelope["campaignReleaseDigest"] = server.byte_digest(release_raw)
+        owner.kit = {"unit-api-ca.pem": self.api_ca}
+        owner.profile = deepcopy(profile)
+        owner.capacity.update(deepcopy(profile["capacityEntries"]))
+        owner.observation_binding = deepcopy(self.fixture["observationBinding"])
+        owner.observation_binding["profileDigest"] = server.canonical_digest(owner.profile)
+        self.fixture["binding"]["profileDigest"] = server.canonical_digest(owner.profile)
+        self.fixture["binding"]["observationBindingDigest"] = server.canonical_digest(owner.observation_binding)
+        owner.qualification_binding._broker_raw = canonical_bytes(self.fixture["binding"])
+        owner.reservation = server.admission_binding(owner.envelope, owner.capacity, owner.profile)
+        owner.secrets = server._Files(owner)
+        self.secret_checks = Mock(return_value=None)
+        self.stack.enter_context(patch.object(server._Files, "check", self.secret_checks))
+        self.secret_reads = Mock(side_effect=self.read_secret)
+        self.stack.enter_context(patch.object(server._Files, "read", self.secret_reads))
+        self.history = []
+        self.append_row("RESERVED", None)
+        self.append_row("RUNNING", owner.active_operation)
+        self.observed["bindingDigest"] = server.canonical_digest(owner.observation_binding)
+        return BrokerTransportCustodyTests.start(self)
+
+    def read_secret(self, path, **kwargs):
+        self.events.append("api-secret")
+        self.assertEqual(path, self.api_endpoint["credentialFileReference"])
+        self.assertEqual(kwargs, dict(mode=0o400, maximum=262144))
+        self.on_secret()
+        self.owner.secrets.raw[path] = self.api_pem
+        return self.api_pem
+
+    def setUp(self):
+        _BrokerEventFixture.setUp(self)
+        self.on_secret = self.on_connect = self.on_handshake = lambda: None
+        self.on_context = lambda: None
+        self.api_socket = Mock()
+        self.api_socket.fileno.return_value = 81
+        self.api_socket.getpeername.side_effect = lambda: self.api_peer
+        self.api_socket.connect.side_effect = self.connect_api
+        self.api_socket.send.side_effect = lambda raw: len(raw)
+        self.api_peer = ("127.0.0.2", 7443)
+        self.fds[81] = SimpleNamespace(st_dev=1, st_ino=81, st_mode=stat.S_IFSOCK | 0o600)
+        self.fds[82] = SimpleNamespace(st_dev=1, st_ino=82, st_mode=stat.S_IFREG | 0o600)
+        self.mocks["socket"].return_value = self.api_socket
+        self.fd_bytes = bytearray()
+        self.seals = 15
+        self.memfd = self.stack.enter_context(patch.object(server.os, "memfd_create", return_value=82, create=True))
+        for name, value in (("MFD_CLOEXEC", 1), ("MFD_ALLOW_SEALING", 2)):
+            self.stack.enter_context(patch.object(server.os, name, value, create=True))
+        for name, value in (("F_ADD_SEALS", 1033), ("F_GET_SEALS", 1034), ("F_SEAL_SEAL", 1),
+                            ("F_SEAL_SHRINK", 2), ("F_SEAL_GROW", 4), ("F_SEAL_WRITE", 8)):
+            self.stack.enter_context(patch.object(server.fcntl, name, value, create=True))
+        self.memfd_write = self.stack.enter_context(patch.object(server.os, "write", side_effect=self.write_memfd))
+        self.stack.enter_context(patch.object(server.os, "lseek", return_value=0))
+        self.memfd_read = self.stack.enter_context(patch.object(server.os, "read",
+            side_effect=lambda fd, maximum: bytes(self.fd_bytes[:maximum])))
+        self.seal_call = self.stack.enter_context(patch.object(server.fcntl, "fcntl",
+            side_effect=lambda fd, op, *args: self.seals if op == 1034 else 0))
+        self.ssl = Mock()
+        self.ssl.version.return_value = "TLSv1.3"
+        self.ssl.session_reused = False
+        self.ssl.selected_alpn_protocol.return_value = "http/1.1"
+        self.ssl.getpeercert.return_value = self.peer_der
+        self.ssl.do_handshake.side_effect = self.handshake
+        self.context = Mock()
+        self.context.wrap_bio.side_effect = self.wrap
+        self.context_call = self.stack.enter_context(patch.object(server, "tls_context", side_effect=self.make_context))
+        self.action()
+        self.take()
+        self.before = list(self.events)
+
+    def connect_api(self, target):
+        self.events.append("api-connect")
+        self.assertEqual(target, self.api_peer)
+        self.on_connect()
+
+    def write_memfd(self, fd, raw):
+        self.assertEqual(fd, 82)
+        self.fd_bytes.extend(raw)
+        return len(raw)
+
+    def make_context(self, ca, fd):
+        self.assertEqual((ca, fd), (self.api_ca, 82))
+        self.events.append("api-context")
+        self.on_context()
+        return self.context
+
+    def wrap(self, incoming, outgoing, **kwargs):
+        self.assertEqual(kwargs, dict(server_side=False, server_hostname="proxy.unit"))
+        self.outgoing = outgoing
+        return self.ssl
+
+    def handshake(self):
+        self.events.append("api-handshake")
+        self.on_handshake()
+        self.outgoing.write(b"unit-encrypted-handshake-only")
+
+    def prepare(self):
+        self.assertIsNone(self.subject.prepare_api())
+        self.api = self.subject.api
+        self.assertIs(type(self.api), server._BrokerApi)
+        self.assertTrue(self.api.ready)
+        return self.api
+
+    def deny(self, reason):
+        with self.assertRaisesRegex(ConformanceError, reason):
+            self.subject.prepare_api()
+        self.assertTrue(self.subject.closed)
+        self.assertTrue(self.subject.failed)
+
+    def test_original_pending_action_opens_separate_authenticated_channel_only(self):
+        api = self.prepare()
+        self.assertIsNone(api.check())
+        self.assertIs(self.subject.sock, self.socket)
+        self.assertIs(api.sock, self.api_socket)
+        self.assertEqual(self.secret_reads.call_count, 1)
+        self.api_socket.send.assert_called_once_with(b"unit-encrypted-handshake-only")
+        self.api_socket.recv.assert_not_called()
+        self.socket.send.assert_not_called()
+        self.assertIsNotNone(self.subject.events.transcript.pending)
+        self.assertEqual(self.subject.events.transcript.sequence, 2)
+        self.assertIsNone(api.memfd)
+        self.assertEqual(self.events.count(("close", 82)), 1)
+
+    def test_factory_accepts_no_caller_endpoint_credential_or_socket(self):
+        with self.assertRaises(TypeError):
+            self.subject.prepare_api({"endpoint": "foreign"})
+        self.secret_reads.assert_not_called()
+
+    def test_missing_event_owner_refuses_before_credential(self):
+        self.subject.events = None
+        self.deny("API_BROKER_EVENTS_REQUIRED")
+        self.secret_reads.assert_not_called()
+
+    def test_no_pending_action_refuses_before_credential(self):
+        self.subject.events.transcript.pending = None
+        self.deny("API_ACTION_REQUIRED")
+        self.secret_reads.assert_not_called()
+
+    def test_changed_generation_refuses_before_credential(self):
+        self.observed["generation"] = "f" * 64
+        self.deny("BROKER_GENERATION_CHANGED")
+        self.secret_reads.assert_not_called()
+
+    def test_changed_journal_refuses_before_credential(self):
+        self.ledger += b" "
+        self.deny("BROKER_RUNNING_CHANGED")
+        self.secret_reads.assert_not_called()
+
+    def test_expiry_refuses_before_credential(self):
+        self.now = 500
+        self.deny("BROKER_CLOCK_OR_DEADLINE")
+        self.secret_reads.assert_not_called()
+
+    def test_substituted_api_kind_refuses_before_credential(self):
+        self.api_endpoint["kind"] = "CAMPAIGN_PROXY"
+        self.deny("API_ENDPOINT_REQUIRED")
+        self.secret_reads.assert_not_called()
+
+    def test_missing_api_endpoint_refuses_before_credential(self):
+        self.owner.envelope["endpoints"].pop()
+        self.deny("API_ENDPOINT_REQUIRED")
+        self.secret_reads.assert_not_called()
+
+    def test_duplicate_api_endpoint_refuses_before_credential(self):
+        self.owner.envelope["endpoints"].append(deepcopy(self.api_endpoint))
+        self.deny("API_ENDPOINT_REQUIRED")
+
+    def test_server_identity_reuse_refuses_before_credential(self):
+        self.api_endpoint["credentialFileReference"] = server.IDENTITY
+        self.deny("API_CREDENTIAL_REUSE")
+        self.secret_reads.assert_not_called()
+
+    def test_campaign_credential_reuse_refuses_before_credential(self):
+        self.api_endpoint["credentialFileReference"] = self.owner.envelope["endpoints"][0]["credentialFileReference"]
+        self.deny("API_CREDENTIAL_REUSE")
+        self.secret_reads.assert_not_called()
+
+    def test_numeric_family_mismatch_refuses_without_socket_or_secret(self):
+        self.api_endpoint["addressFamily"] = "IPV6"
+        self.deny("API_ENDPOINT_ADDRESS")
+        self.secret_reads.assert_not_called()
+
+    def test_dns_name_cannot_be_used_as_numeric_address(self):
+        self.api_endpoint["ipAddress"] = "localhost"
+        with self.assertRaises(ValueError):
+            self.subject.prepare_api()
+        self.secret_reads.assert_not_called()
+
+    def test_ipv4_mapped_ipv6_is_refused(self):
+        self.api_endpoint.update(ipAddress="::ffff:127.0.0.2", addressFamily="IPV6")
+        self.deny("API_ENDPOINT_ADDRESS")
+
+    def test_scoped_ipv6_is_refused(self):
+        self.api_endpoint.update(ipAddress="fe80::1%en0", addressFamily="IPV6")
+        self.deny("API_ENDPOINT_ADDRESS")
+
+    def test_ipv6_uses_one_family_without_fallback(self):
+        self.api_endpoint.update(ipAddress="::1", addressFamily="IPV6")
+        self.api_peer = ("::1", 7443, 0, 0)
+        self.prepare()
+        self.mocks["socket"].assert_called_with(server.socket.AF_INET6, server.socket.SOCK_STREAM)
+        self.api_socket.setsockopt.assert_called_once_with(server.socket.IPPROTO_IPV6, server.socket.IPV6_V6ONLY, 1)
+
+    def test_ca_outside_signed_kit_is_refused(self):
+        self.api_endpoint["tls"]["caCertificateFileReference"] = "/etc/ssl/cert.pem"
+        self.deny("API_CA_NOT_RELEASED")
+
+    def test_ca_bytes_substitution_is_refused(self):
+        self.owner.kit["unit-api-ca.pem"] += b"changed"
+        self.deny("API_CA_CHANGED")
+        self.secret_reads.assert_not_called()
+
+    def test_release_bytes_substitution_is_refused(self):
+        self.owner.files.raw[self.owner.envelope["campaignReleaseFileReference"]] = b"{}"
+        self.deny("API_RELEASE_CHANGED")
+
+    def test_previously_read_credential_cannot_be_reopened(self):
+        self.owner.secrets.raw[self.api_endpoint["credentialFileReference"]] = self.api_pem
+        self.deny("API_CREDENTIAL_ALREADY_READ")
+        self.secret_reads.assert_not_called()
+
+    def test_revocation_after_credential_read_stops_before_memfd(self):
+        self.on_secret = lambda: self.observed.update(generation="e" * 64)
+        self.deny("BROKER_GENERATION_CHANGED")
+        self.memfd.assert_not_called()
+
+    def test_wrong_leaf_certificate_refuses_before_memfd(self):
+        import base64
+        self.api_pem = (b"-----BEGIN CERTIFICATE-----\n" + base64.b64encode(self.peer_der) +
+            b"\n-----END CERTIFICATE-----\n-----BEGIN PRIVATE KEY-----" +
+            self.api_pem.split(b"-----BEGIN PRIVATE KEY-----")[1])
+        with self.assertRaisesRegex(ConformanceError, "TLS_CERT_EKU"):
+            self.subject.prepare_api()
+        self.memfd.assert_not_called()
+
+    def test_zero_memfd_write_refuses_and_closes_original(self):
+        self.memfd_write.side_effect = None
+        self.memfd_write.return_value = 0
+        self.deny("API_CREDENTIAL_SHORT_WRITE")
+        self.assertEqual(self.events.count(("close", 82)), 1)
+        self.api_socket.connect.assert_not_called()
+
+    def test_missing_seals_refuses_before_context(self):
+        self.seals = 7
+        self.deny("API_CREDENTIAL_SEALS")
+        self.context_call.assert_not_called()
+        self.assertEqual(self.events.count(("close", 82)), 1)
+
+    def test_memfd_readback_mismatch_refuses_before_context(self):
+        self.memfd_read.side_effect = lambda *args: b"changed"
+        self.deny("API_CREDENTIAL_MEMFD_CHANGED")
+        self.context_call.assert_not_called()
+
+    def test_context_failure_closes_memfd_without_connect(self):
+        self.on_context = lambda: (_ for _ in ()).throw(OSError("unit context"))
+        with self.assertRaises(OSError):
+            self.subject.prepare_api()
+        self.assertEqual(self.events.count(("close", 82)), 1)
+        self.api_socket.connect.assert_not_called()
+
+    def test_revocation_after_context_stops_before_connect(self):
+        self.on_context = lambda: self.observed.update(generation="a" * 64)
+        self.deny("BROKER_GENERATION_CHANGED")
+        self.assertEqual(self.events.count(("close", 82)), 1)
+        self.api_socket.connect.assert_not_called()
+
+    def test_inheritable_api_socket_is_refused(self):
+        self.mocks["get_inheritable"].side_effect = lambda fd: fd == 81
+        self.deny("API_DESCRIPTOR_CHANGED")
+        self.api_socket.close.assert_called_once()
+
+    def test_connected_peer_substitution_is_refused_before_tls(self):
+        self.api_socket.getpeername.side_effect = lambda: ("127.0.0.3", 7443)
+        self.deny("API_PEER_CHANGED")
+        self.ssl.do_handshake.assert_not_called()
+
+    def test_connect_failure_has_post_observation_and_no_retry(self):
+        def fail():
+            self.events.append("connect-failed")
+            raise TimeoutError("unit connect")
+        self.on_connect = fail
+        with self.assertRaises(TimeoutError):
+            self.subject.prepare_api()
+        self.assertIn("observe", self.events[self.events.index("connect-failed") + 1:])
+        self.api_socket.connect.assert_called_once()
+        self.api_socket.close.assert_called_once()
+
+    def test_late_connect_refuses_before_handshake(self):
+        self.on_connect = lambda: setattr(self, "now", 111)
+        self.deny("API_CONNECT_DEADLINE")
+        self.ssl.do_handshake.assert_not_called()
+
+    def test_revocation_after_connect_refuses_before_handshake(self):
+        self.on_connect = lambda: self.observed.update(generation="a" * 64)
+        self.deny("BROKER_GENERATION_CHANGED")
+        self.ssl.do_handshake.assert_not_called()
+
+    def test_tls_resumption_is_refused(self):
+        self.ssl.session_reused = True
+        self.deny("TLS_PROTOCOL_INVALID")
+
+    def test_wrong_tls_version_is_refused(self):
+        self.ssl.version.return_value = "TLSv1.2"
+        self.deny("TLS_PROTOCOL_INVALID")
+
+    def test_wrong_alpn_is_refused(self):
+        self.ssl.selected_alpn_protocol.return_value = "h2"
+        self.deny("TLS_PROTOCOL_INVALID")
+
+    def test_wrong_server_certificate_is_refused(self):
+        self.ssl.getpeercert.return_value = b"not DER"
+        with self.assertRaises(ConformanceError):
+            self.subject.prepare_api()
+        self.api_socket.close.assert_called_once()
+
+    def test_revocation_during_handshake_does_not_publish_ready(self):
+        self.on_handshake = lambda: self.observed.update(generation="a" * 64)
+        self.deny("BROKER_GENERATION_CHANGED")
+
+    def test_repeated_prepare_never_reconnects_or_reopens_credential(self):
+        self.prepare()
+        self.deny("BROKER_API_ALREADY_ATTEMPTED")
+        self.assertEqual(self.secret_reads.call_count, 1)
+        self.api_socket.connect.assert_called_once()
+
+    def test_mutated_endpoint_after_ready_refuses_and_closes(self):
+        api = self.prepare()
+        self.api_endpoint["ipAddress"] = "127.0.0.3"
+        with self.assertRaisesRegex(ConformanceError, "API_INPUTS_CHANGED"):
+            api.check()
+        self.api_socket.close.assert_called_once()
+
+    def test_recycled_api_descriptor_is_not_closed(self):
+        api = self.prepare()
+        self.fds[81].st_ino += 1
+        with self.assertRaises(ConformanceError):
+            api.check()
+        self.api_socket.close.assert_not_called()
+        self.api_socket.detach.assert_called_once()
+        self.assertIsNotNone(self.subject.cleanup_failure)
+
+    def test_foreign_current_socket_is_not_adopted_or_closed(self):
+        api = self.prepare()
+        foreign = api.sock = Mock()
+        with self.assertRaises(ConformanceError):
+            api.check()
+        foreign.close.assert_not_called()
+        self.api_socket.close.assert_called_once()
+
+    def test_foreign_current_api_owner_is_not_closed(self):
+        api = self.prepare()
+        foreign = self.subject.api = Mock()
+        with self.assertRaises(ConformanceError):
+            api.check()
+        foreign.close.assert_not_called()
+        self.api_socket.close.assert_called_once()
+
+    def test_api_close_is_idempotent_and_preserves_borrowed_resources(self):
+        api = self.prepare()
+        api.close()
+        api.close()
+        self.api_socket.close.assert_called_once()
+        self.socket.close.assert_not_called()
+        self.owner.files.close.assert_not_called()
+        self.assertEqual(self.events.count(("close", 82)), 1)
+
+    def test_api_transport_never_writes_durable_intent_or_cleanup(self):
+        before = self.ledger
+        with patch.object(server._State, "append") as append, patch.object(server._State, "sync") as sync:
+            self.prepare()
+        self.assertEqual(before, self.ledger)
+        append.assert_not_called()
+        sync.assert_not_called()
+
+    def test_pending_action_change_after_ready_refuses(self):
+        api = self.prepare()
+        api.events.transcript.pending["actionId"] += 1
+        with self.assertRaisesRegex(ConformanceError, "BROKER_TRANSCRIPT_CHANGED"):
+            api.check()
+        self.api_socket.close.assert_called_once()
+
+class BrokerApiZeroResourceTests(_BrokerEventFixture, unittest.TestCase):
+    profile_index = 0
+
+    def test_zero_resource_execution_opens_no_api_socket_or_credential(self):
+        self.take()  # only receipt data; no resource action exists
+        self.owner.secrets = server._Files(self.owner)
+        with patch.object(server._Files, "read") as read:
+            with self.assertRaisesRegex(ConformanceError, "API_ACTION_REQUIRED"):
+                self.subject.prepare_api()
+        read.assert_not_called()
+        self.assertEqual(self.mocks["socket"].call_count, 1)  # original broker only
+
+
 class BrokerStartupSourceOrderTests(unittest.TestCase):
     """Source ordering only; separate from every OS-mocked channel fixture."""
     def test_server_constructor_order_keeps_broker_before_credentials(self):

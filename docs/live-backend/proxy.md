@@ -1021,6 +1021,45 @@ retain separate malformed-index/terminal cases and the entire failed replay.
 Production code, all predecessor tests and the acceptance recipe are unchanged.
 The corrected exact head requires a fresh full eight-command replay.
 
+## Server-only API authentication continuation
+
+Prior head `1419ff373ebae5b173c99ce3ef7dd005f7b97146` passed 1,013 tests,
+zero skips and all eight commands in LOCAL activation235 and required localhost
+CI34747686579/activation236. Both trees were70646d1; runner64 retired with zero
+runners/artifacts. Failed initial inbound-event vectors remain recorded above.
+That evidence does not accept this later source increment.
+
+The original broker now owns one no-argument `prepare_api()` for its original
+pending, case-bound resource action. It verifies current RUNNING history,
+observer generation, peer/authority and exact manifest/API grant before opening
+the distinct server-only API credential. Zero-resource runs have no such path.
+The endpoint, numeric address/family/port, TLS name/SPKI, separate credential and
+release-listed CA all come from retained inputs, never caller parameters.
+No DNS, fallback family, kubeconfig, bearer token or ambient CA is introduced.
+
+The one-read 0400 credential is checked, copied to an owned CLOEXEC memfd,
+sealed and read back before context loading. The memfd closes before TCP use.
+The API socket is independently owned and non-inheritable, with retained FD and
+connected-peer checks. Shared MemoryBIO TLS1.3/certificate logic surrounds I/O
+with the original broker/observer checks and session deadline. Connect is one
+attempt with a maximum two-second wait inside its ten-second phase cap; no
+reconnect or credential reopen is permitted. Partial failure closes original
+resources, preserves ambiguous-close errors and never closes a substituted FD.
+
+This step authenticates only: it sends no HTTP request, Kubernetes mutation,
+RESOURCE_RESULT, CLEANUP_RECORDED or terminal acknowledgement. It creates no
+durable intent/UID ledger and does not release a reservation. API authentication
+cannot prove independently enforced generation admission. The resource driver,
+durable intent/observed identity accounting, cleanup and completed native factory
+integration remain unfinished; `NativeProxyServer.serve` is not wired to this leg.
+
+Tests use the real broker/API factories, data checks and MemoryBIO codec with
+explicit OS, installed-owner/observer/store and OpenSSL context/handshake doubles.
+Certificate inputs are unsigned DER-shaped data, not issued keys or a live TLS
+session. Tests do not establish native containment, chain trust or API effects.
+All1,013 predecessor methods,127 accepted files and existing fixture bytes remain
+unchanged. Fresh exact-commit full LOCAL and required localhost CI are mandatory.
+
 ## Verification boundary
 
 This is an in-progress source snapshot, not a self-attested run result. Exact
@@ -1070,7 +1109,8 @@ probe, live launcher, runtime download or cloud/billable service is authorized.
 | Alpha 2 | CONF-LIVE-003 fixed observer-role inspection | LOCAL_AND_CI_PASS_RECORDED | Headdc7f728 /869 tests/all8; CI34737704899 attempt3; runner61 retired |
 | Alpha 2 | CONF-LIVE-003 retained broker peer / native composition | LOCAL_AND_CI_PASS_RECORDED | Headacb2da5 /926 tests/all8; CI34741454274; runner62 retired |
 | Alpha 2 | CONF-LIVE-003 broker dispatch / first STARTED | LOCAL_AND_CI_PASS_RECORDED | Head fd64ffa / 965 tests / all eight; CI 34745275207; runner 63 retired |
-| Alpha 2 | CONF-LIVE-003 bounded inbound events | IMPLEMENTED_NOT_ACCEPTED | Fixed-channel idle/action/chunk handling; no API effects or completion |
+| Alpha 2 | CONF-LIVE-003 bounded inbound events | LOCAL_AND_CI_PASS_RECORDED | Head1419ff3 /1,013 tests/all8; CI34747686579; runner64 retired |
+| Alpha 2 | CONF-LIVE-003 server-only API authentication | IMPLEMENTED_NOT_ACCEPTED | Original pending action, separate credential/socket/TLS; no HTTP/effect/cleanup |
 | Alpha 2 | CONF-LIVE-003 native inspector / broker / API | ONGOING | Required implementation listed above |
 | Alpha 2 | CONF-LIVE-003 required CI | WAITING | Fresh exact-head localhost evidence required; prior failures retained |
 | Alpha 2 | CONF-LIVE-003 source completion / merge / exact-main | NOT_RUN | Packet is incomplete; no completion claim |

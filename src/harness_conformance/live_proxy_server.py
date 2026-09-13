@@ -3281,6 +3281,7 @@ class _Broker:
         self.inspection = self._inspection_original = None
         self.dispatch = self._dispatch_original = None
         self.events = self._events_original = None
+        self.api = self._api_original = None
         self._attempted_cases = set()
         self.deadline = owner.deadline
         self.last_wall, self.last_mono = None, time.monotonic()
@@ -3474,9 +3475,30 @@ class _Broker:
                 pass  # retained cleanup error is sticky; never reconnect/retry
             raise
 
+    def prepare_api(self):
+        """Authenticate one pending action's fixed API leg; send no HTTP/effect."""
+        try:
+            require(not self.closed and not self.failed and not self.busy
+                    and self.api is self._api_original is None, "BROKER_API_ALREADY_ATTEMPTED")
+            self.api = self._api_original = object.__new__(_BrokerApi)
+            self.api.__init__(self)
+        except BaseException:
+            self.failed = True
+            try:
+                self.close()
+            except BaseException:
+                pass  # original cleanup failure stays sticky; never reconnect
+            raise
+
     def close(self):
         if not self.closed:
             self.closed = True
+            api, self._api_original, self.api = self._api_original, None, None
+            if api is not None:
+                try:
+                    api.close()
+                except BaseException as exc:
+                    self.cleanup_failure = self.cleanup_failure or exc
             inspection, self._inspection_original, self.inspection = self._inspection_original, None, None
             if inspection is not None:
                 try:
@@ -3740,6 +3762,238 @@ class _BrokerEvents:
         except BaseException:
             self.failed = True
             raise
+
+
+class _BrokerApi:
+    """Server-only retained TCP/TLS owner, not an action executor or UID ledger.
+
+    One pending broker action selects the endpoint from retained signed inputs.
+    This increment exposes no HTTP send, action acknowledgement or cleanup path.
+    """
+    def __init__(self, broker):
+        self.closed = self.failed = self.ready = self.checking = False
+        self.cleanup_failure = None
+        self.sock = self._socket_original = self.tls = self._tls_original = None
+        self.memfd = self._memfd_original = None
+        self._socket_fd = self._socket_pin = self._memfd_pin = None
+        self.connected = False
+        try:
+            require(type(broker) is _Broker and broker.api is broker._api_original is self,
+                    "API_OWNER_INVALID")
+            self.broker, self.owner = broker, broker.owner
+            self.events = broker.events
+            require(type(self.events) is _BrokerEvents and self.events is broker._events_original,
+                    "API_BROKER_EVENTS_REQUIRED")
+            self.secrets = self.owner.secrets
+            require(type(self.secrets) is _Files and self.secrets.owner is self.owner,
+                    "API_SECRET_OWNER_INVALID")
+            self.deadline, self.last = broker.deadline, time.monotonic()
+            self.action_raw = canonical_bytes(self.events.transcript.pending)
+            self.endpoint_raw, self.ca = self._inputs()
+            self.endpoint = document(self.endpoint_raw)
+            address = ipaddress.ip_address(self.endpoint["ipAddress"])
+            require(str(address) == self.endpoint["ipAddress"] and not address.is_unspecified
+                    and not address.is_multicast and not (address.version == 6 and
+                    (address.ipv4_mapped is not None or address.scope_id is not None))
+                    and self.endpoint["addressFamily"] == ("IPV4" if address.version == 4 else "IPV6"),
+                    "API_ENDPOINT_ADDRESS")
+            self.target = (str(address), self.endpoint["port"]) if address.version == 4 else (str(address), self.endpoint["port"], 0, 0)
+            self._target_original = self.target
+            self._transport_check()
+            path = self.endpoint["credentialFileReference"]
+            require(path not in self.secrets.raw, "API_CREDENTIAL_ALREADY_READ")
+            raw = self._io(self.secrets.read, path, mode=0o400, maximum=262144)
+            self._io(_check_certificate, credential_leaf(raw), self.owner.profile, self.endpoint, client=True)
+            try:
+                self.memfd = self._memfd_original = os.memfd_create("planeon-api-identity", os.MFD_CLOEXEC | os.MFD_ALLOW_SEALING)
+                self._memfd_pin = _Broker._fd_pin(self.memfd)
+                require(self._memfd_pin[2] == stat.S_IFREG, "API_MEMFD_TYPE")
+            finally:
+                self._transport_check()
+            offset = 0
+            while offset < len(raw):
+                count = self._io(os.write, self.memfd, raw[offset:])
+                require(type(count) is int and 0 < count <= len(raw) - offset, "API_CREDENTIAL_SHORT_WRITE")
+                offset += count
+            seals = fcntl.F_SEAL_SEAL | fcntl.F_SEAL_WRITE | fcntl.F_SEAL_GROW | fcntl.F_SEAL_SHRINK
+            self._io(fcntl.fcntl, self.memfd, fcntl.F_ADD_SEALS, seals)
+            require(self._io(fcntl.fcntl, self.memfd, fcntl.F_GET_SEALS) & seals == seals, "API_CREDENTIAL_SEALS")
+            self._io(os.lseek, self.memfd, 0, os.SEEK_SET)
+            require(self._io(os.read, self.memfd, len(raw) + 1) == raw, "API_CREDENTIAL_MEMFD_CHANGED")
+            context = self._io(tls_context, self.ca, self.memfd)
+            self._close_memfd()
+            self._transport_check()
+            try:
+                self.sock = self._socket_original = socket.socket(socket.AF_INET if address.version == 4 else socket.AF_INET6,
+                                                                socket.SOCK_STREAM)
+                self._socket_fd = self.sock.fileno()
+                self._socket_pin = _Broker._fd_pin(self._socket_fd)
+                require(self._socket_pin[2] == stat.S_IFSOCK, "API_SOCKET_TYPE")
+            finally:
+                self._transport_check()
+            self._io(self.sock.set_inheritable, False)
+            if address.version == 6:
+                self._io(self.sock.setsockopt, socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 1)
+            end = min(self.deadline, time.monotonic() + 10)
+            self._transport_check()
+            before = time.monotonic()
+            require(self.last <= before < end, "API_CONNECT_DEADLINE")
+            self._io(self.sock.settimeout, min(2, end - before))
+            # Recompute after all potentially expensive checks, before connect.
+            before = time.monotonic()
+            require(self.last <= before < end, "API_CONNECT_DEADLINE")
+            try:
+                self.sock.settimeout(min(2, end - before))
+                require(before <= time.monotonic() < end, "API_CONNECT_DEADLINE")
+                self.sock.connect(self.target)
+                self.connected = True  # retained before post-I/O refusal
+            finally:
+                self._transport_check()
+                require(before <= time.monotonic() < end, "API_CONNECT_DEADLINE")
+            self.tls = self._tls_original = _TLS(self.sock, context, self.endpoint, self, self.deadline)
+            self._transport_check()
+            require(self.tls.handshake(self.owner.profile, self.endpoint) is None, "API_HANDSHAKE_RESULT")
+            self._transport_check()
+            self.ready = True
+        except BaseException:
+            self.failed = True
+            try:
+                self.close()
+            except BaseException:
+                pass
+            raise
+
+    def check(self):
+        """Retained authentication readiness only; never acknowledge an action."""
+        try:
+            require(self.ready, "API_NOT_READY")
+            self._transport_check()
+        except BaseException:
+            self.failed = True
+            self.broker.failed = True
+            try:
+                self.broker.close()
+            except BaseException:
+                pass
+            raise
+
+    def _inputs(self):
+        owner, events = self.owner, self.events
+        action = document(self.action_raw, 16384)
+        require(type(action) is dict and set(action) == {"actionId", "verb", "manifestDigest"}
+                and action["verb"] in ("CREATE", "GET", "DELETE") and owner.profile["resources"], "API_ACTION_REQUIRED")
+        binding = broker_document(events.start.binding_raw, "binding")
+        require(action["manifestDigest"] in binding["caseResourceDigests"][events.start.operation], "API_ACTION_CASE")
+        resources = [r for r in owner.profile["resources"] if r["manifestDigest"] == action["manifestDigest"]]
+        require(len(resources) == 1, "API_ACTION_MANIFEST")
+        scope = owner.profile["binding"]
+        endpoints = [e for e in owner.envelope["endpoints"] if e["endpointId"] == scope["apiEndpointId"]]
+        require(len(endpoints) == 1 and endpoints[0]["kind"] == "KUBERNETES_API_PROXY"
+                and endpoints[0]["endpointId"] != scope["endpointId"], "API_ENDPOINT_REQUIRED")
+        endpoint = endpoints[0]
+        require(endpoint["credentialFileReference"] != IDENTITY and all(
+            endpoint["credentialFileReference"] != e["credentialFileReference"] for e in owner.envelope["endpoints"]
+            if e["endpointId"] != endpoint["endpointId"]), "API_CREDENTIAL_REUSE")
+        credential = [r for r in owner.profile["capacityEntries"]["credentialIdentities"]
+                      if r["endpointId"] == endpoint["endpointId"] and r["purpose"] == "KUBERNETES_PROXY_SERVER_MTLS"]
+        require(len(credential) == 1, "API_CREDENTIAL_ENROLLMENT")
+        manifest = resources[0]["manifest"]
+        resource = {"Pod": "pods", "ConfigMap": "configmaps", "Service": "services"}[manifest["kind"]]
+        grant = dict(endpointId=endpoint["endpointId"], verb=action["verb"].lower(), resource=resource,
+                     namespace=scope["namespace"], name=manifest["metadata"]["name"], apiGroup="", apiVersion="v1",
+                     subresource="", requestMediaType="application/json", responseMediaType="application/json",
+                     requestMaxBytes=16384, responseMaxBytes=4194304)
+        require(grant in owner.profile["capacityEntries"]["kubernetesApiRules"], "API_EXACT_GRANT_REQUIRED")
+        prefix = owner.envelope["conformanceKitRoot"] + "/"
+        path = endpoint["tls"]["caCertificateFileReference"]
+        require(path.startswith(prefix) and all(p not in ("", ".", "..") for p in path[len(prefix):].split("/")),
+                "API_CA_NOT_RELEASED")
+        relative = path[len(prefix):]
+        ca = owner.kit.get(relative)
+        release_raw = owner.files.raw[owner.envelope["campaignReleaseFileReference"]]
+        require(byte_digest(release_raw) == owner.envelope["campaignReleaseDigest"], "API_RELEASE_CHANGED")
+        release = require_canonical_document(release_raw)
+        rows = [r for r in release["tree"] if r["path"] == relative]
+        require(type(ca) is bytes and 0 < len(ca) <= 262144 and ca.startswith(b"-----BEGIN CERTIFICATE-----")
+                and b"PRIVATE KEY" not in ca and rows == [{"path": relative, "mode": "0444", "size": len(ca),
+                                                          "sha256": byte_digest(ca)}], "API_CA_CHANGED")
+        return canonical_bytes(endpoint), ca
+
+    def _transport_check(self):
+        require(not self.checking, "API_REENTRANT_CHECK")
+        self.checking = True
+        try:
+            broker, owner = self.broker, self.owner
+            require(type(self) is _BrokerApi and not self.closed and not self.failed
+                    and type(broker) is _Broker and broker.api is broker._api_original is self
+                    and broker.owner is owner and owner.broker is owner._broker_original is broker
+                    and broker.events is broker._events_original is self.events
+                    and owner.secrets is self.secrets and self.secrets.owner is owner
+                    and self.deadline == broker.deadline == owner.deadline, "API_OWNER_CHANGED")
+            with broker._phase():
+                self.events._check()
+            self.secrets.check()
+            require(canonical_bytes(self.events.transcript.pending) == self.action_raw
+                    and self._inputs() == (self.endpoint_raw, self.ca)
+                    and canonical_bytes(self.endpoint) == self.endpoint_raw
+                    and self.target == self._target_original, "API_INPUTS_CHANGED")
+            for fd, pin in ((self.memfd, self._memfd_pin), (self._socket_fd, self._socket_pin)):
+                if fd is not None:
+                    require(_Broker._fd_pin(fd) == pin and not os.get_inheritable(fd), "API_DESCRIPTOR_CHANGED")
+            require(self.memfd == self._memfd_original and self.sock is self._socket_original
+                    and self.tls is self._tls_original, "API_TRANSPORT_CHANGED")
+            if self.sock is not None:
+                require(self.sock.fileno() == self._socket_fd, "API_DESCRIPTOR_CHANGED")
+                if self.connected:
+                    require(self.sock.getpeername() == self.target, "API_PEER_CHANGED")
+            if self.tls is not None:
+                require(type(self.tls) is _TLS and self.tls.owner is self and self.tls.sock is self.sock
+                        and self.tls.deadline == self.deadline, "API_TLS_OWNER_CHANGED")
+            now = time.monotonic()
+            require(self.last <= now < self.deadline, "API_CLOCK_OR_DEADLINE")
+            self.last = now
+        finally:
+            self.checking = False
+
+    def _io(self, function, *args, **kwargs):
+        self._transport_check()
+        try:
+            return function(*args, **kwargs)
+        finally:
+            self._transport_check()
+
+    def _close_memfd(self):
+        fd, self.memfd, self._memfd_original = self._memfd_original, None, None
+        if fd is not None:
+            try:
+                require(_Broker._fd_pin(fd) == self._memfd_pin, "API_CLOSE_FD_REUSED")
+                os.close(fd)
+            except BaseException as exc:
+                self.cleanup_failure = self.cleanup_failure or exc
+                raise
+
+    def close(self):
+        if not self.closed:
+            self.closed, self.ready = True, False
+            self.tls = self._tls_original = None
+            try:
+                self._close_memfd()
+            except BaseException:
+                pass  # continue retiring independently owned socket; failure retained
+            sock, self.sock, self._socket_original = self._socket_original, None, None
+            if sock is not None:
+                try:
+                    require(sock.fileno() == self._socket_fd and _Broker._fd_pin(self._socket_fd) == self._socket_pin,
+                            "API_CLOSE_FD_REUSED")
+                    sock.close()
+                except BaseException as exc:
+                    self.cleanup_failure = self.cleanup_failure or exc
+                    try:
+                        sock.detach()  # never destructor-close a possibly recycled descriptor
+                    except BaseException:
+                        pass  # preserve the first cleanup error; no retry
+        if self.cleanup_failure is not None:
+            raise self.cleanup_failure
 
 
 class _State:
