@@ -21,7 +21,7 @@ mandatory. No new product stage, public protocol, dependency or live permission.
 | C2 | DRAFT: future containment/execution callbacks removed; serve loop drives the original broker | Actual complete factory acceptance without004; failure-path closure |
 | C3 | DRAFT: CREATE handoff, original read-once credential reuse and guarded GET/DELETE result/retirement | Complete sequential driver acceptance |
 | C4 | DRAFT: fresh GET, exact UID/version DELETE, confirmed absence and fail-only cleanup journal integrated | Full factory failure-path verification and isolated acceptance |
-| C5 | DRAFT: complete receipt validation, durable cleanup seal, terminal journal and one-way clean case handoff | Integrated failure/driver acceptance; all added regressions remain unexecuted |
+| C5 | DRAFT: complete receipt validation, durable cleanup seal, terminal journal and one-way clean case handoff | Integrated failure/driver acceptance remains unproven |
 | C6 | DRAFT: full `serve()`/HTTP/MemoryBIO and zero/resource-mode factory cases added | Review and execute the full recipe; no successful qualifier/driver substitutes |
 | C7 | ONGOING: source/test mapping below; no completion certificate | Finish independent exact-tree review, full local/required localhost CI, protected merge and separate local exact-main |
 
@@ -31,7 +31,12 @@ the sixth reported an error and never completed. Its unfinished progress is
 not a pass count. The original log SHA256 is
 `03d20f32743575c7bb42c73f9616992d772d4e32a492895416a735809aa4ad9c`.
 Draft PR18 preserves that failure; its unassigned CI queue was canceled without
-execution. LOCAL1/3 is consumed; CI0/2 and LOCAL_EXACT_MAIN0/1 remain unexecuted.
+execution. LOCAL2 on `c366a3fac47d53a52a4fbe76618796e9fe196848` also timed out
+at900 seconds. Five suites passed170 tests; backend inventory1390 did not
+complete.956 progress characters without E/F are not a full acceptance result.
+No new factory diagnostic was reached. Its log SHA256 is
+`9855fa1836c1eade40ae2dfc589d0db33b0f82957d4af1fba1410aa44bc1ab7a`.
+LOCAL2/3 is consumed; CI0/2 and LOCAL_EXACT_MAIN0/1 remain unexecuted.
 
 The broker transport leaf fixture now supplies the original qualification-owner
 and inspector data required by the fixed private join. Actual
@@ -46,6 +51,24 @@ the stalled code. It does not stop cases, alter clocks/guards, replace factories
 filter discovery or extend any deadline. Unit stacks print no local values or
 credentials. A watchdog stack dump is diagnostic, not an acceptance result.
 C7 remains OPEN; no successful factory/HTTP completion is yet established.
+
+The next bounded correction targets private `_time`: the existing exact ASCII
+grammar still runs first; valid values use the stdlib ISO parser instead of
+locale-dependent general format parsing. Invalid calendar values fall back to
+the exact former parser outside the exception handler, preserving its error
+type/args without adding exception context. Values are parsed afresh on every
+call; no expiry, authority, signature, kernel observation or I/O guard is cached.
+No crypto/canonical helper, wire schema or checking cadence changes.
+
+Seven additional StrictTimestampParserTests compare the former parser with
+calendar/century/leap-second boundaries, invalid grammar and types, error
+precedence/context, UTC values and fresh calls. A bounded ABBA timing sample
+prints diagnostic measurements only: no speed assertion, native benchmark or
+claimed whole-suite gain. These new tests and the correction remain unaccepted
+until an exact full isolated replay. The earlier slowdown's root cause is not
+established: six unchanged root-wiring tests took3.443–4.120x their LOCAL1 wall
+time and host load also increased. Neither fact alone proves contention or
+justifies weaker guards. The final LOCAL attempt must not be reset or pooled.
 
 Static syntax/scope and identity checks do not execute or qualify the product.
 Reserve each attempt durably before signing/activation; limits remain3 LOCAL,2 CI and1

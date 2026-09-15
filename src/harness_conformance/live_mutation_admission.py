@@ -116,6 +116,15 @@ def _shape(value, spec, definitions):
 def _time(value):
     require(type(value) is str and re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z", value),
             "PROXY_TIME_INVALID")
+    # The exact ASCII grammar above excludes every broader ISO spelling.
+    # Parse each value afresh without strptime's locale/format machinery on
+    # the valid path. This is not a cached expiry or a skipped custody check.
+    try:
+        return datetime.fromisoformat(value[:-1]).replace(tzinfo=timezone.utc)
+    except ValueError:
+        pass
+    # Keep the original invalid-calendar error type/message/precedence. Run
+    # outside the except block so the fast parser adds no exception context.
     return datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
 
 

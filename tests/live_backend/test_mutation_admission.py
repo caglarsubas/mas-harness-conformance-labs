@@ -1,9 +1,12 @@
 """Offline data/state regressions; neither fixtures nor journals grant effects."""
 from copy import deepcopy
+from datetime import datetime, timezone
 import base64
 import json
+import re
 import unittest
 from time import perf_counter as _wall_clock
+from unittest.mock import patch
 
 from _fixtures import ROOT
 from test_replay_store import MemoryJournal
@@ -1413,3 +1416,122 @@ class AbsenceJournalTests(unittest.TestCase):
         self.assertTrue(self.state()["held"])
         with self.assertRaises(ConformanceError):
             self.record()
+
+
+class StrictTimestampParserTests(unittest.TestCase):
+    """Compare the private fast path with the exact former parser, not a clock.
+
+    These pure-data tests grant no qualification. Invalid input still follows
+    the old rejection path; no expiration, signature or I/O check is cached.
+    """
+    @staticmethod
+    def legacy(value):
+        admission.require(type(value) is str and re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z", value),
+                          "PROXY_TIME_INVALID")
+        return datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+
+    @staticmethod
+    def outcome(function, value):
+        try:
+            result = function(value)
+        except (ValueError, ConformanceError) as error:
+            return (type(error), error.args, getattr(error, "code", None),
+                    type(error.__cause__), type(error.__context__))
+        return (type(result), result, result.tzinfo, result.fold, result.microsecond)
+
+    def assert_equivalent(self, value):
+        self.assertEqual(self.outcome(admission._time, value), self.outcome(self.legacy, value))
+
+    def test_calendar_boundaries_keep_values_and_original_errors(self):
+        for year in (1, 4, 100, 400, 999, 1000, 1582, 1600, 1700, 1800,
+                     1900, 1999, 2000, 2024, 2026, 2100, 2400, 9999):
+            for month in range(1, 13):
+                for day in (1, 28, 29, 30, 31, 32):
+                    value = f"{year:04d}-{month:02d}-{day:02d}T23:59:59Z"
+                    with self.subTest(value=value):
+                        self.assert_equivalent(value)
+
+    def test_clock_boundaries_and_leap_seconds_keep_original_errors(self):
+        for hour in (0, 1, 23, 24, 99):
+            for minute in (0, 1, 59, 60, 99):
+                for second in (0, 1, 59, 60, 61, 99):
+                    value = f"2026-09-15T{hour:02d}:{minute:02d}:{second:02d}Z"
+                    with self.subTest(value=value):
+                        self.assert_equivalent(value)
+
+    def test_invalid_calendar_keeps_error_args_without_fast_parser_context(self):
+        for value in ("0000-01-01T00:00:00Z", "2026-00-01T00:00:00Z",
+                      "2026-13-01T00:00:00Z", "2026-01-00T00:00:00Z",
+                      "2026-02-30T00:00:00Z", "1900-02-29T00:00:00Z",
+                      "2026-09-15T99:99:99Z"):
+            with self.subTest(value=value):
+                self.assert_equivalent(value)
+                with self.assertRaises(ValueError) as caught:
+                    admission._time(value)
+                self.assertIsNone(caught.exception.__context__)
+                self.assertIsNone(caught.exception.__cause__)
+
+    def test_exact_ascii_grammar_rejects_broader_iso_spellings_before_parsing(self):
+        class NoParser:
+            @staticmethod
+            def fromisoformat(value):
+                raise AssertionError("invalid grammar reached ISO parser")
+            @staticmethod
+            def strptime(value, format):
+                raise AssertionError("invalid grammar reached legacy parser")
+        class String(str):
+            pass
+        values = (None, True, 1, {}, [], b"2026-09-15T00:00:00Z",
+            String("2026-09-15T00:00:00Z"), "", "20260915T000000Z",
+            "2026-W38-2T00:00:00Z", "2026-258T00:00:00Z", "2026-9-15T00:00:00Z",
+            "2026-09-15t00:00:00Z", "2026-09-15T00:00:00z", "2026-09-15 00:00:00Z",
+            "2026-09-15T00:00:00+00:00", "2026-09-15T00:00:00.000Z",
+            "2026-09-15T00:00:00,1Z", "2026-09-15T00:00:00Z\n",
+            "2026-09-15T00:00:00Z\x00", "２０２６-09-15T00:00:00Z",
+            "2026-09-15T٠٠:00:00Z", " 2026-09-15T00:00:00Z",
+            "2026-02-99T00:00:00Zsuffix", "10000-01-01T00:00:00Z")
+        with patch.object(admission, "datetime", NoParser):
+            for value in values:
+                with self.subTest(value=value):
+                    self.assert_equivalent(value)
+                    with self.assertRaisesRegex(ConformanceError, "PROXY_TIME_INVALID"):
+                        admission._time(value)
+
+    def test_valid_path_uses_iso_parser_and_returns_exact_utc_datetime(self):
+        seen = []
+        class Parser:
+            @staticmethod
+            def fromisoformat(value):
+                seen.append(value)
+                return datetime.fromisoformat(value)
+            @staticmethod
+            def strptime(value, format):
+                raise AssertionError("valid fixed grammar reached locale parser")
+        with patch.object(admission, "datetime", Parser):
+            result = admission._time("0001-01-01T00:00:00Z")
+        self.assertEqual(seen, ["0001-01-01T00:00:00"])
+        self.assertIs(type(result), datetime)
+        self.assertIs(result.tzinfo, timezone.utc)
+        self.assertEqual(result, self.legacy("0001-01-01T00:00:00Z"))
+
+    def test_each_call_reparses_without_reusing_an_expiry_or_result(self):
+        values = ("2026-09-15T00:00:00Z", "2026-09-15T00:00:01Z",
+                  "2026-09-14T23:59:59Z", "2026-09-15T00:00:00Z")
+        results = [admission._time(value) for value in values]
+        self.assertEqual(results, [self.legacy(value) for value in values])
+        self.assertIsNot(results[0], results[-1])
+
+    def test_bounded_parser_timing_is_diagnostic_not_an_acceptance_threshold(self):
+        # ABBA order; fixed small workload, full discovery, no speed assertion.
+        # This is not a native-phase benchmark or a whole-suite speedup claim.
+        value = "2026-09-15T00:00:02Z"
+        expected = self.legacy(value)
+        for label, function in (("legacy", self.legacy), ("candidate", admission._time),
+                                ("candidate", admission._time), ("legacy", self.legacy)):
+            start = _wall_clock()
+            for _ in range(512):
+                result = function(value)
+            elapsed = _wall_clock() - start
+            self.assertEqual(result, expected)
+            print(f"CONF-FIX-007 timestamp-parser variant={label} calls=512 "
+                  f"elapsedSeconds={elapsed:.6f} evidenceClass=DIAGNOSTIC_ONLY", flush=True)
