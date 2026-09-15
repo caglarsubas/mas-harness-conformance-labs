@@ -5,6 +5,7 @@ broker/API integration. Matching fixture data is explicitly not qualification.
 """
 from copy import deepcopy
 from contextlib import ExitStack
+import faulthandler
 import hashlib
 import json
 import stat
@@ -6065,6 +6066,21 @@ class BrokerTransportCustodyTests(unittest.TestCase):
         binding = self.owner.qualification_binding = object.__new__(server._ServerQualificationBinding)
         binding.owner = self.owner
         binding._broker_raw = canonical_bytes(self.fixture["binding"])
+        # This leaf fixture used to reach _Broker.check directly. Supply the
+        # retained ownership data required by the new fixed qualification join;
+        # its check_peer/_guard/_peer_pin methods remain real. This manually
+        # assembled owner is NOT C1/C6 factory or native qualification evidence.
+        binding.files, binding.closed, binding.poisoned = self.owner.files, False, False
+        self.owner.pid, self.owner.thread = server.os.getpid(), server.threading.get_ident()
+        inspection = self.owner.self_inspection = object.__new__(server._KernelSelfInspection)
+        inspection.owner, inspection.closed, inspection.failed = self.owner, False, False
+        inspection.owned, inspection.cleanup_failure = [], None
+        qualification = self.owner.qualification = self.owner._qualification_original = object.__new__(server._KernelQualification)
+        qualification.owner, qualification.binding, qualification.files = self.owner, binding, self.owner.files
+        qualification.pid, qualification.thread, qualification.deadline = self.owner.pid, self.owner.thread, self.owner.deadline
+        qualification.closed = qualification.failed = qualification._self_checking = qualification._peer_checking = False
+        qualification.cleanup_failure, qualification._self_original, qualification._peers = None, inspection, {}
+        qualification.last, qualification.wall = self.now, server.require_time(self.wall, "now")
         self.binding_check = Mock(return_value=None)
         self.stack.enter_context(patch.object(server._ServerQualificationBinding, "check", self.binding_check))
         self.subject = self.owner.broker = self.owner._broker_original = object.__new__(server._Broker)
@@ -6073,6 +6089,8 @@ class BrokerTransportCustodyTests(unittest.TestCase):
         # Keep the explicit containment double at the fixed owned component.
         def inspection_init(resource, peer):
             resource.peer, resource.closed = peer, False
+            resource.owner, resource.binding = peer.owner, peer.owner.qualification_binding
+            resource.server_inspection, resource.failed = peer.owner.self_inspection, False
         self.stack.enter_context(patch.object(server._KernelBrokerInspection, "__init__", inspection_init))
         self.stack.enter_context(patch.object(server._KernelBrokerInspection, "check", self.containment))
         self.stack.enter_context(patch.object(server._KernelBrokerInspection, "close",
@@ -6409,6 +6427,23 @@ class BrokerInspectionWiringTests(unittest.TestCase):
             server.NativeProxyServer._transport_check(self.owner)
         self.owner.storage.check.assert_not_called()
         self.owner.observer.observe.assert_not_called()
+
+    def test_fixed_qualification_join_preserves_broker_refusal_and_original_peer(self):
+        peer = self.start()
+        self.owner._owner_check = Mock(return_value=None)
+        self.owner.storage, self.owner.observer = Mock(), Mock()
+        qualification = self.owner.qualification
+        self.containment.side_effect = ConformanceError("UNIT_INSPECTOR", "unit")
+        before = self.containment.call_count
+        with self.assertRaisesRegex(ConformanceError, "UNIT_INSPECTOR"):
+            server.NativeProxyServer._transport_check(self.owner)
+        self.assertEqual(self.containment.call_count, before + 1)
+        self.assertIs(qualification._peers["BROKER"][0], peer)
+        self.assertTrue(qualification.failed)
+        self.assertFalse(qualification._peer_checking)
+        self.owner.storage.check.assert_not_called()
+        self.owner.observer.observe.assert_not_called()
+        self.socket.send.assert_not_called()
 
     def test_server_close_uses_only_original_broker_and_continues_after_failure(self):
         original = self.start()
@@ -12143,6 +12178,27 @@ rollback: "Revert unconsumed integration source only. Independently installed ar
 '''
 
 
+class _FactoryDiagnostics:
+    """Diagnostics for new full-factory tests; never an execution shortcut.
+
+    The watchdog only prints Python stacks from this isolated test process. It
+    cannot stop a case, renew a deadline, modify a clock, intercept discovery or
+    turn a failure into success. No locals, credentials or captured payloads are
+    printed. Cleanup cancels it before the next case, including setup failure.
+    """
+    def setUp(self):
+        self._factory_started = _wall_clock()
+        print(f"CONF-FIX-007 factory-start case={self.id()} evidenceClass=DIAGNOSTIC_ONLY", flush=True)
+        faulthandler.dump_traceback_later(30, repeat=True, exit=False)
+        self.addCleanup(faulthandler.cancel_dump_traceback_later)
+        self.addCleanup(self._factory_finished)
+
+    def _factory_finished(self):
+        print(f"CONF-FIX-007 factory-finish case={self.id()} "
+              f"elapsedSeconds={_wall_clock() - self._factory_started:.6f} "
+              "evidenceClass=DIAGNOSTIC_ONLY", flush=True)
+
+
 class _QualificationKernelOS(_QualificationBindingFixture):
     """One synthetic Linux OS for the real binding and all native factories.
 
@@ -13182,7 +13238,7 @@ class _NativeServerHTTPOS(_NativeServerKernelOS):
         return server.http_message("HTTP/1.1 404 Not Found" if index == 4 else "HTTP/1.1 200 OK", canonical_bytes(value))
 
 
-class NativeServerHTTPFactoryTests(unittest.TestCase):
+class NativeServerHTTPFactoryTests(_FactoryDiagnostics, unittest.TestCase):
     """C6 real serve()/HTTP/admission/cleanup composition, OS-double source only."""
     def assert_closed(self, fixture):
         self.assertEqual(set(fixture.handles), {0, 1, 2})
@@ -13455,7 +13511,7 @@ class NativeServerHTTPFactoryTests(unittest.TestCase):
         self.assert_closed(fixture)
 
 
-class NativeServerFactoryTests(unittest.TestCase):
+class NativeServerFactoryTests(_FactoryDiagnostics, unittest.TestCase):
     """Real constructor plus zero-resource driver, not native or full HTTP QA."""
     def test_full_constructor_keeps_real_qualification_observer_broker_and_journal(self):
         fixture = _NativeServerKernelOS(self)
@@ -13591,7 +13647,7 @@ class NativeServerFactoryTests(unittest.TestCase):
             self.assertEqual(len(fixture.broker_outgoing), 2)
 
 
-class KernelQualificationFactoryTests(unittest.TestCase):
+class KernelQualificationFactoryTests(_FactoryDiagnostics, unittest.TestCase):
     """C1 real binding/composition/channel factories; OS doubles only."""
     def environment(self, stack, architecture="amd64"):
         fixture = _QualificationKernelOS(self, architecture)

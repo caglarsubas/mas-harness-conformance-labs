@@ -25,10 +25,30 @@ mandatory. No new product stage, public protocol, dependency or live permission.
 | C6 | DRAFT: full `serve()`/HTTP/MemoryBIO and zero/resource-mode factory cases added | Review and execute the full recipe; no successful qualifier/driver substitutes |
 | C7 | ONGOING: source/test mapping below; no completion certificate | Finish independent exact-tree review, full local/required localhost CI, protected merge and separate local exact-main |
 
-The new tests are source drafts, not reported test passes. Static syntax/scope
-and identity checks do not execute or qualify the product. No corrective local,
-CI or exact-main allowance has been consumed at this checkpoint. Reserve each
-attempt durably before signing/activation; limits remain3 LOCAL,2 CI and1
+LOCAL1 on candidate `6405c014bded2f975576ccd753804e3b12d50b20` failed at the
+unchanged900-second trusted deadline. The first five suites passed170 tests;
+the sixth reported an error and never completed. Its unfinished progress is
+not a pass count. The original log SHA256 is
+`03d20f32743575c7bb42c73f9616992d772d4e32a492895416a735809aa4ad9c`.
+Draft PR18 preserves that failure; its unassigned CI queue was canceled without
+execution. LOCAL1/3 is consumed; CI0/2 and LOCAL_EXACT_MAIN0/1 remain unexecuted.
+
+The broker transport leaf fixture now supplies the original qualification-owner
+and inspector data required by the fixed private join. Actual
+`_KernelQualification.check_peer`, `_guard`, `_peer_pin` and `_Broker.check`
+remain active. The predecessor UNIT_INSPECTOR denial and storage/observation
+assertions are unchanged; an added regression verifies sticky refusal and the
+original peer pin. This manually assembled leaf is not C1/C6 evidence.
+
+The timeout remains unresolved. New full-factory tests emit start/finish timing
+and a30-second repeating stack-only diagnostic so a complete replay can locate
+the stalled code. It does not stop cases, alter clocks/guards, replace factories,
+filter discovery or extend any deadline. Unit stacks print no local values or
+credentials. A watchdog stack dump is diagnostic, not an acceptance result.
+C7 remains OPEN; no successful factory/HTTP completion is yet established.
+
+Static syntax/scope and identity checks do not execute or qualify the product.
+Reserve each attempt durably before signing/activation; limits remain3 LOCAL,2 CI and1
 LOCAL_EXACT_MAIN, with the full original eight-command recipe and unchanged
 isolation/time limits. Do not merge this correction or begin CONF-LIVE-004 until
 C1–C7 and the independent source gates are complete.
