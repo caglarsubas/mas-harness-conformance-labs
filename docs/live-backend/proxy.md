@@ -1,5 +1,380 @@
 # CONF-LIVE-003 — Proxy source implementation
 
+## Current correction — Alpha 2 / CONF-FIX-007 / ONGOING
+
+This section supersedes the publication-status headings below without rewriting
+their historical evidence. CONF-LIVE-003 source publication is recorded at PR12,
+main `092fcf475c6f3ebd455e3c354cddb7664ea1f900`, tree
+`f5a25661c2df6c87e5d3429b0b5f62511c2e5988`; its implementation was incomplete.
+MET-REPAIR-017 was accepted separately at meta main
+`a92b78f9bca51bed4836f5100e58caebadf4b3fb` (PR122).
+
+CONF-FIX-007 is the sole current corrective owner, on branch
+`codex/conf-fix-007-conformance-completion`. Its five existing paths are the
+server, admission module, their two test files and this guide. All other130
+files, all135 baseline paths and all1277 predecessor test identities remain
+mandatory. No new product stage, public protocol, dependency or live permission.
+
+| Check | Current source checkpoint | Remaining acceptance |
+|---|---|---|
+| C1 | DRAFT: `_KernelQualification` owns the fixed self reader and joins original observer/broker lifetimes; OS-double factory regressions added | Execute full isolated recipe; complete ownership/drift review and C6 integration |
+| C2 | DRAFT: future containment/execution callbacks removed; serve loop drives the original broker | Actual complete factory acceptance without004; failure-path closure |
+| C3 | DRAFT: CREATE handoff, original read-once credential reuse and guarded GET/DELETE result/retirement | Complete sequential driver acceptance |
+| C4 | DRAFT: fresh GET, exact UID/version DELETE, confirmed absence and fail-only cleanup journal integrated | Full factory failure-path verification and isolated acceptance |
+| C5 | DRAFT: complete receipt validation, durable cleanup seal, terminal journal and one-way clean case handoff | Integrated failure/driver acceptance; all added regressions remain unexecuted |
+| C6 | DRAFT: full `serve()`/HTTP/MemoryBIO and zero/resource-mode factory cases added | Review and execute the full recipe; no successful qualifier/driver substitutes |
+| C7 | ONGOING: source/test mapping below; no completion certificate | Finish independent exact-tree review, full local/required localhost CI, protected merge and separate local exact-main |
+
+The new tests are source drafts, not reported test passes. Static syntax/scope
+and identity checks do not execute or qualify the product. No corrective local,
+CI or exact-main allowance has been consumed at this checkpoint. Reserve each
+attempt durably before signing/activation; limits remain3 LOCAL,2 CI and1
+LOCAL_EXACT_MAIN, with the full original eight-command recipe and unchanged
+isolation/time limits. Do not merge this correction or begin CONF-LIVE-004 until
+C1–C7 and the independent source gates are complete.
+
+`_KernelQualification` checks the original installed server owner, deadline and
+binding; it owns only its self-reader resources. Observer/broker channels own
+their native readers, sockets and pidfds. Partial failures close acquired
+resources only; a failed lifetime cannot be restored by replacing a field or
+resetting a clock. It neither constructs a worker nor grants execution. The
+existing independently installed broker remains the enforcement owner.
+
+`handoff_create_result()` consumes only an already-delivered, durably accounted,
+locally retired CREATE. The receiver retains a bounded digest archive and the
+original transcript, used action IDs, RUNNING ledger, peer, generation and
+deadline. It sends no frame, reopens no retired socket and releases no resource.
+The CREATE handoff archive now explicitly records its verb, matching the
+GET/DELETE replay guard. Source review caught this missing discriminator in the
+previous unexecuted draft; this fix has not been test-accepted yet.
+After handoff a subsequent authorized API connection may use the original
+server-retained identity bytes, with custody, digest and certificate validation;
+it may not reopen the credential path, adopt preloaded bytes or refresh authority.
+`exchange_api_get()` now derives the exact named GET from that pending action
+and the retained profile, requires a durable server-created UID for this case,
+and validates the returned UID/labels/manifest with the existing strict checker.
+A changed resourceVersion remains an observation, not an ownership change.
+`send_get_result()` sends the original bounded PRESENT fact once;
+`handoff_get_result()` closes the original API connection before advancing the
+same transcript and archiving the result. All paths retain the original
+deadline, generation, action history and durable UID accounting. Read, send or
+close ambiguity cannot retry, adopt, erase a ledger row or certify cleanup.
+
+The GET increment now distinguishes PRESENT from a narrowly validated ABSENT
+observation on the server-only API leg. The immutable campaign HTTP parser still
+rejects non-200 transport; it is not changed or used to normalize an error into
+success. `_read_api_get_response` accepts only200 or404, preserving strict
+headers, original TLS ownership, ten-second header and original overall deadline,
+exact Content-Length/EOF and a16KiB object bound. Every other status, duplicate or
+unknown header, compression, chunking, surplus, truncation and ambiguous read
+refuses. A200 error object is not a resource or an absence observation.
+
+For404, `validate_absent_status` requires the known server-created UID and the
+exact v1 `Status`/Failure/NotFound/code404 shape, empty metadata, core group,
+selected plural resource/name and canonical NotFound message. Generic route,
+namespace, permission or foreign-resource errors do not satisfy it. This is a
+strict subset of Kubernetes' [NotFound construction](https://github.com/kubernetes/apimachinery/blob/master/pkg/api/errors/errors.go)
+and [StatusDetails](https://kubernetes.io/docs/reference/kubernetes-api/definitions/status-details-v1-meta/),
+used only after the original authenticated, generation-guarded named GET.
+Upstream documentation explains wire semantics; it grants no endpoint,
+permission, network access, package adoption or native qualification.
+
+`record_get_absence()` owns the separate `_BrokerAbsence` transaction. It pins
+the original GET/status/UID/profile/action/history, appends an ABSENT fact to the
+same root-custodied journal, fsyncs and verifies readback before advancing the
+retained history. An ABSENT broker result cannot be sent before this succeeds.
+The private row retains the original CREATE identity and a closed GET/status
+proof; it is data, not authenticated evidence in isolation. It does not delete
+history, permit name/UID reuse, reopen a case or release whole-run capacity.
+Ambiguous CREATE with null UID cannot be recorded absent. Storage ambiguity or
+post-I/O authority loss poisons the active owner and prevents result delivery.
+Cleanup receipts must contain exactly the unresolved identities; a CLEAN receipt
+cannot omit a still-created or ambiguous resource. ABSENT alone is not a terminal
+acknowledgement, assurance result or tenant acceptance.
+
+`exchange_api_delete()` now owns one exact DELETE on its original API connection.
+It requires the immediately preceding, successfully delivered and retired PRESENT
+GET from the same original broker, case, transcript, generation, profile and held
+CREATED ledger. The retained GET object and its immutable private snapshot cannot
+be substituted. A five-second maximum age is checked before and throughout the
+single request write; this never extends the original signed operation deadline.
+It validates the current manifest/labels/UID again and derives only the signed
+named resource path. `DeleteOptions` contains the original UID and the version
+observed by that GET, not just the older CREATE version. The extra version
+precondition conservatively prevents a label/manifest update between GET and
+DELETE from being ignored. A conflict refuses; there is no retry without the
+version, no force/grace override, finalizer manipulation, selector or collection
+delete. The [Kubernetes DeleteOptions reference](https://kubernetes.io/zh-cn/docs/reference/kubernetes-api/common-definitions/delete-options)
+describes these preconditions; it is a wire-semantics reference, not qualification
+or permission to contact a cluster.
+
+The existing server-only resource response codec retains all its bounds. DELETE
+accepts only200 plus a scoped Success Status with the recorded UID or a validated
+resource acknowledgement. Graceful-deletion timestamp/period fields in that
+response do not become an absence claim. DELETE404 is not a substitute for the
+separate GET404 proof; conflicts, permission errors, surplus/unknown framing,
+changed owners/UIDs, late writes, response loss and ambiguous broker send/close
+retain the original CREATED history. `send_delete_result()` and
+`handoff_delete_result()` acknowledge and retire only this action/connection.
+They write no ABSENT or cleanup row, release no capacity and cannot repeat a
+DELETE already consumed in this case, even after another PRESENT GET.
+
+`BrokerDeleteActionTests` adds the sequential CREATE/GET/DELETE/GET-absence leaf
+path and refusal coverage. `DeleteDataTests` checks request/response data without
+I/O or execution authority. All new tests are still unexecuted source drafts.
+Full C4/C5/C6 factory verification remains unfinished; this draft must not be
+described as complete server cleanup or qualification.
+
+### C5 draft — durable cleanup is not terminal delivery
+
+`_BrokerCompletion` now owns the original receipt chunks and completion phases.
+It requires no outstanding action or unretired API owner, preserves the original
+transcript/chunk bytes and bounds, and validates the complete unchanged Linux
+receipt against the retained session, request and regression expectations.
+Partial, surplus, mismatched or false-status data cannot be sealed. Cleanup
+comes only from the server's current journal: known unresolved UIDs remain
+OBSERVATION_UNAVAILABLE and null-UID CREATE intents remain IO_AMBIGUOUS. A PASS
+candidate with unresolved resources or a failed action is rejected. Broker lists
+cannot waive remaining resources, provide a UID or grant cleanup permission.
+
+The new native path uses two closed private journal transitions:
+
+- `CLEANUP_SEALED`: append/fsync/readback the cleanup and receipt/transcript proof
+  before sending CLEANUP_RECORDED. The current case and capacity remain held,
+  including after the tenth cleanup. This is not terminal acceptance.
+- `TERMINAL_RECORDED`: only after the original authenticated broker frame echoes
+  the exact cleanup and receipt digest/size, sequence, execution, scope,
+  generation/challenge, matching status and worker-reaped field, and immediate
+  trailing data has been refused. A separate append/fsync/readback records that
+  received fact. Only all ten completed clean cases release run capacity; nonce
+  and resource histories are retained. FAILED/UNAVAILABLE keep the case held.
+
+`seal_cleanup`, `send_cleanup`, `poll_terminal` and `record_terminal` accept no
+caller frame, cleanup list or result override. Original owner/observer/peer,
+history, authority and two-second phase/original operation deadlines bracket
+I/O. Idle polling neither resends cleanup nor renews a lifetime. Loss, timeout,
+SCM_RIGHTS, stale generation, changed bytes, partial writes or ambiguous delivery
+fail closed; no reconnect, retry, journal rollback or fabricated terminal.
+
+Historical RECORDED rows retain their original data-replay semantics, but cannot
+be mixed with the new native terminal mode in one reservation. The new driver
+must exclusively use the sealed/terminal path. No wire schema, existing fixture,
+signing role or external acceptance state was changed. These private rows are
+data, not proof of authenticated execution in isolation.
+
+`CompletionJournalTests` and `BrokerCompletionTests` add journal and real leaf
+owner/channel tests, including ten-case capacity retention and terminal-loss
+failure paths. Resource leaf tests cover confirmed absence and pending cleanup.
+These are not C6 full NativeProxyServer tests. The serve loop and clean case
+handoff are now drafted as described below. Action-failure disposition, complete
+factory tests and C7 review/isolated runs remain pending.
+The appended `BrokerGetActionTests` exercise real CREATE/GET/result/retirement
+owners with unit-only OS/observer/TLS/storage doubles. They do not replace C6
+actual server-factory acceptance or native qualification. No tests have run for
+this corrective draft; the static audit preserves all1277 predecessor IDs and
+the130 out-of-scope files, including the unchanged client and wire-schema data.
+New `AbsenceJournalTests` cover detached status/journal rules using in-memory
+storage only. Neither those data tests nor the OS/TLS-mocked action tests supply
+independent absence proof outside their explicit unit boundary.
+
+### C2/C5/C6 draft — fixed driver and case handoff
+
+`NativeProxyServer.serve` now invokes only its fixed `_drive_case`. The future
+`_fixed_probes` importer and containment/execution callbacks have been removed,
+not replaced with a plugin, callback or local worker invocation. The original
+broker owns execution; the server sequences its existing intent, API, result,
+retirement, receipt and terminal owners. CREATE intent precedes upstream
+credential acquisition; zero-resource actions refuse before an API is acquired.
+`check_action_ownership` adds a pre-credential check for durable intent/known
+created UID and, for DELETE, the retained fresh PRESENT GET. It is not a cached
+permit: the existing full guards still bracket every subsequent I/O/effect.
+
+`_receipt_chunks_complete` only detects a bounded top-level object boundary
+across the existing chunks. It handles split strings, escapes and UTF-8 bytes,
+rejects wrong delimiters, excessive depth and trailing objects/bytes, and
+changes no wire framing. A structural boundary is not valid JSON or a valid
+receipt: the unchanged strict receipt validator must still succeed before
+cleanup is sealed. Missing data expires under the original operation deadline;
+extra chunks/frames cannot pass the terminal phase.
+
+The native serve loop no longer writes legacy RECORDED rows. A response can be
+returned only after CLEANUP_SEALED, its same-channel acknowledgement and a matching
+durable TERMINAL_RECORDED fact. `finish_case` retires only a clean PASS/COMPLETED
+case with exact readback, no outstanding owner and no queued trailing data.
+It clears only completed local phase owners. It retains the original broker
+socket/pidfd, credential cache, deadline, used cases, nonce and all resource
+history, plus a bounded digest archive of the completed cases. A subsequent
+DISPATCH must use a new challenge and execution ID but the same original
+observer boot/generation. Failed/unavailable cases cannot advance; lost terminal
+data cannot retire a case or become a success response.
+
+The new `ProxyCaseDriverTests` exercise the real driver and broker/journal/receipt
+implementations with the earlier leaf boundary doubles. They explicitly do NOT
+prove C6: combined constructor/qualification OS-double coverage is a separate
+increment described below and remains incomplete. `BrokerCaseHandoffTests`,
+`ReceiptChunkBoundaryTests`, `BrokerCreatePreflightTests` and new resource-leaf
+preflight tests cover the additional data/ownership paths. All remain unexecuted.
+
+The removed private helper requires one additional predecessor test adaptation:
+`ObserverInspectionWiringTests.test_observer_no_longer_requests_legacy_probe_containment`
+adds only `create=True` to its existing raising mock. The same no-callback trap
+and all assertions remain; the corresponding observer fixture mock receives the
+same setup adaptation. No obsolete production helper is retained for the test.
+The static audit verifies this exact before/after transformation, in addition
+to the two earlier constructor-order spelling adaptations.
+
+### C4 failure-accounting draft — retained failure is not renewed authority
+
+The fixed driver now captures a `_FailureAccounting` owner before DISPATCH.
+On refusal it first closes the original broker/API path, then may append only a
+local failure fact to the original intact journal. It never recontacts the
+observer, broker or API, rereads a credential, runs cleanup, sends a terminal,
+returns a success receipt or grants a new execution lifetime. Deadline expiry
+does not prevent recording a failure against retained custody; it never permits
+a post-expiry resource action. Lost file/owner custody blocks even this append.
+
+The admission log separately retains the exact history from its last completed
+append/fsync/readback/transaction exit. Execution poisoning remains sticky, but
+is distinguished from storage ambiguity. A known intact original history may
+receive one fail-only append after an execution refusal. Partial writes, failed
+fsync/readback/transaction exit, foreign or rolled-back history, a reopened log,
+or any second attempt cannot use that path. Nothing clears the active-work
+poison flag, repairs/truncates the journal, or adopts a valid-looking extra row.
+
+`FAILURE_RECORDED` is a closed private journal transition, not a new wire message.
+Its cleanup is derived from the exact unresolved identities already in that
+journal. Known UIDs retain their original name/manifest/ownership; unknown CREATE
+outcomes retain `uid=null` and IO_AMBIGUOUS, including after expiry. Fixed reason
+mapping uses the existing enum only. It never persists arbitrary exception
+messages, URLs, credentials or caller resource lists. A zero-resource or already
+confirmed-absence failure has no fabricated cleanup entry or CLEAN case result.
+
+The transition keeps the active case, nonce, capacity, UID/name history and any
+previous cleanup seal. It creates no worker-reaped/terminal claim, and every
+subsequent transition for that run is refused. A prior completed terminal is
+not relabelled or erased. If failure accounting itself cannot complete, the
+original refusal and durable facts remain; ACCOUNTING_UNAVAILABLE is not a pass
+and does not trigger another append, socket or deletion.
+
+The actual `_State` custody checker brackets fail-only journal I/O with the
+original failure-owner checks. New `FailureJournalTests` exercise the data
+transactions and refusal matrix. Expanded `ProxyCaseDriverTests` and resource
+leaf tests cover driver error propagation, no new network/credential access,
+null/known UID accounting, post-absence preservation and custody/write failures.
+The driver fixture now uses actual file/store custody checks around its journal
+primitive doubles. Its qualification/observer boundaries remain explicitly
+leaf-only; none of these tests substitutes for full C6 factory construction.
+
+Six additional `KernelQualificationFactoryTests` use the real C1 factories with
+OS doubles for wrong peer role, replaced owner, reused peer descriptor/PID,
+changed code bytes and post-I/O deadline loss. All new tests remain UNEXECUTED.
+The static preservation audit is not a product test or native qualification.
+
+### C6 factory draft — real startup and zero-resource driver
+
+The new `_NativeServerKernelOS` fixture calls the real `NativeProxyServer()`
+constructor. Its shared filesystem/kernel setup does not manually create,
+register or populate a server. Qualification binding, self/peer factories,
+observer exchanges, journal reservation and driver/cleanup/terminal methods all
+remain real. Only OS/libc/SSL-library primitives and inert peer wire data are
+simulated. This is neither installed/native evidence nor a real TLS session.
+
+The fixture embeds the exact 9,041-byte public CONF-LIVE-006 packet snapshot with
+SHA256 `f95c277cffdfb622f45a1b4b91a5292d9d9a5bfabc8f9388b3899cbb20c5213d`.
+It supplies those bytes through the virtual filesystem, alongside the unchanged
+campaign data and inert bundle. No META checkout is read during product tests;
+the actual constructor digest check and immutable authority constant remain
+enabled. Deterministic unsigned DER and an empty non-key exercise the real
+credential codec but cannot authenticate to a real server. SSL configuration
+calls are checked at the library double, not replaced by a successful product
+credential or transport method.
+
+Eight new `NativeServerFactoryTests` cover startup ownership, durable reservation
+before the server credential, full startup plus zero-resource driver completion,
+forged envelope, packet-byte drift, kernel policy loss, journal custody loss,
+zero-resource action denial and lost terminal. Original fd/pidfd, file, code,
+SELinux, cgroup/BPF and observer checks stay active in the positive fixture.
+Broker replies assert journal synchronization before DISPATCH and cleanup
+acknowledgement. No worker or resource-API socket is created by these tests.
+
+Those eight constructor/driver tests are still leaf-integration coverage, not
+full HTTP coverage. The shared fixture refactor separates OS setup from leaf
+owner construction without changing any predecessor assertion. All added tests
+remain UNEXECUTED.
+
+### C6 HTTP/resource draft — actual serve loop, library-level codec only
+
+`_NativeServerHTTPOS` extends the synthetic OS with original accepted sockets,
+real `ssl.MemoryBIO` instances and an inert SSL-library codec. Its H/D/C records
+are deliberately not TLS records. The actual `_TLS` pump, HTTP parser, certificate
+identity parser, server constructor, qualification/observer/broker factories,
+admission journal, resource actions and completion logic remain active. All
+signatures over unit authority data are verified normally. Deterministic unit
+signing seeds, unsigned certificate DER and empty non-keys are not credentials
+for a real service. These tests neither install nor contact Linux/Kubernetes.
+
+Twenty-three appended `NativeServerHTTPFactoryTests` cover:
+
+- Ten zero-resource requests and ten original-channel case handoffs, with no API
+  credential acquisition or resource socket. No manually seeded RUNNING owner.
+- A signed resource-bearing profile through CREATE, GET, UID/resourceVersion
+  DELETE and an independent GET404. The original API identity is read once;
+  each connection authenticates independently. A DELETE acknowledgement cannot
+  substitute for the durable ABSENT row or the subsequent terminal exchange.
+- Wrong TLS identity/version/ALPN, wrong request nonce/Host and extra HTTP bytes
+  before DISPATCH. Policy loss after accept must prevent even the handshake.
+- Zero-resource action denial, policy loss during API identity read or after
+  connect, lost CREATE, replacement UID and still-present post-DELETE object.
+  Unknown outcomes retain null UID; known ownership is not lost or adopted.
+- Lost/mismatched terminal, false PASS receipt, FAIL/UNAVAILABLE propagation,
+  cleanup fsync ambiguity, completed-case replay and ambiguous client delivery.
+  Bytes offered to a socket are not proof that the client received them.
+
+The tests inspect original FD ownership and close counts, actual durable journal
+rows, peer frames and API request bytes. Negative cases must be product refusals
+or the deliberately injected OS error; an assertion inside the OS fixture is
+not accepted as a successful refusal test. Still-present fixture data is sent
+as PRESENT so the real completion owner, not a simulated peer assertion, must
+reject the false cleanup/PASS claim.
+
+Static composition review found a production bug: `_BrokerApi` indexed
+`addressFamily` in an authenticated envelope endpoint, although that closed
+public shape contains only the IP literal. `addressFamily` belongs to the native
+qualification projection. The API owner now derives it from the pinned literal;
+any supplied private projection must still match. It does not add an envelope
+field, change a schema, weaken the canonical-IP restriction or bypass the
+existing family-mismatch tests. The full resource case explicitly uses signed
+endpoints without the projection field. This correction remains unexecuted.
+
+### C7 source/test map — review input, not completion evidence
+
+All source symbols below are in `src/harness_conformance/live_proxy_server.py`
+unless prefixed `admission`, which means `live_mutation_admission.py`. Test
+classes are in `tests/live_backend/test_proxy_server.py`, except the journal and
+delete-data classes in `test_mutation_admission.py`. Each class expands to its
+exact `test_*` identities in the external data-only preservation audit; it is
+not a test selector or permission to run a shortened recipe.
+
+| Check | Owning source symbols | Regression groups and independent review focus |
+|---|---|---|
+| C1 | `_KernelQualification.__init__/check_self/check_peer/close` | `KernelQualificationFactoryTests`, `NativeServerFactoryTests`: actual reader composition, original owner/FD/PID, partial cleanup, code and policy drift; no qualifier-success double |
+| C2 | `NativeProxyServer.__init__/serve/_drive_case`; `_Broker.begin` | `NativeServerFactoryTests`, `NativeServerHTTPFactoryTests`, `ProxyCaseDriverTests`: no004 callback/import or worker execution; server-owned admission before dispatch/credentials |
+| C3 | `_BrokerEvents._handoff_create`; `_BrokerGetAction`; `_Broker.check_action_ownership`; `_Broker.finish_case` | `BrokerActionHandoffTests`, `BrokerGetActionTests`, `BrokerCaseHandoffTests`, `BrokerCreatePreflightTests`: same transcript/channel/generation/deadline, one pending action, no replay or reused owner |
+| C4 | `_BrokerDeleteAction`; `_BrokerAbsence`; `_FailureAccounting`; `admission.delete_request_body/validate_delete_response/validate_absent_status/_absence_record/_failure_cleanup`; `admission._AdmissionLog.record_absence/record_failure` | `BrokerDeleteActionTests`, `BrokerGetActionTests`, `DeleteDataTests`, `AbsenceJournalTests`, `FailureJournalTests`, `ProxyCaseDriverTests`, `NativeServerHTTPFactoryTests`: UID/version preconditions, independent GET absence, ambiguity, retained ownership, no broader/retried deletion |
+| C5 | `_receipt_chunks_complete`; `_BrokerCompletion`; `admission._completion_frame/_completion_terminal`; `admission.parse_reservations`; `admission._AdmissionLog.record_completion` | `ReceiptChunkBoundaryTests`, `BrokerCompletionTests`, `CompletionJournalTests`, `BrokerCaseHandoffTests`, `ProxyCaseDriverTests`, `NativeServerHTTPFactoryTests`: strict receipt then durable seal then exact terminal, no false PASS or release on loss/FAIL/UNAVAILABLE |
+| C6 | `NativeProxyServer.serve/_drive_case`; `_BrokerApi` | `NativeServerHTTPFactoryTests`: actual HTTP/MemoryBIO/factory composition and denial before subsequent effects in both resource modes; zero runtime qualification claims |
+
+This table is a source-review input. Symbol/test presence, static parsing and a
+passing count cannot certify C7. Remaining work is the independent review tied
+to the full exact candidate tree, followed by exclusively reserved full isolated
+LOCAL, required localhost CI, protected merge and separate LOCAL exact-main.
+Preserve all135 paths, all130 immutable out-of-scope files and1277 predecessor
+test identities/assertions. No merge or004 work until the full C1-C7 gate closes.
+
+Historical source/publication records below remain historical. Native AMD64,
+native ARM64, installation, runtime, assurance and tenant acceptance are still
+separate unproven gates. Alpha2 is ONGOING; model-effort transition NOT_DUE.
+
 ## Alpha 2: ONGOING / IMPLEMENTATION_INCOMPLETE
 
 This packet has not completed acceptance. Do not package, install or merge this

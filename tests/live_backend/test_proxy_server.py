@@ -174,6 +174,14 @@ class _QualificationBindingFixture:
                                           owner.profile, owner.observation_binding, owner.endpoint])
         owner.qualification_binding = object.__new__(server._ServerQualificationBinding)
         self.owner = owner
+        self.filesystem_context(stack)
+        stack.enter_context(patch.object(server, "_ACTIVE", owner))
+        stack.callback(owner.files.close)
+        return owner
+
+    def filesystem_context(self, stack):
+        # Shared OS data only. The full-constructor fixture calls this without
+        # constructing, registering or pre-populating a NativeProxyServer.
         self.nodes = {path: SimpleNamespace(st_dev=91, st_ino=100 + i, st_nlink=1,
             st_mode=stat.S_IFREG | self.modes.get(path, 0o444), st_uid=0, st_gid=0, st_size=len(raw),
             st_mtime_ns=1, st_ctime_ns=1) for i, (path, raw) in enumerate(self.raw.items())}
@@ -189,7 +197,6 @@ class _QualificationBindingFixture:
         def path_stat(path, *, dir_fd=None, follow_symlinks=True):
             absolute = self.resolve(path, dir_fd)
             return self.nodes[absolute] if absolute in self.nodes else original_stat(path, dir_fd=dir_fd, follow_symlinks=follow_symlinks)
-        stack.enter_context(patch.object(server, "_ACTIVE", owner))
         stack.enter_context(patch.object(server, "PINNED_ROOT_PUBLIC_KEY_SHA256", self.key_digest))
         stack.enter_context(patch.object(server, "utc_now", side_effect=lambda: self.now))
         stack.enter_context(patch.object(server.time, "monotonic", side_effect=lambda: self.mono))
@@ -200,8 +207,6 @@ class _QualificationBindingFixture:
                     if p != "/" and p.rsplit("/", 1)[0] == self.fds[fd]))):
             stack.enter_context(patch.object(server.os, name, side_effect=fn))
         self.socket = stack.enter_context(patch.object(server.socket, "socket", side_effect=AssertionError("no socket in binding")))
-        stack.callback(owner.files.close)
-        return owner
 
     def resolve(self, path, parent):
         path = str(path)
@@ -755,10 +760,11 @@ class KernelSelfInspectionTests(unittest.TestCase):
         owner = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "NativeProxyServer")
         init = next(n for n in owner.body if isinstance(n, ast.FunctionDef) and n.name == "__init__")
         source = ast.unparse(init)
-        stages = ["self.qualification_binding.__init__(self)", "self.self_inspection.__init__(self)",
-                  "_fixed_probes().require_server_containment(self)", "self.storage.__init__(self)",
+        stages = ["self.qualification_binding.__init__(self)", "self.qualification.__init__(self)",
+                  "self.storage.__init__(self)",
                   "self.observer.__init__(self)", "self.secrets.read(IDENTITY"]
         self.assertEqual(sorted(source.index(s) for s in stages), [source.index(s) for s in stages])
+        self.assertNotIn("require_server_containment", source)
         self.assertNotIn("check_self", ast.unparse(next(n for n in tree.body
             if isinstance(n, ast.ClassDef) and n.name == "_KernelSelfInspection")))
 
@@ -9376,6 +9382,1310 @@ class BrokerCreateRetirementTests(_BrokerEventFixture, unittest.TestCase):
         self.api_socket.connect.assert_called_once()
 
 
+class BrokerActionHandoffTests(_BrokerEventFixture, unittest.TestCase):
+    """Real CREATE/retirement/handoff/receiver; inherited OS/TLS/store fixture.
+
+    These are action-lifecycle regressions, not the separate C6 full-server
+    factory acceptance or independently installed native qualification.
+    """
+    start = BrokerCreateRetirementTests.start
+    action = BrokerCreateRetirementTests.action
+    read_secret = BrokerCreateRetirementTests.read_secret
+    connect_api = BrokerCreateRetirementTests.connect_api
+    write_memfd = BrokerCreateRetirementTests.write_memfd
+    make_context = BrokerCreateRetirementTests.make_context
+    wrap = BrokerCreateRetirementTests.wrap
+    handshake = BrokerCreateRetirementTests.handshake
+    read_intent = BrokerCreateRetirementTests.read_intent
+    append_intent = BrokerCreateRetirementTests.append_intent
+    sync_intent = BrokerCreateRetirementTests.sync_intent
+    held = BrokerCreateRetirementTests.held
+    reply = BrokerCreateRetirementTests.reply
+    http_write = BrokerCreateRetirementTests.http_write
+    http_read = BrokerCreateRetirementTests.http_read
+    prepare = BrokerCreateRetirementTests.prepare
+    accounted = BrokerCreateRetirementTests.accounted
+    result_send = BrokerCreateRetirementTests.result_send
+    close_api = BrokerCreateRetirementTests.close_api
+    delivered = BrokerCreateRetirementTests.delivered
+
+    def setUp(self):
+        BrokerCreateRetirementTests.setUp(self)
+
+    def retired(self):
+        self.delivered()
+        self.subject.retire_create_result()
+        self.retirement = self.subject.retirement
+        self.last_event = json.loads(self.result.frame_raw)
+        self.action_digest = json.loads(self.result.action_raw)["manifestDigest"]
+
+    def test_retired_create_handoff_keeps_uid_and_allows_next_get_frame(self):
+        self.retired()
+        before = self.subject.deadline, self.ledger, self.secret_reads.call_count, len(self.sent_results)
+        self.assertIsNone(self.subject.handoff_create_result())
+        self.assertEqual(before, (self.subject.deadline, self.ledger, self.secret_reads.call_count, len(self.sent_results)))
+        self.assertIs(self.subject.events.transcript, self.parser)
+        self.assertTrue(self.held()["held"])
+        for name in ("api", "intent", "exchange", "created", "result", "retirement"):
+            self.assertIsNone(getattr(self.subject, name))
+            self.assertIsNone(getattr(self.subject, "_" + name + "_original"))
+        self.queue("RESOURCE_ACTION", {"actionId": 2, "verb": "GET", "manifestDigest": self.action_digest})
+        self.assertEqual(json.loads(self.take())["payload"]["verb"], "GET")
+        self.assertEqual(self.parser.actions, {1, 2})
+        self.assertEqual(self.parser.pending["actionId"], 2)
+        self.api_socket.close.assert_called_once()
+        self.assertEqual(self.secret_reads.call_count, before[2])
+
+    def test_handoff_cannot_skip_retirement_or_acknowledge_an_unsent_result(self):
+        self.delivered()
+        with self.assertRaisesRegex(ConformanceError, "BROKER_HANDOFF_RETIREMENT_REQUIRED"):
+            self.subject.handoff_create_result()
+        self.assertTrue(self.subject.closed and self.held()["held"])
+        self.assertEqual(self.ledger, self.retire_ledger)
+
+    def test_duplicate_handoff_does_not_reopen_api_or_release_resources(self):
+        self.retired()
+        self.subject.handoff_create_result()
+        with self.assertRaisesRegex(ConformanceError, "BROKER_HANDOFF_RETIREMENT_REQUIRED"):
+            self.subject.handoff_create_result()
+        self.api_socket.connect.assert_called_once()
+        self.api_socket.close.assert_called_once()
+        self.assertEqual(self.ledger, self.retire_ledger)
+
+    def test_action_id_replay_after_handoff_still_refuses(self):
+        self.retired()
+        self.subject.handoff_create_result()
+        self.queue("RESOURCE_ACTION", {"actionId": 1, "verb": "GET", "manifestDigest": self.action_digest})
+        self.refused("BROKER_RESOURCE_ACTION_INVALID")
+        self.assertTrue(self.held()["held"])
+
+    def test_original_generation_loss_refuses_before_handoff(self):
+        self.retired()
+        self.observed["generation"] = "f" * 64
+        with self.assertRaisesRegex(ConformanceError, "BROKER_GENERATION_CHANGED"):
+            self.subject.handoff_create_result()
+        self.assertEqual(self.ledger, self.retire_ledger)
+        self.assertEqual(self.subject.events.handoffs, ())
+        self.api_socket.close.assert_called_once()
+
+    def test_substituted_retirement_is_never_called_or_closed(self):
+        self.retired()
+        foreign = Mock()
+        self.subject.retirement = foreign
+        with self.assertRaisesRegex(ConformanceError, "BROKER_HANDOFF_RETIREMENT_REQUIRED"):
+            self.subject.handoff_create_result()
+        self.assertEqual(foreign.mock_calls, [])
+        self.assertEqual(self.ledger, self.retire_ledger)
+
+    def test_changed_handoff_archive_refuses_before_next_frame(self):
+        self.retired()
+        self.subject.handoff_create_result()
+        self.subject.events.handoffs = ()
+        self.socket.recvmsg.reset_mock()
+        self.refused("BROKER_HANDOFF_HISTORY_CHANGED")
+        self.socket.recvmsg.assert_not_called()
+
+    def test_no_caller_frame_history_or_new_deadline_parameter(self):
+        for value in ({}, b"frame", True, Mock()):
+            with self.subTest(value_type=type(value)), self.assertRaises(TypeError):
+                self.subject.handoff_create_result(value)
+        self.api_socket.connect.assert_not_called()
+
+    def test_next_get_authenticates_new_channel_from_original_read_once_identity(self):
+        self.retired()
+        self.subject.handoff_create_result()
+        self.queue("RESOURCE_ACTION", {"actionId": 2, "verb": "GET", "manifestDigest": self.action_digest})
+        self.take()
+        first_api = self.api
+        next_socket = Mock()
+        next_socket.fileno.return_value = 83
+        next_socket.getpeername.side_effect = lambda: self.api_peer
+        next_socket.connect.side_effect = self.connect_api
+        next_socket.send.side_effect = lambda raw: len(raw)
+        self.fds[83] = SimpleNamespace(st_dev=1, st_ino=83, st_mode=stat.S_IFSOCK | 0o600)
+        self.mocks["socket"].return_value = next_socket
+        self.fd_bytes.clear()  # a new synthetic memfd, not retained old contents
+        self.subject.prepare_api()
+        self.assertIsNot(first_api, self.subject.api)
+        self.assertTrue(first_api.closed)
+        self.assertIs(self.subject.api.sock, next_socket)
+        self.assertTrue(self.subject.api.ready)
+        self.secret_reads.assert_called_once()
+        next_socket.connect.assert_called_once_with(self.api_peer)
+        self.assertEqual(self.subject.deadline, first_api.deadline)
+        self.assertEqual(self.ledger, self.retire_ledger)
+
+    def test_changed_retained_identity_refuses_next_get_before_reopening_or_connect(self):
+        self.retired()
+        self.subject.handoff_create_result()
+        self.queue("RESOURCE_ACTION", {"actionId": 2, "verb": "GET", "manifestDigest": self.action_digest})
+        self.take()
+        self.owner.secrets.raw[self.api_endpoint["credentialFileReference"]] = b"unit substituted identity"
+        with self.assertRaisesRegex(ConformanceError, "API_CREDENTIAL_OWNER_CHANGED"):
+            self.subject.prepare_api()
+        self.secret_reads.assert_called_once()
+        self.api_socket.connect.assert_called_once()
+        self.assertEqual(self.ledger, self.retire_ledger)
+
+
+class BrokerGetActionTests(_BrokerEventFixture, unittest.TestCase):
+    """Real sequential CREATE/GET owners; unit OS, observer, TLS and store edges.
+
+    These action tests do not stand in for C6 actual NativeProxyServer factories.
+    """
+    start = BrokerActionHandoffTests.start
+    action = BrokerActionHandoffTests.action
+    read_secret = BrokerActionHandoffTests.read_secret
+    connect_api = BrokerActionHandoffTests.connect_api
+    write_memfd = BrokerActionHandoffTests.write_memfd
+    make_context = BrokerActionHandoffTests.make_context
+    wrap = BrokerActionHandoffTests.wrap
+    handshake = BrokerActionHandoffTests.handshake
+    read_intent = BrokerActionHandoffTests.read_intent
+    append_intent = BrokerActionHandoffTests.append_intent
+    sync_intent = BrokerActionHandoffTests.sync_intent
+    held = BrokerActionHandoffTests.held
+    reply = BrokerActionHandoffTests.reply
+    http_write = BrokerActionHandoffTests.http_write
+    http_read = BrokerActionHandoffTests.http_read
+    prepare = BrokerActionHandoffTests.prepare
+    accounted = BrokerActionHandoffTests.accounted
+    result_send = BrokerActionHandoffTests.result_send
+    close_api = BrokerActionHandoffTests.close_api
+    delivered = BrokerActionHandoffTests.delivered
+    retired = BrokerActionHandoffTests.retired
+
+    def setUp(self):
+        BrokerActionHandoffTests.setUp(self)
+
+    def next_get(self):
+        self.retired()
+        self.subject.handoff_create_result()
+        self.queue("RESOURCE_ACTION", {"actionId": 2, "verb": "GET", "manifestDigest": self.action_digest})
+        self.take()
+        self.get_socket = Mock()
+        self.get_socket.fileno.return_value = 83
+        self.get_socket.getpeername.side_effect = lambda: self.api_peer
+        self.get_socket.connect.side_effect = self.connect_api
+        self.get_socket.send.side_effect = lambda raw: len(raw)
+        self.get_socket.close.side_effect = self.close_api
+        self.fds[83] = SimpleNamespace(st_dev=1, st_ino=83, st_mode=stat.S_IFSOCK | 0o600)
+        self.mocks["socket"].return_value = self.get_socket
+        self.fd_bytes.clear()
+        self.subject.prepare_api()
+        self.get_api = self.subject.api
+        self.plain_requests.clear()
+        self.sent_results.clear()
+        self.socket.send.reset_mock()
+        self.get_socket.send.reset_mock()
+        self.ssl.read.reset_mock()
+        self.reply(canonical_bytes(self.actual))
+        self.get_before = self.subject.events.transcript_raw
+
+    def refused_get(self, reason=".+"):
+        with self.assertRaisesRegex((ConformanceError, OSError), reason):
+            self.subject.exchange_api_get()
+        self.assertTrue(self.subject.failed and self.subject.closed)
+        self.assertEqual(self.ledger, self.retire_ledger)
+        self.assertTrue(self.held()["held"])
+        self.assertIsNone(self.parser.cleanup)
+        self.assertIsNone(self.parser.terminal)
+        self.socket.send.assert_not_called()
+
+    def test_get_reads_exact_created_uid_without_rewriting_ledger_or_result(self):
+        self.next_get()
+        writes = len(self.writes)
+        self.assertIsNone(self.subject.exchange_api_get())
+        action = self.subject.get_action
+        self.assertIs(type(action), server._BrokerGetAction)
+        self.assertIs(action, self.subject._get_action_original)
+        self.assertTrue(action.complete and action.attempted)
+        self.assertFalse(action.sent or action.retired or action.advanced)
+        expected = server.http_message("GET /api/v1/namespaces/" + self.manifest["metadata"]["namespace"]
+            + "/configmaps/" + self.manifest["metadata"]["name"] + " HTTP/1.1", b"", "proxy.unit")
+        self.assertEqual(self.plain_requests, [expected])
+        self.assertEqual(action.response_raw, canonical_bytes(self.actual))
+        self.assertEqual(json.loads(action.record_raw)["uid"], "created-unit-uid")
+        self.assertEqual(self.ledger, self.retire_ledger)
+        self.assertEqual(len(self.writes), writes)
+        self.assertEqual(self.subject.events.transcript_raw, self.get_before)
+        self.secret_reads.assert_called_once()
+        self.socket.send.assert_not_called()
+
+    def test_get_result_then_handoff_keeps_original_parser_and_next_action_chain(self):
+        import base64
+        self.next_get()
+        self.subject.exchange_api_get()
+        action = self.subject.get_action
+        self.assertIsNone(self.subject.send_get_result())
+        self.assertEqual(self.subject.events.transcript_raw, self.get_before)
+        frame = json.loads(action.frame_raw)
+        self.assertEqual(frame["payload"], {"actionId": 2, "outcome": "PRESENT",
+            "objectBase64": base64.b64encode(canonical_bytes(self.actual)).decode("ascii")})
+        self.assertEqual(self.sent_results, [action.frame_raw])
+        seen = []
+        self.on_api_close = lambda: seen.append(self.subject.events.transcript_raw)
+        self.assertIsNone(self.subject.handoff_get_result())
+        self.assertEqual(seen, [self.get_before])
+        self.get_socket.close.assert_called_once()
+        self.assertTrue(action.retired and action.advanced and self.get_api.closed)
+        self.assertIsNone(self.subject.get_action)
+        self.assertIsNone(self.subject.api)
+        self.assertIs(self.subject.events.transcript, self.parser)
+        self.assertEqual(self.parser.actions, {1, 2})
+        self.assertEqual(self.ledger, self.retire_ledger)
+        self.assertTrue(self.held()["held"])
+        self.assertEqual(len(self.subject.events.handoffs), 2)
+        self.last_event = frame
+        self.queue("RESOURCE_ACTION", {"actionId": 3, "verb": "GET", "manifestDigest": self.action_digest})
+        self.take()
+        self.assertEqual(self.parser.pending["actionId"], 3)
+        self.assertEqual(self.parser.actions, {1, 2, 3})
+        self.assertEqual(action.deadline, self.subject.deadline)
+
+    def test_updated_resource_version_does_not_change_recorded_ownership(self):
+        self.next_get()
+        self.actual["metadata"]["resourceVersion"] = "124"
+        self.reply(canonical_bytes(self.actual))
+        self.subject.exchange_api_get()
+        self.assertEqual(json.loads(self.subject.get_action.response_raw)["metadata"]["resourceVersion"], "124")
+        self.assertEqual(json.loads(self.subject.get_action.record_raw)["resourceVersion"], "123")
+        self.assertEqual(self.ledger, self.retire_ledger)
+
+    def test_changed_uid_refuses_without_adopting_or_sending_a_result(self):
+        self.next_get()
+        self.actual["metadata"]["uid"] = "foreign-uid"
+        self.reply(canonical_bytes(self.actual))
+        self.refused_get("ADMISSION_UID_CHANGED")
+        self.assertEqual(len(self.plain_requests), 1)
+        self.assertEqual(next(iter(self.held()["resources"].values()))["uid"], "created-unit-uid")
+
+    def test_changed_labels_refuse_without_claiming_absence(self):
+        self.next_get()
+        labels = self.actual["metadata"]["labels"]
+        labels[next(iter(labels))] = "foreign-tenant"
+        self.reply(canonical_bytes(self.actual))
+        self.refused_get("ADMISSION_POST_MUTATION_MISMATCH")
+
+    def test_changed_manifest_refuses_without_overwriting_tenant_data(self):
+        self.next_get()
+        self.actual["data"] = {"foreign": "replacement"}
+        self.reply(canonical_bytes(self.actual))
+        self.refused_get("ADMISSION_POST_MUTATION_MISMATCH")
+        self.assertTrue(all(raw.startswith(b"GET ") for raw in self.plain_requests))
+
+    def test_http_404_is_not_silently_interpreted_as_absence(self):
+        self.next_get()
+        self.reply(b'{"reason":"NotFound"}', status="HTTP/1.1 404 Not Found")
+        self.refused_get("MISSING_FIELD")
+        self.assertEqual(len(self.plain_requests), 1)
+
+    def test_http_200_error_object_is_not_a_present_resource(self):
+        self.next_get()
+        self.reply(b'{"reason":"NotFound","status":"Failure"}')
+        self.refused_get("ADMISSION_IDENTITY_MISSING")
+
+    def test_surplus_response_refuses_before_any_resource_result(self):
+        self.next_get()
+        self.http_bytes.extend(b"surplus")
+        self.refused_get("HTTP_SURPLUS")
+
+    def test_oversized_response_refuses_without_result_or_cleanup(self):
+        self.next_get()
+        self.reply(b" " * 16385)
+        self.refused_get("BROKER_GET_RESPONSE_SIZE")
+
+    def test_duplicate_json_keys_refuse_without_result(self):
+        self.next_get()
+        raw = canonical_bytes(self.actual)
+        self.reply(raw[:-1] + b',"kind":"ConfigMap"}')
+        self.refused_get()
+
+    def test_generation_loss_during_read_holds_uid_and_sends_no_result(self):
+        self.next_get()
+        self.on_http_read = lambda: self.observed.update(generation="f" * 64)
+        self.refused_get("BROKER_GENERATION_CHANGED")
+        self.assertEqual(len(self.plain_requests), 1)
+
+    def test_generation_loss_before_get_sends_no_http(self):
+        self.next_get()
+        self.observed["generation"] = "f" * 64
+        self.refused_get("BROKER_GENERATION_CHANGED")
+        self.assertEqual(self.plain_requests, [])
+
+    def test_no_create_record_refuses_get_before_http(self):
+        # The existing API unit fixture permits authentication independently of
+        # execution. A GET owner still requires an original durable CREATED UID.
+        frame = self.event_frame
+        frame["payload"]["verb"] = "GET"
+        self.raw_override = canonical_bytes(frame)
+        # Reconstruct the pending data from the original STARTED and changed
+        # broker frame; do not mock the action's ownership decision.
+        transcript = server.BrokerTranscript(self.subject.dispatch.binding_raw, self.subject.dispatch.dispatch_raw)
+        transcript.accept(self.subject.dispatch.started, "BROKER")
+        transcript.accept(self.raw_override, "BROKER")
+        self.subject.dispatch.transcript = self.subject.dispatch._transcript_original = transcript
+        self.subject.events.transcript = transcript
+        self.subject.events.transcript_raw = server._BrokerEvents._snapshot(transcript)
+        BrokerApiConnectionTests.prepare(self)
+        self.plain_requests.clear()
+        self.socket.send.reset_mock()
+        before = self.ledger
+        with self.assertRaisesRegex(ConformanceError, "BROKER_GET_CREATED_UID_REQUIRED"):
+            self.subject.exchange_api_get()
+        self.assertEqual(self.plain_requests, [])
+        self.assertEqual(self.ledger, before)
+        self.socket.send.assert_not_called()
+        self.assertTrue(self.held()["held"])
+
+    def test_changed_retained_response_refuses_before_delivery(self):
+        self.next_get()
+        self.subject.exchange_api_get()
+        self.subject.get_action.response_raw = b"{}"
+        with self.assertRaisesRegex(ConformanceError, "BROKER_GET_INPUT_CHANGED"):
+            self.subject.send_get_result()
+        self.socket.send.assert_not_called()
+        self.assertEqual(self.ledger, self.retire_ledger)
+
+    def test_partial_result_delivery_cannot_advance_or_retry(self):
+        self.next_get()
+        self.subject.exchange_api_get()
+        action = self.subject.get_action
+        self.result_count = 1
+        with self.assertRaisesRegex(ConformanceError, "BROKER_GET_SEND_AMBIGUOUS"):
+            self.subject.send_get_result()
+        self.assertFalse(action.sent or action.retired or action.advanced)
+        self.assertEqual(self.subject.events.transcript_raw, self.get_before)
+        self.assertEqual(self.ledger, self.retire_ledger)
+        with self.assertRaises(ConformanceError):
+            self.subject.send_get_result()
+        self.socket.send.assert_called_once()
+
+    def test_post_send_generation_loss_does_not_advance_transcript(self):
+        self.next_get()
+        self.subject.exchange_api_get()
+        self.on_result_send = lambda raw: self.observed.update(generation="f" * 64)
+        with self.assertRaisesRegex(ConformanceError, "BROKER_GENERATION_CHANGED"):
+            self.subject.send_get_result()
+        self.assertEqual(self.subject.events.transcript_raw, self.get_before)
+        self.assertEqual(self.ledger, self.retire_ledger)
+        self.socket.send.assert_called_once()
+
+    def test_handoff_without_delivery_cannot_skip_pending_action(self):
+        self.next_get()
+        self.subject.exchange_api_get()
+        with self.assertRaisesRegex(ConformanceError, "BROKER_GET_DELIVERY_REQUIRED"):
+            self.subject.handoff_get_result()
+        self.assertEqual(self.subject.events.transcript_raw, self.get_before)
+        self.assertEqual(self.ledger, self.retire_ledger)
+        self.socket.send.assert_not_called()
+
+    def test_post_close_generation_loss_does_not_advance_or_accept_next_action(self):
+        self.next_get()
+        self.subject.exchange_api_get()
+        self.subject.send_get_result()
+        self.on_api_close = lambda: self.observed.update(generation="f" * 64)
+        with self.assertRaisesRegex(ConformanceError, "BROKER_GENERATION_CHANGED"):
+            self.subject.handoff_get_result()
+        self.assertEqual(self.subject.events.transcript_raw, self.get_before)
+        self.get_socket.close.assert_called_once()
+        self.assertEqual(self.ledger, self.retire_ledger)
+
+    def test_substituted_get_owner_is_never_called(self):
+        self.next_get()
+        self.subject.exchange_api_get()
+        foreign = Mock()
+        self.subject.get_action = foreign
+        with self.assertRaisesRegex(ConformanceError, "BROKER_GET_OWNER_CHANGED"):
+            self.subject.send_get_result()
+        self.assertEqual(foreign.mock_calls, [])
+        self.socket.send.assert_not_called()
+
+    def test_failed_original_api_close_is_retained_without_transcript_advance(self):
+        self.next_get()
+        self.subject.exchange_api_get()
+        self.subject.send_get_result()
+        failure = OSError("unit get close failure")
+        self.get_socket.close.side_effect = failure
+        with self.assertRaises(OSError) as caught:
+            self.subject.handoff_get_result()
+        self.assertIs(caught.exception, failure)
+        self.assertIs(self.get_api.cleanup_failure, failure)
+        self.assertIs(self.subject.cleanup_failure, failure)
+        self.assertEqual(self.subject.events.transcript_raw, self.get_before)
+        self.get_socket.close.assert_called_once()
+        self.assertEqual(self.ledger, self.retire_ledger)
+        self.assertTrue(self.held()["held"])
+
+    def test_no_caller_response_fd_or_cleanup_argument_is_accepted(self):
+        for operation in (self.subject.exchange_api_get, self.subject.send_get_result, self.subject.handoff_get_result):
+            for value in (b"{}", {}, True, 83, Mock()):
+                with self.subTest(operation=operation.__name__, value_type=type(value)), self.assertRaises(TypeError):
+                    operation(value)
+        self.api_socket.connect.assert_not_called()
+
+    def test_repeated_get_exchange_cannot_issue_another_request(self):
+        self.next_get()
+        self.subject.exchange_api_get()
+        requests = list(self.plain_requests)
+        with self.assertRaisesRegex(ConformanceError, "BROKER_GET_ALREADY_ATTEMPTED"):
+            self.subject.exchange_api_get()
+        self.assertEqual(self.plain_requests, requests)
+        self.assertEqual(self.ledger, self.retire_ledger)
+        self.socket.send.assert_not_called()
+
+    def test_duplicate_get_result_is_not_retransmitted(self):
+        self.next_get()
+        self.subject.exchange_api_get()
+        self.subject.send_get_result()
+        with self.assertRaisesRegex(ConformanceError, "BROKER_GET_DELIVERY_ORDER"):
+            self.subject.send_get_result()
+        self.socket.send.assert_called_once()
+        self.assertEqual(self.subject.events.transcript_raw, self.get_before)
+        self.assertEqual(self.ledger, self.retire_ledger)
+
+    def test_recycled_api_descriptor_refuses_before_get_http(self):
+        self.next_get()
+        self.fds[83] = SimpleNamespace(st_dev=1, st_ino=999, st_mode=stat.S_IFSOCK | 0o600)
+        self.refused_get("API_DESCRIPTOR_CHANGED")
+        self.assertEqual(self.plain_requests, [])
+        self.get_socket.close.assert_not_called()
+        self.get_socket.detach.assert_called_once()
+
+    def test_changed_history_refuses_before_get_http(self):
+        self.next_get()
+        expected = self.ledger
+        self.ledger += b" "
+        with self.assertRaisesRegex(ConformanceError, "BROKER_RUNNING_CHANGED"):
+            self.subject.exchange_api_get()
+        self.assertEqual(self.plain_requests, [])
+        self.assertEqual(self.ledger, expected + b" ")  # no silent store repair
+        self.socket.send.assert_not_called()
+
+    def test_receiver_cannot_skip_get_delivery_and_retirement(self):
+        self.next_get()
+        self.subject.exchange_api_get()
+        self.socket.recvmsg.reset_mock()
+        self.refused("BROKER_GET_HANDOFF_REQUIRED")
+        self.socket.recvmsg.assert_not_called()
+        self.socket.send.assert_not_called()
+        self.assertEqual(self.ledger, self.retire_ledger)
+
+    def test_action_replay_after_get_handoff_still_refuses(self):
+        self.next_get()
+        self.subject.exchange_api_get()
+        self.subject.send_get_result()
+        action = self.subject.get_action
+        self.subject.handoff_get_result()
+        self.last_event = json.loads(action.frame_raw)
+        self.queue("RESOURCE_ACTION", {"actionId": 2, "verb": "GET", "manifestDigest": self.action_digest})
+        self.refused("BROKER_RESOURCE_ACTION_INVALID")
+        self.assertEqual(self.ledger, self.retire_ledger)
+        self.assertTrue(self.held()["held"])
+
+    def test_duplicate_get_handoff_cannot_reopen_a_retired_connection(self):
+        self.next_get()
+        self.subject.exchange_api_get()
+        self.subject.send_get_result()
+        self.subject.handoff_get_result()
+        before = self.subject.events.transcript_raw
+        with self.assertRaisesRegex(ConformanceError, "BROKER_GET_OWNER_CHANGED"):
+            self.subject.handoff_get_result()
+        self.get_socket.connect.assert_called_once()
+        self.get_socket.close.assert_called_once()
+        self.assertEqual(self.subject.events.transcript_raw, before)
+        self.assertEqual(self.ledger, self.retire_ledger)
+
+    def not_found_reply(self):
+        name = self.manifest["metadata"]["name"]
+        self.not_found = {"apiVersion": "v1", "kind": "Status", "metadata": {}, "status": "Failure",
+            "message": 'configmaps "' + name + '" not found', "reason": "NotFound", "code": 404,
+            "details": {"name": name, "kind": "configmaps"}}
+        self.reply(canonical_bytes(self.not_found), status="HTTP/1.1 404 Not Found")
+
+    def read_absent(self):
+        self.next_get()
+        self.not_found_reply()
+        self.subject.exchange_api_get()
+        self.get_action = self.subject.get_action
+        self.assertEqual(self.get_action.outcome, "ABSENT")
+
+    def test_scoped_get_404_is_data_until_absence_is_durably_recorded(self):
+        self.read_absent()
+        self.assertEqual(self.ledger, self.retire_ledger)
+        self.assertEqual(next(iter(self.held()["resources"].values()))["state"], "CREATED")
+        self.assertEqual(json.loads(self.get_action.frame_raw)["payload"],
+                         {"actionId": 2, "outcome": "ABSENT", "objectBase64": None})
+        self.assertIsNone(self.parser.cleanup)
+        self.socket.send.assert_not_called()
+        with self.assertRaisesRegex(ConformanceError, "BROKER_GET_ABSENCE_NOT_RECORDED"):
+            self.subject.send_get_result()
+        self.assertEqual(self.ledger, self.retire_ledger)
+        self.socket.send.assert_not_called()
+
+    def test_original_absence_fact_fsync_readback_precedes_result_delivery(self):
+        self.read_absent()
+        self.io_events.clear()
+        seen = []
+        self.on_append = self.on_sync = lambda: seen.append(self.subject.dispatch.ledger_raw)
+        self.assertIsNone(self.subject.record_get_absence())
+        absence = self.subject.absence
+        self.assertIs(type(absence), server._BrokerAbsence)
+        self.assertIs(absence, self.subject._absence_original)
+        self.assertTrue(absence.committed and absence.advanced and absence.writing)
+        self.assertEqual(seen, [self.retire_ledger, self.retire_ledger])
+        start, end = self.io_events.index("lock"), self.io_events.index("unlock")
+        self.assertEqual(self.io_events[start:end + 1], ["lock", "read", "append", "fsync", "read", "unlock"])
+        self.assertEqual(self.subject.dispatch.ledger_raw, absence.after)
+        self.assertEqual(self.ledger, absence.after)
+        self.assertEqual(self.subject.events.transcript_raw, self.get_before)
+        record = next(iter(self.held()["resources"].values()))
+        self.assertEqual((record["state"], record["uid"], record["actionId"]), ("ABSENT", "created-unit-uid", 1))
+        self.assertTrue(self.held()["held"])
+        self.socket.send.assert_not_called()
+        self.subject.send_get_result()
+        self.subject.handoff_get_result()
+        self.assertEqual(self.sent_results, [self.get_action.frame_raw])
+        self.assertEqual(self.ledger, absence.after)
+        self.assertEqual(self.parser.previous, server.byte_digest(self.get_action.frame_raw))
+        self.assertIsNone(self.subject.absence)
+        self.assertIsNone(self.parser.cleanup)
+        self.assertIsNone(self.parser.terminal)
+        self.get_socket.close.assert_called_once()
+
+    def test_present_object_cannot_enter_absence_recorder(self):
+        self.next_get()
+        self.subject.exchange_api_get()
+        with self.assertRaisesRegex(ConformanceError, "BROKER_ABSENCE_GET_REQUIRED"):
+            self.subject.record_get_absence()
+        self.assertEqual(self.ledger, self.retire_ledger)
+        self.socket.send.assert_not_called()
+
+    def test_absence_cannot_be_recorded_twice_or_retried(self):
+        self.read_absent()
+        self.subject.record_get_absence()
+        before, writes = self.ledger, list(self.writes)
+        with self.assertRaisesRegex(ConformanceError, "BROKER_ABSENCE_ALREADY_ATTEMPTED"):
+            self.subject.record_get_absence()
+        self.assertEqual(self.ledger, before)
+        self.assertEqual(self.writes, writes)
+        self.assertTrue(self.held()["held"])
+        self.socket.send.assert_not_called()
+
+    def test_absence_fsync_failure_retains_held_identity_without_reply(self):
+        self.read_absent()
+        self.fail = "sync"
+        with self.assertRaises((ConformanceError, OSError)):
+            self.subject.record_get_absence()
+        self.assertTrue(self.owner.log.poisoned)
+        self.assertTrue(self.subject.failed and self.subject.closed)
+        self.assertFalse(self.subject.absence.committed)
+        self.assertEqual(self.subject.dispatch.ledger_raw, self.retire_ledger)
+        self.socket.send.assert_not_called()
+        self.assertTrue(self.held()["held"])
+        self.assertEqual(next(iter(self.held()["resources"].values()))["uid"], "created-unit-uid")
+
+    def test_post_commit_generation_loss_cannot_deliver_absent(self):
+        self.read_absent()
+        self.on_sync = lambda: self.observed.update(generation="f" * 64)
+        with self.assertRaisesRegex(ConformanceError, "BROKER_GENERATION_CHANGED"):
+            self.subject.record_get_absence()
+        self.assertTrue(self.owner.log.poisoned)
+        self.assertFalse(self.subject.absence.committed)
+        self.assertTrue(self.ledger.startswith(self.retire_ledger))
+        self.assertTrue(self.held()["held"])
+        self.socket.send.assert_not_called()
+        self.assertEqual(self.subject.events.transcript_raw, self.get_before)
+
+    def test_stale_generation_before_absence_record_does_not_write(self):
+        self.read_absent()
+        self.observed["generation"] = "f" * 64
+        with self.assertRaisesRegex(ConformanceError, "BROKER_GENERATION_CHANGED"):
+            self.subject.record_get_absence()
+        self.assertEqual(self.ledger, self.retire_ledger)
+        self.assertFalse(self.owner.log.poisoned)
+        self.socket.send.assert_not_called()
+
+    def test_replaced_absence_owner_is_never_called(self):
+        self.read_absent()
+        self.subject.record_get_absence()
+        before = self.ledger
+        foreign = Mock()
+        self.subject.absence = foreign
+        with self.assertRaisesRegex(ConformanceError, "BROKER_GET_ABSENCE_OWNER_CHANGED"):
+            self.subject.send_get_result()
+        self.assertEqual(foreign.mock_calls, [])
+        self.assertEqual(self.ledger, before)
+        self.socket.send.assert_not_called()
+
+    def test_modified_absence_response_cannot_change_recorded_uid_fact(self):
+        self.read_absent()
+        self.subject.record_get_absence()
+        before = self.ledger
+        self.subject.absence.response_raw = b"{}"
+        with self.assertRaisesRegex(ConformanceError, "BROKER_ABSENCE_INPUT_CHANGED"):
+            self.subject.send_get_result()
+        self.assertEqual(self.ledger, before)
+        self.socket.send.assert_not_called()
+
+    def test_absence_send_failure_retains_durable_uid_and_pending_transcript(self):
+        self.read_absent()
+        self.subject.record_get_absence()
+        before = self.ledger
+        self.result_count = 1
+        with self.assertRaisesRegex(ConformanceError, "BROKER_GET_SEND_AMBIGUOUS"):
+            self.subject.send_get_result()
+        self.assertEqual(self.ledger, before)
+        self.assertTrue(self.held()["held"])
+        self.assertEqual(self.subject.events.transcript_raw, self.get_before)
+        self.assertIsNone(self.parser.cleanup)
+        self.assertIsNone(self.parser.terminal)
+
+    def test_wrong_named_404_is_not_absence_of_the_recorded_resource(self):
+        self.next_get()
+        self.not_found_reply()
+        self.not_found["details"]["name"] = "foreign"
+        self.reply(canonical_bytes(self.not_found), status="HTTP/1.1 404 Not Found")
+        self.refused_get("ADMISSION_ABSENCE_STATUS_INVALID")
+
+    def test_namespace_404_is_not_resource_absence(self):
+        self.next_get()
+        self.not_found_reply()
+        self.not_found["details"]["kind"] = "namespaces"
+        self.reply(canonical_bytes(self.not_found), status="HTTP/1.1 404 Not Found")
+        self.refused_get("ADMISSION_ABSENCE_STATUS_INVALID")
+
+    def test_error_object_under_http200_cannot_be_an_absence_observation(self):
+        self.next_get()
+        self.not_found_reply()
+        self.reply(canonical_bytes(self.not_found))
+        self.refused_get("ADMISSION_IDENTITY_MISSING")
+
+    def test_404_duplicate_content_length_refuses_before_absence(self):
+        self.next_get()
+        self.not_found_reply()
+        raw = bytes(self.http_bytes)
+        line = next(line for line in raw.split(b"\r\n") if line.startswith(b"Content-Length: "))
+        self.http_bytes = bytearray(raw.replace(line, line + b"\r\n" + line, 1))
+        self.refused_get("HTTP_HEADER_FORBIDDEN")
+
+    def test_404_transfer_encoding_refuses_before_absence(self):
+        self.next_get()
+        self.not_found_reply()
+        self.http_bytes = bytearray(bytes(self.http_bytes).replace(b"\r\n\r\n", b"\r\nTransfer-Encoding: chunked\r\n\r\n", 1))
+        self.refused_get("HTTP_HEADER_FORBIDDEN")
+
+    def test_404_surplus_and_truncated_responses_do_not_become_absent(self):
+        self.next_get()
+        self.not_found_reply()
+        del self.http_bytes[-5:]
+        self.refused_get("HTTP_TRUNCATED_BODY")
+
+    def test_404_surplus_bytes_do_not_become_absent(self):
+        self.next_get()
+        self.not_found_reply()
+        self.http_bytes.extend(b"surplus")
+        self.refused_get("HTTP_SURPLUS")
+
+    def test_wrong_status_transport_never_falls_back_to_not_found_body(self):
+        self.next_get()
+        self.not_found_reply()
+        self.reply(canonical_bytes(self.not_found), status="HTTP/1.1 403 Forbidden")
+        self.refused_get("HTTP_STATUS_INVALID")
+
+    def test_no_caller_uid_status_or_journal_argument_can_record_absence(self):
+        for value in ({}, "created-unit-uid", b"{}", True, Mock()):
+            with self.subTest(value_type=type(value)), self.assertRaises(TypeError):
+                self.subject.record_get_absence(value)
+        self.api_socket.connect.assert_not_called()
+
+
+class BrokerDeleteActionTests(_BrokerEventFixture, unittest.TestCase):
+    """Sequential owned actions with leaf OS/observer/TLS/store doubles, not C6."""
+    start = BrokerGetActionTests.start
+    action = BrokerGetActionTests.action
+    read_secret = BrokerGetActionTests.read_secret
+    connect_api = BrokerGetActionTests.connect_api
+    write_memfd = BrokerGetActionTests.write_memfd
+    make_context = BrokerGetActionTests.make_context
+    wrap = BrokerGetActionTests.wrap
+    handshake = BrokerGetActionTests.handshake
+    read_intent = BrokerGetActionTests.read_intent
+    append_intent = BrokerGetActionTests.append_intent
+    sync_intent = BrokerGetActionTests.sync_intent
+    held = BrokerGetActionTests.held
+    reply = BrokerGetActionTests.reply
+    http_write = BrokerGetActionTests.http_write
+    http_read = BrokerGetActionTests.http_read
+    prepare = BrokerGetActionTests.prepare
+    accounted = BrokerGetActionTests.accounted
+    result_send = BrokerGetActionTests.result_send
+    close_api = BrokerGetActionTests.close_api
+    delivered = BrokerGetActionTests.delivered
+    retired = BrokerGetActionTests.retired
+    next_get = BrokerGetActionTests.next_get
+    not_found_reply = BrokerGetActionTests.not_found_reply
+
+    def setUp(self):
+        BrokerGetActionTests.setUp(self)
+
+    def failure_owner(self):
+        _failure_custody_fixture(self)
+        actor = self.owner.failure_accounting = self.owner._failure_accounting_original = object.__new__(server._FailureAccounting)
+        actor.__init__(self.owner)
+        return actor
+
+    def test_lost_create_response_records_null_uid_failure_without_retry(self):
+        self.prepare()
+        actor = self.failure_owner()
+        def lose_response():
+            raise OSError("unit response lost after request")
+        self.on_http_read = lose_response
+        with self.assertRaises(OSError) as caught:
+            self.subject.exchange_api_create()
+        sends = len(self.plain_requests)
+        reads, sockets = self.secret_reads.call_count, self.mocks["socket"].call_count
+        self.assertTrue(self.owner.log.poisoned)
+        self.assertFalse(self.owner.log._storage_ambiguous)
+        actor.record(caught.exception)
+        self.assertTrue(actor.complete)
+        cleanup = json.loads(self.writes[-1])["cleanup"]
+        self.assertEqual(cleanup["state"], "CLEANUP_PENDING")
+        row = cleanup["remainingResources"][0]
+        self.assertIsNone(row["uid"])
+        self.assertEqual(row["reasonCode"], "IO_AMBIGUOUS")
+        self.assertEqual(row["name"], self.manifest["metadata"]["name"])
+        self.assertTrue(self.held()["held"])
+        self.assertEqual((len(self.plain_requests), self.secret_reads.call_count, self.mocks["socket"].call_count),
+                         (sends, reads, sockets))
+        self.socket.send.assert_not_called()
+
+    def test_known_uid_is_retained_when_cleanup_authority_expires(self):
+        self.accounted()
+        actor = self.failure_owner()
+        resource = deepcopy(next(iter(self.held()["resources"].values())))
+        self.subject.failed = True
+        self.subject.close()
+        before_requests = list(self.plain_requests)
+        self.now = self.subject.deadline
+        actor.record(ConformanceError("BROKER_CLOCK_OR_DEADLINE", "unit expired"))
+        cleanup = json.loads(self.writes[-1])["cleanup"]
+        self.assertEqual(cleanup["remainingResources"][0]["uid"], resource["uid"])
+        self.assertEqual(cleanup["remainingResources"][0]["reasonCode"], "DEADLINE")
+        self.assertEqual(next(iter(self.held()["resources"].values())), resource)
+        self.assertEqual(self.plain_requests, before_requests)
+        self.assertTrue(self.held()["held"])
+
+    def test_original_delete_grant_refusal_records_denied_not_broader_deletion(self):
+        self.confirmed_get()
+        self.queue("RESOURCE_ACTION", {"actionId": 3, "verb": "DELETE", "manifestDigest": self.action_digest})
+        self.take()
+        actor = self.failure_owner()
+        self.subject.failed = True
+        self.subject.close()
+        before_requests = list(self.plain_requests)
+        actor.record(ConformanceError("API_EXACT_GRANT_REQUIRED", "unit refused"))
+        row = json.loads(self.writes[-1])
+        self.assertEqual(row["failure"]["reasonCode"], "DELETE_DENIED")
+        self.assertEqual(row["cleanup"]["remainingResources"][0]["reasonCode"], "DELETE_DENIED")
+        self.assertEqual(self.plain_requests, before_requests)
+        self.assertTrue(self.held()["held"])
+
+    def test_failure_after_confirmed_absence_never_erases_original_uid_history(self):
+        self.post_delete_get()
+        self.subject.exchange_api_get()
+        self.subject.record_get_absence()
+        self.subject.send_get_result()
+        self.subject.handoff_get_result()
+        actor = self.failure_owner()
+        resource = deepcopy(next(iter(self.held()["resources"].values())))
+        self.assertEqual(resource["state"], "ABSENT")
+        self.subject.failed = True
+        self.subject.close()
+        actor.record(OSError("unit terminal unavailable"))
+        self.assertIsNone(json.loads(self.writes[-1])["cleanup"])
+        self.assertEqual(next(iter(self.held()["resources"].values())), resource)
+        self.assertTrue(self.held()["held"])
+        self.assertNotIn("terminalCases", self.held())
+
+    def test_driver_get_preflight_requires_owned_created_uid_before_new_api(self):
+        self.retired()
+        self.subject.handoff_create_result()
+        self.queue("RESOURCE_ACTION", {"actionId": 2, "verb": "GET", "manifestDigest": self.action_digest})
+        self.take()
+        sockets, history = self.mocks["socket"].call_count, self.ledger
+        self.subject.check_action_ownership()
+        self.assertEqual(self.mocks["socket"].call_count, sockets)
+        self.secret_reads.assert_called_once()
+        self.assertIsNone(self.subject.api)
+        self.assertEqual(self.ledger, history)
+
+    def test_driver_delete_without_fresh_get_refuses_before_new_api(self):
+        self.retired()
+        self.subject.handoff_create_result()
+        self.queue("RESOURCE_ACTION", {"actionId": 2, "verb": "DELETE", "manifestDigest": self.action_digest})
+        self.take()
+        sockets, history = self.mocks["socket"].call_count, self.ledger
+        with self.assertRaisesRegex(ConformanceError, "BROKER_DELETE_FRESH_GET_REQUIRED"):
+            self.subject.check_action_ownership()
+        self.assertEqual(self.mocks["socket"].call_count, sockets)
+        self.secret_reads.assert_called_once()
+        self.assertEqual(self.ledger, history)
+
+    def test_driver_fresh_delete_preflight_acquires_no_api_or_credential(self):
+        self.confirmed_get()
+        self.queue("RESOURCE_ACTION", {"actionId": 3, "verb": "DELETE", "manifestDigest": self.action_digest})
+        self.take()
+        sockets, history = self.mocks["socket"].call_count, self.ledger
+        self.subject.check_action_ownership()
+        self.assertEqual(self.mocks["socket"].call_count, sockets)
+        self.secret_reads.assert_called_once()
+        self.assertIsNone(self.subject.api)
+        self.assertEqual(self.ledger, history)
+
+    def test_driver_stale_delete_preflight_denies_before_new_api(self):
+        self.confirmed_get()
+        self.queue("RESOURCE_ACTION", {"actionId": 3, "verb": "DELETE", "manifestDigest": self.action_digest})
+        self.take()
+        self.now += 5
+        sockets = self.mocks["socket"].call_count
+        with self.assertRaisesRegex(ConformanceError, "BROKER_DELETE_FRESH_GET_REQUIRED"):
+            self.subject.check_action_ownership()
+        self.assertEqual(self.mocks["socket"].call_count, sockets)
+        self.secret_reads.assert_called_once()
+        self.assertTrue(self.held()["held"])
+
+    def test_driver_changed_last_get_owner_cannot_reauthorize_delete(self):
+        self.confirmed_get()
+        self.queue("RESOURCE_ACTION", {"actionId": 3, "verb": "DELETE", "manifestDigest": self.action_digest})
+        self.take()
+        self.subject.last_get = Mock()
+        sockets = self.mocks["socket"].call_count
+        with self.assertRaisesRegex(ConformanceError, "BROKER_DELETE_FRESH_GET_REQUIRED"):
+            self.subject.check_action_ownership()
+        self.assertEqual(self.mocks["socket"].call_count, sockets)
+        self.secret_reads.assert_called_once()
+
+    def confirmed_get(self):
+        self.next_get()
+        if hasattr(self, "current_version"):
+            self.actual["metadata"]["resourceVersion"] = self.current_version
+            self.reply(canonical_bytes(self.actual))
+        self.subject.exchange_api_get()
+        self.ownership_get = self.subject.get_action
+        self.subject.send_get_result()
+        self.subject.handoff_get_result()
+        self.last_event = json.loads(self.ownership_get.frame_raw)
+        self.assertIs(self.subject.last_get, self.ownership_get)
+
+    def next_api(self, fd):
+        sock = Mock()
+        sock.fileno.return_value = fd
+        sock.getpeername.side_effect = lambda: self.api_peer
+        sock.connect.side_effect = self.connect_api
+        sock.send.side_effect = lambda raw: len(raw)
+        sock.close.side_effect = self.close_api
+        self.fds[fd] = SimpleNamespace(st_dev=1, st_ino=fd, st_mode=stat.S_IFSOCK | 0o600)
+        self.mocks["socket"].return_value = sock
+        self.fd_bytes.clear()
+        self.subject.prepare_api()
+        self.plain_requests.clear()
+        self.sent_results.clear()
+        self.socket.send.reset_mock()
+        self.ssl.read.reset_mock()
+        return sock
+
+    def pending_delete(self):
+        self.confirmed_get()
+        self.queue("RESOURCE_ACTION", {"actionId": 3, "verb": "DELETE", "manifestDigest": self.action_digest})
+        self.take()
+        self.delete_socket = self.next_api(85)
+        self.delete_api = self.subject.api
+        self.delete_before = self.subject.events.transcript_raw
+        self.deleted = {"apiVersion": "v1", "kind": "Status", "metadata": {}, "status": "Success", "code": 200,
+            "details": {"name": self.manifest["metadata"]["name"], "kind": "configmaps", "uid": "created-unit-uid"}}
+        self.reply(canonical_bytes(self.deleted))
+
+    def refused_delete(self, reason=".+"):
+        with self.assertRaisesRegex((ConformanceError, OSError), reason):
+            self.subject.exchange_api_delete()
+        self.assertTrue(self.subject.failed and self.subject.closed)
+        self.assertEqual(self.ledger, self.retire_ledger)
+        self.assertTrue(self.held()["held"])
+        self.assertTrue(all(row["state"] == "CREATED" for row in self.held()["resources"].values()))
+        self.assertIsNone(self.parser.cleanup)
+        self.assertIsNone(self.parser.terminal)
+        self.socket.send.assert_not_called()
+
+    def retired_delete(self):
+        self.pending_delete()
+        self.subject.exchange_api_delete()
+        self.deletion = self.subject.delete_action
+        self.subject.send_delete_result()
+        self.subject.handoff_delete_result()
+        self.last_event = json.loads(self.deletion.frame_raw)
+
+    def post_delete_get(self):
+        self.retired_delete()
+        self.queue("RESOURCE_ACTION", {"actionId": 4, "verb": "GET", "manifestDigest": self.action_digest})
+        self.take()
+        self.absence_socket = self.next_api(87)
+        self.not_found_reply()
+
+    def test_delete_uses_exact_recorded_uid_and_fresh_version_not_force(self):
+        self.pending_delete()
+        self.assertIsNone(self.subject.exchange_api_delete())
+        action = self.subject.delete_action
+        self.assertIs(type(action), server._BrokerDeleteAction)
+        self.assertTrue(action.attempted and action.request_written and action.complete)
+        self.assertFalse(action.sent or action.advanced)
+        self.assertEqual(len(self.plain_requests), 1)
+        header, raw = self.plain_requests[0].split(b"\r\n\r\n")
+        path = "DELETE /api/v1/namespaces/" + self.manifest["metadata"]["namespace"]
+        path += "/configmaps/" + self.manifest["metadata"]["name"] + " HTTP/1.1"
+        self.assertEqual(header.split(b"\r\n")[0], path.encode())
+        self.assertEqual(json.loads(raw), {"apiVersion": "v1", "kind": "DeleteOptions",
+            "preconditions": {"uid": "created-unit-uid", "resourceVersion": "123"}})
+        self.assertEqual(self.ledger, self.retire_ledger)
+        self.secret_reads.assert_called_once()
+        self.socket.send.assert_not_called()
+
+    def test_delete_acknowledgement_preserves_created_uid_until_separate_get(self):
+        self.retired_delete()
+        self.assertTrue(self.deletion.sent and self.deletion.retired and self.deletion.advanced)
+        self.assertEqual(self.last_event["payload"], {"actionId": 3, "outcome": "DELETED", "objectBase64": None})
+        self.assertEqual(self.ledger, self.retire_ledger)
+        self.assertTrue(self.held()["held"])
+        self.assertTrue(all(row["state"] == "CREATED" for row in self.held()["resources"].values()))
+        self.assertIsNone(self.subject.last_get)
+        self.assertIsNone(self.subject.delete_action)
+        self.assertEqual(self.parser.actions, {1, 2, 3})
+        self.delete_socket.close.assert_called_once()
+        self.assertIsNone(self.parser.cleanup)
+        self.assertIsNone(self.parser.terminal)
+
+    def test_version_precondition_uses_new_get_version_but_keeps_create_history(self):
+        self.current_version = "124"
+        self.pending_delete()
+        self.subject.exchange_api_delete()
+        self.assertIn(b'"resourceVersion":"124"', self.plain_requests[0])
+        self.assertTrue(all(row["resourceVersion"] == "123" for row in self.held()["resources"].values()))
+        self.assertEqual(self.ledger, self.retire_ledger)
+
+    def test_fractional_monotonic_clock_stays_private_not_a_float_wire_extension(self):
+        self.now += 0.125
+        self.pending_delete()
+        proof = json.loads(self.subject.last_get_raw)
+        self.assertEqual(proof["observedMonotonic"], self.now.hex())
+        self.subject.exchange_api_delete()
+        self.assertTrue(self.subject.delete_action.complete)
+
+    def test_create_get_uid_delete_get_absence_persists_before_absent_result(self):
+        self.post_delete_get()
+        self.subject.exchange_api_get()
+        absence = self.subject.get_action
+        self.assertEqual(self.ledger, self.retire_ledger)
+        self.subject.record_get_absence()
+        self.assertTrue(all(row["state"] == "ABSENT" and row["uid"] == "created-unit-uid"
+                            and row["absenceActionId"] == 4 for row in self.held()["resources"].values()))
+        self.subject.send_get_result()
+        self.subject.handoff_get_result()
+        self.assertEqual(json.loads(absence.frame_raw)["payload"]["outcome"], "ABSENT")
+        self.assertEqual(self.parser.actions, {1, 2, 3, 4})
+        self.assertEqual(len(self.subject.events.handoffs), 4)
+        self.assertIs(self.parser, self.subject.events.transcript)
+        self.assertTrue(self.held()["held"])
+        self.assertEqual(absence.deadline, self.deletion.deadline)
+        self.assertIsNone(self.parser.cleanup)
+        self.assertIsNone(self.parser.terminal)
+        self.secret_reads.assert_called_once()
+
+    def test_delete_cannot_use_create_response_instead_of_independent_get(self):
+        self.retired()
+        self.subject.handoff_create_result()
+        self.queue("RESOURCE_ACTION", {"actionId": 2, "verb": "DELETE", "manifestDigest": self.action_digest})
+        self.take()
+        self.next_api(85)
+        self.refused_delete("BROKER_DELETE_GET_REQUIRED")
+        self.assertEqual(self.plain_requests, [])
+
+    def test_expired_get_cannot_authorize_delete(self):
+        self.pending_delete()
+        self.now += 5
+        self.refused_delete("BROKER_DELETE_GET_STALE")
+        self.assertEqual(self.plain_requests, [])
+
+    def test_get_owner_replacement_is_not_called(self):
+        self.pending_delete()
+        foreign = Mock()
+        self.subject.last_get = foreign
+        self.refused_delete("BROKER_DELETE_GET_REQUIRED")
+        self.assertEqual(foreign.mock_calls, [])
+        self.assertEqual(self.plain_requests, [])
+
+    def test_changed_retained_get_labels_refuse_without_delete(self):
+        self.pending_delete()
+        actual = deepcopy(self.actual)
+        actual["metadata"]["labels"]["foreign"] = "changed"
+        self.ownership_get.response_raw = canonical_bytes(actual)
+        self.refused_delete()
+        self.assertEqual(self.plain_requests, [])
+
+    def test_changed_get_snapshot_refuses_without_delete(self):
+        self.pending_delete()
+        self.subject.last_get_raw = b"{}"
+        self.refused_delete("BROKER_DELETE_GET_CHANGED")
+        self.assertEqual(self.plain_requests, [])
+
+    def test_original_closed_get_api_cannot_be_substituted(self):
+        self.pending_delete()
+        foreign = object.__new__(server._BrokerApi)
+        self.ownership_get.api = foreign
+        self.refused_delete("BROKER_DELETE_GET_REQUIRED")
+        self.assertEqual(self.plain_requests, [])
+        self.assertEqual(vars(foreign), {})
+
+    def test_get_freshness_cannot_be_extended_during_delete_write(self):
+        self.pending_delete()
+        self.on_http_write = lambda: setattr(self, "now", self.now + 5)
+        self.refused_delete()
+        self.assertEqual(len(self.plain_requests), 1)
+        self.ssl.read.assert_not_called()
+
+    def test_changed_delete_request_precondition_is_refused_before_result(self):
+        self.pending_delete()
+        self.subject.exchange_api_delete()
+        self.subject.delete_action.request_raw = b"DELETE / HTTP/1.1\r\n\r\n"
+        with self.assertRaisesRegex(ConformanceError, "BROKER_DELETE_INPUT_CHANGED"):
+            self.subject.send_delete_result()
+        self.socket.send.assert_not_called()
+        self.assertEqual(self.ledger, self.retire_ledger)
+
+    def test_overlapping_action_cannot_skip_delete_retirement(self):
+        self.pending_delete()
+        self.subject.exchange_api_delete()
+        self.socket.recvmsg.reset_mock()
+        with self.assertRaisesRegex(ConformanceError, "BROKER_DELETE_HANDOFF_REQUIRED"):
+            self.subject.poll()
+        self.socket.recvmsg.assert_not_called()
+        self.assertEqual(self.ledger, self.retire_ledger)
+
+    def test_stale_generation_before_delete_keeps_uid_held(self):
+        self.pending_delete()
+        self.observed["generation"] = "f" * 64
+        self.refused_delete("BROKER_GENERATION_CHANGED")
+        self.assertEqual(self.plain_requests, [])
+
+    def test_removed_delete_grant_prevents_write(self):
+        self.pending_delete()
+        rules = self.owner.profile["capacityEntries"]["kubernetesApiRules"]
+        self.owner.profile["capacityEntries"]["kubernetesApiRules"] = [r for r in rules if r["verb"] != "delete"]
+        self.refused_delete()
+        self.assertEqual(self.plain_requests, [])
+
+    def test_conflict_never_retries_without_resource_version(self):
+        self.pending_delete()
+        self.reply(canonical_bytes({"kind": "Status", "code": 409}), status="HTTP/1.1 409 Conflict")
+        self.refused_delete("HTTP_STATUS_INVALID")
+        self.assertEqual(len(self.plain_requests), 1)
+        self.delete_socket.connect.assert_called_once()
+        self.assertIn(b'"resourceVersion":"123"', self.plain_requests[0])
+
+    def test_delete_404_is_not_post_delete_absence_evidence(self):
+        self.pending_delete()
+        self.not_found_reply()
+        self.refused_delete("BROKER_DELETE_STATUS_INVALID")
+        self.assertEqual(len(self.plain_requests), 1)
+
+    def test_failed_status_under_http200_does_not_report_deleted(self):
+        self.pending_delete()
+        self.deleted["status"] = "Failure"
+        self.reply(canonical_bytes(self.deleted))
+        self.refused_delete("ADMISSION_DELETE_RESPONSE_INVALID")
+
+    def test_delete_response_cannot_claim_a_replacement_uid(self):
+        self.pending_delete()
+        self.deleted["details"]["uid"] = "foreign"
+        self.reply(canonical_bytes(self.deleted))
+        self.refused_delete("ADMISSION_DELETE_RESPONSE_INVALID")
+
+    def test_object_delete_response_does_not_release_uid(self):
+        self.pending_delete()
+        self.reply(canonical_bytes(self.actual))
+        self.subject.exchange_api_delete()
+        self.assertTrue(self.subject.delete_action.complete)
+        self.assertEqual(self.ledger, self.retire_ledger)
+        self.assertTrue(self.held()["held"])
+
+    def test_lost_delete_response_keeps_original_record_and_never_retries(self):
+        self.pending_delete()
+        self.http_bytes = bytearray()
+        self.refused_delete("HTTP_TRUNCATED_HEADERS")
+        self.assertEqual(len(self.plain_requests), 1)
+        with self.assertRaises(ConformanceError):
+            self.subject.exchange_api_delete()
+        self.assertEqual(len(self.plain_requests), 1)
+
+    def test_delete_response_surplus_cannot_be_acknowledged(self):
+        self.pending_delete()
+        self.http_bytes.extend(b"surplus")
+        self.refused_delete("HTTP_SURPLUS")
+
+    def test_delete_response_header_cannot_expand_transport(self):
+        self.pending_delete()
+        self.http_bytes = bytearray(bytes(self.http_bytes).replace(b"\r\n\r\n",
+            b"\r\nTransfer-Encoding: chunked\r\n\r\n", 1))
+        self.refused_delete("HTTP_HEADER_FORBIDDEN")
+
+    def test_generation_loss_after_write_keeps_possible_effect_held(self):
+        self.pending_delete()
+        self.on_http_write = lambda: self.observed.update(generation="f" * 64)
+        self.refused_delete("BROKER_GENERATION_CHANGED")
+        self.assertEqual(len(self.plain_requests), 1)
+        self.ssl.read.assert_not_called()
+
+    def test_delete_api_descriptor_reuse_refuses_without_closing_recycled_fd(self):
+        self.pending_delete()
+        self.fds[85].st_ino += 1
+        self.refused_delete("API_DESCRIPTOR_CHANGED")
+        self.assertEqual(self.plain_requests, [])
+        self.delete_socket.close.assert_not_called()
+        self.delete_socket.detach.assert_called_once()
+
+    def test_send_failure_does_not_advance_or_retry_delete(self):
+        self.pending_delete()
+        self.subject.exchange_api_delete()
+        self.result_count = 1
+        with self.assertRaisesRegex(ConformanceError, "BROKER_DELETE_SEND_AMBIGUOUS"):
+            self.subject.send_delete_result()
+        self.assertEqual(self.subject.events.transcript_raw, self.delete_before)
+        self.assertEqual(self.ledger, self.retire_ledger)
+        self.assertEqual(len(self.plain_requests), 1)
+        self.assertTrue(self.held()["held"])
+
+    def test_handoff_requires_delivered_delete_result(self):
+        self.pending_delete()
+        self.subject.exchange_api_delete()
+        with self.assertRaisesRegex(ConformanceError, "BROKER_DELETE_DELIVERY_REQUIRED"):
+            self.subject.handoff_delete_result()
+        self.assertEqual(self.subject.events.transcript_raw, self.delete_before)
+        self.assertEqual(self.ledger, self.retire_ledger)
+
+    def test_delete_close_failure_preserves_first_error_and_original_transcript(self):
+        self.pending_delete()
+        self.subject.exchange_api_delete()
+        self.subject.send_delete_result()
+        self.on_api_close = lambda: (_ for _ in ()).throw(OSError("unit delete close failed"))
+        with self.assertRaisesRegex(OSError, "unit delete close failed"):
+            self.subject.handoff_delete_result()
+        self.assertEqual(self.subject.events.transcript_raw, self.delete_before)
+        self.assertEqual(self.ledger, self.retire_ledger)
+        self.delete_socket.close.assert_called_once()
+
+    def test_replaced_delete_owner_is_not_invoked(self):
+        self.pending_delete()
+        self.subject.exchange_api_delete()
+        foreign = Mock()
+        self.subject.delete_action = foreign
+        with self.assertRaisesRegex(ConformanceError, "BROKER_DELETE_OWNER_CHANGED"):
+            self.subject.send_delete_result()
+        self.assertEqual(foreign.mock_calls, [])
+        self.socket.send.assert_not_called()
+        self.assertEqual(self.ledger, self.retire_ledger)
+
+    def test_post_delete_present_object_stays_held(self):
+        self.post_delete_get()
+        self.reply(canonical_bytes(self.actual))
+        self.subject.exchange_api_get()
+        self.subject.send_get_result()
+        self.subject.handoff_get_result()
+        self.assertEqual(self.ledger, self.retire_ledger)
+        self.assertTrue(self.held()["held"])
+        self.assertIsNone(self.parser.cleanup)
+
+    def test_post_delete_replacement_is_not_adopted_or_deleted(self):
+        self.post_delete_get()
+        actual = deepcopy(self.actual)
+        actual["metadata"]["uid"] = "replacement"
+        self.reply(canonical_bytes(actual))
+        with self.assertRaisesRegex(ConformanceError, "ADMISSION_UID_CHANGED"):
+            self.subject.exchange_api_get()
+        self.assertEqual(self.ledger, self.retire_ledger)
+        self.assertTrue(self.held()["held"])
+
+    def test_second_delete_cannot_retry_even_after_another_present_get(self):
+        self.post_delete_get()
+        self.reply(canonical_bytes(self.actual))
+        self.subject.exchange_api_get()
+        get = self.subject.get_action
+        self.subject.send_get_result()
+        self.subject.handoff_get_result()
+        self.last_event = json.loads(get.frame_raw)
+        self.queue("RESOURCE_ACTION", {"actionId": 5, "verb": "DELETE", "manifestDigest": self.action_digest})
+        self.take()
+        self.next_api(89)
+        self.refused_delete("BROKER_DELETE_RETRY_FORBIDDEN")
+        self.assertEqual(self.plain_requests, [])
+
+    def test_no_caller_uid_response_or_force_argument_is_accepted(self):
+        for method in (self.subject.exchange_api_delete, self.subject.send_delete_result,
+                       self.subject.handoff_delete_result):
+            for value in ({"force": True}, "created-unit-uid", b"{}", Mock()):
+                with self.subTest(method=method.__name__), self.assertRaises(TypeError):
+                    method(value)
+        self.api_socket.connect.assert_not_called()
+
+    def test_resource_completion_seals_clean_only_after_durable_absence(self):
+        self.post_delete_get()
+        self.subject.exchange_api_get()
+        absence = self.subject.get_action
+        self.subject.record_get_absence()
+        self.subject.send_get_result()
+        self.subject.handoff_get_result()
+        self.last_event = json.loads(absence.frame_raw)
+        _BrokerCompletionFixture.configure(self)
+        _BrokerCompletionFixture.chunks(self)
+        self.subject.seal_cleanup()
+        completion = self.subject.completion
+        self.assertEqual(json.loads(completion.cleanup_raw)["state"], "CLEAN")
+        self.assertEqual(json.loads(completion.cleanup_raw)["remainingResources"], [])
+        self.assertTrue(self.held()["held"])
+        self.assertFalse(completion.complete)
+        self.assertTrue(all(r["state"] == "ABSENT" and r["uid"] == "created-unit-uid"
+                            for r in self.held()["resources"].values()))
+        self.secret_reads.assert_called_once()
+
+    def test_present_uid_with_pass_receipt_cannot_be_sealed_clean(self):
+        self.retired_delete()
+        _BrokerCompletionFixture.configure(self)
+        _BrokerCompletionFixture.chunks(self)
+        before = self.ledger
+        with self.assertRaisesRegex(ConformanceError, "ADMISSION_COMPLETION_FALSE_PASS"):
+            self.subject.seal_cleanup()
+        self.assertEqual(self.ledger, before)
+        self.assertTrue(self.held()["held"])
+        self.socket.send.assert_not_called()
+
+    def test_failed_resource_receipt_seals_exact_unresolved_uid_without_deleting(self):
+        self.retired_delete()
+        _BrokerCompletionFixture.configure(self, "FAIL")
+        _BrokerCompletionFixture.chunks(self)
+        requests = list(self.plain_requests)
+        self.subject.seal_cleanup()
+        completion = self.subject.completion
+        cleanup = json.loads(completion.cleanup_raw)
+        self.assertEqual(cleanup["state"], "CLEANUP_PENDING")
+        self.assertEqual(cleanup["remainingResources"], [{"apiVersion": "v1", "kind": "ConfigMap",
+            "namespace": self.manifest["metadata"]["namespace"], "name": self.manifest["metadata"]["name"],
+            "uid": "created-unit-uid", "manifestDigest": self.action_digest,
+            "reasonCode": "OBSERVATION_UNAVAILABLE"}])
+        self.subject.send_cleanup()
+        self.assertEqual(self.plain_requests, requests)
+        self.assertTrue(self.held()["held"])
+        self.assertEqual(self.held()["current"], self.owner.active_operation)
+        self.assertFalse(completion.complete)
+
+
 class BrokerApiZeroResourceTests(_BrokerEventFixture, unittest.TestCase):
     profile_index = 0
 
@@ -9389,18 +10699,918 @@ class BrokerApiZeroResourceTests(_BrokerEventFixture, unittest.TestCase):
         self.assertEqual(self.mocks["socket"].call_count, 1)  # original broker only
 
 
+class _BrokerCompletionFixture(_BrokerEventFixture):
+    """Leaf transport/storage/observer doubles; never C6 whole-server evidence."""
+    profile_index = 0
+    read_intent = BrokerIntentTests.read_intent
+    append_intent = BrokerIntentTests.append_intent
+    sync_intent = BrokerIntentTests.sync_intent
+    held = BrokerIntentTests.held
+    result_send = BrokerCreateResultTests.result_send
+
+    def setUp(self):
+        _BrokerEventFixture.setUp(self)
+        self.configure()
+
+    def configure(self, status="PASS"):
+        from contextlib import contextmanager
+        from harness_conformance.linux_readiness import CASE_CHECKS
+        owner = self.owner
+        request = server.build_probe_request(owner.envelope, owner.capacity, owner.plan, owner.active_operation)
+        # Valid contract data only. The existing fixture explicitly doubles the
+        # installed authority edge; validate_receipt and the owner are real here.
+        owner.binding = {"nonce": request["runNonce"], "tenantId": owner.envelope["tenantId"],
+            "environmentId": owner.envelope["environmentId"], "endpointId": request["endpointId"],
+            "namespace": request["namespace"], "packetDigest": owner.envelope["packetDigest"],
+            "commandSetDigest": owner.envelope["commandSetDigest"], "releaseDigest": owner.envelope["campaignReleaseDigest"],
+            "capacityDigest": byte_digest(canonical_bytes(owner.capacity)),
+            "notBefore": "2026-09-08T00:00:00Z", "notAfter": "2026-09-08T00:10:00Z"}
+        output = {"checks": {check: status for check in CASE_CHECKS[owner.active_operation]}, "regressions": {}}
+        self.case_receipt = {"caseId": owner.active_operation, "status": status, "observedAt": self.wall,
+            "runNonce": request["runNonce"], "probeDigest": request["probeDigest"], "commandDigest": request["commandDigest"],
+            "outputDigest": server.canonical_digest(output, "planeon.linux-probe-output/v1alpha1"), "output": output}
+        self.receipt_bytes = canonical_bytes(self.case_receipt)
+        self.io_events, self.writes = [], []
+        self.fail = None
+        self.on_read = self.on_append = self.on_sync = lambda: None
+        @contextmanager
+        def transaction(resource):
+            self.assertIs(resource, owner.storage)
+            yield resource
+        self.stack.enter_context(patch.object(server._State, "transaction", transaction))
+        self.stack.enter_context(patch.object(server._State, "append", side_effect=self.append_intent))
+        self.stack.enter_context(patch.object(server._State, "sync", side_effect=self.sync_intent))
+        self.read_store.side_effect = self.read_intent
+        self.sent_results, self.result_count = [], None
+        self.on_result_send = lambda raw: None
+        self.socket.send.side_effect = self.result_send
+
+    def chunks(self, raw=None):
+        data = self.receipt_bytes if raw is None else raw
+        at = len(data) // 2
+        for index, part in enumerate((data[:at], data[at:])):
+            self.chunk(index, part)
+            self.take()
+        self.before_completion = self.ledger
+        self.before_cleanup = self.subject.events.transcript_raw
+        self.socket.send.reset_mock()
+
+    def sealed(self):
+        self.chunks()
+        self.subject.seal_cleanup()
+        self.completion = self.subject.completion
+        self.sealed_history = self.ledger
+
+    def sent_cleanup(self):
+        self.sealed()
+        self.subject.send_cleanup()
+        self.last_event = json.loads(self.completion.cleanup_frame_raw)
+        payload = {"status": {"PASS": "COMPLETED", "FAIL": "FAILED",
+            "NOT_RUN_ENV_UNAVAILABLE": "UNAVAILABLE"}[self.case_receipt["status"]],
+            "receiptSize": len(self.receipt_bytes), "receiptDigest": byte_digest(self.receipt_bytes),
+            "cleanupDigest": byte_digest(self.completion.cleanup_raw), "workerReaped": True}
+        self.queue("TERMINAL", payload)
+        self.on_event = lambda: setattr(self, "ready", False)
+
+
+class BrokerCompletionTests(_BrokerCompletionFixture, unittest.TestCase):
+    def test_zero_resource_seal_persists_before_any_cleanup_send(self):
+        self.sealed()
+        self.assertTrue(self.completion.sealed and self.completion.committed)
+        self.assertEqual(json.loads(self.ledger.splitlines()[-1])["state"], "CLEANUP_SEALED")
+        self.assertTrue(self.held()["held"])
+        self.assertEqual(self.held()["current"], self.owner.active_operation)
+        self.assertEqual(self.subject.events.transcript_raw, self.before_cleanup)
+        self.assertIsNone(self.subject.events.transcript.cleanup)
+        self.assertIsNone(self.subject.events.transcript.terminal)
+        self.socket.send.assert_not_called()
+        self.assertEqual(self.mocks["socket"].call_count, 1)
+        self.owner.files.read.assert_not_called()
+
+    def test_cleanup_digest_send_follows_durable_seal_and_preserves_pending_case(self):
+        self.sealed()
+        observed = []
+        self.on_result_send = lambda raw: observed.append(self.ledger)
+        self.subject.send_cleanup()
+        self.assertEqual(observed, [self.sealed_history])
+        self.assertEqual(self.sent_results, [self.completion.cleanup_frame_raw])
+        self.assertTrue(self.completion.sent and self.completion.cleanup_advanced)
+        self.assertTrue(self.held()["held"])
+        self.assertEqual(self.held()["current"], self.owner.active_operation)
+        self.assertFalse(self.completion.received or self.completion.complete)
+
+    def test_real_terminal_echo_precedes_durable_completion(self):
+        self.sent_cleanup()
+        received = self.subject.poll_terminal()
+        self.assertEqual(json.loads(received), self.event_frame)
+        self.assertEqual(self.ledger, self.sealed_history)
+        self.assertTrue(self.completion.received)
+        self.assertFalse(self.completion.complete)
+        self.subject.record_terminal()
+        self.assertEqual(json.loads(self.ledger.splitlines()[-1])["state"], "TERMINAL_RECORDED")
+        self.assertTrue(self.completion.complete)
+        self.assertIsNone(self.held()["current"])
+        self.assertTrue(self.held()["held"])  # one case is not the ten-case campaign
+        self.assertEqual(self.completion.receipt_raw, self.receipt_bytes)
+        self.assertEqual(self.completion.deadline, self.subject.deadline)
+        self.assertEqual(self.mocks["socket"].call_count, 1)
+
+    def test_terminal_loss_never_releases_or_records_success(self):
+        self.sent_cleanup()
+        self.raw_override = b""
+        with self.assertRaises(ConformanceError):
+            self.subject.poll_terminal()
+        self.assertEqual(self.ledger, self.sealed_history)
+        self.assertTrue(self.held()["held"])
+        self.assertFalse(self.completion.complete)
+        self.assertNotIn("terminalCases", self.held())
+
+    def test_idle_terminal_poll_does_not_resend_or_extend_deadline(self):
+        self.sent_cleanup()
+        self.ready = False
+        deadline, sends = self.subject.deadline, self.socket.send.call_count
+        self.assertIsNone(self.subject.poll_terminal())
+        self.assertIsNone(self.subject.poll_terminal())
+        self.assertEqual(self.socket.send.call_count, sends)
+        self.assertEqual(self.subject.deadline, deadline)
+        self.assertEqual(self.ledger, self.sealed_history)
+        self.assertFalse(self.completion.receive_attempted)
+
+    def test_wrong_cleanup_digest_cannot_complete(self):
+        self.sent_cleanup()
+        self.event_frame["payload"]["cleanupDigest"] = admission.ZERO
+        with self.assertRaisesRegex(ConformanceError, "ADMISSION_TERMINAL_MISMATCH"):
+            self.subject.poll_terminal()
+        self.assertEqual(self.ledger, self.sealed_history)
+        self.assertTrue(self.held()["held"])
+
+    def test_wrong_receipt_digest_or_count_cannot_complete(self):
+        self.sent_cleanup()
+        self.event_frame["payload"]["receiptSize"] += 1
+        with self.assertRaisesRegex(ConformanceError, "ADMISSION_TERMINAL_MISMATCH"):
+            self.subject.poll_terminal()
+        self.assertEqual(self.ledger, self.sealed_history)
+
+    def test_terminal_cannot_claim_failed_execution_as_pass(self):
+        self.sent_cleanup()
+        self.event_frame["payload"]["status"] = "FAILED"
+        with self.assertRaisesRegex(ConformanceError, "ADMISSION_TERMINAL_MISMATCH"):
+            self.subject.poll_terminal()
+        self.assertFalse(self.completion.complete)
+        self.assertEqual(self.ledger, self.sealed_history)
+
+    def test_trailing_frame_after_terminal_prevents_receipt_publication(self):
+        self.sent_cleanup()
+        self.on_event = lambda: None  # readiness remains true after TERMINAL
+        with self.assertRaisesRegex(ConformanceError, "BROKER_TERMINAL_TRAILING_DATA"):
+            self.subject.poll_terminal()
+        self.assertFalse(self.completion.received or self.completion.complete)
+        self.assertEqual(self.ledger, self.sealed_history)
+
+    def test_extra_chunk_after_cleanup_cannot_become_terminal(self):
+        self.sent_cleanup()
+        self.chunk(2, b"trailing")
+        with self.assertRaises(ConformanceError):
+            self.subject.poll_terminal()
+        self.assertEqual(self.ledger, self.sealed_history)
+
+    def test_missing_truncated_receipt_never_seals_cleanup(self):
+        self.chunks(self.receipt_bytes[:-1])
+        with self.assertRaises(ConformanceError):
+            self.subject.seal_cleanup()
+        self.assertEqual(self.ledger, self.before_completion)
+        self.socket.send.assert_not_called()
+
+    def test_surplus_receipt_bytes_never_seal_cleanup(self):
+        self.chunks(self.receipt_bytes + b"{}")
+        with self.assertRaises(ConformanceError):
+            self.subject.seal_cleanup()
+        self.assertEqual(self.ledger, self.before_completion)
+
+    def test_seal_without_chunks_cannot_acknowledge_cleanup(self):
+        self.ready = False
+        self.take()
+        before = self.ledger
+        with self.assertRaisesRegex(ConformanceError, "BROKER_COMPLETION_CHUNKS_REQUIRED"):
+            self.subject.seal_cleanup()
+        self.assertEqual(self.ledger, before)
+
+    def test_cleanup_send_loss_preserves_sealed_held_record(self):
+        self.sealed()
+        self.result_count = 1
+        with self.assertRaisesRegex(ConformanceError, "BROKER_CLEANUP_SEND_AMBIGUOUS"):
+            self.subject.send_cleanup()
+        self.assertEqual(self.ledger, self.sealed_history)
+        self.assertEqual(self.subject.events.transcript_raw, self.before_cleanup)
+        self.assertTrue(self.held()["held"])
+
+    def test_original_completion_owner_cannot_be_replaced(self):
+        self.sealed()
+        foreign = Mock()
+        self.subject.completion = foreign
+        with self.assertRaisesRegex(ConformanceError, "BROKER_COMPLETION_OWNER_CHANGED"):
+            self.subject.send_cleanup()
+        self.assertEqual(foreign.mock_calls, [])
+        self.assertEqual(self.ledger, self.sealed_history)
+
+    def test_modified_receipt_bytes_cannot_change_sealed_evidence(self):
+        self.sealed()
+        self.completion.receipt_raw = b"{}"
+        with self.assertRaises(ConformanceError):
+            self.subject.send_cleanup()
+        self.socket.send.assert_not_called()
+        self.assertEqual(self.ledger, self.sealed_history)
+
+    def test_failed_and_unavailable_receipts_never_close_case(self):
+        # This case exercises actual failure receipt validation and fixed native
+        # completion owners; it does not substitute a cleanup/driver result.
+        self.case_receipt["status"] = "NOT_RUN_ENV_UNAVAILABLE"
+        checks = self.case_receipt["output"]["checks"]
+        for check in checks:
+            checks[check] = "NOT_RUN_ENV_UNAVAILABLE"
+        self.case_receipt["outputDigest"] = server.canonical_digest(self.case_receipt["output"],
+                                                                  "planeon.linux-probe-output/v1alpha1")
+        self.receipt_bytes = canonical_bytes(self.case_receipt)
+        self.sent_cleanup()
+        self.subject.poll_terminal()
+        self.subject.record_terminal()
+        self.assertTrue(self.completion.complete and self.held()["held"])
+        self.assertEqual(self.held()["current"], self.owner.active_operation)
+        self.assertEqual(self.completion.receipt_status, "NOT_RUN_ENV_UNAVAILABLE")
+
+    def test_stale_generation_before_seal_prevents_append(self):
+        self.chunks()
+        self.observed["generation"] = "f" * 64
+        with self.assertRaisesRegex(ConformanceError, "BROKER_GENERATION_CHANGED"):
+            self.subject.seal_cleanup()
+        self.assertEqual(self.ledger, self.before_completion)
+        self.socket.send.assert_not_called()
+
+    def test_seal_fsync_failure_poisoned_without_cleanup_send(self):
+        self.chunks()
+        self.fail = "sync"
+        with self.assertRaises((ConformanceError, OSError)):
+            self.subject.seal_cleanup()
+        self.assertTrue(self.owner.log.poisoned)
+        self.assertTrue(self.ledger.startswith(self.before_completion))
+        self.socket.send.assert_not_called()
+
+    def test_terminal_append_failure_never_publishes_complete(self):
+        self.sent_cleanup()
+        self.subject.poll_terminal()
+        self.fail = "before"
+        with self.assertRaises((ConformanceError, OSError)):
+            self.subject.record_terminal()
+        self.assertEqual(self.ledger, self.sealed_history)
+        self.assertFalse(self.completion.complete)
+        self.assertTrue(self.owner.log.poisoned and self.held()["held"])
+
+    def test_terminal_rights_are_drained_before_post_receive_refusal(self):
+        self.sent_cleanup()
+        self.extra_ancillary = [(server.socket.SOL_SOCKET, server.socket.SCM_RIGHTS, server.struct.pack("i", 99))]
+        with self.assertRaises(ConformanceError):
+            self.subject.poll_terminal()
+        self.assertEqual(self.events.count(("close", 99)), 1)
+        self.assertEqual(self.ledger, self.sealed_history)
+
+    def test_cannot_record_or_repeat_unreceived_terminal(self):
+        self.sent_cleanup()
+        with self.assertRaisesRegex(ConformanceError, "BROKER_TERMINAL_RECORD_ORDER"):
+            self.subject.record_terminal()
+        self.assertEqual(self.ledger, self.sealed_history)
+
+
 class BrokerStartupSourceOrderTests(unittest.TestCase):
     """Source ordering only; separate from every OS-mocked channel fixture."""
     def test_server_constructor_order_keeps_broker_before_credentials(self):
         import inspect
         source = inspect.getsource(server.NativeProxyServer.__init__)
         positions = [source.index(fragment) for fragment in (
-            'require_server_containment(self)', 'self.observer.__init__(self)',
+            'self.qualification.__init__(self)', 'self.observer.__init__(self)',
             'self.broker.__init__(self)', 'self.files.sealed = True',
             'self._transport_check()', 'self.secrets.read(IDENTITY')]
         self.assertEqual(positions, sorted(positions))
         # Source ordering is not execution of the complete native factory.
         self.assertIn('self.broker = self._broker_original = object.__new__(_Broker)', source)
+
+
+class BrokerCreatePreflightTests(_BrokerEventFixture, unittest.TestCase):
+    """Driver pre-credential boundary using the existing intent/storage leaf fixture."""
+    start = BrokerIntentTests.start
+    setUp = BrokerIntentTests.setUp
+    read_intent = BrokerIntentTests.read_intent
+    append_intent = BrokerIntentTests.append_intent
+    sync_intent = BrokerIntentTests.sync_intent
+
+    def test_missing_durable_intent_refuses_before_credential_or_socket(self):
+        with self.assertRaisesRegex(ConformanceError, "BROKER_CREATE_INTENT_REQUIRED"):
+            self.subject.check_action_ownership()
+        self.assertEqual(self.mocks["socket"].call_count, 1)
+        self.owner.files.read.assert_not_called()
+        self.assertEqual(self.writes, [])
+
+    def test_committed_intent_preflight_is_not_an_api_or_effect(self):
+        self.subject.record_create_intent()
+        history = self.ledger
+        self.subject.check_action_ownership()
+        self.assertIsNone(self.subject.api)
+        self.assertEqual(self.mocks["socket"].call_count, 1)
+        self.owner.files.read.assert_not_called()
+        self.socket.send.assert_not_called()
+        self.assertEqual(self.ledger, history)
+
+    def test_uncommitted_intent_cannot_be_accepted_as_durable(self):
+        self.subject.record_create_intent()
+        self.subject.intent.committed = False
+        with self.assertRaisesRegex(ConformanceError, "BROKER_CREATE_INTENT_REQUIRED"):
+            self.subject.check_action_ownership()
+        self.assertEqual(self.mocks["socket"].call_count, 1)
+        self.owner.files.read.assert_not_called()
+
+
+class ReceiptChunkBoundaryTests(unittest.TestCase):
+    """Data framing only; a detected boundary never supplies receipt acceptance."""
+    def test_object_boundary_can_cross_every_byte_offset(self):
+        raw = canonical_bytes({"x": ["quote\" slash\\ brace} [", {"z": True}], "y": None})
+        for at in range(1, len(raw)):
+            with self.subTest(at=at):
+                self.assertFalse(server._receipt_chunks_complete([raw[:at]]))
+                self.assertTrue(server._receipt_chunks_complete([raw[:at], raw[at:]]))
+
+    def test_split_multibyte_utf8_does_not_end_the_object(self):
+        raw = '{"x":"ö"}'.encode()
+        at = raw.index(b'\xc3') + 1
+        self.assertFalse(server._receipt_chunks_complete([raw[:at]]))
+        self.assertTrue(server._receipt_chunks_complete([raw[:at], raw[at:]]))
+
+    def test_missing_outer_close_remains_incomplete(self):
+        for raw in (b'{', b'{"x":', b'{"x":"', b'{"x":"\\', b'{"x":{}}'[:-1]):
+            with self.subTest(raw=raw):
+                self.assertFalse(server._receipt_chunks_complete([raw]))
+
+    def test_array_scalar_or_garbage_cannot_supply_receipt_object(self):
+        for raw in (b'[]', b'null', b'1', b'"{}"', b'not-json'):
+            with self.subTest(raw=raw), self.assertRaisesRegex(ConformanceError, "BROKER_RECEIPT_OBJECT_REQUIRED"):
+                server._receipt_chunks_complete([raw])
+
+    def test_trailing_object_or_bytes_refuse_even_in_separate_chunk(self):
+        for suffix in (b'{}', b'[]', b'x', b'\x00'):
+            with self.subTest(suffix=suffix), self.assertRaisesRegex(ConformanceError, "BROKER_RECEIPT_TRAILING_BYTES"):
+                server._receipt_chunks_complete([b'{}', suffix])
+
+    def test_wrong_bracket_and_literal_string_control_refuse(self):
+        for raw in (b'{]', b'{"x":[}', b'{"x":"\x00"}', b'{"x":"\n"}'):
+            with self.subTest(raw=raw), self.assertRaises(ConformanceError):
+                server._receipt_chunks_complete([raw])
+
+    def test_empty_oversize_nonbytes_and_excess_chunk_count_refuse(self):
+        for chunks in ([], [b''], ['{}'], [bytearray(b'{}')], (b'{}',),
+                       [b'{' * 24577], [b' '] * 172, [b' ' * 24576] * 171):
+            with self.subTest(kind=type(chunks).__name__, count=len(chunks)), self.assertRaises(ConformanceError):
+                server._receipt_chunks_complete(chunks)
+
+    def test_depth_limit_is_not_reset_between_frames(self):
+        with self.assertRaisesRegex(ConformanceError, "BROKER_RECEIPT_DEPTH"):
+            server._receipt_chunks_complete([b'{' * 8, b'{' * 9])
+
+    def test_complete_but_invalid_json_still_requires_strict_validation(self):
+        raw = b'{garbage}'
+        self.assertTrue(server._receipt_chunks_complete([raw]))
+        with self.assertRaises(ConformanceError):
+            server.document(raw)
+
+
+class BrokerCaseHandoffTests(_BrokerCompletionFixture, unittest.TestCase):
+    """Actual completion/handoff/start owners; existing leaf boundary doubles."""
+    def completed(self):
+        self.sent_cleanup()
+        self.subject.poll_terminal()
+        self.subject.record_terminal()
+        self.completed_case = self.owner.active_operation
+        self.final_history = self.ledger
+        self.original_channel = self.subject.sock
+        self.original_deadline = self.subject.deadline
+
+    def next_case(self):
+        operation = next(case for case in server.CASES if case != self.completed_case)
+        self.owner.log.record(self.owner.reservation, "RUNNING", operation, self.wall)
+        self.owner.active_operation = operation
+        self.socket.send.side_effect = self.send
+        self.socket.recvmsg.side_effect = self.receive
+        self.challenge.return_value = b'\xab' * 32
+        self.on_send = lambda: self.frame.update(executionId='d' * 64)
+
+    def test_handoff_retains_original_channel_deadline_and_all_history(self):
+        self.completed()
+        old = self.completion
+        self.subject.finish_case()
+        self.assertIsNone(self.owner.active_operation)
+        self.assertIsNone(self.subject.dispatch)
+        self.assertIsNone(self.subject.events)
+        self.assertIsNone(self.subject.completion)
+        self.assertIsNone(self.subject.last_get)
+        self.assertEqual(self.subject._attempted_cases, {self.completed_case})
+        self.assertEqual(self.ledger, self.final_history)
+        self.assertTrue(self.held()["held"])
+        self.assertIs(self.subject.sock, self.original_channel)
+        self.assertEqual(self.subject.deadline, self.original_deadline)
+        archive = json.loads(self.subject.case_history[0])
+        self.assertEqual(archive["terminalDigest"], byte_digest(old.terminal_raw))
+        self.assertEqual(archive["receiptDigest"], byte_digest(self.receipt_bytes))
+        self.assertEqual(archive["ledgerDigest"], byte_digest(self.final_history))
+        self.socket.connect.assert_called_once()
+        self.socket.close.assert_not_called()
+
+    def test_next_case_dispatch_uses_new_challenge_same_channel_and_nonce(self):
+        self.completed()
+        self.subject.finish_case()
+        self.next_case()
+        history = self.ledger
+        self.subject.begin()
+        dispatch = json.loads(self.subject.dispatch.dispatch_raw)
+        self.assertEqual(dispatch["challenge"], 'ab' * 32)
+        self.assertEqual(dispatch["runNonce"], self.owner.envelope["nonce"])
+        self.assertEqual(json.loads(self.subject.dispatch.started)["executionId"], 'd' * 64)
+        self.assertEqual(self.subject._attempted_cases, {self.completed_case, self.owner.active_operation})
+        self.assertIs(self.subject.sock, self.original_channel)
+        self.assertEqual(self.subject.deadline, self.original_deadline)
+        self.assertEqual(self.ledger, history)
+        self.socket.connect.assert_called_once()
+
+    def test_missing_terminal_cannot_retire_case(self):
+        self.sealed()
+        history = self.ledger
+        with self.assertRaisesRegex(ConformanceError, "BROKER_CASE_TERMINAL_REQUIRED"):
+            self.subject.finish_case()
+        self.assertEqual(self.ledger, history)
+        self.assertTrue(self.held()["held"])
+        self.assertEqual(self.subject.case_history, ())
+
+    def test_received_but_unrecorded_terminal_cannot_retire(self):
+        self.sent_cleanup()
+        self.subject.poll_terminal()
+        with self.assertRaisesRegex(ConformanceError, "BROKER_CASE_TERMINAL_REQUIRED"):
+            self.subject.finish_case()
+        self.assertEqual(self.subject.case_history, ())
+        self.assertTrue(self.held()["held"])
+
+    def test_failed_receipt_and_terminal_cannot_enable_next_case(self):
+        self.configure("FAIL")
+        self.completed()
+        with self.assertRaisesRegex(ConformanceError, "BROKER_CASE_NOT_CLEAN_COMPLETED"):
+            self.subject.finish_case()
+        self.assertEqual(self.owner.active_operation, self.completed_case)
+        self.assertEqual(self.subject.case_history, ())
+        self.assertEqual(self.ledger, self.final_history)
+        self.assertTrue(self.held()["held"])
+
+    def test_unavailable_receipt_and_terminal_cannot_enable_next_case(self):
+        self.configure("NOT_RUN_ENV_UNAVAILABLE")
+        self.completed()
+        with self.assertRaisesRegex(ConformanceError, "BROKER_CASE_NOT_CLEAN_COMPLETED"):
+            self.subject.finish_case()
+        self.assertEqual(self.held()["current"], self.completed_case)
+        self.assertTrue(self.held()["held"])
+
+    def test_second_handoff_refuses_without_erasing_first_archive(self):
+        self.completed()
+        self.subject.finish_case()
+        history = self.subject.case_history
+        with self.assertRaises(ConformanceError):
+            self.subject.finish_case()
+        self.assertEqual(self.subject.case_history, history)
+        self.assertEqual(self.ledger, self.final_history)
+
+    def test_retired_completion_object_cannot_be_reused(self):
+        self.completed()
+        old = self.completion
+        self.subject.finish_case()
+        with self.assertRaisesRegex(ConformanceError, "BROKER_COMPLETION_OWNER_CHANGED"):
+            server._BrokerCompletion._check(old)
+        self.assertEqual(self.ledger, self.final_history)
+
+    def test_late_trailing_frame_refuses_before_retirement(self):
+        self.completed()
+        self.ready = True
+        with self.assertRaisesRegex(ConformanceError, "BROKER_CASE_TRAILING_DATA"):
+            self.subject.finish_case()
+        self.assertEqual(self.subject.case_history, ())
+        self.assertEqual(self.ledger, self.final_history)
+
+    def test_changed_final_ledger_refuses_before_retirement(self):
+        self.completed()
+        self.ledger += b' '
+        with self.assertRaisesRegex(ConformanceError, "BROKER_RUNNING_CHANGED"):
+            self.subject.finish_case()
+        self.assertEqual(self.subject.case_history, ())
+
+    def test_attempted_case_archive_mismatch_refuses_retirement(self):
+        self.completed()
+        self.subject._attempted_cases.add(next(case for case in server.CASES if case != self.completed_case))
+        with self.assertRaisesRegex(ConformanceError, "BROKER_CASE_HISTORY_CHANGED"):
+            self.subject.finish_case()
+        self.assertEqual(self.subject.case_history, ())
+
+    def test_next_case_cannot_reuse_challenge(self):
+        self.completed()
+        self.subject.finish_case()
+        self.next_case()
+        self.challenge.return_value = b'\xee' * 32
+        self.socket.send.reset_mock()
+        with self.assertRaisesRegex(ConformanceError, "BROKER_CHALLENGE_REPLAY"):
+            self.subject.begin()
+        self.socket.send.assert_not_called()
+
+    def test_next_case_cannot_reuse_broker_execution_id(self):
+        self.completed()
+        self.subject.finish_case()
+        self.next_case()
+        self.on_send = lambda: None  # existing transport emits the previous c*64 ID
+        with self.assertRaisesRegex(ConformanceError, "BROKER_EXECUTION_REPLAY"):
+            self.subject.begin()
+        self.assertIsNone(self.subject.dispatch.started)
+
+    def test_next_case_generation_change_refuses_before_dispatch(self):
+        self.completed()
+        self.subject.finish_case()
+        self.next_case()
+        self.observed["generation"] = 'f' * 64
+        self.socket.send.reset_mock()
+        with self.assertRaisesRegex(ConformanceError, "BROKER_GENERATION_CHANGED"):
+            self.subject.begin()
+        self.socket.send.assert_not_called()
+
+    def test_next_case_observer_restart_refuses_before_dispatch(self):
+        self.completed()
+        self.subject.finish_case()
+        self.next_case()
+        self.observed["observerBootId"] = "changed-boot"
+        self.socket.send.reset_mock()
+        with self.assertRaisesRegex(ConformanceError, "BROKER_GENERATION_CHANGED"):
+            self.subject.begin()
+        self.socket.send.assert_not_called()
+
+    def test_case_archive_substitution_refuses_before_any_new_io(self):
+        self.completed()
+        self.subject.finish_case()
+        self.subject.case_history = (b'{}',)
+        self.socket.send.reset_mock()
+        with self.assertRaisesRegex(ConformanceError, "BROKER_CASE_HISTORY_CHANGED"):
+            self.subject.check()
+        self.socket.send.assert_not_called()
+
+    def test_handoff_accepts_no_caller_result_or_reset_flag(self):
+        for value in (True, {}, Mock(), b'PASS'):
+            with self.subTest(value=type(value).__name__), self.assertRaises(TypeError):
+                self.subject.finish_case(value)
+
+
+def _failure_custody_fixture(test):
+    """Original owner/files/store custody with leaf OS and journal-I/O doubles.
+
+    This is not full server/qualification construction. It restores the actual
+    custody checks around the earlier leaf's journal primitives, not a successful
+    failure-accounting, admission or cleanup substitute.
+    """
+    owner = test.owner
+    owner.pid, owner.thread, owner.closed = server.os.getpid(), server.threading.get_ident(), False
+    owner.failure_accounting = owner._failure_accounting_original = None
+    test.stack.enter_context(patch.object(server, "_ACTIVE", owner))
+    if type(owner.files) is not server._Files:
+        old = owner.files
+        owner.files = server._Files(owner)
+        owner.files.rows, owner.files.raw, owner.files.read = old.rows, old.raw, old.read
+        owner.files.sealed = True
+    test.fds[75] = test.exe
+    def info(inode, mode):
+        return SimpleNamespace(st_dev=1, st_ino=inode, st_uid=0, st_gid=0, st_mode=mode,
+            st_nlink=1, st_size=1, st_mtime_ns=1, st_ctime_ns=1)
+    directory = info(90, stat.S_IFDIR | 0o700)
+    lock, journal = info(91, stat.S_IFREG | 0o600), info(92, stat.S_IFREG | 0o600)
+    test.fds.update({90: directory, 91: lock, 92: journal})
+    owner.files.rows[server.STATE] = [90, None, "failure-store", server._custody_identity(directory)]
+    previous_stat = test.mocks["stat"].side_effect
+    def current_stat(path, **kwargs):
+        if path == "broker":
+            return test.exe
+        if path == "failure-store":
+            return directory
+        if kwargs.get("dir_fd") == 90 and path in ("admission.lock", "reservations.jsonl"):
+            return lock if path == "admission.lock" else journal
+        return previous_stat(path, **kwargs)
+    test.mocks["stat"].side_effect = current_stat
+    store = owner.storage
+    store.directory, store.lock, store.fd, store.floor = 90, 91, 92, b""
+    store._failure_accounting = None
+    store.identities = {"lock": server._custody_identity(lock)[:6], "fd": server._custody_identity(journal)[:6]}
+    read, append, sync = store.read, store.append, store.sync
+    def guarded_read(resource):
+        server._State.check(resource)
+        try:
+            return read()
+        finally:
+            server._State.check(resource)
+    def guarded_append(resource, raw):
+        server._State.check(resource)
+        try:
+            return append(raw)
+        finally:
+            server._State.check(resource)
+    def guarded_sync(resource):
+        server._State.check(resource)
+        try:
+            return sync()
+        finally:
+            server._State.check(resource)
+    test.stack.enter_context(patch.object(server._State, "read", guarded_read))
+    test.stack.enter_context(patch.object(server._State, "append", guarded_append))
+    test.stack.enter_context(patch.object(server._State, "sync", guarded_sync))
+
+
+class ProxyCaseDriverTests(_BrokerCompletionFixture, unittest.TestCase):
+    """Real driver/handshake/journal/receipt path, NOT C6 constructor evidence.
+
+    The earlier leaf fixture still doubles installed qualification/observer
+    boundaries. Only transport/storage data are scripted here; no successful
+    driver, admission or cleanup result is substituted.
+    """
+    def setUp(self):
+        BrokerDispatchStartTests.setUp(self)  # original broker, not yet dispatched
+        self.configure()
+        self.owner._broker_check = self.subject.check
+        _failure_custody_fixture(self)
+        self.ledger = b""
+        self.owner.log.record(self.owner.reservation, "RESERVED", None, self.wall)
+        self.owner.log.record(self.owner.reservation, "RUNNING", self.owner.active_operation, self.wall)
+        self.writes.clear()
+        self.io_events.clear()
+        self.incoming, self.outgoing = [], []
+        self.script_chunks = None
+        self.script_status = None
+        self.script_action = None
+        self.lost_terminal = self.extra_terminal = False
+        self.on_driver_receive = self.on_driver_send = lambda frame: None
+        self.socket.send.side_effect = self.driver_send
+        self.socket.recvmsg.side_effect = self.driver_receive
+        self.mocks["select"].side_effect = self.driver_select
+
+    def driver_select(self, readers, writers, exceptional, timeout):
+        if readers == [self.socket]:
+            if not self.incoming:
+                self.now += timeout
+            return ([self.socket] if self.incoming else [], [], [])
+        self.assertEqual((readers, writers, exceptional, timeout), ([72], [], [72], 0))
+        return [], [], []
+
+    def enqueue(self, kind, payload):
+        frame = {**deepcopy(self.wire_last), "kind": kind, "payload": payload,
+            "sequence": self.wire_last["sequence"] + 1,
+            "previousDigest": byte_digest(canonical_bytes(self.wire_last))}
+        self.incoming.append(canonical_bytes(frame))
+        self.wire_last = frame
+
+    def driver_send(self, raw):
+        import base64
+        frame = json.loads(raw)
+        self.on_driver_send(frame)
+        self.outgoing.append(frame)
+        if frame.get("operation") == "EXECUTE_FIXED_PROBE":
+            self.wire_last = {**{k: frame[k] for k in admission.BROKER_COMMON},
+                "schemaVersion": "planeon.internal.broker-frame/v1", "executionId": 'c' * 64,
+                "sequence": 1, "previousDigest": admission.ZERO, "kind": "STARTED",
+                "payload": {"workerPid": 1234, "workerStartTicks": 123}}
+            self.incoming.append(canonical_bytes(self.wire_last))
+            if self.script_action is not None:
+                self.enqueue("RESOURCE_ACTION", self.script_action)
+            else:
+                parts = self.script_chunks if self.script_chunks is not None else [
+                    self.receipt_bytes[:90], self.receipt_bytes[90:]]
+                for index, part in enumerate(parts):
+                    self.enqueue("RECEIPT_CHUNK", {"index": index,
+                        "dataBase64": base64.b64encode(part).decode("ascii")})
+        elif frame["kind"] == "CLEANUP_RECORDED":
+            self.wire_last = frame
+            if self.lost_terminal:
+                self.incoming.append(b'')  # authenticated channel EOF, not absence
+            else:
+                self.enqueue("TERMINAL", {"status": self.script_status or {
+                    "PASS": "COMPLETED", "FAIL": "FAILED", "NOT_RUN_ENV_UNAVAILABLE": "UNAVAILABLE"
+                    }[self.case_receipt["status"]], "receiptSize": len(self.receipt_bytes),
+                    "receiptDigest": byte_digest(self.receipt_bytes),
+                    "cleanupDigest": frame["payload"]["cleanupDigest"], "workerReaped": True})
+                if self.extra_terminal:
+                    self.incoming.append(self.incoming[-1])
+        else:
+            raise AssertionError("unexpected zero-resource server frame")
+        return len(raw)
+
+    def driver_receive(self, *args):
+        raw = self.incoming.pop(0)
+        self.on_driver_receive(json.loads(raw) if raw else {})
+        return raw, [(server.socket.SOL_SOCKET, 2, server.struct.pack("3i", *self.message_peer))], 0, None
+
+    def drive_refused(self):
+        with self.assertRaises((ConformanceError, OSError)):
+            self.owner._drive_case()
+        self.assertTrue(self.subject.failed and self.subject.closed)
+        self.assertTrue(self.held()["held"])
+        self.assertNotIn("TERMINAL_RECORDED", [json.loads(row)["state"] for row in self.writes])
+        self.assertIsNotNone(self.held()["current"])
+        self.assertEqual(self.mocks["socket"].call_count, 1)
+        self.owner.files.read.assert_not_called()
+
+    def test_real_driver_completes_zero_resource_case_without_future_module(self):
+        self.assertFalse(hasattr(server, "_fixed_probes"))
+        result = self.owner._drive_case()
+        self.assertEqual(result, self.receipt_bytes)
+        self.assertEqual([json.loads(row)["state"] for row in self.writes],
+                         ["CLEANUP_SEALED", "TERMINAL_RECORDED"])
+        self.assertEqual(len(self.subject.case_history), 1)
+        self.assertIsNone(self.owner.active_operation)
+        self.assertTrue(self.held()["held"])
+        self.assertEqual(self.mocks["socket"].call_count, 1)
+        self.owner.files.read.assert_not_called()
+        self.assertEqual([frame.get("kind", "DISPATCH") for frame in self.outgoing],
+                         ["DISPATCH", "CLEANUP_RECORDED"])
+
+    def test_real_driver_does_not_advance_failed_case(self):
+        self.configure("FAIL")
+        self.socket.send.side_effect = self.driver_send
+        result = self.owner._drive_case()
+        self.assertEqual(json.loads(result)["status"], "FAIL")
+        self.assertEqual(self.subject.case_history, ())
+        self.assertIsNotNone(self.owner.active_operation)
+        self.assertTrue(self.held()["held"])
+
+    def test_real_driver_does_not_upgrade_unavailable_to_pass(self):
+        self.configure("NOT_RUN_ENV_UNAVAILABLE")
+        self.socket.send.side_effect = self.driver_send
+        result = self.owner._drive_case()
+        self.assertEqual(json.loads(result)["status"], "NOT_RUN_ENV_UNAVAILABLE")
+        self.assertEqual(self.subject.case_history, ())
+        self.assertTrue(self.held()["held"])
+
+    def test_zero_resource_action_is_denied_before_upstream_acquisition(self):
+        self.script_action = {"actionId": 1, "verb": "CREATE", "manifestDigest": admission.ZERO}
+        self.drive_refused()
+        self.assertEqual([json.loads(row)["state"] for row in self.writes], ["FAILURE_RECORDED"])
+        self.assertIsNone(json.loads(self.writes[-1])["cleanup"])
+        self.assertIsNone(self.subject.intent)
+
+    def test_lost_terminal_keeps_durable_cleanup_and_held_case(self):
+        self.lost_terminal = True
+        self.drive_refused()
+        self.assertEqual([json.loads(row)["state"] for row in self.writes], ["CLEANUP_SEALED", "FAILURE_RECORDED"])
+
+    def test_duplicate_terminal_cannot_be_returned_as_receipt(self):
+        self.extra_terminal = True
+        self.drive_refused()
+
+    def test_failed_terminal_cannot_match_pass_receipt(self):
+        self.script_status = "FAILED"
+        self.drive_refused()
+
+    def test_complete_invalid_receipt_fails_before_cleanup_append(self):
+        self.script_chunks = [b'{garbage}']
+        self.drive_refused()
+        self.assertEqual([json.loads(row)["state"] for row in self.writes], ["FAILURE_RECORDED"])
+        self.assertIsNone(json.loads(self.writes[-1])["cleanup"])
+
+    def test_trailing_receipt_object_fails_before_cleanup_append(self):
+        self.script_chunks = [self.receipt_bytes + b'{}']
+        self.drive_refused()
+        self.assertEqual([json.loads(row)["state"] for row in self.writes], ["FAILURE_RECORDED"])
+
+    def test_receipt_truncation_expires_without_new_dispatch(self):
+        self.script_chunks = [self.receipt_bytes[:-1]]
+        self.owner.deadline = self.subject.deadline = self.now + 0.5
+        self.drive_refused()
+        self.assertEqual([json.loads(row)["state"] for row in self.writes], ["FAILURE_RECORDED"])
+        self.assertEqual(len(self.outgoing), 1)
+
+    def test_denial_after_receipt_receive_prevents_cleanup_append(self):
+        def revoke(frame):
+            if frame.get("kind") == "RECEIPT_CHUNK":
+                self.owner._base_check.side_effect = ConformanceError("UNIT_REVOKED", "unit")
+        self.on_driver_receive = revoke
+        self.drive_refused()
+        self.assertEqual([json.loads(row)["state"] for row in self.writes], ["FAILURE_RECORDED"])
+
+    def test_cleanup_append_failure_cannot_send_acknowledgement(self):
+        self.fail = "sync"
+        self.drive_refused()
+        self.assertEqual([frame.get("kind", "DISPATCH") for frame in self.outgoing], ["DISPATCH"])
+        self.assertTrue(self.owner.log._storage_ambiguous)
+        self.assertEqual(self.owner.failure_accounting.refusal, "ACCOUNTING_UNAVAILABLE")
+
+    def test_failed_driver_keeps_original_error_and_emits_only_failure_facts(self):
+        def refuse(frame):
+            if frame.get("kind") == "RECEIPT_CHUNK":
+                raise OSError("unit secret text must never enter journal")
+        self.on_driver_receive = refuse
+        with self.assertRaisesRegex(OSError, "unit secret text"):
+            self.owner._drive_case()
+        accounting = self.owner.failure_accounting
+        self.assertIs(type(accounting), server._FailureAccounting)
+        self.assertTrue(accounting.complete)
+        self.assertNotIn(b"unit secret text", self.ledger)
+        self.assertEqual(json.loads(self.writes[-1])["failure"], {"reasonCode": "IO_AMBIGUOUS"})
+        self.assertTrue(self.held()["held"])
+
+    def test_failure_accounting_never_rechecks_observer_or_opens_transport(self):
+        counts = []
+        def receive(frame):
+            if frame.get("kind") == "RECEIPT_CHUNK":
+                self.owner._base_check.side_effect = ConformanceError("UNIT_REVOKED", "unit")
+        def append():
+            if self.subject.closed:
+                counts.append((len(self.observations), self.mocks["socket"].call_count))
+        self.on_driver_receive, self.on_append = receive, append
+        self.drive_refused()
+        self.assertTrue(self.owner.failure_accounting.complete)
+        self.assertEqual(counts, [(len(self.observations), 1)])
+
+    def test_failure_append_readback_ambiguity_cannot_retry(self):
+        self.script_chunks = [b'{garbage}']
+        self.fail = "readback"
+        with self.assertRaises(ConformanceError):
+            self.owner._drive_case()
+        accounting = self.owner.failure_accounting
+        self.assertFalse(accounting.complete)
+        self.assertTrue(self.owner.log.poisoned and self.owner.log._storage_ambiguous)
+        history = self.ledger
+        with self.assertRaisesRegex(ConformanceError, "FAILURE_ACCOUNTING_ALREADY_ATTEMPTED"):
+            accounting.record(OSError("retry"))
+        self.assertEqual(self.ledger, history)
+
+    def test_custody_loss_prevents_even_a_failure_append(self):
+        def receive(frame):
+            if frame.get("kind") == "RECEIPT_CHUNK":
+                self.fds[92].st_ino = 123456
+                raise OSError("unit journal replaced")
+        self.on_driver_receive = receive
+        with self.assertRaises(OSError):
+            self.owner._drive_case()
+        self.assertEqual(self.writes, [])
+        self.assertFalse(self.owner.failure_accounting.complete)
+        self.assertEqual(self.owner.failure_accounting.refusal, "ACCOUNTING_UNAVAILABLE")
+
+    def test_owner_change_during_failure_append_refuses_before_fsync(self):
+        self.script_chunks = [b'{garbage}']
+        def change_owner():
+            self.owner._failure_accounting_original = None
+        self.on_append = change_owner
+        with self.assertRaises(ConformanceError):
+            self.owner._drive_case()
+        self.assertTrue(self.owner.log._storage_ambiguous)
+        self.assertFalse(self.owner.failure_accounting.complete)
+        at = self.io_events.index("append")
+        self.assertNotIn("fsync", self.io_events[at + 1:])
+
+    def test_failure_accounting_cannot_run_before_broker_is_closed(self):
+        actor = self.owner.failure_accounting = self.owner._failure_accounting_original = object.__new__(server._FailureAccounting)
+        actor.__init__(self.owner)
+        with self.assertRaisesRegex(ConformanceError, "FAILURE_ACCOUNTING_UNAVAILABLE"):
+            actor.record(OSError("unit"))
+        self.assertEqual(self.writes, [])
+        self.socket.close.assert_not_called()
+
+    def test_failure_cannot_switch_to_a_different_valid_looking_journal_fd(self):
+        self.script_chunks = [b'{garbage}']
+        def swap(frame):
+            if frame.get("kind") == "RECEIPT_CHUNK":
+                self.fds[93] = self.fds[92]
+                self.owner.storage.fd = 93
+                raise OSError("unit journal descriptor replaced")
+        self.on_driver_receive = swap
+        with self.assertRaises(OSError):
+            self.owner._drive_case()
+        self.assertEqual(self.writes, [])
+        self.assertFalse(self.owner.failure_accounting.complete)
+        self.assertEqual(self.owner.failure_accounting.refusal, "ACCOUNTING_UNAVAILABLE")
+
+    def test_failure_accounting_cannot_be_constructed_from_caller_owner(self):
+        with self.assertRaisesRegex(ConformanceError, "FAILURE_ACCOUNTING_OWNER"):
+            server._FailureAccounting(self.owner)
+        self.assertEqual(self.writes, [])
+
+    def test_foreign_failure_owner_cannot_touch_original_journal(self):
+        self.script_chunks = [b'{garbage}']
+        self.drive_refused()
+        actor, before = self.owner.failure_accounting, self.ledger
+        self.owner.failure_accounting = Mock()
+        with self.assertRaises(ConformanceError):
+            actor._state_check()
+        self.assertEqual(self.ledger, before)
+
+    def test_closed_reason_mapping_never_uses_arbitrary_messages(self):
+        for error, expected in ((ConformanceError("TLS_DEADLINE", "secret"), "DEADLINE"),
+                (ConformanceError("ADMISSION_UID_CHANGED", "secret"), "UID_CHANGED"),
+                (ConformanceError("ADMISSION_DELETE_DENIED", "secret"), "DELETE_DENIED"),
+                (OSError("secret"), "IO_AMBIGUOUS"), (ValueError("secret"), "OBSERVATION_UNAVAILABLE"),
+                (ConformanceError("BROKER_DELETE_FRESH_GET_REQUIRED", "secret"), "OBSERVATION_UNAVAILABLE")):
+            with self.subTest(error=type(error).__name__):
+                self.assertEqual(server._failure_reason(error), expected)
 
 
 class ObserverTransportCustodyTests(unittest.TestCase):
@@ -9454,7 +11664,7 @@ class ObserverTransportCustodyTests(unittest.TestCase):
             (server, "utc_now", dict(side_effect=lambda: self.wall)),
             (server, "_manifest", dict(return_value=({}, self.fixture["binding"]["observer"]["manifestDigest"],
                 self.fixture["binding"]["observer"]["executableDigest"]))),
-            (server, "_fixed_probes", dict(return_value=SimpleNamespace(require_observer_containment=self.containment))),
+            (server, "_fixed_probes", dict(return_value=SimpleNamespace(require_observer_containment=self.containment), create=True)),
             (server, "process_identity", dict(side_effect=lambda pid: deepcopy(self.process))),
             (server.os, "stat", dict(side_effect=lambda path, **kw: self.path if path == "policy-observer.sock" else self.exe)),
             (server.os, "fstat", dict(side_effect=lambda fd: self.fds[fd])),
@@ -9789,7 +11999,7 @@ class ObserverInspectionWiringTests(unittest.TestCase):
         self.assertEqual(self.events.count(("close", 72)), 1)
 
     def test_observer_no_longer_requests_legacy_probe_containment(self):
-        with patch.object(server, "_fixed_probes", side_effect=AssertionError("no legacy observer hook")):
+        with patch.object(server, "_fixed_probes", side_effect=AssertionError("no legacy observer hook"), create=True):
             subject = self.start()
             self.assertEqual(subject.observe()["sequence"], 1)
         self.assertGreater(self.containment.call_count, 0)
@@ -9908,6 +12118,1641 @@ class ProxyServerCustodyTests(unittest.TestCase):
             with self.assertRaises(ConformanceError):
                 files.close()
             self.assertEqual(close.call_count, 1)
+
+
+# Exact public META authority bytes from MET-REPAIR-017's accepted predecessor.
+# Test data only: never execute this declaration or read a META checkout at test
+# runtime. The constructor's real hash check must remain enabled.
+_FULL_FACTORY_PACKET_006 = b'''id: "CONF-LIVE-006"
+repository: "mas-harness-conformance-labs"
+branch: "codex/conf-live-006-campaign-integration"
+objective: "Trusted campaign integration and manual qualification declaration under the approved trusted backend roadmap; source coding only."
+predecessors: ["CONF-LIVE-005"]
+allowedPaths: ["src/harness_conformance/live_launcher.py","src/harness_conformance/live_backend_campaign.py","src/harness_conformance/live_backend_evidence.py","tests/live_backend/test_campaign_integration.py","tests/live_backend/test_cumulative_release.py","docs/live-backend/qualification.md"]
+warmSourceAccess: "PROHIBITED_DURING_IMPLEMENTATION"
+sourceReuse: []
+contracts: ["Consumes docs/alpha-2/LIVE_BACKEND_READINESS.md and architecture/live-backend-roadmap.json from the exact merged MET-LIVE-001 authority, the existing trusted live-runner contract and unchanged CONF-LINUX-001/CON-007 wire contracts. Pin exact merged predecessor SHA and complete source inventory before edits.","Source-only enablement before the native gate is limited to these six packets. No installation or live execution occurs in a coding run. Missing authority, supported OS backend or native capacity fails closed; offline fakes remain UNIT_VERIFICATION_ONLY with nativeAcceptance=false.","Preserve all 120 original test identities across tests/meta, tests/parity, tests/alpha1, tests/fixes/runner_boundary and tests/platform/linux_baseline. Add flat tests/live_backend discovery, run all six roots on every packet and prove no module/test omission, skip, xfail, deselection or test-only runtime shortcut.","Python 3.12.14 standard library and existing pinned conformance crypto/canonical helpers only; no new dependency, public API/signature schema/role, Makefile/dispatcher, PORTING ledger, warm-source, workflow or toolchain change. Kernel primitives and fixed operator prerequisites are preinstalled, never downloaded."]
+deliverables: ["Add the sole existing-file integration hook in live_launcher.py, after independent installed-manifest/signature/custody checks and before any checked-out code/credential access. Delegate to the fixed installed supervisor implementation, never import checkout-selected modules. Preserve the direct/unauthorized CLI refusal and pure linux_readiness.py UNIT_VERIFICATION_ONLY behavior.","Implement the authenticated external campaign context path in live_backend_campaign.py. Reuse the existing pure validators and data-only request builder, but obtain all transport/session authority and signed receipts from the protected channel. The offline campaign API and its three predecessor campaign outputs remain byte-identical; environment flags and fixture evidence never enter the live path.","Run all eight cumulative commands and inventory checks, rebuild the complete candidate via the new builder from tests, and prove every original test and all newly added packet tests are discovered. Bind all six source increments, final release inputs and current packet/command digests; never reuse a seven-command historical envelope.","Declare the future manual post-merge linux-baseline run through only the external root-owned launcher with an independent installed candidate, dual-signed exact eight-command envelope, capacity authorization and existing native target. This declaration does not perform or authorize an installation, network call or live run in coding/CI. Missing prerequisites remain NOT_RUN_ENV_UNAVAILABLE.","Publish per-architecture/per-case runtime evidence references separately from source/head/CI/merge/exact-main/package/preflight. Ten fresh mandatory AMD64 cases plus all original gate conditions are required before runtime product dispatch; ARM64 remains separate. No campaign signature becomes tenant acceptance.","Implement the separate pure live_backend_evidence verifier using the new authority adapter and the existing Linux evidence shape/plan/request primitives. Bind authority.packetDigest to the exact CONF-LIVE-006 packet and eight commands, not the old hardcoded digest. Preserve all three independent evidence signatures, every release/plan/case/freshness check and UNIT_VERIFICATION_ONLY/nativeAcceptance=false for pure verification. Only the protected installed supervisor plus independently verified real receipts can support a separate native qualification decision; no substitution or monkeypatch of old constants."]
+excluded: ["No administrator installation, provisioning, kernel/cluster policy modification on this workstation, live network/probe argv, emulation-based native PASS, paid API or third-party key, mutable artifact, warm-source access, external telemetry or source-to-runtime evidence promotion.","No edits to predecessor tests, crypto.py, canonical.py, models.py, schema.py, registry.py, campaign.py, live.py, cli.py, linux_readiness.py, existing schemas, ci/build_live_launcher.py, Makefile, dispatcher, toolchain, workflow or PORTING.yaml. New tests independently preserve old source guards; no relaxing immutable baseline hashes. The sole permitted existing-file exception is live_launcher.py as specified above."]
+prefetchCommands: []
+offlineAcceptanceCommands: [["python3","-m","unittest","discover","-s","tests/meta","-p","test_*.py"],["python3","-m","unittest","discover","-s","tests/parity","-p","test_*.py"],["python3","-m","unittest","discover","-s","tests/alpha1","-p","test_*.py"],["python3","-m","unittest","discover","-s","tests/fixes/runner_boundary","-p","test_*.py"],["python3","-m","unittest","discover","-s","tests/platform/linux_baseline","-p","test_*.py"],["python3","-m","unittest","discover","-s","tests/live_backend","-p","test_*.py"],["make","campaign","CAMPAIGN=linux-baseline"],["make","evidence-verify","CAMPAIGN=linux-baseline"]]
+offlineExecution: {"wrapperArgv":["./ci/verify-offline.sh"],"packetPathEnvironment":"HARNESS_TASK_PACKET","packetPathMode":"HASH_PINNED_READ_ONCE_NO_CHILD_PATH","commandTransport":"ARGV_ARRAY_V1","isolation":"OS_ENFORCED_DENY_ALL_OUTBOUND","sessionScope":"SINGLE_PROCESS_TREE","prefetchOutsideSession":false,"offlineEnvironment":{"UV_OFFLINE":"1","UV_FROZEN":"1","UV_NO_SYNC":"1"}}
+liveCampaignExecution: {"launcherArgv":["/opt/planeon/bin/harness-live-campaign-launch"],"commandTransport":"ARGV_ARRAY_V1","executionPlacement":"PREINSTALLED_TARGET_LOCAL_EPHEMERAL_RUNNER","executionEnvelopeEnvironment":"HARNESS_LIVE_EXECUTION_ENVELOPE","executionEnvelopeMode":"DUAL_SIGNED_PACKET_COMMAND_CAMPAIGN_ENDPOINT_BINDING_V1","releaseTrustStoreMount":"/etc/planeon/trust/release-trust-bundle.json","tenantTrustStoreMount":"/etc/planeon/trust/tenant-trust-bundle.json","trustStoreMode":"HASH_PINNED_LOCAL_PUBLIC_KEYS_VALIDITY_PURPOSE_AND_REVOCATION_V1","revocationRequired":true,"networkIsolation":"OS_ENFORCED_DENY_ALL_EXCEPT_SIGNED_ENDPOINTS","endpointAuthority":"TENANT_CONTROLLED_PREEXISTING_CAPACITY_ONLY","dynamicEndpointTransport":"PREAUTHORIZED_API_OR_CAMPAIGN_PROXY_ONLY","mutationAdmission":"SERVER_SIDE_SIGNED_ZERO_INCREMENTAL_COST_POLICY_AND_RBAC_REQUIRED","capacityAuthorization":"INDEPENDENT_OPERATOR_SIGNED_FIXED_PREEXISTING_CAPACITY","publicInternetDiscovery":"DENIED","cloudManagementApis":"DENIED","billingApis":"DENIED","thirdPartyApiKeys":"DENIED","credentialMode":"TENANT_LOCAL_SHORT_LIVED_FILE_REFERENCE","unavailableResult":"NOT_RUN_ENV_UNAVAILABLE","ciEvidenceUse":"FORBIDDEN","allowedEvidenceAxes":["DEPLOYMENT","RUNTIME","SECURITY","ASSURANCE"],"commands":[["python3","-m","unittest","discover","-s","tests/meta","-p","test_*.py"],["python3","-m","unittest","discover","-s","tests/parity","-p","test_*.py"],["python3","-m","unittest","discover","-s","tests/alpha1","-p","test_*.py"],["python3","-m","unittest","discover","-s","tests/fixes/runner_boundary","-p","test_*.py"],["python3","-m","unittest","discover","-s","tests/platform/linux_baseline","-p","test_*.py"],["python3","-m","unittest","discover","-s","tests/live_backend","-p","test_*.py"],["make","campaign","CAMPAIGN=linux-baseline"],["make","evidence-verify","CAMPAIGN=linux-baseline"]]}
+expectedEvidence: ["Direct inner-launcher invocation, forged context, unsigned/mismatched/expired/revoked/replayed envelopes, wrong command count, credential-open ordering, source/native conflation, regression output drift, integration bypass and incomplete final-package inventory.","All eight offline commands run in one signed deny-all process tree; all original 120 test identities and every predecessor backend test remain discovered and passing. New tests never replace real native qualification.","Source/CI/merge/exact-main and unsigned candidate/package evidence are separate from installed preflight, native artifacts, runtime, assurance and tenant acceptance. Missing independent backend/target/authority is NOT_RUN_ENV_UNAVAILABLE; no phase completion claim."]
+rollback: "Revert unconsumed integration source only. Independently installed artifacts require operator-reviewed rollback retaining replay/trust history; no tenant data or capacity destruction. Preserve completed evidence and mark mismatched native qualification stale."
+'''
+
+
+class _QualificationKernelOS(_QualificationBindingFixture):
+    """One synthetic Linux OS for the real binding and all native factories.
+
+    No qualifier, inspector, admission or driver method is replaced. Files,
+    libc/syscall outputs, clock and transport are unit-only OS doubles; inert
+    ELF/program bytes are never executed, installed, or called native evidence.
+    """
+    hooks = (("INET_SOCK_CREATE", 2), ("INET4_BIND", 8), ("INET6_BIND", 9),
+             ("INET4_CONNECT", 10), ("INET6_CONNECT", 11),
+             ("UDP4_SENDMSG", 14), ("UDP6_SENDMSG", 15))
+
+    def __init__(self, case, architecture="amd64"):
+        super().__init__(architecture)
+        self.case = case
+        self.events, self.handles, self.links, self.flags, self.maps = [], {}, {}, {}, []
+        self.after = lambda operation, path: None
+        self.processes = {"SERVER": server.os.getpid(), "OBSERVER": 9401, "BROKER": 9402}
+        self.programs, self.code_pins = {}, {}
+        self.kernel_raw = {
+            "/proc/sys/kernel/random/boot_id": (self.record["host"]["bootId"] + "\n").encode(),
+            "/sys/kernel/notes": b"C1 unit kernel notes, not native evidence",
+            "/sys/fs/selinux/policy": b"C1 unit SELinux policy, not enforcement",
+            "/sys/fs/selinux/enforce": b"1", "/sys/fs/selinux/deny_unknown": b"1"}
+        self.raw_status = server.struct.pack("<5I", 1, 2, 1, 1, 1)
+        self.record["host"]["kernelNotesDigest"] = byte_digest(self.kernel_raw["/sys/kernel/notes"])
+        self.record["selinux"]["policyDigest"] = byte_digest(self.kernel_raw["/sys/fs/selinux/policy"])
+        for row in self.record["files"]:
+            path = row["path"]
+            raw = (KernelInputCodecTests.elf(self, self.machine) if row["executableSegments"]
+                   else b"PK\x03\x04C1 inert archive " + path.encode())
+            self.raw[path] = raw
+            row.update(size=len(raw), sha256=byte_digest(raw),
+                verityDigest=byte_digest(b"C1 independent verity measurement:" + raw))
+            self.code_pins[path] = row
+        for role, pins in self.record["roles"].items():
+            pins["artifactDigest"] = byte_digest(self.raw[pins["executable"]])
+            for name, hook in self.hooks:
+                program = pins["bpfPrograms"][name]
+                raw = server.struct.pack("<4I", program["programId"], hook, 0, 0)
+                program.update(instructionBytes=len(raw), translatedSha256=byte_digest(raw))
+                self.programs[program["programId"]] = (pins["cgroup"]["path"], hook, program["programType"], raw)
+        preflight = byte_digest(canonical_bytes(self.record))
+        self.raw["/unit-only/kit/" + admission.QUALIFICATION_PATH] = canonical_bytes(self.record)
+        for _, path, executable in self.paths:
+            value = json.loads(self.raw[path])
+            value["launcher"]["sha256"] = byte_digest(self.raw[executable])
+            value["preflightEvidenceDigest"] = preflight
+            self.manifest(path, value)
+        self.observation["observer"] = dict(manifestDigest=byte_digest(self.raw[server.OBSERVER_MANIFEST]),
+            executableDigest=byte_digest(self.raw[server.OBSERVER]))
+        self.observation["enforcementPins"]["hostPreflightDigest"] = preflight
+        self.broker.update(observationBindingDigest=server.canonical_digest(self.observation),
+            brokerManifestDigest=byte_digest(self.raw[server.BROKER_MANIFEST]),
+            brokerExecutableDigest=byte_digest(self.raw[server.BROKER]),
+            workerManifestDigest=byte_digest(self.raw[server.WORKER_MANIFEST]),
+            workerArtifactDigest=byte_digest(self.raw[server.WORKER]))
+        for path, value in ((admission.OBSERVATION_PATH, self.observation),
+                            (admission.BROKER_BINDING_PATH, self.broker)):
+            self.raw["/unit-only/kit/" + path] = canonical_bytes(value)
+        self.release()
+
+    def node(self, path, *, directory=False, raw=None, **changes):
+        if path not in self.nodes:
+            parent = path.rsplit("/", 1)[0] or "/"
+            if parent != path and parent not in self.nodes:
+                self.node(parent, directory=True)
+            self.nodes[path] = SimpleNamespace(st_dev=91, st_ino=5000 + len(self.nodes), st_nlink=1,
+                st_uid=0, st_gid=0, st_mode=(stat.S_IFDIR | 0o555) if directory else (stat.S_IFREG | 0o444),
+                st_size=0 if raw is None else len(raw), st_mtime_ns=1, st_ctime_ns=1)
+        node = self.nodes[path]
+        group = ("/sys/fs/cgroup" if path.startswith("/sys/fs/cgroup") else
+                 "/sys/fs/selinux" if path.startswith("/sys/fs/selinux") else
+                 "/sys" if path.startswith("/sys") else
+                 "/proc" if path.startswith("/proc") else "/")
+        index = ("/", "/proc", "/sys", "/sys/fs/selinux", "/sys/fs/cgroup").index(group)
+        node.st_dev, node.mountId = server.os.makedev(0, 10 + index), 101 + index
+        node.magic = (0xef53, 0x9fa0, 0x62656572, 0xf97cff8c, 0x63677270)[index]
+        for key, value in changes.items():
+            setattr(node, key, value)
+        if raw is not None:
+            self.kernel_raw[path] = raw
+        return node
+
+    def context(self, stack):
+        owner = super().context(stack)
+        self.kernel_context(stack)
+        owner.secrets = server._Files(owner)
+        owner.last_mono, owner.last_wall = self.mono, server.require_time(self.now, "now")
+        owner.self_inspection = owner.observer = owner.broker = owner._broker_original = None
+        owner.qualification = owner._qualification_original = object.__new__(server._KernelQualification)
+        owner.qualification_binding.__init__(owner)
+        def close_qualification():
+            if hasattr(owner.qualification, "closed"):
+                owner.qualification.close()
+        stack.callback(close_qualification)
+        return owner
+
+    def kernel_context(self, stack):
+        # Turn the signed file fixture into one consistent virtual kernel VFS.
+        # Descriptor rows retain node objects; replacing a path is not silently
+        # reflected in an old descriptor's metadata.
+        for path in tuple(self.nodes):
+            self.node(path)
+        for path in ("/proc", "/sys", "/sys/kernel", "/sys/fs", "/sys/fs/selinux", "/sys/fs/cgroup"):
+            self.node(path, directory=True)
+        for path, raw in tuple(self.kernel_raw.items()):
+            self.node(path, raw=raw)
+        self.node("/sys/fs/selinux/status", st_size=4096)
+        for role, pid in self.processes.items():
+            pins = self.record["roles"][role]
+            prefix = "/proc/" + str(pid)
+            for suffix in ("", "/ns", "/attr", "/task", "/task/" + str(pid)):
+                self.node(prefix + suffix, directory=True)
+            fields = ["S"] + ["0"] * 49
+            fields[1], fields[17], fields[19] = "100", "1", str(9000 + pid)
+            status = dict(Name="unit", Tgid=str(pid), Pid=str(pid), PPid="100", TracerPid="0",
+                Uid="0 0 0 0", Gid="0 0 0 0", Threads="1", NSpid=str(pid), NStgid=str(pid),
+                Groups="0 ", Seccomp="2", NoNewPrivs="1", CapInh="0000000000000000", CapPrm="0000000000000001",
+                CapEff="0000000000000001", CapBnd="0000000000000001", CapAmb="0000000000000000")
+            values = {"stat": (str(pid) + " (unit) " + " ".join(fields) + "\n").encode(),
+                "status": "".join(k + ":\t" + v + "\n" for k, v in status.items()).encode(),
+                "cgroup": ("0::" + pins["cgroup"]["path"].removeprefix("/sys/fs/cgroup") + "\n").encode(),
+                "attr/current": pins["processLabel"].encode() + b"\0", "task/" + str(pid) + "/children": b""}
+            for suffix, raw in values.items():
+                self.node(prefix + "/" + suffix, raw=raw)
+            for name, kind in (("user", 0x10000000), ("mnt", 0x20000), ("pid", 0x20000000), ("net", 0x40000000)):
+                path = prefix + "/ns/" + name
+                node = self.node(path, st_ino=pins["namespaceInodes"][name], st_dev=server.os.makedev(0, 22),
+                    magic=0x6e736673, kind=kind)
+                self.links[path] = SimpleNamespace(**{**vars(node), "st_dev": self.nodes[prefix].st_dev,
+                                                      "st_ino": 50000 + len(self.links),
+                                                      "st_mode": stat.S_IFLNK | 0o777})
+            native = pins["interpreterPath"] or pins["executable"]
+            self.nodes[prefix + "/exe"] = self.nodes[native]
+            self.links[prefix + "/exe"] = SimpleNamespace(**{**vars(self.nodes[prefix]),
+                "st_ino": 50000 + len(self.links), "st_mode": stat.S_IFLNK | 0o777, "target": native})
+            node = self.nodes[native]
+            maps = (f"00001000-00002000 r-xp 00000000 {server.os.major(node.st_dev):02x}:"
+                    f"{server.os.minor(node.st_dev):02x} {node.st_ino} {native}\n".encode()
+                    + b"00007000-00008000 r-xp 00000000 00:00 0 [vdso]\n")
+            argv = [native, pins["executable"]] if pins["interpreterPath"] else [native]
+            for name, raw in (("maps", maps), ("auxv", KernelInputCodecTests.auxv(self)),
+                              ("cmdline", b"\0".join(x.encode() for x in argv) + b"\0")):
+                self.node(prefix + "/" + name, raw=raw)
+            self.node("/pidfd/" + str(pid), st_mode=stat.S_IFREG | 0o700)
+            group = pins["cgroup"]
+            self.node(group["path"], directory=True, st_ino=group["inode"])
+            for name, raw in (("memory.max", str(group["memoryMaxBytes"])), ("pids.max", str(group["pidsMax"])),
+                    ("cpu.max", str(group["cpuQuotaMicros"]) + " " + str(group["cpuPeriodMicros"])), ("cgroup.procs", str(pid))):
+                self.node(group["path"] + "/" + name, st_mode=stat.S_IFREG | 0o644, raw=(raw + "\n").encode())
+        # Function doubles intentionally do not accumulate mock-call objects
+        # for every retained kernel read. The actual factories/checks still run.
+        self.lib = SimpleNamespace(fstatfs=lambda *a: self.statfs(*a), statx=lambda *a: self.statx(*a),
+                                  syscall=lambda *a: self.syscall(*a))
+        for obj, name, options in (
+                (server.sys, "platform", dict(new="linux")), (server.sys, "byteorder", dict(new="little")),
+                (server.os, "uname", dict(new=lambda: SimpleNamespace(machine=self.machine,
+                    release=self.record["host"]["kernelRelease"], sysname="Linux"))),
+                (server.os, "sysconf", dict(new=lambda name: 4096)),
+                (server, "utc_now", dict(new=lambda: self.now)),
+                (server.time, "monotonic", dict(new=lambda: self.mono)),
+                (server.ctypes, "CDLL", dict(new=lambda *a, **kw: self.lib)),
+                (server.os, "open", dict(new=self.open)), (server.os, "read", dict(new=self.read)),
+                (server.os, "close", dict(new=self.close)), (server.os, "get_inheritable", dict(new=lambda fd: False)),
+                (server.os, "fstat", dict(new=lambda fd: self.handles[fd][1])),
+                (server.os, "stat", dict(new=self.stat_path)),
+                (server.os, "pread", dict(new=self.pread)),
+                (server.os, "readlink", dict(new=lambda name, dir_fd: self.links[self.resolve(name, dir_fd)].target)),
+                (server.os, "getxattr", dict(new=self.getxattr, create=True)),
+                (server.os, "pidfd_open", dict(new=lambda pid, flags: self.open("/pidfd/" + str(pid), 0), create=True)),
+                (server.os, "scandir", dict(new=self.scandir)),
+                (server.select, "select", dict(new=self.poll)),
+                (server.fcntl, "fcntl", dict(new=self.fcntl)),
+                (server.fcntl, "ioctl", dict(new=self.ioctl)),
+                (server.mmap, "mmap", dict(new=self.mapping)),
+                (server.Path, "read_text", dict(new=lambda path, *args, **kwargs: self.kernel_raw[str(path)].decode()))):
+            stack.enter_context(patch.object(obj, name, **options))
+        self.network = stack.enter_context(patch.object(server.socket, "socket", side_effect=self.socket_factory))
+        for name in ("write", "execve", "mkdir", "rmdir"):
+            stack.enter_context(patch.object(server.os, name, side_effect=AssertionError("no effects during qualification")))
+
+    def open(self, path, flags, *, dir_fd=None):
+        absolute = self.resolve(path, dir_fd)
+        self.case.assertIn(absolute, self.nodes)
+        if absolute in self.links:
+            self.case.assertFalse(flags & server.os.O_NOFOLLOW)
+        self.next_fd += 1
+        fd = self.next_fd
+        self.fds[fd], self.handles[fd], self.positions[fd], self.flags[fd] = absolute, (absolute, self.nodes[absolute]), 0, flags
+        self.events.append(("open", absolute))
+        self.after("open", absolute)
+        return fd
+
+    def stat_path(self, path, *, dir_fd=None, follow_symlinks=True):
+        absolute = self.resolve(path, dir_fd)
+        source = self.nodes if follow_symlinks or absolute not in self.links else self.links
+        if absolute not in source:
+            raise FileNotFoundError(absolute)
+        return source[absolute]
+
+    def read(self, fd, count):
+        path, position = self.fds[fd], self.positions[fd]
+        raw = self.kernel_raw[path] if path in self.kernel_raw else self.raw[path]
+        result = raw[position:position + count]
+        self.positions[fd] += len(result)
+        self.read_paths.append(path)
+        self.after("read", path)
+        return result
+
+    def pread(self, fd, count, offset):
+        path = self.fds[fd]
+        raw = self.kernel_raw[path] if path in self.kernel_raw else self.raw[path]
+        result = raw[offset:offset + count]
+        self.after("pread", path)
+        return result
+
+    def close(self, fd):
+        super().close(fd)
+        del self.handles[fd]
+
+    def statfs(self, fd, pointer):
+        node, output = self.handles[fd.value][1], pointer._obj
+        self.case.assertEqual(bytes(output), b"\0" * 120)
+        output.kind, output.block_size, output.name_length, output.flags = node.magic, 4096, 255, 1
+        output.fsid[:] = (node.magic & 0x7fffffff, 1)
+        return 0
+
+    def statx(self, fd, path, flags, mask, pointer):
+        node = self.stat_path(path.decode(), dir_fd=fd, follow_symlinks=False) if path else self.handles[fd][1]
+        self.case.assertEqual((flags, mask), (0x900 if path else 0x1900, 0x411b))
+        self.case.assertEqual(bytes(pointer._obj), b"\0" * 256)
+        raw = bytearray(256)
+        server.struct.pack_into("<I", raw, 0, 0x47ff)
+        server.struct.pack_into("<IIH", raw, 20, node.st_uid, node.st_gid, node.st_mode)
+        server.struct.pack_into("<Q", raw, 32, node.st_ino)
+        server.struct.pack_into("<IIQ", raw, 136, server.os.major(node.st_dev), server.os.minor(node.st_dev), node.mountId)
+        pointer._obj.words[:] = server.struct.unpack("<32Q", raw)
+        return 0
+
+    def fcntl(self, fd, command):
+        self.case.assertEqual(command, server.fcntl.F_GETFL)
+        return server.os.O_RDWR if self.fds[fd].startswith("bpf:") else server.os.O_RDONLY
+
+    def ioctl(self, fd, command, *args):
+        path = self.fds[fd]
+        if command == 0xb703:
+            self.case.assertEqual(args, (0,))
+            return self.handles[fd][1].kind
+        self.case.assertEqual(command, 0xc0046686)
+        output, mutate = args
+        self.case.assertTrue(mutate)
+        self.case.assertEqual(output, server.struct.pack("<HH", 0, 32) + b"\0" * 32)
+        output[:] = server.struct.pack("<HH", 1, 32) + bytes.fromhex(self.code_pins[path]["verityDigest"][7:])
+        self.after("verity", path)
+        return 0
+
+    def getxattr(self, fd, name):
+        self.case.assertEqual(name, "security.selinux")
+        return self.code_pins[self.fds[fd]]["selinuxLabel"].encode() + b"\0"
+
+    def mapping(self, fd, length, *, flags, prot):
+        self.case.assertEqual(self.fds[fd], "/sys/fs/selinux/status")
+        self.case.assertEqual((length, flags, prot), (4096, server.mmap.MAP_SHARED, server.mmap.PROT_READ))
+        fixture = self
+        class Mapping:
+            closes = 0
+            def __getitem__(self, item):
+                result = fixture.raw_status[item]
+                fixture.after("epoch", "/sys/fs/selinux/status")
+                return result
+            def close(self):
+                self.closes += 1
+                fixture.case.assertEqual(self.closes, 1)
+        result = Mapping()
+        self.maps.append(result)
+        return result
+
+    def syscall(self, number, command, *args):
+        if number.value in (324, 283):
+            self.case.assertEqual(number.value, 324 if self.machine == "x86_64" else 283)
+            self.case.assertEqual(tuple(arg.value for arg in args), (0, 0))
+            self.case.assertIn(command.value, (0, 16, 8))
+            return 24 if command.value == 0 else 0
+        self.case.assertEqual(number.value, 321 if self.machine == "x86_64" else 280)
+        pointer, size = args
+        self.case.assertEqual(size.value, 64)
+        attr, operation = pointer._obj, command.value
+        raw = bytes(attr)
+        if operation == 16:
+            target, hook, effective, flags, address, count = server.struct.unpack_from("<4IQI", raw)
+            self.case.assertEqual((flags, count, raw[28:]), (0, 16, b"\0" * 36))
+            self.case.assertIn(effective, (0, 1))
+            program = next(pid for pid, (path, h, _, _) in self.programs.items() if path == self.fds[target] and h == hook)
+            output = (server.ctypes.c_uint32 * 16).from_address(address)
+            output[0] = program
+            server.struct.pack_into("<I", attr, 24, 1)
+            result = 0
+        elif operation == 13:
+            program = server.struct.unpack_from("<I", raw)[0]
+            self.case.assertIn(program, self.programs)
+            self.case.assertEqual(raw[4:], b"\0" * 60)
+            path = "bpf:" + str(program)
+            self.nodes[path] = SimpleNamespace(st_dev=99, st_ino=22, st_mode=0o600, st_uid=0, st_gid=0,
+                st_nlink=1, st_size=0, st_mtime_ns=1, st_ctime_ns=1)
+            # BPF returns an anonymous FD, not a filesystem open.
+            self.next_fd += 1
+            result = self.next_fd
+            self.fds[result], self.handles[result] = path, (path, self.nodes[path])
+        elif operation == 15:
+            fd, length, address = server.struct.unpack_from("<IIQ", raw)
+            self.case.assertEqual((length, raw[16:]), (240, b"\0" * 48))
+            program = int(self.fds[fd].split(":")[1])
+            _, _, kind, code = self.programs[program]
+            info = (server.ctypes.c_ubyte * 240).from_address(address)
+            output = server.struct.unpack_from("<Q", info, 32)[0]
+            if output:
+                (server.ctypes.c_ubyte * 65536).from_address(output)[:len(code)] = code
+            server.struct.pack_into("<II", info, 0, kind, program)
+            server.struct.pack_into("<I", info, 20, len(code))
+            server.struct.pack_into("<Q", info, 40, 76543)
+            for offset, value in ((84, 1), (104, 1), (108, 1), (132, 8), (172, 16), (176, 8)):
+                server.struct.pack_into("<I", info, offset, value)
+            server.struct.pack_into("<I", attr, 4, 232)
+            result = 0
+        else:
+            raise AssertionError("no BPF mutation or execution")
+        self.after("bpf", str(operation))
+        return result
+
+    def scandir(self, fd):
+        prefix = self.fds[fd]
+        entries = [SimpleNamespace(name=path.rsplit("/", 1)[1]) for path in self.nodes
+                   if path.rsplit("/", 1)[0] == prefix]
+        class Scan:
+            def __enter__(self):
+                return iter(entries)
+            def __exit__(self, *args):
+                return False
+        return Scan()
+
+    def poll(self, reads, writes, errors, timeout):
+        self.case.assertEqual((writes, timeout), ([], 0))
+        self.case.assertEqual(reads, errors)
+        return [], [], []
+
+    def socket_factory(self, family, kind):
+        self.case.assertEqual((family, kind), (server.socket.AF_UNIX, server.socket.SOCK_SEQPACKET))
+        fixture = self
+        class Channel:
+            def __init__(self):
+                self.fd, fixture.next_fd = fixture.next_fd + 1, fixture.next_fd + 1
+                node = SimpleNamespace(st_dev=99, st_ino=self.fd, st_mode=stat.S_IFSOCK | 0o600,
+                    st_uid=0, st_gid=0, st_nlink=1, st_size=0, st_mtime_ns=1, st_ctime_ns=1)
+                fixture.fds[self.fd], fixture.handles[self.fd] = "socket:", ("socket:", node)
+                self.path = None
+            def fileno(self):
+                return self.fd
+            def set_inheritable(self, value):
+                fixture.case.assertIs(value, False)
+            def setsockopt(self, *args):
+                fixture.case.assertEqual(args, (server.socket.SOL_SOCKET, 16, 1))
+            def settimeout(self, value):
+                fixture.case.assertTrue(0 < value <= 2)
+            def connect(self, path):
+                fixture.case.assertIn(path, (server.OBSERVER_SOCKET, server.BROKER_SOCKET))
+                self.path = path
+            def getsockopt(self, *args):
+                fixture.case.assertEqual(args, (server.socket.SOL_SOCKET, server.socket.SO_PEERCRED, 12))
+                role = "OBSERVER" if self.path == server.OBSERVER_SOCKET else "BROKER"
+                return server.struct.pack("3i", fixture.processes[role], 0, 0)
+            def close(self):
+                fixture.close(self.fd)
+            def detach(self):
+                return self.fd
+            def send(self, raw):
+                raise AssertionError("qualification sends no datagram or DISPATCH")
+        return Channel()
+
+    def peer(self, role):
+        owner = self.owner
+        kind, path, attr = ((server._Observer, server.OBSERVER_SOCKET, "observer") if role == "OBSERVER"
+                           else (server._Broker, server.BROKER_SOCKET, "broker"))
+        self.node(path.rsplit("/", 1)[0], directory=True, st_mode=stat.S_IFDIR | 0o700)
+        self.node(path, st_mode=stat.S_IFSOCK | 0o600)
+        peer = object.__new__(kind)
+        setattr(owner, attr, peer)
+        if role == "BROKER":
+            owner._broker_original = peer
+        kind.__init__(peer, owner)
+        return peer
+
+
+class _NativeServerKernelOS(_QualificationKernelOS):
+    """Full constructor and case driver against one synthetic OS, not Linux QA.
+
+    Only OS/SSL library primitives and inert peer wire bytes are doubled. No
+    server, qualifier, observer, broker, journal, admission, receipt or cleanup
+    method is replaced or manually initialized. No usable key, TLS session,
+    worker, native binary, installed launcher or real network is involved.
+    """
+    journal_path = server.STATE + "/reservations.jsonl"
+
+    def __init__(self, case):
+        import base64
+        from test_proxy_client import identity_data
+        super().__init__(case)
+        case.assertEqual(byte_digest(_FULL_FACTORY_PACKET_006), self.fixture.envelope["packetDigest"])
+        self.raw[self.fixture.envelope["packetFileReference"]] = _FULL_FACTORY_PACKET_006
+        self.raw[self.fixture.envelope["campaignDefinitionFileReference"]] = canonical_bytes(
+            json.loads((ROOT / "campaigns/platform/linux-baseline/campaign.json").read_bytes()))
+        self.raw[self.fixture.envelope["bundleFileReference"]] = b"UNIT_ONLY_NOT_REAL_bundle"
+        leaf, _, endpoint = identity_data(False)
+        # Equal-length replacements keep the DER codec data structurally valid;
+        # the unsigned bytes and empty key remain unusable by a real TLS engine.
+        self.server_leaf = leaf.replace(b"260908000000Z", b"260907010000Z").replace(
+            b"260908001000Z", b"260907011000Z").replace(b"proxy.unit", b"unit.proxy")
+        self.raw[server.IDENTITY] = (b"-----BEGIN CERTIFICATE-----\n" + base64.b64encode(self.server_leaf)
+            + b"\n-----END CERTIFICATE-----\n-----BEGIN PRIVATE KEY-----\nMAA=\n-----END PRIVATE KEY-----\n")
+        self.modes[server.IDENTITY] = 0o400
+        self.fixture.envelope["endpoints"][0]["tls"]["serverSpkiDigest"] = endpoint["tls"]["serverSpkiDigest"]
+        self.release()
+        self.channels, self.listeners, self.tls_contexts = [], [], []
+        self.memfds, self.seals = [], {}
+        self.broker_incoming, self.broker_outgoing, self.observations = [], [], []
+        self.receipt_raw = self.wire_last = None
+        self.durable_journal, self.random_count = b"", 0
+        self.driver_fault = None
+        self.on_io = lambda operation, path, value: None
+
+    def context(self, stack):
+        # These two helpers register only OS data. In particular they do not
+        # create the object.__new__ owner used by the separate binding tests.
+        self.filesystem_context(stack)
+        self.kernel_context(stack)
+        for path in (server.OBSERVER_SOCKET, server.BROKER_SOCKET):
+            self.node(path.rsplit("/", 1)[0], directory=True, st_mode=stat.S_IFDIR | 0o700)
+            self.node(path, st_mode=stat.S_IFSOCK | 0o600)
+        self.node(server.STATE, directory=True, st_mode=stat.S_IFDIR | 0o700)
+        for path in (server.STATE + "/admission.lock", self.journal_path):
+            self.node(path, st_mode=stat.S_IFREG | 0o600, raw=b"")
+        for fd in range(3):
+            path = "stdio:" + str(fd)
+            node = SimpleNamespace(st_dev=99, st_ino=fd + 1, st_mode=stat.S_IFCHR | 0o600,
+                st_uid=0, st_gid=0, st_nlink=1, st_size=0, st_mtime_ns=1, st_ctime_ns=1)
+            self.fds[fd], self.handles[fd] = path, (path, node)
+        self.kernel_raw["/proc/self/task/" + str(self.processes["SERVER"]) + "/children"] = b""
+        for obj, name, options in (
+                (server, "_ACTIVE", dict(new=None)),
+                (server, "__loader__", dict(new=SimpleNamespace(archive=server.EXECUTABLE))),
+                (server.sys, "argv", dict(new=[server.EXECUTABLE])),
+                (server.os, "geteuid", dict(new=lambda: 0)), (server.os, "getegid", dict(new=lambda: 0)),
+                (server.os, "listdir", dict(new=self.listdir)),
+                (server.os, "urandom", dict(new=self.urandom)),
+                (server.os, "write", dict(new=self.write)),
+                (server.os, "fsync", dict(new=self.fsync)),
+                (server.os, "memfd_create", dict(new=self.memfd_create, create=True)),
+                (server.os, "MFD_CLOEXEC", dict(new=1, create=True)),
+                (server.os, "MFD_ALLOW_SEALING", dict(new=2, create=True)),
+                (server.fcntl, "flock", dict(new=self.flock)),
+                (_client_module.ssl, "SSLContext", dict(new=self.ssl_context))):
+            stack.enter_context(patch.object(obj, name, **options))
+        for name, value in (("F_ADD_SEALS", 1033), ("F_GET_SEALS", 1034),
+                ("F_SEAL_SEAL", 1), ("F_SEAL_SHRINK", 2), ("F_SEAL_GROW", 4), ("F_SEAL_WRITE", 8)):
+            stack.enter_context(patch.object(server.fcntl, name, value, create=True))
+        stack.enter_context(patch.dict(server.os.environ,
+            {"HARNESS_LIVE_EXECUTION_ENVELOPE": "/unit-only/envelope.json"}, clear=True))
+
+    def start(self, stack):
+        self.context(stack)
+        owner = server.NativeProxyServer()
+        self.owner = owner  # record the returned owner, never supply one
+        stack.callback(owner.close)
+        return owner
+
+    def listdir(self, path):
+        if path == "/proc/self/task":
+            return [str(self.processes["SERVER"])]
+        if path == "/proc/self/fd":
+            return [str(fd) for fd in self.handles]
+        prefix = self.fds[path] if type(path) is int else path
+        return sorted(p.rsplit("/", 1)[1] for p in self.nodes
+                      if p != "/" and p.rsplit("/", 1)[0] == prefix)
+
+    def urandom(self, count):
+        self.case.assertEqual(count, 32)
+        self.random_count += 1
+        return self.random_count.to_bytes(32, "big")
+
+    def write(self, fd, raw):
+        path = self.fds[fd]
+        self.case.assertTrue(path == self.journal_path or fd in self.memfds)
+        self.kernel_raw[path] += raw
+        self.nodes[path].st_size = len(self.kernel_raw[path])
+        self.events.append(("write", path))
+        self.on_io("write", path, raw)
+        return len(raw)
+
+    def fsync(self, fd):
+        path = self.fds[fd]
+        self.case.assertIn(path, (server.STATE, self.journal_path))
+        self.events.append(("fsync", path))
+        if path == server.STATE:
+            self.durable_journal = self.kernel_raw[self.journal_path]
+        self.on_io("fsync", path, None)
+
+    def flock(self, fd, flags):
+        self.case.assertIn(self.fds[fd], (server.STATE + "/admission.lock", self.journal_path))
+        self.case.assertIn(flags, (server.fcntl.LOCK_EX | server.fcntl.LOCK_NB, server.fcntl.LOCK_UN))
+        self.on_io("flock", self.fds[fd], flags)
+
+    def memfd_create(self, name, flags):
+        self.case.assertEqual((name, flags), ("planeon-proxy-identity", 3))
+        path = "/memfd/unit-" + str(len(self.memfds))
+        self.nodes[path] = SimpleNamespace(st_dev=99, st_ino=80000 + len(self.memfds),
+            st_mode=stat.S_IFREG | 0o600, st_uid=0, st_gid=0, st_nlink=0,
+            st_size=0, st_mtime_ns=1, st_ctime_ns=1)
+        self.kernel_raw[path] = b""
+        fd = self.open(path, server.os.O_RDWR)
+        self.memfds.append(fd)
+        self.seals[fd] = 0
+        return fd
+
+    def fcntl(self, fd, command, *args):
+        if fd in self.memfds:
+            if command == server.fcntl.F_ADD_SEALS:
+                self.case.assertEqual(args, (15,))
+                self.seals[fd] = args[0]
+                return 0
+            self.case.assertEqual((command, args), (server.fcntl.F_GET_SEALS, ()))
+            return self.seals[fd]
+        self.case.assertEqual(args, ())
+        return super().fcntl(fd, command)
+
+    def ssl_context(self, protocol):
+        fixture = self
+        self.case.assertEqual(protocol, _client_module.ssl.PROTOCOL_TLS_SERVER)
+        class Context:
+            options = verify_flags = 0
+            def set_alpn_protocols(self, names):
+                fixture.case.assertEqual(names, ["http/1.1"])
+            def load_verify_locations(self, *, cadata):
+                fixture.case.assertEqual(cadata.encode(), fixture.raw["/unit-only/kit/ca.pem"])
+            def load_cert_chain(self, path, *, password):
+                fd = int(path.rsplit("/", 1)[1])
+                fixture.case.assertIs(password, _client_module._no_password)
+                fixture.case.assertEqual(fixture.seals[fd], 15)
+                fixture.case.assertEqual(fixture.kernel_raw[fixture.fds[fd]], fixture.raw[server.IDENTITY])
+            def wrap_bio(self, *args, **kwargs):
+                raise AssertionError("full HTTP/SSL transport extension is not supplied by this fixture")
+        context = Context()
+        self.tls_contexts.append(context)
+        return context
+
+    def socket_factory(self, family, kind):
+        fixture = self
+        if family == server.socket.AF_UNIX:
+            channel = super().socket_factory(family, kind)
+            self.channels.append(channel)
+            def send(raw):
+                if channel.path == server.OBSERVER_SOCKET:
+                    request = json.loads(raw)
+                    response = deepcopy(VECTORS["observation"]["positive"]["observation"])
+                    for key in ("bindingDigest", "runNonce", "challenge", "sequence", "previousObservationDigest"):
+                        response[key] = request[key]
+                    response.update(observedAt=self.now, expiresAt="2026-09-07T01:00:05Z")
+                    response["projections"] = {name: {**value, "resourceVersion": "100"}
+                                               for name, value in self.observation["projections"].items()}
+                    response["enforcement"].update(self.observation["enforcementPins"])
+                    channel.incoming.append(canonical_bytes(response))
+                    self.observations.append(request)
+                else:
+                    self.broker_send(raw)
+                self.on_io("send", channel.path, raw)
+                return len(raw)
+            def receive(*args):
+                expected = (65537, server.socket.CMSG_SPACE(12) + server.socket.CMSG_SPACE(253 * 4))
+                self.case.assertEqual(args, expected)
+                role = "OBSERVER" if channel.path == server.OBSERVER_SOCKET else "BROKER"
+                raw = (channel.incoming if role == "OBSERVER" else self.broker_incoming).pop(0)
+                self.on_io("recvmsg", channel.path, raw)
+                return raw, [(server.socket.SOL_SOCKET, 2,
+                    server.struct.pack("3i", self.processes[role], 0, 0))], 0, None
+            channel.incoming, channel.send, channel.recvmsg = [], send, receive
+            return channel
+        self.case.assertEqual((family, kind), (server.socket.AF_INET, server.socket.SOCK_STREAM))
+        class Listener:
+            closed = False
+            def set_inheritable(self, value):
+                fixture.case.assertIs(value, False)
+            def bind(self, target):
+                endpoint = fixture.fixture.envelope["endpoints"][0]
+                fixture.case.assertEqual(target, (endpoint["ipAddress"], endpoint["port"]))
+                self.target = target
+            def listen(self, backlog):
+                fixture.case.assertEqual(backlog, 1)
+            def getsockname(self):
+                return self.target
+            def close(self):
+                fixture.case.assertFalse(self.closed)
+                self.closed = True
+        listener = Listener()
+        self.listeners.append(listener)
+        return listener
+
+    def poll(self, reads, writes, errors, timeout):
+        if reads and reads[0] in self.channels:
+            self.case.assertEqual((writes, errors), ([], reads))
+            self.case.assertEqual(reads[0].path, server.BROKER_SOCKET)
+            self.case.assertTrue(0 <= timeout <= 2)
+            if not self.broker_incoming:
+                self.mono += timeout
+            return (reads if self.broker_incoming else []), [], []
+        return super().poll(reads, writes, errors, timeout)
+
+    def enqueue(self, kind, payload):
+        frame = {**deepcopy(self.wire_last), "kind": kind, "payload": payload,
+            "sequence": self.wire_last["sequence"] + 1,
+            "previousDigest": byte_digest(canonical_bytes(self.wire_last))}
+        self.broker_incoming.append(canonical_bytes(frame))
+        self.wire_last = frame
+
+    def broker_send(self, raw):
+        import base64
+        frame = json.loads(raw)
+        self.broker_outgoing.append(frame)
+        self.case.assertEqual(self.durable_journal, self.kernel_raw[self.journal_path])
+        state = json.loads(self.durable_journal.splitlines()[-1])["state"]
+        if frame.get("operation") == "EXECUTE_FIXED_PROBE":
+            self.case.assertEqual(state, "RUNNING")
+            self.wire_last = {**{key: frame[key] for key in admission.BROKER_COMMON},
+                "schemaVersion": "planeon.internal.broker-frame/v1", "executionId": "c" * 64,
+                "sequence": 1, "previousDigest": admission.ZERO, "kind": "STARTED",
+                "payload": {"workerPid": 9600, "workerStartTicks": 5000}}
+            self.broker_incoming.append(canonical_bytes(self.wire_last))
+            if self.driver_fault == "zero-resource-action":
+                self.enqueue("RESOURCE_ACTION", {"actionId": 1, "verb": "CREATE", "manifestDigest": admission.ZERO})
+            else:
+                for index, chunk in enumerate((self.receipt_raw[:90], self.receipt_raw[90:])):
+                    self.enqueue("RECEIPT_CHUNK", {"index": index, "dataBase64": base64.b64encode(chunk).decode()})
+        else:
+            self.case.assertEqual((frame["kind"], state), ("CLEANUP_RECORDED", "CLEANUP_SEALED"))
+            self.wire_last = frame
+            if self.driver_fault == "lost-terminal":
+                self.broker_incoming.append(b"")
+            else:
+                self.enqueue("TERMINAL", {"status": "COMPLETED", "receiptSize": len(self.receipt_raw),
+                    "receiptDigest": byte_digest(self.receipt_raw), "cleanupDigest": frame["payload"]["cleanupDigest"],
+                    "workerReaped": True})
+
+    def prepare_case(self, owner):
+        from harness_conformance.linux_readiness import CASE_CHECKS
+        operation = server.CASES[0]
+        request = server.build_probe_request(owner.envelope, owner.capacity, owner.plan, operation)
+        output = {"checks": {key: "PASS" for key in CASE_CHECKS[operation]}, "regressions": {}}
+        self.receipt_raw = canonical_bytes({"caseId": operation, "status": "PASS", "observedAt": self.now,
+            "runNonce": request["runNonce"], "probeDigest": request["probeDigest"], "commandDigest": request["commandDigest"],
+            "outputDigest": server.canonical_digest(output, "planeon.linux-probe-output/v1alpha1"), "output": output})
+        owner.log.record(owner.reservation, "RUNNING", operation, self.now)
+        owner.active_operation = operation
+
+
+class _NativeServerHTTPOS(_NativeServerKernelOS):
+    """Full serve() fixture: real factories/MemoryBIO owner, inert SSL codec.
+
+    H/D/C below are deliberately non-TLS library-double records. Certificate
+    bytes are unsigned DER and keys are empty ASN.1 values; no TLS, Kubernetes,
+    broker enforcement or native qualification is claimed by these tests.
+    """
+    def __init__(self, case, resources=False):
+        super().__init__(case)
+        self.resource_mode = resources
+        self.accepted, self.api_streams, self.codecs, self.responses = [], [], [], []
+        self.api_requests, self.receipts, self.requests = [], {}, []
+        self.tls_fault = self.http_fault = self.api_fault = None
+        self.on_stream = lambda operation, stream, value: None
+        self.api_path = "/etc/planeon/live-proxy/unit-api.pem"
+        self.status = "PASS"
+        scope = self.profile["binding"]
+        self.client_leaf, spki = self.leaf("campaign-proxy", scope["endpointId"])
+        self.profile["capacityEntries"]["credentialIdentities"][0].update(
+            certificateDigest=byte_digest(self.client_leaf), clientSpkiDigest=byte_digest(spki))
+        if resources:
+            template = sample(1)["profile"]
+            scope["apiEndpointId"] = template["binding"]["apiEndpointId"]
+            for key in ("kubernetesApiRules", "permittedGvksAndVerbs"):
+                self.profile["capacityEntries"][key] = deepcopy(template["capacityEntries"][key])
+            self.profile["quota"] = deepcopy(template["quota"])
+            self.profile["resources"] = deepcopy(template["resources"])
+            row = self.profile["resources"][0]
+            row["manifest"]["metadata"]["labels"].update({
+                "planeon.ai/run-nonce": scope["runNonce"], "planeon.ai/tenant-id": scope["tenantId"]})
+            row["manifestDigest"] = byte_digest(canonical_bytes(row["manifest"]))
+            self.resource = row
+            self.created = deepcopy(row["manifest"])
+            self.created["metadata"].update(uid="unit-owned-uid", resourceVersion="100")
+            self.present = deepcopy(self.created)
+            self.present["metadata"]["resourceVersion"] = "101"
+            api_leaf, api_spki = self.leaf("capacity-proxy", scope["apiEndpointId"])
+            self.raw[self.api_path], self.modes[self.api_path] = self.pem(api_leaf), 0o400
+            identity = deepcopy(template["capacityEntries"]["credentialIdentities"][1])
+            identity.update(expiresAt=scope["expiresAt"], certificateDigest=byte_digest(api_leaf),
+                            clientSpkiDigest=byte_digest(api_spki))
+            self.profile["capacityEntries"]["credentialIdentities"].append(identity)
+            endpoint = deepcopy(self.fixture.envelope["endpoints"][0])
+            endpoint.update(endpointId=scope["apiEndpointId"], kind="KUBERNETES_API_PROXY",
+                ipAddress="127.0.0.2", port=9444, credentialFileReference=self.api_path)
+            endpoint["authorizationPolicyDigest"] = byte_digest(
+                canonical_bytes(self.profile["capacityEntries"]["kubernetesApiRules"]))
+            self.fixture.envelope["endpoints"].append(endpoint)
+            self.record["roles"]["SERVER"]["outboundEndpointIds"] = [endpoint["endpointId"]]
+            self.broker["caseResourceDigests"][server.CASES[0]] = [row["manifestDigest"]]
+        self.rebind()
+
+    def leaf(self, prefix, endpoint_id):
+        from test_proxy_client import der
+        scope = self.profile["binding"]
+        san = ("urn:planeon:" + prefix + ":" + ":".join(scope[key] for key in
+               ("tenantId", "environmentId", "runNonce")) + ":" + endpoint_id).encode()
+        extension = lambda oid, value: der(0x30, der(6, bytes.fromhex(oid)) + der(4, value))
+        extensions = der(0xa3, der(0x30, extension("551d13", der(0x30, b""))
+            + extension("551d25", der(0x30, der(6, bytes.fromhex("2b06010505070302"))))
+            + extension("551d11", der(0x30, der(0x86, san)))))
+        spki = der(0x30, der(0x30, b"") + der(3, b"\0unit-" + prefix.encode() + b"-not-a-key"))
+        algorithm = der(0x30, der(6, b"\x2b\x65\x70"))
+        tbs = der(0x30, b"\xa0\x03\x02\x01\x02" + der(2, b"\x01") + algorithm + der(0x30, b"")
+            + der(0x30, der(0x17, b"260907010000Z") + der(0x17, b"260907011000Z"))
+            + der(0x30, b"") + spki + extensions)
+        return der(0x30, tbs + algorithm + der(3, b"\0unsigned-unit-data")), spki
+
+    @staticmethod
+    def pem(leaf):
+        import base64
+        return (b"-----BEGIN CERTIFICATE-----\n" + base64.b64encode(leaf)
+            + b"\n-----END CERTIFICATE-----\n-----BEGIN PRIVATE KEY-----\nMAA=\n-----END PRIVATE KEY-----\n")
+
+    def rebind(self):
+        """Re-sign input DATA before construction; never alter an active owner."""
+        self.fixture.capacity.update(deepcopy(self.profile["capacityEntries"]))
+        self.fixture.capacity["permittedEndpointIds"] = [row["endpointId"] for row in self.fixture.envelope["endpoints"]]
+        self.fixture.release["endpointPolicyDigests"] = sorted({row["authorizationPolicyDigest"]
+            for row in self.fixture.envelope["endpoints"]})
+        digest = byte_digest(canonical_bytes(self.profile))
+        self.record["profileDigest"] = self.observation["profileDigest"] = self.broker["profileDigest"] = digest
+        self.record["endpointTuples"] = [{**{key: endpoint[key] for key in
+            ("endpointId", "kind", "ipAddress", "port")},
+            "addressFamily": "IPV6" if ":" in endpoint["ipAddress"] else "IPV4"}
+            for endpoint in self.fixture.envelope["endpoints"]]
+        preflight = byte_digest(canonical_bytes(self.record))
+        for _, path, _ in self.paths:
+            value = json.loads(self.raw[path])
+            value["preflightEvidenceDigest"] = preflight
+            self.manifest(path, value)
+        self.observation["observer"]["manifestDigest"] = byte_digest(self.raw[server.OBSERVER_MANIFEST])
+        self.observation["enforcementPins"]["hostPreflightDigest"] = preflight
+        self.broker.update(observationBindingDigest=byte_digest(canonical_bytes(self.observation)),
+            brokerManifestDigest=byte_digest(self.raw[server.BROKER_MANIFEST]),
+            workerManifestDigest=byte_digest(self.raw[server.WORKER_MANIFEST]))
+        for path, value in ((admission.PROFILE_PATH, self.profile), (admission.QUALIFICATION_PATH, self.record),
+                (admission.OBSERVATION_PATH, self.observation), (admission.BROKER_BINDING_PATH, self.broker)):
+            self.raw["/unit-only/kit/" + path] = canonical_bytes(value)
+        self.release()
+
+    def context(self, stack):
+        super().context(stack)
+        stack.enter_context(patch.object(server.os, "lseek", self.lseek))
+
+    def lseek(self, fd, offset, whence):
+        self.case.assertIn(fd, self.memfds)
+        self.case.assertEqual((offset, whence), (0, server.os.SEEK_SET))
+        self.positions[fd] = 0
+        return 0
+
+    def memfd_create(self, name, flags):
+        self.case.assertIn(name, ("planeon-proxy-identity", "planeon-api-identity"))
+        fd = super().memfd_create("planeon-proxy-identity", flags)
+        self.events.append(("memfd", name))
+        return fd
+
+    def ssl_context(self, protocol):
+        fixture = self
+        is_server = protocol == _client_module.ssl.PROTOCOL_TLS_SERVER
+        self.case.assertIn(protocol, (_client_module.ssl.PROTOCOL_TLS_SERVER, _client_module.ssl.PROTOCOL_TLS_CLIENT))
+        class Context:
+            options = verify_flags = 0
+            def set_alpn_protocols(self, names):
+                fixture.case.assertEqual(names, ["http/1.1"])
+            def load_verify_locations(self, *, cadata):
+                fixture.case.assertEqual(cadata.encode(), fixture.raw["/unit-only/kit/ca.pem"])
+            def load_cert_chain(self, path, *, password):
+                fd = int(path.rsplit("/", 1)[1])
+                fixture.case.assertIs(password, _client_module._no_password)
+                fixture.case.assertEqual(fixture.seals[fd], 15)
+                fixture.case.assertEqual(fixture.kernel_raw[fixture.fds[fd]],
+                    fixture.raw[server.IDENTITY if is_server else fixture.api_path])
+            def wrap_bio(self, incoming, outgoing, *, server_side, server_hostname):
+                fixture.case.assertEqual((server_side, server_hostname),
+                    (is_server, None if is_server else fixture.fixture.envelope["endpoints"][1]["tls"]["serverName"]))
+                # Exercise the real MemoryBIO objects and _TLS pumping logic;
+                # only OpenSSL's byte codec is a deliberately inert substitute.
+                fixture.case.assertIs(type(incoming), _client_module.ssl.MemoryBIO)
+                class Codec:
+                    plain = b""
+                    hello_sent = False
+                    session_reused = False
+                    def do_handshake(self):
+                        if not self.hello_sent:
+                            outgoing.write(b"H")
+                            self.hello_sent = True
+                        if not incoming.pending:
+                            raise _client_module.ssl.SSLWantReadError()
+                        fixture.case.assertEqual(incoming.read(), b"H")
+                    def version(self):
+                        return "TLSv1.2" if fixture.tls_fault == "version" else "TLSv1.3"
+                    def selected_alpn_protocol(self):
+                        return "h2" if fixture.tls_fault == "alpn" else "http/1.1"
+                    def getpeercert(self, *, binary_form):
+                        fixture.case.assertIs(binary_form, True)
+                        if fixture.tls_fault == "identity":
+                            return fixture.server_leaf if is_server else fixture.client_leaf
+                        return fixture.client_leaf if is_server else fixture.server_leaf
+                    def write(self, raw):
+                        outgoing.write(b"D" + len(raw).to_bytes(4, "big") + raw)
+                        return len(raw)
+                    def read(self, maximum):
+                        if not self.plain:
+                            if not incoming.pending:
+                                raise _client_module.ssl.SSLWantReadError()
+                            kind = incoming.read(1)
+                            if kind == b"C":
+                                return b""
+                            fixture.case.assertEqual(kind, b"D")
+                            size = int.from_bytes(incoming.read(4), "big")
+                            self.plain = incoming.read(size)
+                            fixture.case.assertEqual(len(self.plain), size)
+                        raw, self.plain = self.plain[:maximum], self.plain[maximum:]
+                        return raw
+                    def pending(self):
+                        return len(self.plain)
+                    def unwrap(self):
+                        outgoing.write(b"C")
+                        raise _client_module.ssl.SSLWantReadError()
+                codec = Codec()
+                fixture.codecs.append(codec)
+                return codec
+        context = Context()
+        self.tls_contexts.append(context)
+        return context
+
+    def socket_factory(self, family, kind):
+        if family == server.socket.AF_UNIX:
+            return super().socket_factory(family, kind)
+        self.case.assertEqual((family, kind), (server.socket.AF_INET, server.socket.SOCK_STREAM))
+        fixture = self
+        class Stream:
+            def __init__(self):
+                fixture.next_fd += 1
+                self.fd, self.closed, self.incoming, self.sent = fixture.next_fd, False, [b"H"], []
+                node = SimpleNamespace(st_dev=99, st_ino=self.fd, st_mode=stat.S_IFSOCK | 0o600,
+                    st_uid=0, st_gid=0, st_nlink=1, st_size=0, st_mtime_ns=1, st_ctime_ns=1)
+                fixture.fds[self.fd], fixture.handles[self.fd] = "tcp:", ("tcp:", node)
+                self.mode, self.target = None, None
+            def fileno(self):
+                return self.fd
+            def set_inheritable(self, value):
+                fixture.case.assertIs(value, False)
+            def settimeout(self, value):
+                fixture.case.assertTrue(0 < value <= 2)
+            def bind(self, target):
+                endpoint = fixture.fixture.envelope["endpoints"][0]
+                fixture.case.assertEqual(target, (endpoint["ipAddress"], endpoint["port"]))
+                self.mode, self.target = "listener", target
+                fixture.listeners.append(self)
+            def listen(self, backlog):
+                fixture.case.assertEqual(backlog, 1)
+            def getsockname(self):
+                return self.target
+            def accept(self):
+                fixture.case.assertEqual(self.mode, "listener")
+                fixture.case.assertTrue(fixture.requests, "serve attempted an undeclared extra request")
+                stream = Stream()
+                stream.mode = "campaign"
+                raw = fixture.requests.pop(0)
+                stream.incoming.append(b"D" + len(raw).to_bytes(4, "big") + raw)
+                fixture.accepted.append(stream)
+                fixture.on_stream("accept", stream, None)
+                return stream, ("127.0.0.3", 9000)
+            def connect(self, target):
+                endpoint = fixture.fixture.envelope["endpoints"][1]
+                fixture.case.assertEqual(target, (endpoint["ipAddress"], endpoint["port"]))
+                self.mode, self.target = "api", target
+                fixture.api_streams.append(self)
+                fixture.on_stream("connect", self, target)
+            def getpeername(self):
+                return self.target
+            def recv(self, maximum):
+                fixture.case.assertEqual(maximum, 65536)
+                fixture.case.assertTrue(self.incoming, "unexpected receive without peer bytes")
+                raw = self.incoming.pop(0)
+                fixture.on_stream("recv", self, raw)
+                return raw
+            def send(self, raw):
+                self.sent.append(raw)
+                if raw[:1] == b"D":
+                    body = raw[5:]
+                    fixture.case.assertEqual(len(body), int.from_bytes(raw[1:5], "big"))
+                    if self.mode == "api":
+                        reply = fixture.api_reply(body)
+                        self.incoming += [b"D" + len(reply).to_bytes(4, "big") + reply, b"C"]
+                    else:
+                        fixture.case.assertEqual(self.mode, "campaign")
+                        fixture.responses.append(body)
+                        rows = fixture.durable_journal.splitlines()
+                        fixture.case.assertEqual(json.loads(rows[-1])["state"], "TERMINAL_RECORDED")
+                else:
+                    fixture.case.assertIn(raw, (b"H", b"C"))
+                fixture.on_stream("send", self, raw)
+                return len(raw)
+            def close(self):
+                fixture.case.assertFalse(self.closed)
+                self.closed = True
+                fixture.close(self.fd)
+                fixture.on_stream("close", self, None)
+            def detach(self):
+                return self.fd
+        return Stream()
+
+    def prepare_http(self, operations=None):
+        from harness_conformance.linux_readiness import CASE_CHECKS
+        operations = list(server.CASES if operations is None else operations)
+        for operation in operations:
+            request = server.build_probe_request(self.fixture.envelope, self.fixture.capacity, self.fixture.plan, operation)
+            output = {"checks": {key: self.status for key in CASE_CHECKS[operation]}, "regressions": {}}
+            if operation == "FULL_PREDECESSOR_REGRESSION":
+                output["regressions"] = {name: {"inventoryDigest": row["inventoryDigest"],
+                    "collected": row["testCount"], "executed": row["testCount"], "skipped": 0, "failed": 0}
+                    for name, row in self.fixture.plan["regressions"].items()}
+            receipt = {"caseId": operation, "status": self.status, "observedAt": self.now,
+                "runNonce": request["runNonce"], "probeDigest": request["probeDigest"],
+                "commandDigest": request["commandDigest"],
+                "outputDigest": server.canonical_digest(output, "planeon.linux-probe-output/v1alpha1"), "output": output}
+            self.receipts[operation] = canonical_bytes(receipt)
+            if self.http_fault == "nonce":
+                request["runNonce"] = "foreign-run"
+            raw = server.http_message("POST " + request["path"] + " HTTP/1.1", canonical_bytes(request),
+                                      self.fixture.envelope["endpoints"][0]["tls"]["serverName"])
+            if self.http_fault == "host":
+                raw = raw.replace(b"Host: unit.proxy", b"Host: evil.proxy")
+            if self.http_fault == "surplus":
+                raw += b"unexpected"
+            self.requests.append(raw)
+
+    def enqueue_receipt(self):
+        import base64
+        for index, chunk in enumerate((self.receipt_raw[:90], self.receipt_raw[90:])):
+            self.enqueue("RECEIPT_CHUNK", {"index": index, "dataBase64": base64.b64encode(chunk).decode()})
+
+    def broker_send(self, raw):
+        frame = json.loads(raw)
+        self.broker_outgoing.append(frame)
+        self.case.assertEqual(self.durable_journal, self.kernel_raw[self.journal_path])
+        state = json.loads(self.durable_journal.splitlines()[-1])["state"]
+        if frame.get("operation") == "EXECUTE_FIXED_PROBE":
+            self.case.assertEqual(state, "RUNNING")
+            self.receipt_raw = self.receipts[frame["caseId"]]
+            self.wire_last = {**{key: frame[key] for key in admission.BROKER_COMMON},
+                "schemaVersion": "planeon.internal.broker-frame/v1", "executionId": frame["challenge"],
+                "sequence": 1, "previousDigest": admission.ZERO, "kind": "STARTED",
+                "payload": {"workerPid": 9600, "workerStartTicks": 5000}}
+            self.broker_incoming.append(canonical_bytes(self.wire_last))
+            if self.resource_mode and frame["caseId"] == server.CASES[0]:
+                self.enqueue("RESOURCE_ACTION", {"actionId": 1, "verb": "CREATE",
+                    "manifestDigest": self.resource["manifestDigest"]})
+            elif self.driver_fault == "zero-resource-action":
+                self.enqueue("RESOURCE_ACTION", {"actionId": 1, "verb": "CREATE", "manifestDigest": admission.ZERO})
+            else:
+                self.enqueue_receipt()
+        elif frame["kind"] == "RESOURCE_RESULT":
+            self.wire_last = frame
+            action = frame["payload"]["actionId"]
+            final_outcome = "PRESENT" if self.api_fault == "still-present" else "ABSENT"
+            self.case.assertEqual(frame["payload"]["outcome"],
+                {1: "CREATED", 2: "PRESENT", 3: "DELETED", 4: final_outcome}[action])
+            if action < 4:
+                self.enqueue("RESOURCE_ACTION", {"actionId": action + 1,
+                    "verb": {1: "GET", 2: "DELETE", 3: "GET"}[action],
+                    "manifestDigest": self.resource["manifestDigest"]})
+            else:
+                if self.api_fault != "still-present":
+                    self.case.assertEqual(state, "ABSENT")
+                self.enqueue_receipt()
+        else:
+            self.case.assertEqual((frame["kind"], state), ("CLEANUP_RECORDED", "CLEANUP_SEALED"))
+            self.wire_last = frame
+            if self.driver_fault == "lost-terminal":
+                self.broker_incoming.append(b"")
+                return
+            self.enqueue("TERMINAL", {"status": {"PASS": "COMPLETED", "FAIL": "FAILED",
+                "NOT_RUN_ENV_UNAVAILABLE": "UNAVAILABLE"}[self.status], "receiptSize": len(self.receipt_raw),
+                "receiptDigest": byte_digest(self.receipt_raw),
+                "cleanupDigest": admission.ZERO if self.driver_fault == "terminal-digest" else frame["payload"]["cleanupDigest"],
+                "workerReaped": True})
+
+    def api_reply(self, raw):
+        self.api_requests.append(raw)
+        headers, body = raw.split(b"\r\n\r\n", 1)
+        verb = headers.split(b" ", 1)[0]
+        index = len(self.api_requests)
+        self.case.assertEqual(verb, {1: b"POST", 2: b"GET", 3: b"DELETE", 4: b"GET"}[index])
+        base = b"/api/v1/namespaces/unit-namespace/configmaps"
+        self.case.assertEqual(headers.split(b"\r\n", 1)[0],
+            verb + b" " + base + (b"" if index == 1 else b"/unit-fixture") + b" HTTP/1.1")
+        self.case.assertIn(b"Host: unit.proxy", headers)
+        self.case.assertEqual(self.durable_journal, self.kernel_raw[self.journal_path])
+        if index == 1:
+            self.case.assertEqual(json.loads(self.durable_journal.splitlines()[-1])["state"], "CREATE_INTENT")
+            self.case.assertEqual(json.loads(body), self.resource["manifest"])
+            if self.api_fault == "lost-create":
+                raise OSError("unit ambiguous CREATE")
+            value = deepcopy(self.created)
+        elif index == 2:
+            self.case.assertEqual(body, b"")
+            value = deepcopy(self.present)
+            if self.api_fault == "changed-uid":
+                value["metadata"]["uid"] = "foreign-uid"
+        elif index == 3:
+            self.case.assertEqual(json.loads(body), {"apiVersion": "v1", "kind": "DeleteOptions",
+                "preconditions": {"uid": "unit-owned-uid", "resourceVersion": "101"}})
+            value = {"apiVersion": "v1", "kind": "Status", "metadata": {}, "status": "Success",
+                "code": 200, "details": {"name": "unit-fixture", "kind": "configmaps", "uid": "unit-owned-uid"}}
+        else:
+            self.case.assertEqual(body, b"")
+            if self.api_fault == "still-present":
+                return server.http_message("HTTP/1.1 200 OK", canonical_bytes(self.present))
+            value = {"apiVersion": "v1", "kind": "Status", "metadata": {}, "status": "Failure",
+                "code": 404, "reason": "NotFound", "details": {"name": "unit-fixture", "kind": "configmaps"},
+                "message": 'configmaps "unit-fixture" not found'}
+        return server.http_message("HTTP/1.1 404 Not Found" if index == 4 else "HTTP/1.1 200 OK", canonical_bytes(value))
+
+
+class NativeServerHTTPFactoryTests(unittest.TestCase):
+    """C6 real serve()/HTTP/admission/cleanup composition, OS-double source only."""
+    def assert_closed(self, fixture):
+        self.assertEqual(set(fixture.handles), {0, 1, 2})
+        self.assertTrue(all(stream.closed for stream in fixture.accepted + fixture.api_streams + fixture.listeners))
+        self.assertTrue(all(mapping.closes == 1 for mapping in fixture.maps))
+
+    def test_all_ten_zero_resource_requests_use_real_server_and_terminal_journal(self):
+        fixture = _NativeServerHTTPOS(self)
+        fixture.prepare_http()
+        with ExitStack() as stack:
+            owner = fixture.start(stack)
+            owner.serve()
+            self.assertEqual(len(fixture.responses), 10)
+            self.assertEqual([json.loads(raw.split(b"\r\n\r\n", 1)[1])["caseId"] for raw in fixture.responses], list(server.CASES))
+            self.assertEqual(len(owner.broker.case_history), 10)
+            states, _, _ = admission.parse_reservations(fixture.durable_journal)
+            self.assertFalse(states[(owner.envelope["tenantId"], owner.envelope["nonce"])]["held"])
+            self.assertEqual(len(fixture.accepted), 10)
+            self.assertEqual(fixture.api_requests, [])
+            self.assertEqual(fixture.api_streams, [])
+            self.assertEqual(set(owner.secrets.raw), {server.IDENTITY})
+        self.assert_closed(fixture)
+
+    def test_resource_round_trip_uses_actual_api_tls_uid_cleanup_and_ten_case_handoff(self):
+        fixture = _NativeServerHTTPOS(self, resources=True)
+        self.assertTrue(all("addressFamily" not in row for row in fixture.fixture.envelope["endpoints"]))
+        fixture.prepare_http()
+        with ExitStack() as stack:
+            owner = fixture.start(stack)
+            owner.serve()
+            self.assertEqual(len(fixture.responses), 10)
+            self.assertEqual(len(fixture.api_streams), 4)
+            self.assertEqual([raw.split(b" ", 1)[0] for raw in fixture.api_requests], [b"POST", b"GET", b"DELETE", b"GET"])
+            self.assertEqual([frame["payload"]["outcome"] for frame in fixture.broker_outgoing
+                if frame.get("kind") == "RESOURCE_RESULT"], ["CREATED", "PRESENT", "DELETED", "ABSENT"])
+            self.assertEqual(fixture.events.count(("open", fixture.api_path)), 1)
+            states, _, _ = admission.parse_reservations(fixture.durable_journal)
+            state = states[(owner.envelope["tenantId"], owner.envelope["nonce"])]
+            self.assertFalse(state["held"])
+            self.assertEqual(len(state["terminalCases"]), 10)
+            self.assertIn("ABSENT", [json.loads(raw)["state"] for raw in fixture.durable_journal.splitlines()])
+        self.assert_closed(fixture)
+
+    def denied_request(self, *, tls=None, http=None):
+        fixture = _NativeServerHTTPOS(self)
+        fixture.tls_fault, fixture.http_fault = tls, http
+        fixture.prepare_http([server.CASES[0]])
+        with ExitStack() as stack:
+            owner = fixture.start(stack)
+            with self.assertRaises(ConformanceError):
+                owner.serve()
+            self.assertEqual(fixture.broker_outgoing, [])
+            self.assertEqual(fixture.responses, [])
+            self.assertEqual(fixture.api_requests, [])
+            self.assertEqual([json.loads(row)["state"] for row in fixture.durable_journal.splitlines()], ["RESERVED"])
+        self.assert_closed(fixture)
+
+    def test_wrong_tls_peer_is_denied_before_dispatch(self):
+        self.denied_request(tls="identity")
+
+    def test_wrong_tls_version_is_denied_before_dispatch(self):
+        self.denied_request(tls="version")
+
+    def test_wrong_alpn_is_denied_before_dispatch(self):
+        self.denied_request(tls="alpn")
+
+    def test_wrong_request_nonce_is_denied_before_running_append(self):
+        self.denied_request(http="nonce")
+
+    def test_wrong_http_host_is_denied_before_running_append(self):
+        self.denied_request(http="host")
+
+    def test_extra_request_bytes_are_denied_before_dispatch(self):
+        self.denied_request(http="surplus")
+
+    def failed_case(self, *, driver=None, api=None, expected_api=0):
+        fixture = _NativeServerHTTPOS(self, resources=api is not None)
+        fixture.driver_fault, fixture.api_fault = driver, api
+        fixture.prepare_http([server.CASES[0]])
+        with ExitStack() as stack:
+            owner = fixture.start(stack)
+            with self.assertRaises((ConformanceError, OSError, AssertionError)) as caught:
+                owner.serve()
+            # An OS-double assertion is NOT a product denial. Keep it a failing
+            # test so a broken fixture cannot satisfy this negative case.
+            self.assertNotIsInstance(caught.exception, AssertionError)
+            self.assertEqual(len(fixture.api_requests), expected_api)
+            self.assertEqual(fixture.responses, [])
+            states, _, _ = admission.parse_reservations(fixture.durable_journal)
+            state = states[(owner.envelope["tenantId"], owner.envelope["nonce"])]
+            self.assertTrue(state["held"])
+            self.assertEqual(state.get("terminalCases", []), [])
+            self.assertEqual(json.loads(fixture.durable_journal.splitlines()[-1])["state"], "FAILURE_RECORDED")
+        self.assert_closed(fixture)
+        return fixture
+
+    def test_zero_resource_action_is_denied_before_api_identity(self):
+        fixture = self.failed_case(driver="zero-resource-action")
+        self.assertNotIn(fixture.api_path, fixture.read_paths)
+
+    def test_lost_terminal_sends_no_client_success(self):
+        self.failed_case(driver="lost-terminal")
+
+    def test_terminal_digest_mismatch_sends_no_client_success(self):
+        self.failed_case(driver="terminal-digest")
+
+    def test_lost_create_retains_null_uid_and_never_retries(self):
+        fixture = self.failed_case(api="lost-create", expected_api=1)
+        cleanup = json.loads(fixture.durable_journal.splitlines()[-1])["cleanup"]
+        self.assertEqual(cleanup["remainingResources"][0]["uid"], None)
+        self.assertEqual(cleanup["remainingResources"][0]["reasonCode"], "IO_AMBIGUOUS")
+
+    def test_replaced_uid_stops_before_delete(self):
+        self.failed_case(api="changed-uid", expected_api=2)
+
+    def test_still_present_after_delete_cannot_become_clean(self):
+        fixture = self.failed_case(api="still-present", expected_api=4)
+        cleanup = json.loads(fixture.durable_journal.splitlines()[-1])["cleanup"]
+        self.assertEqual(cleanup["remainingResources"][0]["uid"], "unit-owned-uid")
+        self.assertNotIn("ABSENT", [json.loads(row)["state"] for row in fixture.durable_journal.splitlines()])
+
+    def nonpass_receipt(self, status):
+        fixture = _NativeServerHTTPOS(self)
+        fixture.status = status
+        fixture.prepare_http([server.CASES[0]])
+        with ExitStack() as stack:
+            owner = fixture.start(stack)
+            owner.serve()
+            self.assertEqual(len(fixture.responses), 1)
+            self.assertEqual(json.loads(fixture.responses[0].split(b"\r\n\r\n", 1)[1])["status"], status)
+            states, _, _ = admission.parse_reservations(fixture.durable_journal)
+            state = states[(owner.envelope["tenantId"], owner.envelope["nonce"])]
+            self.assertTrue(state["held"])
+            self.assertEqual(state["current"], server.CASES[0])
+            self.assertEqual(len(state["terminalCases"]), 1)
+            self.assertEqual(len(owner.broker.case_history), 0)
+            self.assertEqual(len(fixture.accepted), 1)
+            self.assertEqual(fixture.api_requests, [])
+        self.assert_closed(fixture)
+
+    def test_failed_receipt_is_returned_as_failed_without_releasing_capacity(self):
+        self.nonpass_receipt("FAIL")
+
+    def test_unavailable_receipt_never_becomes_pass_or_advances_the_case(self):
+        self.nonpass_receipt("NOT_RUN_ENV_UNAVAILABLE")
+
+    def test_false_pass_receipt_is_denied_before_cleanup_or_client_response(self):
+        fixture = _NativeServerHTTPOS(self)
+        fixture.status = "FAIL"
+        fixture.prepare_http([server.CASES[0]])
+        receipt = json.loads(fixture.receipts[server.CASES[0]])
+        receipt["status"] = "PASS"
+        fixture.receipts[server.CASES[0]] = canonical_bytes(receipt)
+        with ExitStack() as stack:
+            owner = fixture.start(stack)
+            with self.assertRaises(ConformanceError) as caught:
+                owner.serve()
+            self.assertEqual(caught.exception.reason, "SESSION_FALSE_RECEIPT_STATUS")
+            self.assertEqual([row.get("kind", "DISPATCH") for row in fixture.broker_outgoing], ["DISPATCH"])
+            self.assertEqual(fixture.responses, [])
+            self.assertEqual(json.loads(fixture.durable_journal.splitlines()[-1])["state"], "FAILURE_RECORDED")
+        self.assert_closed(fixture)
+
+    def api_boundary_denial(self, boundary):
+        fixture = _NativeServerHTTPOS(self, resources=True)
+        fixture.prepare_http([server.CASES[0]])
+        observed = []
+        def revoke():
+            observed.append(boundary)
+            fixture.raw_status = server.struct.pack("<5I", 1, 4, 0, 2, 1)
+        if boundary == "credential-read":
+            def after(operation, path):
+                if operation == "read" and path == fixture.api_path and not observed:
+                    revoke()
+            fixture.after = after
+        else:
+            def connected(operation, stream, value):
+                if operation == "connect":
+                    revoke()
+            fixture.on_stream = connected
+        with ExitStack() as stack:
+            owner = fixture.start(stack)
+            with self.assertRaises(ConformanceError):
+                owner.serve()
+            self.assertEqual(observed, [boundary])
+            self.assertEqual(fixture.api_requests, [])
+            self.assertEqual(fixture.responses, [])
+            self.assertEqual(len(fixture.codecs), 1)  # campaign codec only; no API handshake
+            self.assertEqual(len(fixture.api_streams), 0 if boundary == "credential-read" else 1)
+            states, _, _ = admission.parse_reservations(fixture.durable_journal)
+            self.assertTrue(states[(owner.envelope["tenantId"], owner.envelope["nonce"])]["held"])
+            last = json.loads(fixture.durable_journal.splitlines()[-1])
+            self.assertEqual(last["state"], "FAILURE_RECORDED")
+            self.assertIsNone(last["cleanup"]["remainingResources"][0]["uid"])
+        self.assert_closed(fixture)
+
+    def test_post_api_credential_policy_loss_stops_before_identity_copy_or_socket(self):
+        self.api_boundary_denial("credential-read")
+
+    def test_post_api_connect_policy_loss_stops_before_handshake_or_mutation(self):
+        self.api_boundary_denial("api-connect")
+
+    def test_cleanup_sync_ambiguity_sends_no_cleanup_ack_or_client_response(self):
+        fixture = _NativeServerHTTPOS(self)
+        fixture.prepare_http([server.CASES[0]])
+        def fail_sync(operation, path, value):
+            if operation == "fsync" and path == fixture.journal_path:
+                if json.loads(fixture.kernel_raw[path].splitlines()[-1])["state"] == "CLEANUP_SEALED":
+                    raise OSError("unit ambiguous cleanup sync")
+        fixture.on_io = fail_sync
+        with ExitStack() as stack:
+            owner = fixture.start(stack)
+            with self.assertRaises(OSError):
+                owner.serve()
+            self.assertEqual([row.get("kind", "DISPATCH") for row in fixture.broker_outgoing], ["DISPATCH"])
+            self.assertEqual(fixture.responses, [])
+            self.assertEqual(json.loads(fixture.durable_journal.splitlines()[-1])["state"], "RUNNING")
+            self.assertEqual(json.loads(fixture.kernel_raw[fixture.journal_path].splitlines()[-1])["state"], "CLEANUP_SEALED")
+            self.assertTrue(owner.log.poisoned)
+            self.assertEqual(owner.failure_accounting.refusal, "ACCOUNTING_UNAVAILABLE")
+        self.assert_closed(fixture)
+
+    def test_completed_case_replay_cannot_dispatch_or_reply_twice(self):
+        fixture = _NativeServerHTTPOS(self)
+        fixture.prepare_http([server.CASES[0], server.CASES[0]])
+        with ExitStack() as stack:
+            owner = fixture.start(stack)
+            with self.assertRaises(ConformanceError):
+                owner.serve()
+            self.assertEqual(len(fixture.responses), 1)
+            self.assertEqual(len([row for row in fixture.broker_outgoing if "operation" in row]), 1)
+            self.assertEqual(len(owner.broker.case_history), 1)
+            states, _, _ = admission.parse_reservations(fixture.durable_journal)
+            self.assertTrue(states[(owner.envelope["tenantId"], owner.envelope["nonce"])]["held"])
+        self.assert_closed(fixture)
+
+    def test_ambiguous_client_write_keeps_terminal_facts_without_next_dispatch(self):
+        fixture = _NativeServerHTTPOS(self)
+        fixture.prepare_http([server.CASES[0]])
+        def lost_response(operation, stream, value):
+            if operation == "send" and stream.mode == "campaign" and value[:1] == b"D":
+                raise OSError("unit ambiguous client delivery")
+        fixture.on_stream = lost_response
+        with ExitStack() as stack:
+            owner = fixture.start(stack)
+            with self.assertRaises(OSError):
+                owner.serve()
+            self.assertEqual(len(fixture.responses), 1)  # bytes offered, not client receipt
+            self.assertEqual(len(fixture.accepted), 1)
+            self.assertEqual(len(owner.broker.case_history), 1)
+            self.assertEqual(json.loads(fixture.durable_journal.splitlines()[-1])["state"], "TERMINAL_RECORDED")
+            states, _, _ = admission.parse_reservations(fixture.durable_journal)
+            self.assertTrue(states[(owner.envelope["tenantId"], owner.envelope["nonce"])]["held"])
+        self.assert_closed(fixture)
+
+    def test_post_accept_policy_loss_prevents_tls_handshake_and_dispatch(self):
+        fixture = _NativeServerHTTPOS(self)
+        fixture.prepare_http([server.CASES[0]])
+        def revoke(operation, stream, value):
+            if operation == "accept":
+                fixture.raw_status = server.struct.pack("<5I", 1, 4, 0, 2, 1)
+        fixture.on_stream = revoke
+        with ExitStack() as stack:
+            owner = fixture.start(stack)
+            with self.assertRaises(ConformanceError):
+                owner.serve()
+            self.assertEqual(fixture.codecs, [])
+            self.assertEqual(fixture.broker_outgoing, [])
+            self.assertEqual(fixture.accepted[0].sent, [])
+        self.assert_closed(fixture)
+
+
+class NativeServerFactoryTests(unittest.TestCase):
+    """Real constructor plus zero-resource driver, not native or full HTTP QA."""
+    def test_full_constructor_keeps_real_qualification_observer_broker_and_journal(self):
+        fixture = _NativeServerKernelOS(self)
+        with ExitStack() as stack:
+            owner = fixture.start(stack)
+            self.assertIs(type(owner), server.NativeProxyServer)
+            self.assertIs(type(owner.qualification), server._KernelQualification)
+            self.assertIs(type(owner.self_inspection), server._KernelSelfInspection)
+            self.assertIs(type(owner.observer), server._Observer)
+            self.assertIs(type(owner.broker), server._Broker)
+            self.assertIs(type(owner.storage), server._State)
+            self.assertIs(type(owner.log), admission._AdmissionLog)
+            self.assertEqual(json.loads(fixture.durable_journal.splitlines()[-1])["state"], "RESERVED")
+            self.assertTrue(owner.reserved)
+            self.assertEqual(len(fixture.channels), 2)
+            self.assertEqual(len(fixture.listeners), 1)
+            self.assertEqual(len(fixture.memfds), 1)
+            self.assertEqual(fixture.broker_outgoing, [])
+            self.assertGreater(len(fixture.observations), 0)
+            first_secret = fixture.events.index(("open", server.IDENTITY))
+            durable = fixture.events.index(("fsync", server.STATE))
+            self.assertLess(durable, first_secret)
+            self.assertEqual(set(owner.secrets.raw), {server.IDENTITY})
+            self.assertEqual(owner.deadline, 700.0)
+        self.assertEqual(set(fixture.handles), {0, 1, 2})
+        self.assertTrue(all(mapping.closes == 1 for mapping in fixture.maps))
+        self.assertTrue(fixture.listeners[0].closed)
+
+    def test_full_constructor_and_real_zero_resource_driver_preserve_durable_terminal_order(self):
+        fixture = _NativeServerKernelOS(self)
+        with ExitStack() as stack:
+            owner = fixture.start(stack)
+            fixture.prepare_case(owner)
+            broker = owner.broker
+            result = owner._drive_case()
+            self.assertEqual(result, fixture.receipt_raw)
+            self.assertEqual([json.loads(raw)["state"] for raw in fixture.durable_journal.splitlines()],
+                ["RESERVED", "RUNNING", "CLEANUP_SEALED", "TERMINAL_RECORDED"])
+            self.assertEqual([frame.get("kind", "DISPATCH") for frame in fixture.broker_outgoing],
+                ["DISPATCH", "CLEANUP_RECORDED"])
+            states, _, _ = admission.parse_reservations(fixture.durable_journal)
+            state = states[(owner.envelope["tenantId"], owner.envelope["nonce"])]
+            self.assertTrue(state["held"])  # one of ten cases, not release acceptance
+            self.assertIsNone(state["current"])
+            self.assertIsNone(owner.active_operation)
+            self.assertEqual(len(broker.case_history), 1)
+            self.assertIsNone(broker.credential)
+            self.assertEqual(len(fixture.channels), 2)
+            self.assertEqual(len(fixture.listeners), 1)
+
+    def test_full_factory_rejects_bad_envelope_before_opening_capacity_or_state(self):
+        fixture = _NativeServerKernelOS(self)
+        value = json.loads(fixture.raw["/unit-only/envelope.json"])
+        value["nonce"] = "unit-forged-nonce"
+        fixture.raw["/unit-only/envelope.json"] = canonical_bytes(value)
+        with ExitStack() as stack:
+            fixture.context(stack)
+            with self.assertRaises(ConformanceError):
+                server.NativeProxyServer()
+            self.assertIsNone(server._ACTIVE)
+        self.assertNotIn("/unit-only/capacity.json", fixture.read_paths)
+        self.assertNotIn(("open", fixture.journal_path), fixture.events)
+        self.assertEqual(fixture.channels, [])
+        self.assertEqual(set(fixture.handles), {0, 1, 2})
+
+    def test_full_factory_rejects_packet_digest_drift_before_qualification_and_state(self):
+        fixture = _NativeServerKernelOS(self)
+        fixture.raw["/unit-only/packet.yaml"] += b"\n"
+        with ExitStack() as stack:
+            fixture.context(stack)
+            with self.assertRaisesRegex(ConformanceError, "PROXY_FILE_DIGEST"):
+                server.NativeProxyServer()
+        self.assertNotIn(("open", fixture.journal_path), fixture.events)
+        self.assertNotIn(server.IDENTITY, fixture.read_paths)
+        self.assertEqual(fixture.channels, [])
+
+    def test_full_factory_policy_loss_prevents_state_observer_and_credentials(self):
+        fixture = _NativeServerKernelOS(self)
+        fixture.raw_status = server.struct.pack("<5I", 1, 2, 0, 1, 1)
+        with ExitStack() as stack:
+            fixture.context(stack)
+            with self.assertRaises(ConformanceError):
+                server.NativeProxyServer()
+        self.assertNotIn(("open", fixture.journal_path), fixture.events)
+        self.assertNotIn(server.IDENTITY, fixture.read_paths)
+        self.assertEqual(fixture.channels, [])
+        self.assertEqual(fixture.memfds, [])
+
+    def test_full_factory_state_custody_loss_prevents_observer_and_credentials(self):
+        fixture = _NativeServerKernelOS(self)
+        with ExitStack() as stack:
+            fixture.context(stack)
+            fixture.nodes[fixture.journal_path].st_mode = stat.S_IFREG | 0o644
+            with self.assertRaisesRegex(ConformanceError, "ADMISSION_STORE_CUSTODY"):
+                server.NativeProxyServer()
+        self.assertEqual(fixture.channels, [])
+        self.assertNotIn(server.IDENTITY, fixture.read_paths)
+        self.assertEqual(fixture.kernel_raw[fixture.journal_path], b"")
+
+    def test_full_factory_zero_resource_action_is_denied_before_upstream_or_cleanup(self):
+        fixture = _NativeServerKernelOS(self)
+        fixture.driver_fault = "zero-resource-action"
+        with ExitStack() as stack:
+            owner = fixture.start(stack)
+            fixture.prepare_case(owner)
+            broker = owner.broker
+            with self.assertRaises(ConformanceError):
+                owner._drive_case()
+            self.assertTrue(broker.failed and broker.closed)
+            self.assertEqual([json.loads(raw)["state"] for raw in fixture.durable_journal.splitlines()],
+                             ["RESERVED", "RUNNING", "FAILURE_RECORDED"])
+            self.assertIsNone(json.loads(fixture.durable_journal.splitlines()[-1])["cleanup"])
+            self.assertIsNone(broker.credential)
+            self.assertEqual(len(fixture.channels), 2)
+            self.assertEqual(len(fixture.listeners), 1)
+            self.assertEqual(len(fixture.broker_outgoing), 1)
+
+    def test_full_factory_lost_terminal_retains_cleanup_seal_without_success(self):
+        fixture = _NativeServerKernelOS(self)
+        fixture.driver_fault = "lost-terminal"
+        with ExitStack() as stack:
+            owner = fixture.start(stack)
+            fixture.prepare_case(owner)
+            with self.assertRaises(ConformanceError):
+                owner._drive_case()
+            self.assertEqual([json.loads(raw)["state"] for raw in fixture.durable_journal.splitlines()],
+                             ["RESERVED", "RUNNING", "CLEANUP_SEALED", "FAILURE_RECORDED"])
+            states, _, _ = admission.parse_reservations(fixture.durable_journal)
+            state = states[(owner.envelope["tenantId"], owner.envelope["nonce"])]
+            self.assertTrue(state["held"])
+            self.assertIsNotNone(state["pendingCompletion"])
+            self.assertEqual(state.get("terminalCases", []), [])
+            self.assertEqual(len(fixture.broker_outgoing), 2)
+
+
+class KernelQualificationFactoryTests(unittest.TestCase):
+    """C1 real binding/composition/channel factories; OS doubles only."""
+    def environment(self, stack, architecture="amd64"):
+        fixture = _QualificationKernelOS(self, architecture)
+        owner = fixture.context(stack)
+        return fixture, owner, owner.qualification
+
+    def test_real_self_and_both_peer_factories_without_worker_or_credentials(self):
+        with ExitStack() as stack:
+            fixture, owner, subject = self.environment(stack)
+            subject.__init__(owner)
+            self.assertIsNone(subject.check_self())
+            self.assertEqual({name for name, _ in owner.self_inspection.owned},
+                             {"roots", "policy", "process", "code", "mappings", "cgroup", "filters"})
+            for role in ("OBSERVER", "BROKER"):
+                peer = fixture.peer(role)
+                stack.callback(peer.close)
+                self.assertIsNone(subject.check_peer(role, peer))
+            self.assertEqual(set(subject._peers), {"OBSERVER", "BROKER"})
+            self.assertEqual(owner.secrets.raw, {})
+            self.assertNotIn("WORKER", fixture.processes)
+            self.assertEqual(fixture.network.call_count, 2)
+            self.assertTrue(fixture.maps)
+
+    def test_real_arm64_self_factory_and_partial_policy_failure_close_owned_views(self):
+        with ExitStack() as stack:
+            fixture, owner, subject = self.environment(stack, "arm64")
+            # Fail a real policy read after resources have been retained. The
+            # absence is an OS error, never a successful inspector substitute.
+            def deny(operation, path):
+                if operation == "read" and path == "/sys/fs/selinux/policy":
+                    raise PermissionError("unit missing inspection permission")
+            fixture.after = deny
+            with self.assertRaises(PermissionError):
+                subject.__init__(owner)
+            self.assertTrue(subject.closed and subject.failed)
+            self.assertEqual(set(fixture.fds), {row[0] for row in owner.files.rows.values()})
+            self.assertEqual(owner.secrets.raw, {})
+            fixture.network.assert_not_called()
+
+    def test_policy_epoch_loss_inside_real_read_is_sticky_and_closes_originals(self):
+        with ExitStack() as stack:
+            fixture, owner, subject = self.environment(stack)
+            subject.__init__(owner)
+            def change(operation, path):
+                if operation == "pread" and path == server.EXECUTABLE:
+                    fixture.raw_status = server.struct.pack("<5I", 1, 4, 1, 2, 1)
+            fixture.after = change
+            with self.assertRaises(ConformanceError):
+                subject.check_self()
+            fixture.after = lambda *args: None
+            fixture.raw_status = server.struct.pack("<5I", 1, 2, 1, 1, 1)
+            with self.assertRaisesRegex(ConformanceError, "KERNEL_QUALIFICATION_UNAVAILABLE"):
+                subject.check_self()
+            subject.close()
+            self.assertEqual(set(fixture.fds), {row[0] for row in owner.files.rows.values()})
+            self.assertEqual(owner.secrets.raw, {})
+
+    def test_unregistered_owner_and_caller_context_cannot_construct(self):
+        for value in ({"qualified": True}, 3, lambda: None, SimpleNamespace()):
+            with self.subTest(value_type=type(value)), self.assertRaisesRegex(ConformanceError, "KERNEL_QUALIFICATION_OWNER"):
+                server._KernelQualification(value)
+        with ExitStack() as stack:
+            fixture, owner, subject = self.environment(stack)
+            with self.assertRaisesRegex(ConformanceError, "KERNEL_QUALIFICATION_OWNER"):
+                server._KernelQualification(owner)
+            fixture.network.assert_not_called()
+            self.assertIs(owner.qualification, subject)
+
+    def test_real_factory_wrong_peer_role_never_becomes_broker_qualification(self):
+        with ExitStack() as stack:
+            fixture, owner, subject = self.environment(stack)
+            subject.__init__(owner)
+            peer = fixture.peer("OBSERVER")
+            stack.callback(peer.close)
+            with self.assertRaisesRegex(ConformanceError, "KERNEL_QUALIFICATION_PEER_OWNER"):
+                subject.check_peer("BROKER", peer)
+            self.assertTrue(subject.failed)
+            self.assertEqual(subject._peers, {})
+            self.assertFalse(peer.closed)
+            self.assertEqual(owner.secrets.raw, {})
+
+    def test_real_factory_original_owner_replacement_refuses_before_credentials(self):
+        with ExitStack() as stack:
+            fixture, owner, subject = self.environment(stack)
+            subject.__init__(owner)
+            original = owner.self_inspection
+            owner.self_inspection = Mock()
+            with self.assertRaisesRegex(ConformanceError, "KERNEL_QUALIFICATION_OWNER_CHANGED"):
+                subject.check_self()
+            subject.close()
+            self.assertTrue(original.closed)
+            owner.self_inspection.close.assert_not_called()
+            self.assertEqual(owner.secrets.raw, {})
+            fixture.network.assert_not_called()
+
+    def test_real_factory_peer_fd_reuse_is_not_an_accepted_new_channel(self):
+        with ExitStack() as stack:
+            fixture, owner, subject = self.environment(stack)
+            subject.__init__(owner)
+            peer = fixture.peer("BROKER")
+            stack.callback(peer.close)
+            subject.check_peer("BROKER", peer)
+            fd = peer._socket_fd
+            saved = fixture.handles[fd]
+            fixture.handles[fd] = (saved[0], SimpleNamespace(**{**vars(saved[1]), "st_ino": saved[1].st_ino + 1}))
+            try:
+                with self.assertRaises(ConformanceError):
+                    subject.check_peer("BROKER", peer)
+                self.assertTrue(subject.failed)
+                self.assertIn(fd, fixture.handles)  # do not close a recycled descriptor
+                self.assertEqual(owner.secrets.raw, {})
+            finally:
+                fixture.handles[fd] = saved  # restore the OS double only for original-owner cleanup
+
+    def test_real_factory_peer_pid_reuse_is_sticky_without_reenrollment(self):
+        with ExitStack() as stack:
+            fixture, owner, subject = self.environment(stack)
+            subject.__init__(owner)
+            peer = fixture.peer("BROKER")
+            stack.callback(peer.close)
+            subject.check_peer("BROKER", peer)
+            path = "/proc/" + str(fixture.processes["BROKER"]) + "/stat"
+            prefix, body = fixture.kernel_raw[path].split(b") ", 1)
+            fields = body.split()
+            fields[19] = str(int(fields[19]) + 1).encode()
+            fixture.kernel_raw[path] = prefix + b") " + b" ".join(fields) + b"\n"
+            with self.assertRaises(ConformanceError):
+                subject.check_peer("BROKER", peer)
+            self.assertTrue(subject.failed)
+            with self.assertRaisesRegex(ConformanceError, "KERNEL_QUALIFICATION_UNAVAILABLE"):
+                subject.check_self()
+            self.assertEqual(owner.secrets.raw, {})
+            self.assertEqual(fixture.network.call_count, 1)
+
+    def test_real_factory_code_byte_drift_cannot_use_old_expected_measurement(self):
+        with ExitStack() as stack:
+            fixture, owner, subject = self.environment(stack)
+            subject.__init__(owner)
+            raw = fixture.raw[server.EXECUTABLE]
+            fixture.raw[server.EXECUTABLE] = raw[:-1] + bytes([raw[-1] ^ 1])
+            with self.assertRaises(ConformanceError):
+                subject.check_self()
+            self.assertTrue(subject.failed)
+            self.assertEqual(owner.secrets.raw, {})
+            fixture.network.assert_not_called()
+
+    def test_real_factory_post_io_deadline_loss_never_renews_lifetime(self):
+        with ExitStack() as stack:
+            fixture, owner, subject = self.environment(stack)
+            subject.__init__(owner)
+            original = subject.deadline
+            def expire(operation, path):
+                if operation == "pread" and path == server.EXECUTABLE:
+                    fixture.mono = original
+            fixture.after = expire
+            with self.assertRaises(ConformanceError):
+                subject.check_self()
+            self.assertTrue(subject.failed)
+            self.assertEqual(subject.deadline, original)
+            self.assertEqual(owner.secrets.raw, {})
+            fixture.network.assert_not_called()
 
 
 class ProxyPredecessorTests(unittest.TestCase):

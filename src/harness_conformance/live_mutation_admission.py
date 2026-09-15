@@ -370,6 +370,70 @@ def validate_observed_manifest(observed, expected, uid=None):
     return assigned_uid, version
 
 
+def delete_request_body(observed, expected, uid):
+    """DATA only: exact UID/version conditions, never force or broad deletion."""
+    assigned, version = validate_observed_manifest(observed, expected, uid)
+    require(type(uid) is str and assigned == uid, "ADMISSION_DELETE_UID_REQUIRED")
+    return canonical_bytes({"apiVersion": "v1", "kind": "DeleteOptions",
+                            "preconditions": {"uid": uid, "resourceVersion": version}})
+
+
+def validate_delete_response(observed, expected, uid):
+    """An exact200 acknowledgement is not proof of resource absence."""
+    value, manifest = document(observed, 16384), document(expected, 16384)
+    require(type(value) is dict and type(manifest) is dict, "ADMISSION_DELETE_RESPONSE_INVALID")
+    require(type(uid) is str and re.fullmatch("[A-Za-z0-9-]{1,128}", uid),
+            "ADMISSION_DELETE_UID_REQUIRED")
+    if value.get("kind") == "Status":
+        closed(value, ("apiVersion", "kind", "metadata", "status", "details", "code"))
+        details = value["details"]
+        require(type(details) is dict, "ADMISSION_DELETE_RESPONSE_INVALID")
+        closed(details, ("name", "kind", "uid"), ("group",))
+        plural = {"Pod": "pods", "ConfigMap": "configmaps", "Service": "services"}.get(manifest.get("kind"))
+        require(value["apiVersion"] == "v1" and value["metadata"] == {} and value["status"] == "Success"
+                and type(value["code"]) is int and value["code"] == 200 and plural is not None
+                and details["kind"] == plural and details["name"] == manifest["metadata"]["name"]
+                and details["uid"] == uid and details.get("group", "") == "",
+                "ADMISSION_DELETE_RESPONSE_INVALID")
+    else:
+        meta = value.get("metadata", {})
+        require(type(meta) is dict, "ADMISSION_DELETE_RESPONSE_INVALID")
+        if "deletionTimestamp" in meta:
+            require_time(meta.pop("deletionTimestamp"), "deletionTimestamp")
+        if "deletionGracePeriodSeconds" in meta:
+            seconds = meta.pop("deletionGracePeriodSeconds")
+            require(type(seconds) is int and seconds >= 0, "ADMISSION_DELETE_RESPONSE_INVALID")
+        validate_observed_manifest(value, manifest, uid)
+    return None  # no ledger transition or resource-capacity release
+
+
+def validate_absent_status(observed, expected, uid):
+    """Validate scoped NotFound DATA, not transport, authority or absence proof.
+
+    The native owner must independently establish HTTP404 on its original
+    authenticated GET connection and hold the recorded UID throughout. Bare
+    errors, generic route/namespace failures and unknown ownership are refused.
+    """
+    actual, signed = document(observed, 16384), document(expected, 16384)
+    require(type(uid) is str and re.fullmatch(r"[A-Za-z0-9-]{1,128}", uid), "ADMISSION_ABSENCE_UID_REQUIRED")
+    require(type(actual) is dict and type(signed) is dict, "ADMISSION_ABSENCE_STATUS_INVALID")
+    closed(actual, ("apiVersion", "kind", "metadata", "status", "message", "reason", "details", "code"))
+    require(signed.get("apiVersion") == "v1" and signed.get("kind") in ("Pod", "ConfigMap", "Service"),
+            "ADMISSION_ABSENCE_SCOPE")
+    name, namespace = (signed.get("metadata", {}).get(k) for k in ("name", "namespace"))
+    require(all(type(v) is str and re.fullmatch(r"[a-z0-9][a-z0-9.-]{0,62}", v) for v in (name, namespace)),
+            "ADMISSION_ABSENCE_SCOPE")
+    plural = {"Pod": "pods", "ConfigMap": "configmaps", "Service": "services"}[signed["kind"]]
+    details = actual["details"]
+    require(type(details) is dict and set(details) in ({"name", "kind"}, {"name", "kind", "group"})
+            and details.get("group", "") == "" and details["name"] == name and details["kind"] == plural
+            and actual["apiVersion"] == "v1" and actual["kind"] == "Status"
+            and type(actual["metadata"]) is dict and actual["metadata"] == {}
+            and actual["status"] == "Failure" and actual["reason"] == "NotFound"
+            and type(actual["code"]) is int and actual["code"] == 404
+            and actual["message"] == plural + ' "' + name + '" not found', "ADMISSION_ABSENCE_STATUS_INVALID")
+
+
 def cleanup_receipt(binding_digest, operation, now, remaining, previous=ZERO):
     require_digest(binding_digest, "bindingDigest")
     require_digest(previous, "previousReceiptDigest")
@@ -436,8 +500,34 @@ def _create_record(binding, operation, profile, broker_binding, action, observed
             "manifestDigest": action["manifestDigest"], "uid": uid, "resourceVersion": version}
 
 
+def _absence_record(binding, operation, profile, broker_binding, action, history, observed):
+    """Derive a private absence row from an existing CREATED identity only."""
+    action = document(action, 16384)
+    closed(action, ("actionId", "verb", "manifestDigest"))
+    require(action["verb"] == "GET", "ADMISSION_ABSENCE_GET_REQUIRED")
+    # Reuse exact scope derivation as DATA; this does not execute a CREATE.
+    scope = _create_record(binding, operation, profile, broker_binding, {**action, "verb": "CREATE"})
+    binding = document(binding, 16384)
+    states, _, _ = parse_reservations(history)
+    prior = states.get((binding["tenantId"], binding["runNonce"]))
+    require(prior is not None and prior["binding"] == binding and prior["held"]
+            and prior["current"] == operation, "ADMISSION_ABSENCE_RUNNING_REQUIRED")
+    key = tuple(scope[k] for k in ("apiVersion", "kind", "namespace", "name"))
+    original = prior.get("resources", {}).get(key)
+    require(original is not None and original["state"] == "CREATED" and original["operation"] == operation
+            and original["manifestDigest"] == scope["manifestDigest"]
+            and original["actionId"] < action["actionId"], "ADMISSION_ABSENCE_CREATED_REQUIRED")
+    manifest = next(r["manifest"] for r in document(profile)["resources"]
+                    if r["manifestDigest"] == scope["manifestDigest"])
+    validate_absent_status(observed, manifest, original["uid"])
+    status = document(observed, 16384)
+    resource = {k: original[k] for k in scope}
+    proof = {"actionId": action["actionId"], "responseDigest": canonical_digest(status), "status": status}
+    return resource, proof
+
+
 def _resource_transition(prior, row):
-    """Replay only intent/identity facts. Neither fact permits cleanup or release."""
+    """Replay private ownership facts; these data alone authorize no API effect."""
     resource = row["resource"]
     closed(resource, ("actionId", "apiVersion", "kind", "namespace", "name", "manifestDigest", "uid", "resourceVersion"))
     require(row["cleanup"] is None and prior["current"] == row["operation"]
@@ -450,6 +540,24 @@ def _resource_transition(prior, row):
     require_digest(resource["manifestDigest"], "manifestDigest")
     resources = prior.setdefault("resources", {})
     key = (resource["apiVersion"], resource["kind"], resource["namespace"], resource["name"])
+    if row["state"] == "ABSENT":
+        original = resources.get(key)
+        require(original is not None and original["state"] == "CREATED"
+                and original["operation"] == row["operation"]
+                and all(original[k] == v for k, v in resource.items()), "ADMISSION_ABSENCE_CREATED_REQUIRED")
+        proof = row["absence"]
+        closed(proof, ("actionId", "responseDigest", "status"))
+        require(type(proof["actionId"]) is int and resource["actionId"] < proof["actionId"] <= 256
+                and proof["responseDigest"] == canonical_digest(proof["status"])
+                and all(r["actionId"] != proof["actionId"] and r.get("absenceActionId") != proof["actionId"]
+                        for r in resources.values() if r["operation"] == row["operation"]),
+                "ADMISSION_ABSENCE_PROOF_INVALID")
+        expected = {"apiVersion": resource["apiVersion"], "kind": resource["kind"],
+                    "metadata": {"name": resource["name"], "namespace": resource["namespace"]}}
+        validate_absent_status(proof["status"], expected, resource["uid"])
+        resources[key] = {**original, "state": "ABSENT", "absenceActionId": proof["actionId"],
+                          "absenceDigest": canonical_digest(proof)}
+        return  # retain original name/UID/create action forever; never enable reuse
     if row["state"] == "CREATE_INTENT":
         require(resource["uid"] is None and resource["resourceVersion"] is None,
                 "ADMISSION_INTENT_IDENTITY")
@@ -457,6 +565,8 @@ def _resource_transition(prior, row):
                 and all(r["state"] != "CREATE_INTENT" for r in resources.values())
                 and all(r["manifestDigest"] != resource["manifestDigest"] for r in resources.values())
                 and all(r["actionId"] < resource["actionId"] for r in resources.values()
+                        if r["operation"] == row["operation"])
+                and all(r.get("absenceActionId", 0) < resource["actionId"] for r in resources.values()
                         if r["operation"] == row["operation"]), "ADMISSION_CREATE_REPLAY")
     else:
         original = resources.get(key)
@@ -471,16 +581,80 @@ def _resource_transition(prior, row):
     resources[key] = {**resource, "operation": row["operation"], "state": row["state"]}
 
 
+def _completion_frame(binding, operation, cleanup, proof):
+    """Reconstruct sealed DATA only; native custody and receipt checks are separate."""
+    proof = document(proof, 16384)
+    require(type(proof) is dict, "ADMISSION_COMPLETION_PROOF_INVALID")
+    closed(proof, ("dispatch", "executionId", "receiptDigest", "receiptSize", "receiptStatus",
+                   "failedAction", "cleanupSequence", "cleanupPreviousDigest"))
+    dispatch = broker_document(proof["dispatch"], "dispatch")
+    require(dispatch["reservationDigest"] == canonical_digest(binding)
+            and dispatch["runNonce"] == binding["runNonce"] and dispatch["caseId"] == operation,
+            "ADMISSION_COMPLETION_BINDING")
+    require(type(proof["receiptSize"]) is int and 1 <= proof["receiptSize"] <= 4194304
+            and type(proof["cleanupSequence"]) is int and 3 <= proof["cleanupSequence"] < 2048
+            and type(proof["failedAction"]) is bool
+            and proof["receiptStatus"] in ("PASS", "FAIL", "NOT_RUN_ENV_UNAVAILABLE"),
+            "ADMISSION_COMPLETION_PROOF_INVALID")
+    require_digest(proof["receiptDigest"], "receiptDigest")
+    require_digest(proof["cleanupPreviousDigest"], "cleanupPreviousDigest")
+    require(proof["receiptStatus"] != "PASS" or cleanup["state"] == "CLEAN" and not proof["failedAction"],
+            "ADMISSION_COMPLETION_FALSE_PASS")
+    return broker_document({"schemaVersion": "planeon.internal.broker-frame/v1",
+        **{k: dispatch[k] for k in BROKER_COMMON}, "executionId": proof["executionId"],
+        "sequence": proof["cleanupSequence"], "previousDigest": proof["cleanupPreviousDigest"],
+        "kind": "CLEANUP_RECORDED", "payload": {"cleanupDigest": canonical_digest(cleanup),
+            "state": cleanup["state"], "remainingResources": cleanup["remainingResources"]}}, "frame")
+
+
+def _completion_terminal(binding, operation, cleanup, proof, terminal):
+    """Check the exact broker echo; this parser cannot observe delivery or reaping."""
+    expected = _completion_frame(binding, operation, cleanup, proof)
+    terminal = broker_document(terminal, "frame")
+    payload = {"status": {"PASS": "COMPLETED", "FAIL": "FAILED",
+                          "NOT_RUN_ENV_UNAVAILABLE": "UNAVAILABLE"}[proof["receiptStatus"]],
+        "receiptDigest": proof["receiptDigest"], "receiptSize": proof["receiptSize"],
+        "cleanupDigest": canonical_digest(cleanup), "workerReaped": True}
+    require(terminal == {**expected, "sequence": expected["sequence"] + 1,
+        "previousDigest": canonical_digest(expected), "kind": "TERMINAL", "payload": payload},
+        "ADMISSION_TERMINAL_MISMATCH")
+    return terminal
+
+
+def _failure_cleanup(binding, operation, now, prior, reason):
+    """Derive fail-only cleanup DATA from retained rows; no supplied UID/list."""
+    require(type(reason) is str and reason in
+            ("DELETE_DENIED", "UID_CHANGED", "DEADLINE", "IO_AMBIGUOUS", "OBSERVATION_UNAVAILABLE"),
+            "ADMISSION_FAILURE_REASON")
+    require(prior["binding"] == binding and prior["current"] == operation and prior["held"] is True,
+            "ADMISSION_FAILURE_SCOPE")
+    remaining = [{**{k: row[k] for k in ("apiVersion", "kind", "namespace", "name", "uid", "manifestDigest")},
+                  "reasonCode": "IO_AMBIGUOUS" if row["uid"] is None else reason}
+                 for _, row in sorted(prior.get("resources", {}).items())
+                 if row["operation"] == operation and row["state"] != "ABSENT"]
+    # Zero-resource/confirmed-absence failures have no remaining-resource
+    # claim, not a fabricated CLEANUP_PENDING entry or a successful CLEAN case.
+    return (cleanup_receipt(canonical_digest(binding), operation, now, remaining, prior["cleanupDigest"])
+            if remaining else None)
+
+
 def parse_reservations(raw):
     require(type(raw) is bytes and len(raw) <= 4194304 and (not raw or raw.endswith(b"\n")), "ADMISSION_HISTORY_INVALID")
     lines = raw.splitlines()
     require(len(lines) <= 4096, "ADMISSION_HISTORY_FULL")
-    previous, reservations, recorded = ZERO, {}, set()
+    previous, reservations, recorded, modes = ZERO, {}, set(), {}
     for index, line in enumerate(lines, 1):
         row = document(line, 32768)
         require(type(row) is dict, "ADMISSION_HISTORY_INVALID")
-        resource_row = row.get("state") in ("CREATE_INTENT", "CREATED")
-        closed(row, LEDGER_FIELDS + ("resource",) if resource_row else LEDGER_FIELDS)
+        resource_row = row.get("state") in ("CREATE_INTENT", "CREATED", "ABSENT")
+        extra = ("resource", "absence") if row.get("state") == "ABSENT" else (("resource",) if resource_row else ())
+        if row.get("state") == "CLEANUP_SEALED":
+            extra = ("completion",)
+        elif row.get("state") == "TERMINAL_RECORDED":
+            extra = ("terminal",)
+        elif row.get("state") == "FAILURE_RECORDED":
+            extra = ("failure",)
+        closed(row, LEDGER_FIELDS + extra)
         binding = row["binding"]
         closed(binding, BINDING_FIELDS)
         for field in BINDING_FIELDS:
@@ -507,7 +681,21 @@ def parse_reservations(raw):
                     "ADMISSION_HISTORY_TRANSITION")
             operation = row["operation"]
             require(type(operation) is str and operation in CASES, "ADMISSION_OPERATION_INVALID")
-            if resource_row:
+            require("failure" not in prior, "ADMISSION_FAILURE_CLOSED")
+            if row["state"] == "FAILURE_RECORDED":
+                require(modes.get(key, "NATIVE_TERMINAL") == "NATIVE_TERMINAL",
+                        "ADMISSION_COMPLETION_MODE_CHANGED")
+                closed(row["failure"], ("reasonCode",))
+                expected = _failure_cleanup(binding, operation, row["observedAt"], prior, row["failure"]["reasonCode"])
+                require(row["cleanup"] == expected, "ADMISSION_FAILURE_CLEANUP_CHANGED")
+                modes[key] = "NATIVE_TERMINAL"
+                prior["failure"] = row["failure"]
+                prior["held"] = True
+                if expected is not None:
+                    prior["cleanupDigest"] = canonical_digest(expected)
+                # Retain current case, pending seal, original UIDs, used names
+                # and every consumed nonce. No following row can resume this run.
+            elif resource_row:
                 require((key, operation) not in recorded, "ADMISSION_RESOURCE_AFTER_CLEANUP")
                 _resource_transition(prior, row)
             elif row["state"] == "RUNNING":
@@ -515,27 +703,54 @@ def parse_reservations(raw):
                         "ADMISSION_OPERATION_REPLAY")
                 prior["current"] = operation
                 prior["done"].append(operation)
-            elif row["state"] == "RECORDED":
+            elif row["state"] in ("RECORDED", "CLEANUP_SEALED"):
                 require(prior["current"] == operation and type(row["cleanup"]) is dict, "ADMISSION_HISTORY_TRANSITION")
+                mode = "NATIVE_TERMINAL" if row["state"] == "CLEANUP_SEALED" else "LEGACY_RECORDED"
+                require(modes.get(key, mode) == mode, "ADMISSION_COMPLETION_MODE_CHANGED")
+                modes[key] = mode
+                if mode == "NATIVE_TERMINAL":
+                    require((key, operation) not in recorded and "pendingCompletion" not in prior,
+                            "ADMISSION_COMPLETION_REPLAY")
                 receipt = row["cleanup"]
                 expected = cleanup_receipt(canonical_digest(binding), operation, row["observedAt"],
                                            receipt.get("remainingResources"), prior["cleanupDigest"])
                 require(receipt == expected, "ADMISSION_CLEANUP_INVALID")
                 resources = [r for r in prior.get("resources", {}).values() if r["operation"] == operation]
-                if resources:
-                    # Until independent absence accounting is implemented, every
-                    # intent/created identity remains held, including a lost reply.
+                if resources or mode == "NATIVE_TERMINAL":
+                    # Only a separately recorded original-UID absence fact can
+                    # remove an entry from pending cleanup. Keep its history.
+                    unresolved = [r for r in resources if r["state"] != "ABSENT"]
                     fields = ("apiVersion", "kind", "namespace", "name", "uid", "manifestDigest")
                     remaining = receipt["remainingResources"]
-                    require(len(remaining) == len(resources)
+                    require(len(remaining) == len(unresolved)
                             and {tuple(r[k] for k in fields) for r in remaining}
-                            == {tuple(r[k] for k in fields) for r in resources}, "ADMISSION_RESOURCE_NOT_CLEAN")
+                            == {tuple(r[k] for k in fields) for r in unresolved}, "ADMISSION_RESOURCE_NOT_CLEAN")
                 recorded.add((key, operation))
                 prior["cleanupDigest"] = canonical_digest(receipt)
-                prior["current"] = None if receipt["state"] == "CLEAN" else operation
-                # The process remains one-run exclusive. All ten operations and
-                # independently confirmed CLEAN are needed to release capacity.
-                prior["held"] = len(prior["done"]) < len(CASES) or receipt["state"] != "CLEAN"
+                if mode == "NATIVE_TERMINAL":
+                    frame = _completion_frame(binding, operation, receipt, row["completion"])
+                    prior["pendingCompletion"] = {"operation": operation, "cleanup": receipt,
+                        "proof": row["completion"], "frameDigest": canonical_digest(frame)}
+                    # Cleanup is durable, but a missing/lost terminal still holds
+                    # this exact case and all run capacity, including case ten.
+                    prior["held"] = True
+                else:
+                    # Preserve historical RECORDED replay semantics byte-for-byte.
+                    # The new native driver never mixes or appends this mode.
+                    prior["current"] = None if receipt["state"] == "CLEAN" else operation
+                    prior["held"] = len(prior["done"]) < len(CASES) or receipt["state"] != "CLEAN"
+            elif row["state"] == "TERMINAL_RECORDED":
+                pending = prior.get("pendingCompletion")
+                require(modes.get(key) == "NATIVE_TERMINAL" and type(pending) is dict
+                        and prior["current"] == operation == pending["operation"]
+                        and row["cleanup"] is None, "ADMISSION_TERMINAL_WITHOUT_CLEANUP")
+                terminal = _completion_terminal(binding, operation, pending["cleanup"], pending["proof"], row["terminal"])
+                completed = terminal["payload"]["status"] == "COMPLETED" and pending["cleanup"]["state"] == "CLEAN"
+                prior.setdefault("terminalCases", []).append(operation)
+                prior["current"] = None if completed else operation
+                prior["held"] = not completed or len(prior["terminalCases"]) < len(CASES)
+                prior["lastTerminalDigest"] = canonical_digest(terminal)
+                del prior["pendingCompletion"]
             else:
                 require(False, "ADMISSION_HISTORY_TRANSITION")
         prior["last"] = instant
@@ -547,24 +762,30 @@ class _AdmissionLog:
     """Shared durable algorithm. Instances/data alone authorize no effect."""
     def __init__(self, storage):
         self.storage, self.poisoned = storage, False
+        self._verified_history = None
+        self._storage_ambiguous = self._failure_attempted = False
 
     def record(self, binding, state, operation, now, cleanup=None):
         require(not self.poisoned, "ADMISSION_STORAGE_AMBIGUOUS")
-        with self.storage.transaction() as io:
-            before = io.read()
-            _, previous, count = parse_reservations(before)
-            row = {"sequence": count + 1, "previousDigest": previous, "binding": binding,
-                   "state": state, "operation": operation, "observedAt": now, "cleanup": cleanup}
-            after = before + canonical_bytes(row) + b"\n"
-            parse_reservations(after)
-            try:
+        writing = False
+        try:
+            with self.storage.transaction() as io:
+                before = io.read()
+                _, previous, count = parse_reservations(before)
+                row = {"sequence": count + 1, "previousDigest": previous, "binding": binding,
+                       "state": state, "operation": operation, "observedAt": now, "cleanup": cleanup}
+                after = before + canonical_bytes(row) + b"\n"
+                parse_reservations(after)
+                writing = True
                 io.append(after[len(before):])
                 io.sync()
                 require(io.read() == after, "ADMISSION_READBACK_FAILED")
-            except BaseException:
-                self.poisoned = True
-                raise
+            self._verified_history = after
             return canonical_digest(row)
+        except BaseException:
+            if writing:
+                self.poisoned = self._storage_ambiguous = True
+            raise
 
     def record_resource(self, binding, state, operation, now, profile, broker_binding, action,
                         *, expected_history, observed=None):
@@ -595,11 +816,112 @@ class _AdmissionLog:
                 io.append(after[len(before):])
                 io.sync()
                 require(io.read() == after, "ADMISSION_READBACK_FAILED")
+            self._verified_history = after
             return canonical_digest(row)
         except BaseException:
             if writing:
-                self.poisoned = True
+                self.poisoned = self._storage_ambiguous = True
             raise
+
+    def record_absence(self, binding, operation, now, profile, broker_binding, action,
+                       *, expected_history, observed):
+        """Persist one guarded native GET404 observation; never infer or retry it."""
+        require(not self.poisoned, "ADMISSION_STORAGE_AMBIGUOUS")
+        resource, proof = _absence_record(binding, operation, profile, broker_binding, action, expected_history, observed)
+        binding = document(binding, 16384)
+        writing = False
+        try:
+            with self.storage.transaction() as io:
+                before = io.read()
+                require(before == expected_history, "ADMISSION_RESOURCE_HISTORY_CHANGED")
+                _, previous, count = parse_reservations(before)
+                row = {"sequence": count + 1, "previousDigest": previous, "binding": binding,
+                       "state": "ABSENT", "operation": operation, "observedAt": now, "cleanup": None,
+                       "resource": resource, "absence": proof}
+                after = before + canonical_bytes(row) + b"\n"
+                parse_reservations(after)
+                writing = True
+                io.append(after[len(before):])
+                io.sync()
+                require(io.read() == after, "ADMISSION_READBACK_FAILED")
+            self._verified_history = after
+            return canonical_digest(row)
+        except BaseException:
+            if writing:
+                self.poisoned = self._storage_ambiguous = True
+            raise
+
+    def record_completion(self, binding, state, operation, now, *, expected_history,
+                          cleanup=None, completion=None, terminal=None):
+        """Append one guarded native completion phase; never infer terminal delivery."""
+        require(not self.poisoned, "ADMISSION_STORAGE_AMBIGUOUS")
+        require(state in ("CLEANUP_SEALED", "TERMINAL_RECORDED")
+                and (state == "CLEANUP_SEALED" and cleanup is not None and completion is not None and terminal is None
+                     or state == "TERMINAL_RECORDED" and terminal is not None and cleanup is completion is None),
+                "ADMISSION_COMPLETION_STATE")
+        require(type(expected_history) is bytes, "ADMISSION_HISTORY_INVALID")
+        binding = document(binding, 16384)
+        writing = False
+        try:
+            with self.storage.transaction() as io:
+                before = io.read()
+                require(before == expected_history, "ADMISSION_COMPLETION_HISTORY_CHANGED")
+                _, previous, count = parse_reservations(before)
+                row = {"sequence": count + 1, "previousDigest": previous, "binding": binding,
+                    "state": state, "operation": operation, "observedAt": now, "cleanup": cleanup,
+                    **({"completion": completion} if state == "CLEANUP_SEALED" else {"terminal": terminal})}
+                after = before + canonical_bytes(row) + b"\n"
+                parse_reservations(after)
+                writing = True
+                io.append(after[len(before):])
+                io.sync()
+                require(io.read() == after, "ADMISSION_READBACK_FAILED")
+            self._verified_history = after
+            return canonical_digest(row)
+        except BaseException:
+            if writing:
+                self.poisoned = self._storage_ambiguous = True
+            raise
+
+    def record_failure(self, binding, operation, now, reason, *, expected_history):
+        """One fail-only append to an intact original journal, never recovery.
+
+        A native owner must separately retain custody. An execution refusal may
+        have poisoned active work, but only a confirmed prior transaction can
+        seed this append. Storage ambiguity, reopened owners, foreign history,
+        retries and any successful continuation are forbidden.
+        """
+        require(self._failure_attempted is False and self._storage_ambiguous is False
+                and type(self._verified_history) is bytes and type(expected_history) is bytes
+                and expected_history == self._verified_history,
+                "ADMISSION_FAILURE_UNAVAILABLE")
+        self._failure_attempted = self.poisoned = True
+        binding = document(binding, 16384)
+        writing = False
+        try:
+            with self.storage.transaction() as io:
+                before = io.read()
+                require(before == expected_history, "ADMISSION_FAILURE_HISTORY_CHANGED")
+                states, previous, count = parse_reservations(before)
+                prior = states.get((binding["tenantId"], binding["runNonce"]))
+                require(prior is not None, "ADMISSION_FAILURE_SCOPE")
+                cleanup = _failure_cleanup(binding, operation, now, prior, reason)
+                row = {"sequence": count + 1, "previousDigest": previous, "binding": binding,
+                    "state": "FAILURE_RECORDED", "operation": operation, "observedAt": now,
+                    "cleanup": cleanup, "failure": {"reasonCode": reason}}
+                after = before + canonical_bytes(row) + b"\n"
+                parse_reservations(after)
+                writing = True
+                io.append(after[len(before):])
+                io.sync()
+                require(io.read() == after, "ADMISSION_READBACK_FAILED")
+            self._verified_history = after
+            return canonical_digest(row)
+        except BaseException:
+            if writing:
+                self._storage_ambiguous = True
+            raise
+
 
 # Fixed, source-owned MET-REPAIR-014 message schema. This is validation data;
 # neither a valid message nor this parser can construct an installed execution.
