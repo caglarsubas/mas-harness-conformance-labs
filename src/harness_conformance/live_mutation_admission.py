@@ -53,6 +53,14 @@ def _bounded(value, maximum, depth=0, budget=None):
 
 
 def document(value, maximum=262144):
+    if type(value) is bytes and type(maximum) is int:
+        require(0 < len(value) <= maximum, "PROXY_DATA_SIZE")
+        raw, value = value, require_canonical_document(value)
+        encoded = canonical_bytes(value)
+        require(encoded == raw, "PROXY_NONCANONICAL_BYTES")
+        _bounded(value, maximum)
+        require(len(encoded) <= maximum, "PROXY_DATA_SIZE")
+        return value
     if type(value) is bytes:
         require(0 < len(value) <= maximum, "PROXY_DATA_SIZE")
         raw, value = value, require_canonical_document(value)
