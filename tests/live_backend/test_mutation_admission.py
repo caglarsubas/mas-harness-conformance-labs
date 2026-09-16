@@ -678,3 +678,453 @@ class ResourceJournalTests(unittest.TestCase):
                            ("namespace", "../foreign"), ("name", "x" * 64), ("manifestDigest", "latest")):
             with self.subTest(key=key), self.assertRaises(ConformanceError):
                 admission.parse_reservations(self.raw_row("CREATE_INTENT", {**payload, key: value}))
+
+
+# CONF-PERF-006: independent fixed semantic oracles and source-only custody.
+import ast as _doc_ast
+import hashlib as _doc_hashlib
+
+_DOCUMENT_REPAIR_PROOF_SHA256 = "0122ee71f769fe14edd90912ab143ce373db7bced202cea7162c87df94f7d82d"
+_DOC_RUNTIME = "src/harness_conformance/live_mutation_admission.py"
+_DOC_TESTS = "tests/live_backend/test_mutation_admission.py"
+_DOC_GUIDE = "docs/live-backend/proxy.md"
+_DOC_BEGIN = b"<!-- CONF-PERF-006 SOURCE_DELTA_ONLY BEGIN -->\n"
+_DOC_END = b"\n<!-- CONF-PERF-006 SOURCE_DELTA_ONLY END -->\n"
+
+
+def _doc_sha(raw):
+    return _doc_hashlib.sha256(raw).hexdigest()
+
+
+def _doc_function(raw):
+    nodes = [node for node in _doc_ast.parse(raw).body
+             if isinstance(node, _doc_ast.FunctionDef) and node.name == "document"]
+    if len(nodes) != 1 or nodes[0].decorator_list:
+        raise ValueError("exact document function required")
+    node = nodes[0]
+    lines = raw.splitlines(keepends=True)
+    return (b"".join(lines[:node.lineno - 1]),
+            b"".join(lines[node.lineno - 1:node.end_lineno]),
+            b"".join(lines[node.end_lineno:]))
+
+
+def _doc_ids(sources):
+    result = {}
+    for path, raw in sorted(sources.items()):
+        if not (path.startswith("tests/") and path.rsplit("/", 1)[-1].startswith("test_")
+                and path.endswith(".py")):
+            continue
+        tree = _doc_ast.parse(raw)
+        if any(isinstance(n, (_doc_ast.FunctionDef, _doc_ast.AsyncFunctionDef))
+               and n.name == "load_tests" for n in tree.body):
+            raise ValueError("no discovery override")
+        ids = [cls.name + "." + method.name for cls in tree.body
+               if isinstance(cls, _doc_ast.ClassDef) for method in cls.body
+               if isinstance(method, _doc_ast.FunctionDef) and method.name.startswith("test_")]
+        if not ids or len(set(ids)) != len(ids):
+            raise ValueError("empty or duplicate test identities")
+        result[path] = sorted(ids)
+    return result
+
+
+def _doc_verify_sources(rows, sources):
+    # This validates data, never imports or executes stored source text.
+    guide = sources.get(_DOC_GUIDE, b"")
+    if guide.count(_DOC_BEGIN) != 1 or guide.count(_DOC_END) != 1:
+        raise ValueError("one exact source proof required")
+    prefix, tail = guide.split(_DOC_BEGIN)
+    proof_raw, suffix = tail.split(_DOC_END)
+    if suffix or _doc_sha(proof_raw) != _DOCUMENT_REPAIR_PROOF_SHA256:
+        raise ValueError("independently pinned proof required")
+    proof = json.loads(proof_raw)
+    baseline = proof["baselineFiles"]
+    if len(rows) != 135 or len(sources) != 135:
+        raise ValueError("135 current files required")
+    seen = set()
+    for row in rows:
+        path = row["path"]
+        if path in seen or path not in baseline or path not in sources:
+            raise ValueError("unknown, duplicate or missing source")
+        seen.add(path)
+        raw = sources[path]
+        if (type(raw) is not bytes or row["kind"] != "file" or row["nlink"] != 1
+                or row["linkedAncestry"] is not False or row["mode"] != baseline[path]["mode"]
+                or row["size"] != len(raw) or row["sha256"] != _doc_sha(raw)):
+            raise ValueError("current row/source custody mismatch")
+        if path not in (_DOC_RUNTIME, _DOC_TESTS, _DOC_GUIDE):
+            blob = _doc_hashlib.sha1(b"blob " + str(len(raw)).encode() + b"\0" + raw).hexdigest()
+            if (len(raw), _doc_sha(raw), blob) != (
+                    baseline[path]["size"], baseline[path]["sha256"], baseline[path]["blob"]):
+                raise ValueError("non-owned source changed")
+    if seen != set(baseline) or set(sources) != seen:
+        raise ValueError("closed source inventory required")
+    before, function, after = _doc_function(sources[_DOC_RUNTIME])
+    region = proof["runtime"]
+    original = region["beforeSource"].encode()
+    if (_doc_sha(before) != region["prefixSha256"] or _doc_sha(after) != region["suffixSha256"]
+            or _doc_sha(function) != region["candidateSha256"]
+            or _doc_sha(original) != region["beforeSha256"]
+            or _doc_sha(before + original + after) != baseline[_DOC_RUNTIME]["sha256"]):
+        raise ValueError("exact owner region and before-image required")
+    for path in (_DOC_TESTS, _DOC_GUIDE):
+        old = baseline[path]
+        if _doc_sha(sources[path][:old["size"]]) != old["sha256"]:
+            raise ValueError("historical prefix changed")
+    if prefix[baseline[_DOC_GUIDE]["size"]:] != proof["guideIntroduction"].encode():
+        raise ValueError("exact appended guidance required")
+    extension = sources[_DOC_TESTS][baseline[_DOC_TESTS]["size"]:]
+    anchor = ('_DOCUMENT_REPAIR_PROOF_SHA256 = "' + _DOCUMENT_REPAIR_PROOF_SHA256 + '"').encode()
+    normalized = b'_DOCUMENT_REPAIR_PROOF_SHA256 = "' + b"0" * 64 + b'"'
+    if extension.count(anchor) != 1 or _doc_sha(extension.replace(anchor, normalized)) != proof["testExtensionSha256"]:
+        raise ValueError("test definitions changed")
+    observed = _doc_ids(sources)
+    expected = deepcopy(proof["baselineTestIds"])
+    expected[_DOC_TESTS] = sorted(expected[_DOC_TESTS] + proof["addedTestIds"])
+    if observed != expected or sum(map(len, observed.values())) != 1309:
+        raise ValueError("exact old plus new test identities required")
+    return proof
+
+
+def _doc_current_sources():
+    # Reuse only the accepted current-file reader, not its acceptance result.
+    from _inventory import SUCCESSOR
+    return SUCCESSOR.tracked_inventory(ROOT)
+
+
+def _doc_reseal(rows, sources, path, raw):
+    # Independent negative assembler: do not call any production/proof builder.
+    changed_rows, changed_sources = deepcopy(rows), dict(sources)
+    changed_sources[path] = raw
+    row = next(r for r in changed_rows if r["path"] == path)
+    row["size"] = len(raw)
+    row["sha256"] = _doc_hashlib.sha256(raw).hexdigest()
+    return changed_rows, changed_sources
+
+
+class DocumentRepairTests(unittest.TestCase):
+    def _error(self, value, maximum, reason, message="fixed proxy refused; no execution authority"):
+        with self.assertRaises(ConformanceError) as caught:
+            admission.document(value, maximum)
+        self.assertIs(type(caught.exception), ConformanceError)
+        self.assertEqual((caught.exception.reason, caught.exception.message), (reason, message))
+        self.assertEqual(str(caught.exception), reason + ": " + message)
+
+    def test_compact_primitives(self):
+        rows = [(b"null", None), (b"true", True), (b"false", False), (b"0", 0),
+                (b"9007199254740991", 9007199254740991),
+                (b"-9007199254740991", -9007199254740991),
+                (b'"caf\xc3\xa9"', "caf\u00e9")]
+        for raw, expected in rows:
+            with self.subTest(raw=raw):
+                result = admission.document(raw)
+                self.assertIs(type(result), type(expected))
+                self.assertEqual(result, expected)
+
+    def test_compact_containers(self):
+        for raw, expected in [(b"[]", []), (b"{}", {}),
+                              (b'[0,true,null,{"a":[]}]', [0, True, None, {"a": []}]),
+                              (b'{"a":[1],"b":{"c":false}}', {"a": [1], "b": {"c": False}})]:
+            with self.subTest(raw=raw):
+                self.assertEqual(admission.document(raw), expected)
+
+    def test_final_newline(self):
+        for raw in (b"{}\n", b"null\n", b"[0]\n"):
+            with self.subTest(raw=raw):
+                self._error(raw, len(raw), "PROXY_NONCANONICAL_BYTES")
+
+    def test_noncanonical_wire(self):
+        for raw in (b'{ "a":1}', b"{}\r\n", b'{"b":0,"a":1}', b'"\\u0061"', b'"\\/"', b"-0"):
+            with self.subTest(raw=raw):
+                self._error(raw, 262144, "NON_CANONICAL_JSON", "document bytes are not canonical JSON")
+        for raw in (b"{}x", b"{}{}", b"{}\n\n{}"):
+            with self.subTest(raw=raw):
+                self._error(raw, 262144, "INVALID_JSON", "document is not valid strict JSON")
+
+    def test_duplicate_members(self):
+        for raw in (b'{"a":1,"a":2}', b'{"x":{"a":1,"a":2}}'):
+            with self.subTest(raw=raw):
+                self._error(raw, 262144, "DUPLICATE_JSON_MEMBER", "duplicate member 'a'")
+
+    def test_invalid_utf8(self):
+        for raw in (b"\xff", b'"\xc3"', b'"\xed\xa0\x80"'):
+            with self.subTest(raw=raw):
+                self._error(raw, len(raw), "INVALID_UTF8", "document is not UTF-8")
+
+    def test_malformed_json(self):
+        for raw in (b"{", b"[", b"tru", b"01", b'{"a":}', b'"unterminated'):
+            with self.subTest(raw=raw):
+                self._error(raw, len(raw), "INVALID_JSON", "document is not valid strict JSON")
+
+    def test_noncanonical_numbers(self):
+        for raw in (b"1.0", b"1e0", b"NaN", b"Infinity", b"-Infinity", b"[1.5]"):
+            with self.subTest(raw=raw):
+                self._error(raw, 262144, "NON_CANONICAL_NUMBER", "floating-point values are not permitted")
+
+    def test_integer_bounds(self):
+        for number in (-9007199254740991, 9007199254740991):
+            self.assertEqual(admission.document(str(number).encode()), number)
+        for raw in (b"9007199254740992", b"-9007199254740992"):
+            self._error(raw, len(raw), "INTEGER_OUT_OF_RANGE", "integer exceeds the canonical safe range")
+
+    def test_unicode_nfc_and_surrogates(self):
+        self.assertEqual(admission.document(b'{"caf\xc3\xa9":"\xe7\x95\x8c"}'), {"caf\u00e9": "\u754c"})
+        for raw in (b'"e\xcc\x81"', b'{"e\xcc\x81":0}'):
+            self._error(raw, 262144, "NON_NORMALIZED_STRING", "strings must use Unicode NFC")
+        for raw, value in ((b'"\\ud800"', "\ud800"), (b'{"\\udfff":0}', "\udfff")):
+            with self.assertRaises(UnicodeEncodeError) as caught:
+                admission.document(raw)
+            self.assertIs(type(caught.exception), UnicodeEncodeError)
+            self.assertEqual((caught.exception.encoding, caught.exception.object,
+                              caught.exception.start, caught.exception.end, caught.exception.reason),
+                             ("utf-8", value, 0, 1, "surrogates not allowed"))
+
+    def test_wire_size_precedence(self):
+        for raw, maximum in ((b"", 1), (b"", 0), (b"0", 0), (b"0", -1),
+                             (b"{broken", 2), (b"\xff\xff", 1), (b"null", 3)):
+            with self.subTest(raw=raw, maximum=maximum):
+                self._error(raw, maximum, "PROXY_DATA_SIZE")
+        self.assertIsNone(admission.document(b"null", 4))
+
+    def test_depth_boundaries(self):
+        expected = None
+        for _ in range(16):
+            expected = [expected]
+        self.assertEqual(admission.document(b"[" * 16 + b"null" + b"]" * 16), expected)
+        for depth in (17, 32):
+            self._error(b"[" * depth + b"null" + b"]" * depth, 262144, "PROXY_DATA_TYPE")
+        self._error(b"[" * 33 + b"null" + b"]" * 33, 262144,
+                    "DOCUMENT_TOO_DEEP", "document nesting exceeds the bound")
+
+    def test_collection_boundaries(self):
+        self.assertEqual(admission.document(b"[" + b"0," * 4095 + b"0]"), [0] * 4096)
+        self._error(b"[" + b"0," * 4096 + b"0]", 262144,
+                    "COLLECTION_TOO_LARGE", "array exceeds the item bound")
+        for count in (4096, 4097):
+            # Independent sorted wire construction, not a candidate serializer.
+            raw = ("{" + ",".join('"k%04d":0' % n for n in range(count)) + "}").encode()
+            if count == 4096:
+                self.assertEqual(admission.document(raw), {"k%04d" % n: 0 for n in range(count)})
+            else:
+                self._error(raw, 262144, "COLLECTION_TOO_LARGE", "object exceeds the member bound")
+
+    def test_object_budget_and_encoded_size(self):
+        self.assertEqual(admission.document([0, 0], 5), [0, 0])
+        self._error([0, 0], 4, "PROXY_DATA_SIZE")  # aggregate node budget
+        self._error({"a": 0}, 5, "PROXY_DATA_SIZE")  # encoded size 7, node budget 5
+        self.assertEqual(admission.document({"a": 0}, 7), {"a": 0})
+        self._error([object()], 1, "PROXY_DATA_SIZE")  # budget precedes child type
+        self._error([object()], 2, "PROXY_DATA_TYPE")
+        self._error({1: 0}, 0, "PROXY_DATA_SIZE")
+        self._error({1: 0}, 2, "PROXY_DATA_KEY")
+        self._error([0, 9007199254740992], 4, "PROXY_DATA_SIZE")
+        self._error([0, 9007199254740992], 5, "PROXY_INTEGER_RANGE")
+
+    def test_global_document_bound(self):
+        raw = b" " * (4 * 1024 * 1024 + 1)
+        self._error(raw, len(raw), "DOCUMENT_TOO_LARGE", "document exceeds the local size bound")
+        self._error(raw, 262144, "PROXY_DATA_SIZE")
+
+    def test_exact_error_contract(self):
+        rows = [(b"{}\n", 3, "PROXY_NONCANONICAL_BYTES", "fixed proxy refused; no execution authority"),
+                (b"{}\r\n", 4, "NON_CANONICAL_JSON", "document bytes are not canonical JSON"),
+                (b'{"a":1,"a":2}', 262144, "DUPLICATE_JSON_MEMBER", "duplicate member 'a'"),
+                (b"\xff", 1, "INVALID_UTF8", "document is not UTF-8"),
+                (b"{", 1, "INVALID_JSON", "document is not valid strict JSON"),
+                (b"", 0, "PROXY_DATA_SIZE", "fixed proxy refused; no execution authority"),
+                (b"1.0", 3, "NON_CANONICAL_NUMBER", "floating-point values are not permitted")]
+        for raw, maximum, reason, message in rows:
+            with self.subTest(raw=raw):
+                self._error(raw, maximum, reason, message)
+        with self.assertRaises(TypeError) as caught:
+            admission.document(b"0", None)
+        self.assertIs(type(caught.exception), TypeError)
+        self.assertEqual(str(caught.exception), "'<=' not supported between instances of 'int' and 'NoneType'")
+        with self.assertRaises(UnicodeEncodeError) as caught:
+            admission.document(b'"\\ud800"')
+        self.assertIs(type(caught.exception), UnicodeEncodeError)
+        self.assertEqual(caught.exception.reason, "surrogates not allowed")
+
+    def test_bytes_subclass(self):
+        class Bytes(bytes):
+            pass
+        for value in (Bytes(b"0"), Bytes(b"{broken")):
+            self._error(value, 262144, "PROXY_DATA_TYPE")
+
+    def test_mutable_buffers(self):
+        for value in (bytearray(b"0"), memoryview(b"0")):
+            self._error(value, 262144, "PROXY_DATA_TYPE")
+
+    def test_container_subclasses(self):
+        for parent, value in ((dict, {}), (list, []), (str, "a"), (int, 1)):
+            subclass = type("NotExact", (parent,), {})
+            self._error(subclass(value), 262144, "PROXY_DATA_TYPE")
+
+    def test_bool_maximum(self):
+        self.assertEqual(admission.document(b"0", True), 0)
+        self._error(b"0", False, "PROXY_DATA_SIZE")
+
+    def test_float_maximum(self):
+        self.assertEqual(admission.document(b"0", 1.0), 0)
+        for maximum in ("1", None):
+            with self.assertRaises(TypeError) as caught:
+                admission.document(b"0", maximum)
+            self.assertIs(type(caught.exception), TypeError)
+
+    def test_integer_subclass_maximum(self):
+        calls = []
+        class Maximum(int):
+            def __ge__(self, other):
+                calls.append(("ge", other))
+                return int(self) >= other
+            def __sub__(self, other):
+                calls.append(("sub", other))
+                return int(self) - other
+        self.assertEqual(admission.document(b"0", Maximum(1)), 0)
+        self.assertEqual(calls, [("ge", 1), ("sub", 1), ("ge", 1)])
+
+    def test_effectful_maximum(self):
+        calls = []
+        class Maximum:
+            def __init__(self, allow):
+                self.allow = allow
+            def __ge__(self, other):
+                calls.append(("ge", other))
+                return self.allow
+            def __sub__(self, other):
+                calls.append(("sub", other))
+                return 1 - other
+        self.assertEqual(admission.document(b"0", Maximum(True)), 0)
+        self.assertEqual(calls, [("ge", 1), ("sub", 1), ("ge", 1)])
+        calls.clear()
+        self._error(b"{", Maximum(False), "PROXY_DATA_SIZE")
+        self.assertEqual(calls, [("ge", 1)])
+
+    def test_ordinary_object_fallback(self):
+        value = {"a": [0, {"b": True}]}
+        result = admission.document(value)
+        self.assertEqual(result, {"a": [0, {"b": True}]})
+        self.assertIsNot(result, value)
+        self.assertIsNot(result["a"], value["a"])
+        self._error(9007199254740992, 262144, "PROXY_INTEGER_RANGE")
+        self._error(1.0, 262144, "PROXY_DATA_TYPE")
+
+    def test_detached_input(self):
+        value = {"a": [{"b": [1]}]}
+        result = admission.document(value)
+        value["a"][0]["b"].append(2)
+        value["a"].append({})
+        self.assertEqual(result, {"a": [{"b": [1]}]})
+
+    def test_detached_result(self):
+        value = {"a": [{"b": [1]}]}
+        result = admission.document(value)
+        result["a"][0]["b"].clear()
+        self.assertEqual(value, {"a": [{"b": [1]}]})
+        self.assertEqual(admission.document(value), {"a": [{"b": [1]}]})
+
+    def test_repeated_bytes(self):
+        raw = b'{"a":[{"b":[1]}]}'
+        first, second = admission.document(raw), admission.document(raw)
+        self.assertEqual(first, second)
+        self.assertIsNot(first, second)
+        self.assertIsNot(first["a"], second["a"])
+        self.assertIsNot(first["a"][0], second["a"][0])
+        self.assertIsNot(first["a"][0]["b"], second["a"][0]["b"])
+        first["a"][0]["b"].clear()
+        self.assertEqual(second, {"a": [{"b": [1]}]})
+        self.assertEqual(admission.document(raw), second)
+
+    def test_changed_bytes(self):
+        self.assertEqual(admission.document(b'{"a":[1]}'), {"a": [1]})
+        self.assertEqual(admission.document(b'{"a":[2]}'), {"a": [2]})
+        self._error(b'{"a":[}', 262144, "INVALID_JSON", "document is not valid strict JSON")
+        self._error(b'{"a":[1]}\n', 262144, "PROXY_NONCANONICAL_BYTES")
+        self.assertEqual(admission.document(b'{"a":[1]}'), {"a": [1]})
+
+    def test_exact_owner_regions(self):
+        rows, sources = _doc_current_sources()
+        proof = _doc_verify_sources(rows, sources)
+        self.assertEqual(proof["evidenceClass"], "SOURCE_DELTA_ONLY")
+        self.assertEqual(proof["baselineCommit"], "092fcf475c6f3ebd455e3c354cddb7664ea1f900")
+        self.assertEqual(proof["runtime"]["candidateSha256"],
+                         "fe3b468872cb14db63f1b2bc1b5c4579703d1e8909c037f8e657ed2d2c26d97c")
+        before, function, after = _doc_function(sources[_DOC_RUNTIME])
+        self.assertIn(proof["runtime"]["beforeSource"].encode().split(b"\n", 1)[1], function)
+        self.assertTrue(before and after)
+
+    def test_unchanged_inventory(self):
+        rows, sources = _doc_current_sources()
+        _doc_verify_sources(rows, sources)
+        variants = [(rows[:-1], sources), (rows + [dict(rows[0])], sources),
+                    (rows, {**sources, "unexpected.py": b""}),
+                    (rows, {p: v for p, v in sources.items() if p != rows[0]["path"]})]
+        for key, value in (("kind", "symlink"), ("nlink", 2), ("linkedAncestry", True),
+                           ("mode", "120000"), ("sha256", "0" * 64), ("size", -1)):
+            changed = deepcopy(rows)
+            changed[0][key] = value
+            variants.append((changed, sources))
+        for changed_rows, changed_sources in variants:
+            with self.subTest(rows=len(changed_rows), files=len(changed_sources)), self.assertRaises(ValueError):
+                _doc_verify_sources(changed_rows, changed_sources)
+        from pathlib import Path
+        import os
+        import tempfile
+        from _inventory import SUCCESSOR
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder).resolve()
+            regular = root / "original"
+            regular.write_bytes(b"current")
+            (root / "alias").symlink_to(regular)
+            with self.assertRaises(ValueError):
+                SUCCESSOR.regular_bytes(root, "alias")
+            os.link(regular, root / "hardlink")
+            with self.assertRaises(ValueError):
+                SUCCESSOR.regular_bytes(root, "original")
+
+    def test_resealed_substitutions(self):
+        rows, sources = _doc_current_sources()
+        proof = _doc_verify_sources(rows, sources)
+        prefix, function, suffix = _doc_function(sources[_DOC_RUNTIME])
+        variants = [(_DOC_RUNTIME, b"# outside owner\n" + sources[_DOC_RUNTIME]),
+                    (_DOC_RUNTIME, prefix + function.replace(b"maximum=262144", b"maximum=262145") + suffix),
+                    (_DOC_RUNTIME, prefix + function + suffix + b"\n"),
+                    (_DOC_TESTS, sources[_DOC_TESTS].replace(b"self.assertEqual", b"self.assertNotEqual", 1)),
+                    (_DOC_TESTS, sources[_DOC_TESTS] + b"\n# resealed test change\n"),
+                    ("src/harness_conformance/canonical.py", sources["src/harness_conformance/canonical.py"] + b"\n"),
+                    (_DOC_GUIDE, sources[_DOC_GUIDE] + sources[_DOC_GUIDE].split(_DOC_BEGIN)[1])]
+        for field in ("baselineCommit", "beforeSource"):
+            changed_proof = deepcopy(proof)
+            if field == "beforeSource":
+                changed_proof["runtime"][field] += "# false before-image\n"
+                changed_proof["runtime"]["beforeSha256"] = _doc_sha(changed_proof["runtime"][field].encode())
+            else:
+                changed_proof[field] = "0" * 40
+            guide_prefix = sources[_DOC_GUIDE].split(_DOC_BEGIN)[0]
+            changed_raw = json.dumps(changed_proof, sort_keys=True, separators=(",", ":")).encode()
+            variants.append((_DOC_GUIDE, guide_prefix + _DOC_BEGIN + changed_raw + _DOC_END))
+        for path, raw in variants:
+            changed_rows, changed_sources = _doc_reseal(rows, sources, path, raw)
+            with self.subTest(path=path, sha256=_doc_sha(raw)), self.assertRaises(ValueError):
+                _doc_verify_sources(changed_rows, changed_sources)
+        changed = dict(sources)
+        changed[_DOC_RUNTIME] += b"# stale current bytes\n"
+        with self.assertRaises(ValueError):
+            _doc_verify_sources(rows, changed)
+
+    def test_consumer_history_preserved(self):
+        rows, sources = _doc_current_sources()
+        proof = _doc_verify_sources(rows, sources)
+        self.assertEqual(len(proof["baselineFiles"]), 135)
+        self.assertEqual(sum(map(len, proof["baselineTestIds"].values())), 1277)
+        self.assertEqual(set(proof["allowedPaths"]), {_DOC_RUNTIME, _DOC_TESTS, _DOC_GUIDE})
+        stage3 = json.loads(sources["fixtures/platform/linux-baseline/successor-inventory.json"])["record"]["stages"][2]["paths"]
+        self.assertLessEqual(set(proof["allowedPaths"]), set(stage3))
+        from _inventory import SUCCESSOR
+        observed = {}
+        roots = ("tests/meta", "tests/parity", "tests/alpha1", "tests/fixes/runner_boundary",
+                 "tests/platform/linux_baseline", "tests/live_backend")
+        for root in roots:
+            observed.update({root + "/" + p: ids for p, ids in SUCCESSOR.discover_inventory(ROOT / root).items()})
+        self.assertEqual(observed, _doc_ids(sources))
+        self.assertEqual(sum(map(len, observed.values())), 1309)
+        self.assertEqual(sum(len(ids) for p, ids in observed.items() if p.startswith("tests/live_backend/")), 1139)
