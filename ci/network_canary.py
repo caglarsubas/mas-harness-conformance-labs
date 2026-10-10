@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+"""Fail if an outbound TCP connection succeeds inside the offline sandbox."""
+
 from __future__ import annotations
 
 import errno
@@ -6,34 +9,47 @@ import socket
 import sys
 
 
+EXPECTED_DENIAL_ERRNOS = {
+    "darwin-sandbox": {errno.EACCES, errno.EPERM},
+    "linux-firejail": {
+        errno.EACCES,
+        errno.EPERM,
+        errno.ENETUNREACH,
+        errno.EHOSTUNREACH,
+    },
+}
+
+
+def denial_is_proven(backend: str, result: int | None) -> bool:
+    return result in EXPECTED_DENIAL_ERRNOS.get(backend, set())
+
+
 def main() -> int:
-    backend = {"darwin": "darwin-sandbox", "linux": "linux-firejail"}.get(sys.platform)
-    if (backend is None or os.environ.get("HARNESS_OFFLINE_ENFORCED") != "1"
-            or os.environ.get("HARNESS_OFFLINE_BACKEND") != backend
-            or not os.environ.get("HARNESS_OFFLINE_SESSION_ID")):
-        raise RuntimeError("matching pre-established OS boundary is absent")
-    # Firejail's protocol restriction denies inet socket creation; Darwin's
-    # sandbox permits creation but denies connect. Other failures are not proof.
-    probe = None
-    stage = "socket"
+    backend = os.environ.get("HARNESS_OFFLINE_BACKEND", "")
+    if backend not in EXPECTED_DENIAL_ERRNOS:
+        print(
+            "offline network canary refused: recognized isolation backend required",
+            file=sys.stderr,
+        )
+        return 2
     try:
-        probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        if backend == "linux-firejail":
-            raise RuntimeError("Linux inet socket creation was not denied")
-        stage = "configure"
-        probe.settimeout(0.25)
-        stage = "connect"
-        probe.connect(("1.1.1.1", 443))
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client:
+            client.settimeout(0.5)
+            result = client.connect_ex(("1.1.1.1", 443))
     except OSError as exc:
-        expected_stage = "socket" if backend == "linux-firejail" else "connect"
-        if stage != expected_stage or exc.errno not in (errno.EPERM, errno.EACCES):
-            raise
-        print(f"offline_network_status=PASS backend={backend} stage={stage} errno={exc.errno}")
+        result = exc.errno
+    if denial_is_proven(backend, result):
+        print(
+            f"offline network canary: {backend} denied outbound egress "
+            f"with errno={result}"
+        )
         return 0
-    finally:
-        if probe is not None:
-            probe.close()
-    raise RuntimeError("outbound network was not denied")
+    print(
+        f"offline network canary failed: backend={backend!r} errno={result}; "
+        "OS denial was not proven",
+        file=sys.stderr,
+    )
+    return 1
 
 
 if __name__ == "__main__":

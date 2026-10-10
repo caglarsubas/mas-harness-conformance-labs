@@ -1,0 +1,16 @@
+id: "CONF-CI-001"
+repository: "mas-harness-conformance-labs"
+branch: "codex/conf-ci-001-verifier-bootstrap"
+objective: "Adopt the owner-operated verifier (VERIFIER-EXT v4) for this repository: the harness-onion launcher contract as four ci/ files, this first in-repository task packet with four known-good existing commands, and removal of the old offline-verify workflow."
+predecessors: []
+allowedPaths: ["ci/verify-offline.sh","ci/run_packet_argv.py","ci/warm-source-isolation.sh","ci/network_canary.py","task-packets/CONF-CI-001.yaml",".github/workflows/verify.yml"]
+warmSourceAccess: "PROHIBITED_DURING_IMPLEMENTATION"
+sourceReuse: []
+contracts: ["The four ci/ files are byte-identical to harness-onion main 0e74704 (VERIFIER-EXT section 2): verify-offline.sh 778cb0fa, run_packet_argv.py c2ed0852, warm-source-isolation.sh f717f62f, network_canary.py 1be4a837, with modes 0755, 0755, 0644, 0755.","This is the repository's first task packet: main has never added task-packets/*.yaml, so the verifier runs it only after the owner's transport approval of the exact head (VERIFIER-EXT section 6). Every later PR inherits its commands in order.",".github/workflows/verify.yml is deleted (owner decision VX4); branch protection requires only the verifier App's verify check.","No product source, test, fixture, campaign or Makefile change. The new runner passes no PYTHONPATH, so commands that import src/ go through the Makefile targets, which set it themselves (ci/run_make_target.py).","The four commands pass at main and on this head without depending on the retired workflow or the old runner. Suites that still read them (tests/meta through make meta-conformance and make zero-bill, and the runner-boundary, parity and Linux-baseline tests that pin the old ci/ files) are not inherited here; a follow-up packet migrates them to the verifier contract and adds them."]
+deliverables: ["Launcher contract files, this packet and the workflow removal; one required verify run from the owner-operated verifier."]
+excluded: ["Product source, tests and fixtures; the old ci/ helpers (run_packet.py, prefetch.py and the rest stay unchanged); live, native or networked execution; W04 test source (later packets)."]
+prefetchCommands: []
+offlineAcceptanceCommands: [["python3","-m","unittest","discover","-s","tests/alpha1","-p","test_*.py"],["make","campaign","CAMPAIGN=linux-baseline"],["make","evidence-verify","CAMPAIGN=linux-baseline"],["make","acceptance-package-contract"]]
+offlineExecution: {"wrapperArgv":["./ci/verify-offline.sh"],"packetPathEnvironment":"HARNESS_TASK_PACKET","packetPathMode":"HASH_PINNED_READ_ONCE_NO_CHILD_PATH","commandTransport":"ARGV_ARRAY_V1","isolation":"OS_ENFORCED_DENY_ALL_OUTBOUND","sessionScope":"SINGLE_PROCESS_TREE","prefetchOutsideSession":false,"offlineEnvironment":{"UV_OFFLINE":"1","UV_FROZEN":"1","UV_NO_SYNC":"1"}}
+expectedEvidence: ["One verify run on the approved head: the network canary passes, then the four commands pass in order under the python-conformance-stdlib profile."]
+rollback: "Revert this PR before any later packet consumes it; afterwards use a successor packet."
