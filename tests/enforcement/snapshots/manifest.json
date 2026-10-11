@@ -221,10 +221,16 @@
    "path": "scripts/host_interface_amendment.py",
    "sha256": "cc7e3fd22aaf5dff057184c9aff47ee358b27b2c65afbfc527c8f3d19d78262b",
    "size": 10324
+  },
+  {
+   "contract": "I06 backend profile v1 (recorded addition, owner decision Q-T5)",
+   "path": "scripts/i06_backend_profile.py",
+   "sha256": "bea3c953573478be5b03ab81b4ebd859da62d1eaa2a1be8f361b9dd39a98555e",
+   "size": 44806
   }
  ],
  "root": "tests/enforcement/snapshots/harness-onion",
- "rule": "Byte-exact copies of the adopted contract data and reference models the W04-0 plan names, and the plan itself; never W03 or R10 source. Each file is pinned by sha256 and size; the plan's own pins must agree.",
+ "rule": "Byte-exact copies of the adopted contract data and reference models the W04-0 plan names, and the plan itself, followed by the owner-decided recorded additions; never W03 or R10 source. Each file is pinned by sha256 and size at the one source commit; the plan's own pins must agree.",
  "schemaVersion": "r12.enforcement-snapshot-manifest/v1",
  "sourceCommit": "a2eab9365c8663cc1ae23a666e864b821f600fa6",
  "sourceRepository": "harness-onion"

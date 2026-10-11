@@ -10,7 +10,7 @@ W04 test source for the Harness-Onion enforcement work, per the adopted W04-0 pl
   adds `attestations/<packet>.json` with the plan's attestation fields, and its separate-agent reviewer checks it.
 - Toolchain (owner decision Q-T1, 2026-10-11): Python 3.12 standard-library `unittest` only; no pytest and no
   dependency. Rust+musl native probes are deferred (Q-T2) to the first W04 packet that needs native probe source.
-  `toolchains.json` records both and the known gaps (G-JSONSCHEMA, G-I06-V1) in the snapshotted reference models.
+  `toolchains.json` records both, the open gap G-JSONSCHEMA and the closed gap G-I06-V1 (Q-T5).
 - The stdlib-only R12 reader (`src/`) never imports this area, and this area's own test code imports only the standard
   library and this area.
 - Snapshots are byte-exact copies from harness-onion, pinned in `snapshots/manifest.json` by sha256 and size at one
@@ -19,6 +19,13 @@ W04 test source for the Harness-Onion enforcement work, per the adopted W04-0 pl
   `fixtures/ci/<packet>-checkpoint.json` and one entry in `fixtures/ci/checkpoints.json`, naming every path it deleted,
   changed or added with exact pins. Later W04 packets are data plus tests only. That the registry is append-only and a
   merged record is never rewritten is checked by review of each packet's diff, not by code (review E1-2).
+
+## Test groups
+
+- `tg01_contract/` (TG-01, CONF-ENF-002): every adopted contract's vectors replayed through its snapshotted reference
+  model, loaded only through `_models.py`. `tg01_contract/results.json` is the ledger each run must reproduce exactly:
+  every vector PASS, or NOT_RUN_ENV_UNAVAILABLE where its replay needs jsonschema (owner decision Q-T4); CODEC waits
+  for W05's release. The I05 v3 supplement comes in a later W04 packet (owner decision Q-T6).
 
 ## Running
 

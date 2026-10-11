@@ -18,6 +18,18 @@
    "selected": "defer",
    "date": "2026-10-11",
    "decision": "defer. W04-1 records the Rust+musl need for the TG-04/TG-05 probes and installs nothing. Decide it in the first W04 packet that needs native probe source (W04-4/5)."
+  },
+  {
+   "id": "Q-T4",
+   "selected": "a",
+   "date": "2026-10-11",
+   "decision": "run the stdlib cases now (SELinux v4, seccomp v2, admission v3, W02D, and the I05/I07 checks that don't reach check_frame). Record each schema-dependent case as NOT_RUN_ENV_UNAVAILABLE, never PASS (AGENTS rule 14). The jsonschema profile is a later root change."
+  },
+  {
+   "id": "Q-T5",
+   "selected": "accept",
+   "date": "2026-10-11",
+   "decision": "in W04-2, snapshot scripts/i06_backend_profile.py from the same harness-onion commit, pinned by sha256, as a recorded addition to the plan's contract set."
   }
  ],
  "toolchains": [
@@ -54,17 +66,16 @@
     "scripts/native_qualification_v3.py"
    ],
    "finding": "jsonschema is outside the standard library: native_qualification_v3.py imports it at module load, and i05_gate_channel_v3.py imports it inside check_frame (the F00 closed-schema frame check). Through their sibling imports, i06_backend_profile_v2.py (loads native_qualification_v3) and i07_policy_write_v3.py (loads i05_gate_channel_v3) depend on it too. Under Q-T1 these reference-model paths cannot run in R12 as it stands.",
-   "decideIn": "before W04-2 (TG-01 MATRIX and CONTRACT-DATA replay I05, I07 and I06 v2 through these models)",
+   "decideIn": "a later owner root change adding a jsonschema profile (Q-T4); until then TG-01 records each vector that needs it NOT_RUN_ENV_UNAVAILABLE in tg01_contract/results.json",
    "affectsW04_2": true
-  },
+  }
+ ],
+ "closedGaps": [
   {
    "id": "G-I06-V1",
-   "snapshots": [
-    "scripts/i06_backend_profile_v2.py"
-   ],
-   "finding": "i06_backend_profile_v2.py imports scripts/i06_backend_profile.py (I06 v1), which the plan's contract set does not name, so it is not snapshotted; the I06 v2 reference model cannot load from the snapshots alone.",
-   "decideIn": "before W04-2 (TG-01 CONTRACT-DATA replays I06 v2)",
-   "affectsW04_2": true
+   "closedBy": "Q-T5",
+   "packet": "CONF-ENF-002",
+   "note": "scripts/i06_backend_profile.py is snapshotted from a2eab93 as a recorded addition; the I06 v2 model still cannot load without jsonschema (G-JSONSCHEMA)"
   }
  ]
 }
