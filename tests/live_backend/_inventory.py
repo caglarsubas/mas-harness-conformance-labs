@@ -13,7 +13,7 @@ import stat
 
 ROOT = Path(__file__).resolve().parents[2]
 HELPER_PATH = "tests/platform/linux_baseline/_successor_inventory.py"
-HELPER_SHA256 = "d4ea235f8c25e180f5368b28c54839868594810fd0a6547d2a452952b189027f"
+HELPER_SHA256 = "bb98a095d20f35dde44864fe06c5f3cdfda286a7619018c9303ab8e845f41afa"
 BASELINE_PATH = "fixtures/live-backend/baseline.json"
 BASELINE_SHA256 = "c3dd610a748e018c9e015668567fbea9820a050022dc33375912f8f4aaa51a00"
 

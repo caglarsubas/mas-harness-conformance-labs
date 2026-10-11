@@ -588,7 +588,7 @@ def performance_current(root):
 # against the after-pins; older consumers then see the before-images, so their own pins keep proving 3a81c8f. Every
 # path the record does not name passes through unchanged, for the older layers to check.
 CI_002_RECORD_PATH = "fixtures/ci/conf-ci-002-checkpoint.json"
-CI_002_RECORD_SHA256 = "63b650ede7e820ebcc6ae17b1bb34d965205f120dd561ce675d4138b182ab432"
+CI_002_RECORD_SHA256 = "b1e8cd83de775d1fcbdca5117bc417e2c30379fcd7af330819a404d97e47be4b"
 CI_002_RECORD_FIELDS = {"schemaVersion", "packetId", "evidenceClass", "nativeAcceptance", "tenantAcceptance",
                         "baseCommit", "bootstrapCommit", "ownerDecisions", "deleted", "changed", "added"}
 # Two after-pins are taken with a digest constant zeroed, so that the record, this helper and the live_backend helper
@@ -642,7 +642,7 @@ def ci_002_project(root, rows, sources):
     """The current tree must carry every CI-admitted change exactly; the view returned restores 3a81c8f for them."""
     record = ci_002_record(root)
     current = {row["path"]: row for row in rows}
-    ci_002_require(CI_002_RECORD_PATH in current, "record tracked")
+    ci_002_require(CI_002_RECORD_PATH in current and current[CI_002_RECORD_PATH]["mode"] == "100644", "record tracked")
     for path in record["deleted"]:
         ci_002_require(path not in current, "deleted path present: " + path)
     for path, pin in [*record["added"].items(), *((path, entry["after"]) for path, entry in record["changed"].items())]:

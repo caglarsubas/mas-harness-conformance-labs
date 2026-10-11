@@ -17,13 +17,13 @@
   },
   "task-packets/CONF-CI-002.yaml": {
    "mode": "100644",
-   "sha256": "dfb6c89a2d8041e95bad2bc012ae0838933a31a074f06664919adf7d98c02a71",
-   "size": 6890
+   "sha256": "9fe268b6ddbee9cfffaf9a6b5fbe42e5bb0058054e9a4fc2146221b91fa40a35",
+   "size": 7194
   },
   "tests/ci_checkpoint/test_conf_ci_002.py": {
    "mode": "100644",
-   "sha256": "cb195573538fbe6326fe7bc702260c72777eca24bf4b66a0180ec06cdacd4fc8",
-   "size": 8350
+   "sha256": "f4a00c4055e01b2e984aec4a2d9f446677c301994bcf3a4e6a6196eb98704e87",
+   "size": 8623
   }
  },
  "baseCommit": "3a81c8ffb17be9e288c4368d443c57361d5a4fc8",
@@ -84,8 +84,8 @@
   "tests/fixes/runner_boundary/test_boundaries.py": {
    "after": {
     "mode": "100644",
-    "sha256": "5a382d55fc62d5e072bce6a54b2085c8d36f932d8c8c511b6222004187e6093c",
-    "size": 20503
+    "sha256": "a6dd7c2f1b382c1611807ab3057d60e16343783ddb6f1563deea19e221d3f1c7",
+    "size": 21500
    },
    "before": {
     "mode": "100644",
@@ -110,8 +110,8 @@
   "tests/meta/test_porting_zero_bill.py": {
    "after": {
     "mode": "100644",
-    "sha256": "96850a5ab947ca369a140803ed4a079a71c594a8f493cfc3080d93348f7abe30",
-    "size": 5063
+    "sha256": "f3124b984d535665ba7a0b4b09e0fb4a465191b54c591f684311314d302f031e",
+    "size": 5093
    },
    "before": {
     "mode": "100644",
@@ -136,8 +136,8 @@
   "tests/platform/linux_baseline/_successor_inventory.py": {
    "after": {
     "mode": "100644",
-    "sha256": "965fcf9a2e0333109856236ad0589378f8fdd3f95b66abef7d7f0862cae396dc",
-    "size": 69093
+    "sha256": "5166e5fa03f52226553f5fd6b0eb8ab04e5cad4dc4574807f15a792b83a6b814",
+    "size": 69145
    },
    "before": {
     "mode": "100644",

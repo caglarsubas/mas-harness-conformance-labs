@@ -65,7 +65,7 @@ class PortingZeroBillTests(unittest.TestCase):
             (target / ".github/workflows/verify.yml").write_text(_SELF_HOSTED, encoding="utf-8")
             module.validate(target)
         for case, files in (("two workflows", {"a.yml": _SELF_HOSTED, "b.yaml": _SELF_HOSTED}),
-                            ("hosted workflow", {"verify.yml": "jobs:\n  verify:\n    runs-on: [self-hosted]\n"})):
+                            ("workflow without the credential-free boundary", {"verify.yml": "jobs:\n  verify:\n    runs-on: [self-hosted]\n"})):
             with self.subTest(case=case), tempfile.TemporaryDirectory() as temporary:
                 target = _scratch(Path(temporary))
                 (target / ".github/workflows").mkdir(parents=True)

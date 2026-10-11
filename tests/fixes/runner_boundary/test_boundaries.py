@@ -135,18 +135,24 @@ class RunnerBoundaryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             packet = Path(folder) / "packet.yaml"
             packet.write_text("id: \"UNIT-001\"\n", encoding="utf-8")
-            for argv, env in ((["ci/run_packet_argv.py", "/unit/packet.yaml"], {**environment(), "HARNESS_TASK_PACKET": str(packet)}),
-                              (["ci/run_packet_argv.py"], {**environment(), "HARNESS_TASK_PACKET": str(packet)}),
-                              (["ci/run_packet_argv.py"], environment())):
+            for argv, env, reason in (
+                    (["ci/run_packet_argv.py", "/unit/packet.yaml"], {**environment(), "HARNESS_TASK_PACKET": str(packet)},
+                     "unrecognized arguments"),
+                    (["ci/run_packet_argv.py"], {**environment(), "HARNESS_TASK_PACKET": str(packet)},
+                     "packet must contain one inline JSON offlineExecution field"),
+                    (["ci/run_packet_argv.py"], environment(), "HARNESS_TASK_PACKET is required")):
                 with self.subTest(argv=argv, env=sorted(env)), mock.patch.dict(os.environ, env, clear=True), \
-                        mock.patch.object(sys, "argv", argv), contextlib.redirect_stderr(io.StringIO()), \
+                        mock.patch.object(sys, "argv", argv), contextlib.redirect_stderr(io.StringIO()) as error, \
                         mock.patch.object(subprocess, "Popen", side_effect=AssertionError("unexpected child")), \
                         mock.patch.object(subprocess, "run", side_effect=AssertionError("unexpected child")):
                     with self.assertRaises(SystemExit) as result:
                         runpy.run_path(str(ROOT / "ci/run_packet_argv.py"), run_name="__main__")
                     self.assertEqual(result.exception.code, 2)
-        self.assertNotIn("run_packet", {alias.name for node in ast.walk(ast.parse((ROOT / "ci/run_packet_argv.py").read_bytes()))
-                                        if isinstance(node, ast.Import) for alias in node.names})
+                    self.assertIn(reason, error.getvalue())
+        tree = ast.parse((ROOT / "ci/run_packet_argv.py").read_bytes())
+        imported = {alias.name for node in ast.walk(tree) if isinstance(node, ast.Import) for alias in node.names}
+        imported |= {node.module or "" for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)}
+        self.assertFalse({name for name in imported if name.split(".")[0] == "run_packet"})
 
     def test_wrapper_binds_os_and_executes_only_the_fixed_bridge(self):
         # CONF-CI-002: without trusted outer isolation the adopted wrapper isolates itself and names the backend from
@@ -210,9 +216,11 @@ _ADOPTED_PACKET = (
 
 class CanaryTests(unittest.TestCase):
     # CONF-CI-002: the adopted canary (harness-onion contract) proves isolation only by a denial errno the named
-    # backend is expected to produce on connect_ex to 1.1.1.1:443: EACCES or EPERM for darwin-sandbox; EACCES, EPERM,
-    # ENETUNREACH or EHOSTUNREACH for linux-firejail (firejail --net=none has no route). Anything else fails, and an
-    # absent or unrecognized backend is refused before any socket.
+    # backend is expected to produce: EACCES or EPERM for darwin-sandbox; EACCES, EPERM, ENETUNREACH or EHOSTUNREACH
+    # for linux-firejail (firejail --net=none has no route). Anything else fails, and an absent or unrecognized backend
+    # is refused before any socket. Unlike the retired R12 canary, it accepts that errno at socket creation, settimeout
+    # or connect alike (no stage binding), and it reads only HARNESS_OFFLINE_BACKEND: the bridge requires
+    # HARNESS_OFFLINE_ENFORCED=1 and the wrapper a session ID before the canary runs.
     def invoke(self, backend, *, result=None, create_error=None, configure_error=None, connect_error=None):
         client = mock.MagicMock()
         client.__enter__.return_value = client
@@ -236,7 +244,11 @@ class CanaryTests(unittest.TestCase):
                         self.assertEqual(self.invoke(backend, **{kind: value})[0], 0)
 
     def test_wrong_stage_permission_denials_fail(self):
-        # A denial that is not the named backend's own proof fails, wherever it is raised.
+        # The adopted canary has no stage binding: its backend's own denial passes at any stage (asserted below), and
+        # a denial that is not the named backend's own proof fails, wherever it is raised.
+        for stage in ("create_error", "configure_error", "connect_error"):
+            with self.subTest(stage=stage):
+                self.assertEqual(self.invoke("darwin-sandbox", **{stage: OSError(errno.EPERM, "any stage")})[0], 0)
         for backend, code in (("darwin-sandbox", errno.ENETUNREACH), ("darwin-sandbox", errno.EHOSTUNREACH),
                               ("darwin-sandbox", errno.ECONNREFUSED), ("linux-firejail", errno.ECONNREFUSED)):
             for kind in ("result", "create_error", "configure_error"):

@@ -116,6 +116,9 @@ class CheckpointRefusalTests(unittest.TestCase):
     def test_an_untracked_record_is_refused(self):
         self.assert_refused(lambda rows, sources: rows.__setitem__(slice(None), [row for row in rows if row["path"] != HELPER.CI_002_RECORD_PATH]),
                             "record tracked")
+        # The record leaves the view, so its own mode is pinned here (review K1-2).
+        self.assert_refused(lambda rows, sources: next(row for row in rows if row["path"] == HELPER.CI_002_RECORD_PATH).update(mode="100755"),
+                            "record tracked")
 
     def test_a_changed_record_is_refused(self):
         with mock.patch.object(HELPER, "CI_002_RECORD_SHA256", "0" * 64):
