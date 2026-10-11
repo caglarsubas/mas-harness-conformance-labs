@@ -28,18 +28,19 @@ class LinuxInventoryTests(unittest.TestCase):
             print(f"linux-test-inventory root={root} modules={len(inventory)} cases={sum(map(len, inventory.values()))} status=PASS", flush=True)
 
     def test_original_files_are_unchanged_except_ten_authorized_integrations(self):
-        from _successor_inventory import performance_current
+        from _successor_inventory import performance_current, tracked_inventory
         _, historical_sources, _ = performance_current(ROOT)
+        # CONF-CI-002 (owner decision D2, 2026-10-11): modes and file presence come from the checked 3a81c8f view,
+        # whose reader refuses symlinks, hard links and index/disk mode mismatches on the current tree.
+        modes = {row["path"]: row["mode"] for row in tracked_inventory(ROOT)[0]}
         baseline = load_json(ROOT / "fixtures/platform/linux-baseline/predecessor-inventory.json")
         mutable = {"src/harness_conformance/" + name for name in ("campaign.py", "cli.py", "live.py", "live_launcher.py", "models.py", "schema.py")}
         mutable |= {"schemas/v1alpha1/" + name + ".schema.json" for name in ("conformance-campaign", "control-result")}
         mutable |= {"tests/meta/test_canonical_schema.py", "tests/meta/test_registry_dispatch.py"}
         self.assertEqual(len(baseline["files"]), 91)
         for file, expected in baseline["files"].items():
-            path = ROOT / file
             with self.subTest(file=file):
-                self.assertFalse(path.is_symlink())
-                self.assertEqual(bool(path.stat().st_mode & 0o111), expected["mode"] == "100755")
+                self.assertEqual(modes[file], expected["mode"])
                 if file not in mutable:
                     actual = historical_sources[file]  # current bytes already checked
                     if file == "ci/run_packet.py":
