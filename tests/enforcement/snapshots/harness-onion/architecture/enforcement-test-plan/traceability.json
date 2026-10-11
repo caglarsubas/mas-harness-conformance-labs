@@ -1,0 +1,1669 @@
+{
+ "schemaVersion": "planeon.internal.enforcement-test-plan/v1",
+ "planLabel": "W04-0",
+ "repository": {
+  "id": "R12",
+  "name": "mas-harness-conformance-labs",
+  "remote": "https://github.com/caglarsubas/mas-harness-conformance-labs",
+  "visibility": "public",
+  "currentVerification": "GitHub Actions workflow offline-verify on a self-hosted ephemeral harness-engineering runner (last run 2026-09-16)",
+  "verificationDecision": "pending owner decision on the R12 verification route; W04-1 waits for it"
+ },
+ "independence": {
+  "rules": [
+   "W04 source lives in R12, separate from W03's R10 operator repository; no source crosses (ENFORCEMENT_INTEGRATION.md:110-114).",
+   "Only the parallel lane authors W04; W03's authors write no W04 source, and W04's authors read no W03 source or work in progress.",
+   "Allowed W03 inputs are reviewed records the owner names (today only the distribution selection record, pinned in w03Inputs) and, later, W05's released artifact digests.",
+   "Expected results come from the adopted contracts' reference models and vectors, never from reading or running the implementation; implementations are run only as the subject under test, from W05's release.",
+   "Every W04 packet carries an independence attestation with the fields below, and its separate-agent reviewer checks it.",
+   "R12 never implements or self-certifies the enforcement premise (ENFORCEMENT_INTEGRATION.md:93).",
+   "The new toolchains stay in W04's enforcement test area; the stdlib-only R12 reader is not extended (ENFORCEMENT_INTEGRATION.md:100-102).",
+   "Agents never send personal data in network requests, headers or queries."
+  ],
+  "attestationFields": [
+   "packet",
+   "lane",
+   "inputs",
+   "inputDigests",
+   "r10SourceRead",
+   "w03WorkInProgressRead",
+   "implementationReadOrRunForExpectedResults",
+   "reviewer"
+  ]
+ },
+ "sources": [
+  {
+   "path": "architecture/host-interface-inputs/corrected/REVIEW_BRIEF.md",
+   "sha256": "8e627ee92919d6228ce63caadb32b4e2cb3948f4e805131ad4b4bfc9055c0338"
+  },
+  {
+   "path": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md",
+   "sha256": "8a3a09bb5dbc08804dbea06dd0700a14648a9cdbc8efd62112dc64ba0b6ba1b4"
+  },
+  {
+   "path": "docs/alpha-2/OBSERVATION_ENFORCEMENT_DESIGN.md",
+   "sha256": "44ceb7ef3a8e2c71b93cbaee695ee486c65b1be9d4e9fdd564473ec65681b1e6"
+  },
+  {
+   "path": "docs/alpha-2/ENFORCEMENT_FEASIBILITY.md",
+   "sha256": "9fac4492e1b5f6255993374a6642072855a5855a40bcc68706a25b78fd822965"
+  },
+  {
+   "path": "docs/alpha-2/ENFORCEMENT_INTEGRATION.md",
+   "sha256": "abbf35454a80b6e5b847f86e944819910320e274dc78a31d817bbbbf155ecc55"
+  },
+  {
+   "path": "architecture/host-interface-amendment-w02d/HOST_INTERFACE_SPEC.md",
+   "sha256": "2ac2751cbddd7fae20ee92a93a8fc18c7988dd0c96853d1ccb2d08cb3753f83b"
+  }
+ ],
+ "w03Inputs": [
+  {
+   "path": "architecture/backend-distribution/selection.json",
+   "sha256": "e6750f20a56f76486c24e35114b9e0b204357e51e3f97e560a34c544bf238952",
+   "commit": "104b11529b6448a2c208450e5fbbd677e5dd8069",
+   "reviewState": "reviewed W03 record named by the owner via the lane monitor; on main from packet 221 (MET-ENFORCE-019)"
+  }
+ ],
+ "contracts": [
+  {
+   "name": "I05 gate channel v3",
+   "state": "ADOPTED_DATA_CONTRACT",
+   "files": [
+    {
+     "path": "architecture/i05-gate-channel-v3/channel.schema.json",
+     "sha256": "3bfee13c9d32e82fe5ab908eb6f716bc11881f9d57b324f8ea4a21a3ad35356f"
+    },
+    {
+     "path": "architecture/i05-gate-channel-v3/outcome-mapping.json",
+     "sha256": "4466f379f1cc669e047cffd8afa5fa88b2cc7648a51e2d38b17f0bd5e2252a3a"
+    },
+    {
+     "path": "architecture/i05-gate-channel-v3/vectors.json",
+     "sha256": "ab75d86fe54ade7ee2695ef84b200d0473e14e4112e64e7702032593658763ed"
+    },
+    {
+     "path": "architecture/i05-gate-channel-v3/status.json",
+     "sha256": "7cd5302ba7fe8bbb47b2859c4311e247ae6d730cf37d31d8c7140a61e3e8c5c4"
+    },
+    {
+     "path": "scripts/i05_gate_channel_v3.py",
+     "sha256": "2c7985b539c0ce8eb79eaabfa1f1ab7d43bdca7515defc590a76ecb1697ca959"
+    }
+   ]
+  },
+  {
+   "name": "I06 backend profile v2",
+   "state": "ADOPTED_DATA_CONTRACT",
+   "files": [
+    {
+     "path": "architecture/i06-backend-profile-v2/criteria.json",
+     "sha256": "026206c57d3025c0f0129b6615e46c83d5a8000ddc3288f000a1fe4570050cda"
+    },
+    {
+     "path": "architecture/i06-backend-profile-v2/vectors.json",
+     "sha256": "1a5e168f0d8fff233f5072b1440e75a633b38e428f87b2893a96e579122a430e"
+    },
+    {
+     "path": "architecture/i06-backend-profile-v2/status.json",
+     "sha256": "44217baf7857b86abfa9c8ccadb953e2678592e437c9caf049096c402abb9c20"
+    },
+    {
+     "path": "scripts/i06_backend_profile_v2.py",
+     "sha256": "58ceb7a6817aab512a56f9f2a614868ce27660d174be353c5629cc8de335e426"
+    }
+   ]
+  },
+  {
+   "name": "I07 policy write v3",
+   "state": "ADOPTED_DATA_CONTRACT",
+   "files": [
+    {
+     "path": "architecture/i07-policy-write-v3/channel.schema.json",
+     "sha256": "c68721a1002fccc7d6e59eeee9016a0a0f4a7428fad714e5a3d90a362d30ce09"
+    },
+    {
+     "path": "architecture/i07-policy-write-v3/policy-kinds.json",
+     "sha256": "4e427204b89959cb855d8641c3fa6f95d358b0b6a6a7730bfc7776adc4a173c0"
+    },
+    {
+     "path": "architecture/i07-policy-write-v3/vectors.json",
+     "sha256": "c4c24c5ff15618aa2f0fe0f016011359bc4316220c6e40d5168f9ee24b6f736d"
+    },
+    {
+     "path": "architecture/i07-policy-write-v3/status.json",
+     "sha256": "b95b720e1741bc8db86cce3259ae3c6c4eda4b4b6970def95a06e47f0544e983"
+    },
+    {
+     "path": "scripts/i07_policy_write_v3.py",
+     "sha256": "6cc7ea0d3df0c7f2966184bb6d322189de3b49b5b02dfe2429911121973afe08"
+    }
+   ]
+  },
+  {
+   "name": "Admission semantics v3",
+   "state": "ADOPTED_DATA_CONTRACT",
+   "files": [
+    {
+     "path": "architecture/admission-semantics-v3/allowlists.json",
+     "sha256": "9314cd0732880a8e6af91df562af0a392183f6ef078c12fa9b479f6953fad5d4"
+    },
+    {
+     "path": "architecture/admission-semantics-v3/admission-manifests/planeon-a2.json",
+     "sha256": "1096b3cc71c4fe6b5a17ed61e8bf8c17ee17fcf52b192503534d60aed9ce4741"
+    },
+    {
+     "path": "architecture/admission-semantics-v3/vectors.json",
+     "sha256": "a3e2dc9818742ae2188e0e83cf91bb833be836115975b3fb23d5f280f6928cc1"
+    },
+    {
+     "path": "architecture/admission-semantics-v3/status.json",
+     "sha256": "65fedb6284ae7ee70686166db0bcf0f2fdf37756b59ee3f3f8267b25b0ccfda7"
+    },
+    {
+     "path": "scripts/admission_semantics_v3.py",
+     "sha256": "3db8f51ab55f49dc33cf6f028306bfb6d7aa1c5d7d96f264cfe709dae925ad22"
+    }
+   ]
+  },
+  {
+   "name": "Native qualification profile v3",
+   "state": "ADOPTED_DATA_CONTRACT",
+   "files": [
+    {
+     "path": "architecture/native-profile-v3/qualification.schema.json",
+     "sha256": "ae5cbb6aa39f4edfa2d9919f25e55bad9ab214a99ca927c5afe7e2d943946ac5"
+    },
+    {
+     "path": "architecture/native-profile-v3/vectors.json",
+     "sha256": "14af47a69c972039294be8659c31332acd5326bfb0a3a38384a2c6bf9d11fe6d"
+    },
+    {
+     "path": "architecture/native-profile-v3/status.json",
+     "sha256": "f242944dd7a03eb64fd4f14d811711f7ed4ccf9bdb00bca82ea8abbaa5cb0538"
+    },
+    {
+     "path": "scripts/native_qualification_v3.py",
+     "sha256": "2ef5c14ad5d8c962cf3703ccd076059685ed8dcc852059e4f863e8d9dc8965ad"
+    }
+   ]
+  },
+  {
+   "name": "SELinux matrix v4",
+   "state": "ADOPTED_DATA_CONTRACT",
+   "files": [
+    {
+     "path": "architecture/selinux-matrix-v2/matrix.json",
+     "sha256": "1d2f27e53d7b1a77d1c80b5e167fd477bc5c25dd78250399edc33de8397eebff"
+    },
+    {
+     "path": "architecture/selinux-matrix-v2/vectors.json",
+     "sha256": "e6a0afb937443d6f6cb941ba06e9bd46d9bda5b8f1bcdf97d6dba0b634f25961"
+    },
+    {
+     "path": "architecture/selinux-matrix-v2/status.json",
+     "sha256": "0a9edabf6c2136bf0f5acc2055e7757af0704fb69b2538c56180bf9f2d600aa8"
+    },
+    {
+     "path": "scripts/selinux_matrix_v2.py",
+     "sha256": "09fe67b911e66adfc4eb6ba26b5cb75a16a90748157f628c9ca2d9066412ddd8"
+    }
+   ]
+  },
+  {
+   "name": "Seccomp allowlists v2",
+   "state": "ADOPTED_DATA_CONTRACT",
+   "files": [
+    {
+     "path": "architecture/seccomp-allowlists-v2/syscalls.json",
+     "sha256": "343176d6518530ba9a4d71c36eec7f6e5a98a87198e5e08d53ac0d68d746ad67"
+    },
+    {
+     "path": "architecture/seccomp-allowlists-v2/allowlists.json",
+     "sha256": "c041263a9526a3526e1fa10bf7e73d1d26cba70931c9329f31cfce2d9ce74344"
+    },
+    {
+     "path": "architecture/seccomp-allowlists-v2/vectors.json",
+     "sha256": "7aec409b0b6520d11beec0a89a8600ab87c3a5083cfd3860e2b1550c0f25eb47"
+    },
+    {
+     "path": "architecture/seccomp-allowlists-v2/status.json",
+     "sha256": "9695c5e4a19fbaec760c0745485c5cd3237951e3c316092bef8f00ba0007a419"
+    },
+    {
+     "path": "scripts/seccomp_allowlists_v2.py",
+     "sha256": "12845115589add9e1b0562c6f764decda7685b32a63c9f11872f847af2a54caf"
+    }
+   ]
+  },
+  {
+   "name": "W01 amendment W02D",
+   "state": "ADOPTED_AMENDMENT",
+   "files": [
+    {
+     "path": "architecture/host-interface-amendment-w02d/amendment.json",
+     "sha256": "8c20ccc25ae504073d89d052b1618c21ab53108dcc44af26f747024709e8f6f9"
+    },
+    {
+     "path": "architecture/host-interface-amendment-w02d/HOST_INTERFACE_SPEC.md",
+     "sha256": "2ac2751cbddd7fae20ee92a93a8fc18c7988dd0c96853d1ccb2d08cb3753f83b"
+    },
+    {
+     "path": "architecture/host-interface-amendment-w02d/status.json",
+     "sha256": "5a3479778f70c73cf956886712bbe5cff691f741dcd73240a9465ec03360866f"
+    },
+    {
+     "path": "scripts/host_interface_amendment.py",
+     "sha256": "cc7e3fd22aaf5dff057184c9aff47ee358b27b2c65afbfc527c8f3d19d78262b"
+    }
+   ]
+  }
+ ],
+ "testGroups": [
+  {
+   "id": "TG-01",
+   "from": "T01",
+   "title": "contract",
+   "matrix": {
+    "cases": "exact fields, duplicate/unknown keys, role/version mismatch, transcript replay and wrong peer",
+    "evidence": "Offline contract data tests"
+   },
+   "evidenceClass": "OFFLINE_CONTRACT",
+   "cases": [
+    {
+     "tag": "MATRIX:exact fields",
+     "case": "exact fields, checked against the adopted reference models' frame and record vectors",
+     "source": "architecture/host-interface-inputs/corrected/REVIEW_BRIEF.md:74-81",
+     "phase": "W04_OFFLINE",
+     "obligations": [
+      "E10"
+     ],
+     "blockedBy": []
+    },
+    {
+     "tag": "MATRIX:duplicate/unknown keys",
+     "case": "duplicate/unknown keys",
+     "source": "architecture/host-interface-inputs/corrected/REVIEW_BRIEF.md:74-81",
+     "phase": "W04_OFFLINE",
+     "obligations": [
+      "E10"
+     ],
+     "blockedBy": []
+    },
+    {
+     "tag": "MATRIX:role/version mismatch",
+     "case": "role/version mismatch",
+     "source": "architecture/host-interface-inputs/corrected/REVIEW_BRIEF.md:74-81",
+     "phase": "W04_OFFLINE",
+     "obligations": [
+      "E07",
+      "E10"
+     ],
+     "blockedBy": []
+    },
+    {
+     "tag": "MATRIX:transcript replay",
+     "case": "transcript replay",
+     "source": "architecture/host-interface-inputs/corrected/REVIEW_BRIEF.md:74-81",
+     "phase": "W04_OFFLINE",
+     "obligations": [
+      "E10",
+      "E11"
+     ],
+     "blockedBy": []
+    },
+    {
+     "tag": "MATRIX:wrong peer",
+     "case": "wrong peer",
+     "source": "architecture/host-interface-inputs/corrected/REVIEW_BRIEF.md:74-81",
+     "phase": "W04_OFFLINE",
+     "obligations": [
+      "E07"
+     ],
+     "blockedBy": []
+    },
+    {
+     "tag": "CE23",
+     "case": "counterexample 23: an I07 WRITE_OBJECT carrying a Pod or an unknown kind is refused",
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md section 9 (23)",
+     "phase": "W04_OFFLINE",
+     "obligations": [
+      "E10"
+     ],
+     "blockedBy": []
+    },
+    {
+     "tag": "CONTRACT-DATA",
+     "case": "host data contracts (I06 v2 criteria, SELinux matrix v4, seccomp v2) replay offline through their reference models as the input the probes are generated from",
+     "source": "architecture/host-interface-inputs/corrected/REVIEW_BRIEF.md:74-81; the adopted contracts",
+     "phase": "W04_OFFLINE",
+     "obligations": [
+      "E04",
+      "E06",
+      "E10"
+     ],
+     "blockedBy": []
+    },
+    {
+     "tag": "CODEC",
+     "case": "the same contract cases against the implementation's frame and record codecs, through a narrow adapter, using W05's released build only",
+     "source": "architecture/host-interface-inputs/corrected/REVIEW_BRIEF.md:74-81",
+     "phase": "AFTER_W05_RELEASE_SET",
+     "obligations": [
+      "E07",
+      "E10",
+      "E11"
+     ],
+     "blockedBy": []
+    }
+   ],
+   "obligations": [
+    "E04",
+    "E06",
+    "E07",
+    "E10",
+    "E11"
+   ],
+   "contracts": [
+    "I05 gate channel v3",
+    "I06 backend profile v2",
+    "I07 policy write v3",
+    "Admission semantics v3",
+    "Native qualification profile v3",
+    "SELinux matrix v4",
+    "Seccomp allowlists v2",
+    "W01 amendment W02D"
+   ],
+   "acceptance": [
+    "A06"
+   ],
+   "packet": "W04-2",
+   "r12Location": "tests/enforcement/tg01_contract/"
+  },
+  {
+   "id": "TG-02",
+   "from": "T02",
+   "title": "lifecycle",
+   "matrix": {
+    "cases": "unarmed/duplicate/cross-case action, old socket, queued action, conflicting gate/server result, same-generation delayed-identical-request across two armed actions",
+    "evidence": "Source tests of actual owner implementations"
+   },
+   "evidenceClass": "SOURCE_OWNER_IMPLEMENTATION",
+   "cases": [
+    {
+     "tag": "MATRIX:unarmed/duplicate/cross-case action",
+     "case": "unarmed/duplicate/cross-case action",
+     "source": "architecture/host-interface-inputs/corrected/REVIEW_BRIEF.md:74-81",
+     "phase": "AFTER_W05_RELEASE_SET",
+     "obligations": [
+      "E10"
+     ],
+     "blockedBy": []
+    },
+    {
+     "tag": "MATRIX:old socket",
+     "case": "old socket",
+     "source": "architecture/host-interface-inputs/corrected/REVIEW_BRIEF.md:74-81",
+     "phase": "AFTER_W05_RELEASE_SET",
+     "obligations": [
+      "E07",
+      "E10"
+     ],
+     "blockedBy": []
+    },
+    {
+     "tag": "MATRIX:queued action",
+     "case": "queued action",
+     "source": "architecture/host-interface-inputs/corrected/REVIEW_BRIEF.md:74-81",
+     "phase": "AFTER_W05_RELEASE_SET",
+     "obligations": [
+      "E10"
+     ],
+     "blockedBy": []
+    },
+    {
+     "tag": "MATRIX:conflicting gate/server result",
+     "case": "conflicting gate/server result",
+     "source": "architecture/host-interface-inputs/corrected/REVIEW_BRIEF.md:74-81",
+     "phase": "AFTER_W05_RELEASE_SET",
+     "obligations": [
+      "E10"
+     ],
+     "blockedBy": []
+    },
+    {
+     "tag": "MATRIX:same-generation delayed-identical-request across two armed actions",
+     "case": "same-generation delayed-identical-request across two armed actions (counterexample 17, G09)",
+     "source": "architecture/host-interface-inputs/corrected/REVIEW_BRIEF.md:74-81",
+     "phase": "AFTER_W05_RELEASE_SET",
+     "obligations": [
+      "E10"
+     ],
+     "blockedBy": []
+    },
+    {
+     "tag": "S63-SOURCE",
+     "case": "the section 6.3 residual (a new connection after ARM(B) sends bytes identical to B; misattribution becomes HELD) as a source case",
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md section 6.3",
+     "phase": "AFTER_W05_RELEASE_SET",
+     "obligations": [
+      "E10"
+     ],
+     "blockedBy": []
+    },
+    {
+     "tag": "S63-NATIVE",
+     "case": "the same section 6.3 residual as a native case",
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md section 6.3",
+     "phase": "W06_NATIVE_ONLY",
+     "obligations": [
+      "E10"
+     ],
+     "blockedBy": [
+      "D-W02A-F2"
+     ]
+    },
+    {
+     "tag": "CE18",
+     "case": "counterexample 18: a policy writer commits an RBAC change while an admitted CREATE is in flight; A3 blocks it, the urgent path records ADMITTED_BEFORE_INVALIDATION",
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md section 9 (18)",
+     "phase": "AFTER_W05_RELEASE_SET",
+     "obligations": [
+      "E10"
+     ],
+     "blockedBy": []
+    },
+    {
+     "tag": "CE22",
+     "case": "counterexample 22: connection K opened while A is armed and used after B is armed carries A's stamp and C4 refuses",
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md section 9 (22)",
+     "phase": "AFTER_W05_RELEASE_SET",
+     "obligations": [
+      "E10"
+     ],
+     "blockedBy": []
+    },
+    {
+     "tag": "S8-C2C3",
+     "case": "C2/C3 flush and stamp behaviour under load and restart",
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md section 8 (T02/T03)",
+     "phase": "W06_NATIVE_ONLY",
+     "obligations": [
+      "E10"
+     ],
+     "blockedBy": [
+      "D-W02A-F2"
+     ]
+    },
+    {
+     "tag": "LEDGER-E09",
+     "case": "the R12 reader's private factory and dynamic guards: reentrancy, wrong owner, partial construction and state corruption fail sticky; an explicit trusted-code boundary; real fixed factories, dynamic peer overrides, partial acquisition and original-resource-only cleanup under resource substitution",
+     "source": "docs/alpha-2/ENFORCEMENT_FEASIBILITY.md:166 (row E09); docs/alpha-2/OBSERVATION_ENFORCEMENT_DESIGN.md:327 (A02)",
+     "phase": "W04_OFFLINE",
+     "obligations": [
+      "E07",
+      "E09"
+     ],
+     "blockedBy": []
+    }
+   ],
+   "obligations": [
+    "E07",
+    "E09",
+    "E10"
+   ],
+   "contracts": [
+    "I05 gate channel v3",
+    "I07 policy write v3",
+    "Admission semantics v3"
+   ],
+   "acceptance": [
+    "A02",
+    "A05",
+    "A06"
+   ],
+   "packet": "W04-3",
+   "r12Location": "tests/enforcement/tg02_lifecycle/"
+  },
+  {
+   "id": "TG-03",
+   "from": "T03",
+   "title": "persistence",
+   "matrix": {
+    "cases": "kill at each fsync/send/result boundary, ENOSPC, partial records, lost acknowledgements, restart/rollback",
+    "evidence": "Real multi-process/storage fault tests"
+   },
+   "evidenceClass": "SOURCE_MULTIPROCESS_FAULT",
+   "cases": [
+    {
+     "tag": "MATRIX:kill at each fsync/send/result boundary",
+     "case": "kill at each fsync/send/result boundary",
+     "source": "architecture/host-interface-inputs/corrected/REVIEW_BRIEF.md:74-81",
+     "phase": "AFTER_W05_RELEASE_SET",
+     "obligations": [
+      "E11"
+     ],
+     "blockedBy": []
+    },
+    {
+     "tag": "MATRIX:ENOSPC",
+     "case": "ENOSPC",
+     "source": "architecture/host-interface-inputs/corrected/REVIEW_BRIEF.md:74-81",
+     "phase": "AFTER_W05_RELEASE_SET",
+     "obligations": [
+      "E11"
+     ],
+     "blockedBy": []
+    },
+    {
+     "tag": "MATRIX:partial records",
+     "case": "partial records",
+     "source": "architecture/host-interface-inputs/corrected/REVIEW_BRIEF.md:74-81",
+     "phase": "AFTER_W05_RELEASE_SET",
+     "obligations": [
+      "E11"
+     ],
+     "blockedBy": []
+    },
+    {
+     "tag": "MATRIX:lost acknowledgements",
+     "case": "lost acknowledgements",
+     "source": "architecture/host-interface-inputs/corrected/REVIEW_BRIEF.md:74-81",
+     "phase": "AFTER_W05_RELEASE_SET",
+     "obligations": [
+      "E11",
+      "E12"
+     ],
+     "blockedBy": []
+    },
+    {
+     "tag": "MATRIX:restart/rollback",
+     "case": "restart/rollback",
+     "source": "architecture/host-interface-inputs/corrected/REVIEW_BRIEF.md:74-81",
+     "phase": "AFTER_W05_RELEASE_SET",
+     "obligations": [
+      "E11"
+     ],
+     "blockedBy": []
+    },
+    {
+     "tag": "CE21",
+     "case": "counterexample 21: the gate restarts mid-execution with clients connected; deny-first, HELD, no stamps restored",
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md section 9 (21)",
+     "phase": "AFTER_W05_RELEASE_SET",
+     "obligations": [
+      "E10",
+      "E11"
+     ],
+     "blockedBy": []
+    },
+    {
+     "tag": "S8-C2C3",
+     "case": "C2/C3 flush and stamp behaviour under load and restart",
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md section 8 (T02/T03)",
+     "phase": "W06_NATIVE_ONLY",
+     "obligations": [
+      "E11"
+     ],
+     "blockedBy": [
+      "D-W02A-F2"
+     ]
+    }
+   ],
+   "obligations": [
+    "E10",
+    "E11",
+    "E12"
+   ],
+   "contracts": [
+    "I05 gate channel v3",
+    "I07 policy write v3"
+   ],
+   "acceptance": [
+    "A05",
+    "A06"
+   ],
+   "packet": "W04-3",
+   "r12Location": "tests/enforcement/tg03_persistence/"
+  },
+  {
+   "id": "TG-04",
+   "from": "T04",
+   "title": "host",
+   "matrix": {
+    "cases": "policy/load/boolean/relabel, namespaces/mount aliases, effective BPF ancestors, mappings/injection, parent/FD spoof",
+    "evidence": "Independently authorized native Linux tests"
+   },
+   "evidenceClass": "NATIVE_HOST",
+   "cases": [
+    {
+     "tag": "MATRIX:policy/load/boolean/relabel",
+     "case": "policy/load/boolean/relabel",
+     "source": "architecture/host-interface-inputs/corrected/REVIEW_BRIEF.md:74-81",
+     "phase": "W06_NATIVE_ONLY",
+     "obligations": [
+      "E04"
+     ],
+     "blockedBy": [
+      "D-W02A-F2"
+     ]
+    },
+    {
+     "tag": "MATRIX:namespaces/mount aliases",
+     "case": "namespaces/mount aliases",
+     "source": "architecture/host-interface-inputs/corrected/REVIEW_BRIEF.md:74-81",
+     "phase": "W06_NATIVE_ONLY",
+     "obligations": [
+      "E01",
+      "E03"
+     ],
+     "blockedBy": [
+      "D-W02A-F2"
+     ]
+    },
+    {
+     "tag": "MATRIX:effective BPF ancestors",
+     "case": "effective BPF ancestors",
+     "source": "architecture/host-interface-inputs/corrected/REVIEW_BRIEF.md:74-81",
+     "phase": "W06_NATIVE_ONLY",
+     "obligations": [
+      "E05"
+     ],
+     "blockedBy": [
+      "D-W02A-F2"
+     ]
+    },
+    {
+     "tag": "MATRIX:mappings/injection",
+     "case": "mappings/injection",
+     "source": "architecture/host-interface-inputs/corrected/REVIEW_BRIEF.md:74-81",
+     "phase": "W06_NATIVE_ONLY",
+     "obligations": [
+      "E06"
+     ],
+     "blockedBy": [
+      "D-W02A-F2"
+     ]
+    },
+    {
+     "tag": "MATRIX:parent/FD spoof",
+     "case": "parent/FD spoof",
+     "source": "architecture/host-interface-inputs/corrected/REVIEW_BRIEF.md:74-81",
+     "phase": "W06_NATIVE_ONLY",
+     "obligations": [
+      "E02",
+      "E07"
+     ],
+     "blockedBy": [
+      "D-W02A-F2"
+     ]
+    },
+    {
+     "tag": "LEDGER-E01",
+     "case": "path and writer aliases: transient rename and restore, retained writers, relabel and mode changes",
+     "source": "docs/alpha-2/ENFORCEMENT_FEASIBILITY.md:158 (row E01)",
+     "phase": "W06_NATIVE_ONLY",
+     "obligations": [
+      "E01"
+     ],
+     "blockedBy": [
+      "D-W02A-F2"
+     ]
+    },
+    {
+     "tag": "LEDGER-E02",
+     "case": "process-owned descriptors: close, dup, reuse, inheritance and ancillary injection",
+     "source": "docs/alpha-2/ENFORCEMENT_FEASIBILITY.md:159 (row E02)",
+     "phase": "W06_NATIVE_ONLY",
+     "obligations": [
+      "E02"
+     ],
+     "blockedBy": [
+      "D-W02A-F2"
+     ]
+    },
+    {
+     "tag": "S8-KERNEL-FACTS",
+     "case": "the section 5.1 kernel facts hold on the enrolled kernel and policy",
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md section 8",
+     "phase": "W06_NATIVE_ONLY",
+     "obligations": [
+      "E05",
+      "E06"
+     ],
+     "blockedBy": [
+      "D-W02A-F2"
+     ]
+    },
+    {
+     "tag": "S8-POLICYLOAD",
+     "case": "secure_mode_policyload conditionals in the pinned binary policy",
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md section 8",
+     "phase": "W06_NATIVE_ONLY",
+     "obligations": [
+      "E04"
+     ],
+     "blockedBy": [
+      "D-W02A-F2"
+     ]
+    },
+    {
+     "tag": "S8-FREEZE",
+     "case": "freeze before user space under CLONE_INTO_CGROUP on the enrolled kernel",
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md section 8 (T04/T05)",
+     "phase": "W06_NATIVE_ONLY",
+     "obligations": [
+      "E07",
+      "E12"
+     ],
+     "blockedBy": [
+      "D-W02A-F2"
+     ]
+    },
+    {
+     "tag": "S8-CLOSURE",
+     "case": "completeness of the section 2 closure on a real host (E03-E05)",
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md section 8",
+     "phase": "W06_NATIVE_ONLY",
+     "obligations": [
+      "E03",
+      "E04",
+      "E05"
+     ],
+     "blockedBy": [
+      "D-W02A-F2"
+     ]
+    },
+    {
+     "tag": "O-T04-AMEND",
+     "case": "per-role seccomp decisions (ALLOW, KILL_PROCESS, ENOSYS) on both architectures; MFD_NOEXEC_SEAL memfds non-executable and exec-sealed; a pidfd signal from the broker without CAP_KILL fails; the worker shows Seccomp_filters: 2 and lists no supplementary groups",
+     "source": "architecture/host-interface-amendment-w02d/HOST_INTERFACE_SPEC.md section 11",
+     "phase": "W06_NATIVE_ONLY",
+     "obligations": [
+      "E06",
+      "E07",
+      "E12"
+     ],
+     "blockedBy": [
+      "D-W02A-F2"
+     ]
+    },
+    {
+     "tag": "CE19",
+     "case": "counterexample 19: a runtime restart of host containment is refused",
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md section 9 (19)",
+     "phase": "W06_NATIVE_ONLY",
+     "obligations": [
+      "E04",
+      "E05"
+     ],
+     "blockedBy": [
+      "D-W02A-F2"
+     ]
+    },
+    {
+     "tag": "CE25",
+     "case": "counterexample 25: a datastore restore at runtime is refused outside reboot maintenance",
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md section 9 (25)",
+     "phase": "W06_NATIVE_ONLY",
+     "obligations": [
+      "E04",
+      "E11"
+     ],
+     "blockedBy": [
+      "D-W02A-F2"
+     ]
+    },
+    {
+     "tag": "CE27",
+     "case": "counterexample 27: no reader keeps CAP_SYS_ADMIN for GET_FD_BY_ID; command 13 is removed",
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md section 9 (27)",
+     "phase": "W06_NATIVE_ONLY",
+     "obligations": [
+      "E05"
+     ],
+     "blockedBy": [
+      "D-W02A-F2"
+     ]
+    },
+    {
+     "tag": "CE28",
+     "case": "counterexample 28: an O_PATH fd on a role cgroup cannot detach its enrolled program",
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md section 9 (28)",
+     "phase": "W06_NATIVE_ONLY",
+     "obligations": [
+      "E05"
+     ],
+     "blockedBy": [
+      "D-W02A-F2"
+     ]
+    }
+   ],
+   "obligations": [
+    "E01",
+    "E02",
+    "E03",
+    "E04",
+    "E05",
+    "E06",
+    "E07",
+    "E11",
+    "E12"
+   ],
+   "contracts": [
+    "Native qualification profile v3",
+    "SELinux matrix v4",
+    "Seccomp allowlists v2",
+    "W01 amendment W02D"
+   ],
+   "acceptance": [
+    "A03",
+    "A04"
+   ],
+   "packet": "W04-4",
+   "r12Location": "probes/enforcement/tg04_host/ (static Rust+musl probes)"
+  },
+  {
+   "id": "TG-05",
+   "from": "T05",
+   "title": "clocks",
+   "matrix": {
+    "cases": "expiry with stalled Python, suspend, wall-clock rollback, peer death/restart and original deadlines",
+    "evidence": "Independent native lifetime tests"
+   },
+   "evidenceClass": "NATIVE_LIFETIME",
+   "cases": [
+    {
+     "tag": "MATRIX:expiry with stalled Python",
+     "case": "expiry with stalled Python",
+     "source": "architecture/host-interface-inputs/corrected/REVIEW_BRIEF.md:74-81",
+     "phase": "W06_NATIVE_ONLY",
+     "obligations": [
+      "E08"
+     ],
+     "blockedBy": [
+      "D-W02A-F2"
+     ]
+    },
+    {
+     "tag": "MATRIX:suspend",
+     "case": "suspend",
+     "source": "architecture/host-interface-inputs/corrected/REVIEW_BRIEF.md:74-81",
+     "phase": "W06_NATIVE_ONLY",
+     "obligations": [
+      "E08"
+     ],
+     "blockedBy": [
+      "D-W02A-F2"
+     ]
+    },
+    {
+     "tag": "MATRIX:wall-clock rollback",
+     "case": "wall-clock rollback",
+     "source": "architecture/host-interface-inputs/corrected/REVIEW_BRIEF.md:74-81",
+     "phase": "W06_NATIVE_ONLY",
+     "obligations": [
+      "E08"
+     ],
+     "blockedBy": [
+      "D-W02A-F2"
+     ]
+    },
+    {
+     "tag": "MATRIX:peer death/restart",
+     "case": "peer death/restart",
+     "source": "architecture/host-interface-inputs/corrected/REVIEW_BRIEF.md:74-81",
+     "phase": "W06_NATIVE_ONLY",
+     "obligations": [
+      "E07"
+     ],
+     "blockedBy": [
+      "D-W02A-F2"
+     ]
+    },
+    {
+     "tag": "MATRIX:original deadlines",
+     "case": "original deadlines",
+     "source": "architecture/host-interface-inputs/corrected/REVIEW_BRIEF.md:74-81",
+     "phase": "W06_NATIVE_ONLY",
+     "obligations": [
+      "E08",
+      "E11"
+     ],
+     "blockedBy": [
+      "D-W02A-F2"
+     ]
+    },
+    {
+     "tag": "S8-FREEZE",
+     "case": "freeze before user space under CLONE_INTO_CGROUP, as a lifetime case (a frozen child never reaches user space before W3)",
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md section 8 (T04/T05)",
+     "phase": "W06_NATIVE_ONLY",
+     "obligations": [
+      "E07",
+      "E08"
+     ],
+     "blockedBy": [
+      "D-W02A-F2"
+     ]
+    }
+   ],
+   "obligations": [
+    "E07",
+    "E08",
+    "E11"
+   ],
+   "contracts": [
+    "I05 gate channel v3",
+    "Native qualification profile v3",
+    "W01 amendment W02D"
+   ],
+   "acceptance": [
+    "A02",
+    "A05"
+   ],
+   "packet": "W04-4",
+   "r12Location": "probes/enforcement/tg05_clocks/ (static Rust+musl probes)"
+  },
+  {
+   "id": "TG-06",
+   "from": "T06",
+   "title": "API/writers",
+   "matrix": {
+    "cases": "reads, final mutated objects, controller/aggregate-role changes, privileged/alternate paths, direct-storage hazards",
+    "evidence": "Exact selected backend integration tests"
+   },
+   "evidenceClass": "BACKEND_INTEGRATION",
+   "cases": [
+    {
+     "tag": "MATRIX:reads",
+     "case": "reads",
+     "source": "architecture/host-interface-inputs/corrected/REVIEW_BRIEF.md:74-81",
+     "phase": "W06_NATIVE_ONLY",
+     "obligations": [
+      "E10"
+     ],
+     "blockedBy": [
+      "D-W02A-F2",
+      "D-SC01-PEER"
+     ]
+    },
+    {
+     "tag": "MATRIX:final mutated objects",
+     "case": "final mutated objects",
+     "source": "architecture/host-interface-inputs/corrected/REVIEW_BRIEF.md:74-81",
+     "phase": "W06_NATIVE_ONLY",
+     "obligations": [
+      "E10"
+     ],
+     "blockedBy": [
+      "D-W02A-F2",
+      "D-SC01-PEER"
+     ]
+    },
+    {
+     "tag": "MATRIX:controller/aggregate-role changes",
+     "case": "controller/aggregate-role changes",
+     "source": "architecture/host-interface-inputs/corrected/REVIEW_BRIEF.md:74-81",
+     "phase": "W06_NATIVE_ONLY",
+     "obligations": [
+      "E10"
+     ],
+     "blockedBy": [
+      "D-W02A-F2",
+      "D-SC01-PEER"
+     ]
+    },
+    {
+     "tag": "MATRIX:privileged/alternate paths",
+     "case": "privileged/alternate paths",
+     "source": "architecture/host-interface-inputs/corrected/REVIEW_BRIEF.md:74-81",
+     "phase": "W06_NATIVE_ONLY",
+     "obligations": [
+      "E10"
+     ],
+     "blockedBy": [
+      "D-W02A-F2",
+      "D-SC01-PEER"
+     ]
+    },
+    {
+     "tag": "MATRIX:direct-storage hazards",
+     "case": "direct-storage hazards, including etcd over its unix socket (selection owner decision Q4)",
+     "source": "architecture/host-interface-inputs/corrected/REVIEW_BRIEF.md:74-81",
+     "phase": "W06_NATIVE_ONLY",
+     "obligations": [
+      "E10",
+      "E11"
+     ],
+     "blockedBy": [
+      "D-W02A-F2",
+      "D-SC01-PEER"
+     ]
+    },
+    {
+     "tag": "S8-CLOSURE",
+     "case": "completeness of the section 2 closure on a real host (E10)",
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md section 8",
+     "phase": "W06_NATIVE_ONLY",
+     "obligations": [
+      "E10"
+     ],
+     "blockedBy": [
+      "D-W02A-F2",
+      "D-SC01-PEER"
+     ]
+    },
+    {
+     "tag": "S8-A2",
+     "case": "A2 field allowlists against real defaulting",
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md section 8 (T06)",
+     "phase": "W06_NATIVE_ONLY",
+     "obligations": [
+      "E10"
+     ],
+     "blockedBy": [
+      "D-W02A-F2",
+      "D-SC01-PEER"
+     ]
+    },
+    {
+     "tag": "CE20",
+     "case": "counterexample 20: a root login with a leftover admin kubeconfig is refused by name_connect",
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md section 9 (20)",
+     "phase": "W06_NATIVE_ONLY",
+     "obligations": [
+      "E10"
+     ],
+     "blockedBy": [
+      "D-W02A-F2",
+      "D-SC01-PEER"
+     ]
+    },
+    {
+     "tag": "CE24",
+     "case": "counterexample 24: an aggregated ClusterRole widening is excluded from the closure and refused by the observer",
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md section 9 (24)",
+     "phase": "W06_NATIVE_ONLY",
+     "obligations": [
+      "E10"
+     ],
+     "blockedBy": [
+      "D-W02A-F2",
+      "D-SC01-PEER"
+     ]
+    },
+    {
+     "tag": "CE26",
+     "case": "counterexample 26: CSR approval cannot mint a privileged client certificate",
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md section 9 (26)",
+     "phase": "W06_NATIVE_ONLY",
+     "obligations": [
+      "E10"
+     ],
+     "blockedBy": [
+      "D-W02A-F2",
+      "D-SC01-PEER"
+     ]
+    }
+   ],
+   "obligations": [
+    "E10",
+    "E11"
+   ],
+   "contracts": [
+    "I06 backend profile v2",
+    "I07 policy write v3",
+    "Admission semantics v3"
+   ],
+   "acceptance": [
+    "A06"
+   ],
+   "packet": "W04-5",
+   "r12Location": "tests/enforcement/tg06_api_writers/ (against the selected Kubernetes v1.37.1 set)"
+  },
+  {
+   "id": "TG-07",
+   "from": "T07",
+   "title": "cleanup",
+   "matrix": {
+    "cases": "ambiguous create, conflicting UID, delete precondition, revoked cleanup, pending remote effects",
+    "evidence": "Native integration plus retained resource evidence"
+   },
+   "evidenceClass": "NATIVE_INTEGRATION",
+   "cases": [
+    {
+     "tag": "MATRIX:ambiguous create",
+     "case": "ambiguous create",
+     "source": "architecture/host-interface-inputs/corrected/REVIEW_BRIEF.md:74-81",
+     "phase": "W06_NATIVE_ONLY",
+     "obligations": [
+      "E10",
+      "E12"
+     ],
+     "blockedBy": [
+      "D-W02A-F2"
+     ]
+    },
+    {
+     "tag": "MATRIX:conflicting UID",
+     "case": "conflicting UID",
+     "source": "architecture/host-interface-inputs/corrected/REVIEW_BRIEF.md:74-81",
+     "phase": "W06_NATIVE_ONLY",
+     "obligations": [
+      "E12"
+     ],
+     "blockedBy": [
+      "D-W02A-F2"
+     ]
+    },
+    {
+     "tag": "MATRIX:delete precondition",
+     "case": "delete precondition",
+     "source": "architecture/host-interface-inputs/corrected/REVIEW_BRIEF.md:74-81",
+     "phase": "W06_NATIVE_ONLY",
+     "obligations": [
+      "E10",
+      "E12"
+     ],
+     "blockedBy": [
+      "D-W02A-F2"
+     ]
+    },
+    {
+     "tag": "MATRIX:revoked cleanup",
+     "case": "revoked cleanup",
+     "source": "architecture/host-interface-inputs/corrected/REVIEW_BRIEF.md:74-81",
+     "phase": "W06_NATIVE_ONLY",
+     "obligations": [
+      "E12"
+     ],
+     "blockedBy": [
+      "D-W02A-F2"
+     ]
+    },
+    {
+     "tag": "MATRIX:pending remote effects",
+     "case": "pending remote effects",
+     "source": "architecture/host-interface-inputs/corrected/REVIEW_BRIEF.md:74-81",
+     "phase": "W06_NATIVE_ONLY",
+     "obligations": [
+      "E10",
+      "E12"
+     ],
+     "blockedBy": [
+      "D-W02A-F2"
+     ]
+    }
+   ],
+   "obligations": [
+    "E10",
+    "E12"
+   ],
+   "contracts": [
+    "I05 gate channel v3",
+    "Native qualification profile v3",
+    "W01 amendment W02D"
+   ],
+   "acceptance": [
+    "A06"
+   ],
+   "packet": "W04-5",
+   "r12Location": "tests/enforcement/tg07_cleanup/"
+  },
+  {
+   "id": "TG-08",
+   "from": "T08",
+   "title": "compatibility",
+   "matrix": {
+    "cases": "old profile rejection, new profile missing gate/backend, export/upgrade/rollback without nonce reuse",
+    "evidence": "Source and installed migration tests separately"
+   },
+   "evidenceClass": "SOURCE_AND_INSTALLED_MIGRATION",
+   "cases": [
+    {
+     "tag": "S44",
+     "case": "the section 4.4 rejection vectors through native qualification v3's cross-version and negative vectors: each reader refuses a record of another version with no fallback; a record missing EFFECT_GATE, with an extra role, with the gate under the BROKER key or path, with an aliased role path, with a lifecycle subject inside a resident role cgroup, or with unknown backendComponents keys refuses",
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md section 4.4",
+     "phase": "W04_OFFLINE",
+     "obligations": [
+      "E07",
+      "E10"
+     ],
+     "blockedBy": []
+    },
+    {
+     "tag": "MATRIX:old profile rejection",
+     "case": "old profile rejection, as source tests of the released build",
+     "source": "architecture/host-interface-inputs/corrected/REVIEW_BRIEF.md:74-81",
+     "phase": "AFTER_W05_RELEASE_SET",
+     "obligations": [
+      "E07",
+      "E10"
+     ],
+     "blockedBy": []
+    },
+    {
+     "tag": "MATRIX:new profile missing gate/backend",
+     "case": "new profile missing gate/backend, as source tests of the released build",
+     "source": "architecture/host-interface-inputs/corrected/REVIEW_BRIEF.md:74-81",
+     "phase": "AFTER_W05_RELEASE_SET",
+     "obligations": [
+      "E07",
+      "E10"
+     ],
+     "blockedBy": []
+    },
+    {
+     "tag": "MATRIX:export/upgrade/rollback without nonce reuse",
+     "case": "export/upgrade/rollback without nonce reuse; migration never reinterprets accepted data or reuses a generation or nonce (section 4.4), as source tests",
+     "source": "architecture/host-interface-inputs/corrected/REVIEW_BRIEF.md:74-81",
+     "phase": "AFTER_W05_RELEASE_SET",
+     "obligations": [
+      "E11"
+     ],
+     "blockedBy": []
+    },
+    {
+     "tag": "INSTALLED",
+     "case": "the same migrations on the installed host, separately from the source tests",
+     "source": "architecture/host-interface-inputs/corrected/REVIEW_BRIEF.md:74-81",
+     "phase": "W06_NATIVE_ONLY",
+     "obligations": [
+      "E10",
+      "E11"
+     ],
+     "blockedBy": [
+      "D-W02A-F2"
+     ]
+    }
+   ],
+   "obligations": [
+    "E07",
+    "E10",
+    "E11"
+   ],
+   "contracts": [
+    "I05 gate channel v3",
+    "I06 backend profile v2",
+    "Native qualification profile v3",
+    "W01 amendment W02D"
+   ],
+   "acceptance": [
+    "A06"
+   ],
+   "packet": "W04-6",
+   "r12Location": "tests/enforcement/tg08_compatibility/ (source and installed parts kept separate)"
+  }
+ ],
+ "obligations": [
+  {
+   "id": "E01",
+   "theme": "Path and writer aliases (SELinux plus fs-verity; ancestor, path and writer policy)",
+   "gates": [
+    "G07"
+   ],
+   "testGroups": [
+    "TG-04"
+   ],
+   "w04": "Writes the test source of TG-04; runs none of it before W06.",
+   "w06": "Runs the native cases of TG-04 on the enrolled AMD64 and ARM64 hosts and records the evidence."
+  },
+  {
+   "id": "E02",
+   "theme": "Process-owned file descriptors",
+   "gates": [],
+   "testGroups": [
+    "TG-04"
+   ],
+   "w04": "Writes the test source of TG-04; runs none of it before W06.",
+   "w06": "Runs the native cases of TG-04 on the enrolled AMD64 and ARM64 hosts and records the evidence."
+  },
+  {
+   "id": "E03",
+   "theme": "Mount and namespace restrictions",
+   "gates": [
+    "G04",
+    "G07"
+   ],
+   "testGroups": [
+    "TG-04"
+   ],
+   "w04": "Writes the test source of TG-04; runs none of it before W06.",
+   "w06": "Runs the native cases of TG-04 on the enrolled AMD64 and ARM64 hosts and records the evidence."
+  },
+  {
+   "id": "E04",
+   "theme": "SELinux policy changes and exclusive update lifecycle",
+   "gates": [
+    "G04",
+    "G07"
+   ],
+   "testGroups": [
+    "TG-01",
+    "TG-04"
+   ],
+   "w04": "Writes the test source of TG-01, TG-04; runs TG-01 before W06.",
+   "w06": "Runs the native cases of TG-04 on the enrolled AMD64 and ARM64 hosts and records the evidence."
+  },
+  {
+   "id": "E05",
+   "theme": "Cgroup v2 and exact BPF endpoint programs",
+   "gates": [
+    "G04",
+    "G07"
+   ],
+   "testGroups": [
+    "TG-04"
+   ],
+   "w04": "Writes the test source of TG-04; runs none of it before W06.",
+   "w06": "Runs the native cases of TG-04 on the enrolled AMD64 and ARM64 hosts and records the evidence."
+  },
+  {
+   "id": "E06",
+   "theme": "Code, maps and injection (loader versus sealed phase)",
+   "gates": [
+    "G07"
+   ],
+   "testGroups": [
+    "TG-01",
+    "TG-04"
+   ],
+   "w04": "Writes the test source of TG-01, TG-04; runs TG-01 before W06.",
+   "w06": "Runs the native cases of TG-04 on the enrolled AMD64 and ARM64 hosts and records the evidence."
+  },
+  {
+   "id": "E07",
+   "theme": "Peer and PID replacement",
+   "gates": [
+    "G06",
+    "G07"
+   ],
+   "testGroups": [
+    "TG-01",
+    "TG-02",
+    "TG-04",
+    "TG-05",
+    "TG-08"
+   ],
+   "w04": "Writes the test source of TG-01, TG-02, TG-04, TG-05, TG-08; runs TG-01, TG-02, TG-08 before W06.",
+   "w06": "Runs the native cases of TG-04, TG-05 on the enrolled AMD64 and ARM64 hosts and records the evidence."
+  },
+  {
+   "id": "E08",
+   "theme": "Original clocks, deadlines and independent expiry",
+   "gates": [
+    "G07"
+   ],
+   "testGroups": [
+    "TG-05"
+   ],
+   "w04": "Writes the test source of TG-05; runs none of it before W06.",
+   "w06": "Runs the native cases of TG-05 on the enrolled AMD64 and ARM64 hosts and records the evidence."
+  },
+  {
+   "id": "E09",
+   "theme": "The R12 reader's private factory and dynamic guards",
+   "gates": [],
+   "testGroups": [
+    "TG-02"
+   ],
+   "w04": "Writes the test source of TG-02; runs TG-02 before W06.",
+   "w06": "No native case; W04's source evidence stands for this row until W07."
+  },
+  {
+   "id": "E10",
+   "theme": "API-operation and policy-generation gate",
+   "gates": [
+    "G04",
+    "G05",
+    "G09"
+   ],
+   "testGroups": [
+    "TG-01",
+    "TG-02",
+    "TG-03",
+    "TG-06",
+    "TG-07",
+    "TG-08"
+   ],
+   "w04": "Writes the test source of TG-01, TG-02, TG-03, TG-06, TG-07, TG-08; runs TG-01, TG-02, TG-03, TG-08 before W06.",
+   "w06": "Runs the native cases of TG-02, TG-06, TG-07, TG-08 on the enrolled AMD64 and ARM64 hosts and records the evidence."
+  },
+  {
+   "id": "E11",
+   "theme": "Protected durable history and deny on restart",
+   "gates": [
+    "G05"
+   ],
+   "testGroups": [
+    "TG-01",
+    "TG-03",
+    "TG-04",
+    "TG-05",
+    "TG-06",
+    "TG-08"
+   ],
+   "w04": "Writes the test source of TG-01, TG-03, TG-04, TG-05, TG-06, TG-08; runs TG-01, TG-03, TG-08 before W06.",
+   "w06": "Runs the native cases of TG-03, TG-04, TG-05, TG-06, TG-08 on the enrolled AMD64 and ARM64 hosts and records the evidence."
+  },
+  {
+   "id": "E12",
+   "theme": "Broker process ownership, reaping and exact-UID records",
+   "gates": [
+    "G05",
+    "G07"
+   ],
+   "testGroups": [
+    "TG-03",
+    "TG-04",
+    "TG-07"
+   ],
+   "w04": "Writes the test source of TG-03, TG-04, TG-07; runs TG-03 before W06.",
+   "w06": "Runs the native cases of TG-04, TG-07 on the enrolled AMD64 and ARM64 hosts and records the evidence."
+  }
+ ],
+ "acceptance": [
+  {
+   "id": "A01",
+   "evidence": "Lost-window register: mutation after every changed leaf boundary, restored before next sample; denied externally or detected with original fresh check",
+   "testGroups": [],
+   "observationWindows": true,
+   "outsideW04": "the lost-window half (removed or moved calls, exclusion proofs) is W07's, against W04-7's baseline register (D-OW-1 A)"
+  },
+  {
+   "id": "A02",
+   "evidence": "Real fixed factories, wrong roles/owners, dynamic peer overrides, sticky failure, original deadlines, partial acquisition and original-resource-only cleanup",
+   "testGroups": [
+    "TG-02",
+    "TG-05"
+   ],
+   "observationWindows": false,
+   "outsideW04": null
+  },
+  {
+   "id": "A03",
+   "evidence": "No observer/broker self-created bootstrap grant, no token/FD/boolean callback, no credential/worker before all independent prerequisites",
+   "testGroups": [
+    "TG-04"
+   ],
+   "observationWindows": false,
+   "outsideW04": null
+  },
+  {
+   "id": "A04",
+   "evidence": "Actual effective policy/BPF/cgroup/maps on pinned AMD64 and ARM64 Linux environments, bypass attempts and denied mutation windows",
+   "testGroups": [
+    "TG-04"
+   ],
+   "observationWindows": false,
+   "outsideW04": null
+  },
+  {
+   "id": "A05",
+   "evidence": "Concurrent normal updates, urgent invalidation, stuck reader, dead enforcer, peer restart, suspend/expiry and lost durable history",
+   "testGroups": [
+    "TG-02",
+    "TG-03",
+    "TG-05"
+   ],
+   "observationWindows": false,
+   "outsideW04": null
+  },
+  {
+   "id": "A06",
+   "evidence": "Zero-resource and resource profiles; old connections and delayed effects; exact UID/no-adoption cleanup; denied cleanup and lost terminal delivery",
+   "testGroups": [
+    "TG-01",
+    "TG-02",
+    "TG-03",
+    "TG-06",
+    "TG-07",
+    "TG-08"
+   ],
+   "observationWindows": false,
+   "outsideW04": null
+  },
+  {
+   "id": "A07",
+   "evidence": "Fresh exact candidate inventory, source-history round trips, independent changed-symbol/test map and full unaffected regression suites",
+   "testGroups": [],
+   "observationWindows": false,
+   "outsideW04": "W07's temporal successor and its source gates (C6/C7)"
+  },
+  {
+   "id": "A08",
+   "evidence": "Complete unchanged bounded source recipe under an explicitly reserved successor allowance, required localhost CI, protected merge and independent exact-main",
+   "testGroups": [],
+   "observationWindows": false,
+   "outsideW04": "The source gates of every W04 packet and of W07"
+  },
+  {
+   "id": "A09",
+   "evidence": "Exact artifact/SBOM/signature, installation, native campaign, runtime assurance and tenant acceptance independently recorded",
+   "testGroups": [],
+   "observationWindows": false,
+   "outsideW04": "W05's release set and W06's installation, native campaign, runtime and tenant acceptance"
+  }
+ ],
+ "packets": [
+  {
+   "id": "W04-0",
+   "repository": "harness-onion",
+   "content": "This traceability record and the observation-window register schema",
+   "earliest": "after packet 221 (MET-ENFORCE-019) merges, which brings the selection record to main"
+  },
+  {
+   "id": "W04-1",
+   "repository": "mas-harness-conformance-labs",
+   "content": "Enforcement test area bootstrap: pinned Python 3.12 + pytest and Rust+musl toolchains kept out of the stdlib-only reader, offline CI gates, contract snapshots imported by sha256, the independence attestation",
+   "earliest": "after the owner's R12 verification route"
+  },
+  {
+   "id": "W04-2",
+   "repository": "mas-harness-conformance-labs",
+   "content": "TG-01 contract tests",
+   "earliest": "after W04-1"
+  },
+  {
+   "id": "W04-3",
+   "repository": "mas-harness-conformance-labs",
+   "content": "TG-02 and TG-03 lifecycle and persistence fault tests",
+   "earliest": "after W04-1"
+  },
+  {
+   "id": "W04-4",
+   "repository": "mas-harness-conformance-labs",
+   "content": "TG-04 and TG-05 native probe source",
+   "earliest": "after W04-1"
+  },
+  {
+   "id": "W04-5",
+   "repository": "mas-harness-conformance-labs",
+   "content": "TG-06 and TG-07 backend and cleanup integration tests",
+   "earliest": "after W04-1"
+  },
+  {
+   "id": "W04-6",
+   "repository": "mas-harness-conformance-labs",
+   "content": "TG-08 compatibility and migration tests",
+   "earliest": "after W04-1"
+  },
+  {
+   "id": "W04-7",
+   "repository": "harness-onion",
+   "content": "The exhaustive observation-window register of the R12 reader at its baseline, with W05's enforcement context, generated by a pinned inventory tool reviewed in the same packet and re-run by its reviewer",
+   "earliest": "after W05's release set"
+  }
+ ],
+ "observationWindows": {
+  "schema": "architecture/enforcement-test-plan/observation-windows.schema.json",
+  "register": null,
+  "state": "SCHEMA_ONLY",
+  "fillAt": "W04-7",
+  "subject": "the R12 observation reader (mas-harness-conformance-labs), which owns the observation calls (OBSERVATION_ENFORCEMENT_DESIGN.md:226)",
+  "baseline": "the R12 accepted main revision the inventory is taken from, recorded in the register",
+  "enforcementContext": "the exact R10 operator revision in W05's release set, which the exclusion proofs rely on",
+  "removals": "null until W07's reader-successor candidate proposes them against this register"
+ },
+ "blockers": [
+  {
+   "id": "D-W02A-F2",
+   "text": "a production W02a backend profile naming the selected components, their canonical paths, confined types and verity digests (selection open item; native qualification v3 has none yet); gates the W06 run of every native case, not the writing of its source"
+  },
+  {
+   "id": "D-SC01-PEER",
+   "text": "the I06 successor accepting etcd's single AF_UNIX peer listener (selection open item); gates the W06 run of TG-06's native cases"
+  }
+ ],
+ "ownerDecisions": [
+  {
+   "id": "D-R12",
+   "selected": "a",
+   "date": "2026-10-10",
+   "state": "ACCEPTED",
+   "decision": "W04 source lives in R12 mas-harness-conformance-labs; the owner sets up its verification route (the repository already exists)"
+  },
+  {
+   "id": "D-TOOL",
+   "selected": "a",
+   "date": "2026-10-10",
+   "state": "ACCEPTED",
+   "decision": "Python 3.12 + pytest for the source and offline groups; static Rust+musl probe binaries for the native TG-04/TG-05 probes"
+  },
+  {
+   "id": "D-MAP",
+   "selected": "accepted",
+   "date": "2026-10-10",
+   "state": "ACCEPTED",
+   "decision": "W04-0 defines the TG-to-E map; W04 delivers test source and the offline-runnable part; all native execution is W06's"
+  },
+  {
+   "id": "D-OW",
+   "selected": "accepted",
+   "date": "2026-10-10",
+   "state": "ACCEPTED",
+   "decision": "The observation-window register schema now (W04-0); the register is filled at the exact candidate revision in W04-7 after W05"
+  },
+  {
+   "id": "D-ID",
+   "selected": "accepted",
+   "date": "2026-10-10",
+   "state": "ACCEPTED",
+   "decision": "New ids TG-01..TG-08 and OW-nn, distinct from the I05 vector ids T001-T120 and the W01-W08 work labels"
+  },
+  {
+   "id": "D-OW-1",
+   "selected": "A",
+   "date": "2026-10-10",
+   "state": "ACCEPTED",
+   "decision": "Clarification of D-OW: the observation windows are the R12 reader's calls (OBSERVATION_ENFORCEMENT_DESIGN.md:226). A: W04-7 registers the reader's current calls at a pinned baseline with W05's enforcement context and W07 adds the removal half (A01 split; ENFORCEMENT_INTEGRATION.md:125 amended through the roadmap). B: W04-7 waits for a W07 candidate so A01 completes in W04. C: bind the register to R10's calls (not recommended)."
+  }
+ ],
+ "notClaimed": [
+  "No test is written or run; W04-1..W04-7 write them.",
+  "No native evidence; every native case runs only in W06.",
+  "E01-E12 stay OPEN_UNPROVEN.",
+  "The observation-window register is not filled; W04-7 fills it at the R12 reader's baseline."
+ ]
+}

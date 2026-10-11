@@ -1,0 +1,6535 @@
+{
+ "assertions": [
+  {
+   "allow": [
+    "planeon_gate_t",
+    "planeon_observer_t",
+    "qualk8s_controller_manager_t",
+    "qualk8s_scheduler_t",
+    "qualk8s_kubelet_t",
+    "qualk8s_netpol_t",
+    "qualk8s_proxy_t"
+   ],
+   "class": "tcp_socket",
+   "id": "A01",
+   "perms": [
+    "name_connect"
+   ],
+   "ref": "W01 2.1 P2",
+   "sources": "ALL",
+   "statement": "Only the gate, the observer and the enumerated control-plane clients connect to the apiserver port",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_kubeapi_port_t"
+   ]
+  },
+  {
+   "allow": [
+    "qualk8s_apiserver_t"
+   ],
+   "class": "tcp_socket",
+   "id": "A02",
+   "perms": [
+    "name_bind"
+   ],
+   "ref": "W01 2.1 P2",
+   "sources": "ALL",
+   "statement": "Only the apiserver binds the apiserver port",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_kubeapi_port_t"
+   ]
+  },
+  {
+   "allow": [
+    "planeon_gate_t"
+   ],
+   "class": "tcp_socket",
+   "id": "A03",
+   "perms": [
+    "name_bind"
+   ],
+   "ref": "W01 5.3",
+   "sources": "ALL",
+   "statement": "Only the gate binds the I04 port",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_i04_port_t"
+   ]
+  },
+  {
+   "allow": [
+    "planeon_server_t"
+   ],
+   "class": "tcp_socket",
+   "id": "A04",
+   "perms": [
+    "name_connect"
+   ],
+   "ref": "W01 5.3",
+   "sources": "ALL",
+   "statement": "Only the server connects to the I04 port",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_i04_port_t"
+   ]
+  },
+  {
+   "allow": [
+    "qualk8s_apiserver_t"
+   ],
+   "class": "unix_stream_socket",
+   "id": "A05",
+   "perms": [
+    "connectto"
+   ],
+   "ref": "W01 2.1 P1",
+   "sources": "ALL",
+   "statement": "Only the apiserver connects to the datastore socket",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "qualk8s_datastore_t"
+   ]
+  },
+  {
+   "allow": [
+    "qualk8s_kubelet_t"
+   ],
+   "class": "unix_stream_socket",
+   "id": "A06",
+   "perms": [
+    "connectto"
+   ],
+   "ref": "W01 2.1 P9",
+   "sources": "ALL",
+   "statement": "Only the kubelet connects to the container runtime socket",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "qualk8s_runtime_t"
+   ]
+  },
+  {
+   "allow": [
+    "planeon_broker_t"
+   ],
+   "class": "unix_stream_socket",
+   "id": "A07",
+   "perms": [
+    "connectto"
+   ],
+   "ref": "W01 5.3; W02b",
+   "sources": "ALL",
+   "statement": "Only the broker connects to I05",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_i05_socket_t"
+   ]
+  },
+  {
+   "allow": [
+    "planeon_policy_writer_t"
+   ],
+   "class": "unix_stream_socket",
+   "id": "A08",
+   "perms": [
+    "connectto"
+   ],
+   "ref": "W01 2.4; W02c",
+   "sources": "ALL",
+   "statement": "Only the policy writer connects to I07",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_i07_socket_t"
+   ]
+  },
+  {
+   "allow": [
+    "planeon_gate_t"
+   ],
+   "class": "file",
+   "id": "A09",
+   "perms": [
+    "read",
+    "open"
+   ],
+   "ref": "W01 5.3",
+   "sources": "ALL",
+   "statement": "The gate is the sole reader of its two upstream credentials",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_gate_effect_cred_t",
+    "planeon_gate_writer_cred_t"
+   ]
+  },
+  {
+   "allow": [
+    "qualk8s_apiserver_t",
+    "qualk8s_controller_manager_t"
+   ],
+   "class": "file",
+   "id": "A10",
+   "perms": [
+    "read",
+    "open"
+   ],
+   "ref": "W01 2.1 P4",
+   "sources": "ALL",
+   "statement": "Only the apiserver and controller-manager read the service-account signing key",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "qualk8s_sa_key_t"
+   ]
+  },
+  {
+   "allow": [
+    "planeon_observer_t"
+   ],
+   "class": "file",
+   "id": "A11.1",
+   "perms": [
+    "read",
+    "open"
+   ],
+   "ref": "W01 5.3; 2.3",
+   "sources": "ALL",
+   "statement": "Only its owner reads planeon_observer_cred_t",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_observer_cred_t"
+   ]
+  },
+  {
+   "allow": [
+    "planeon_server_t"
+   ],
+   "class": "file",
+   "id": "A11.2",
+   "perms": [
+    "read",
+    "open"
+   ],
+   "ref": "W01 5.3; 2.3",
+   "sources": "ALL",
+   "statement": "Only its owner reads planeon_server_cred_t",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_server_cred_t"
+   ]
+  },
+  {
+   "allow": [
+    "qualk8s_apiserver_t"
+   ],
+   "class": "file",
+   "id": "A11.3",
+   "perms": [
+    "read",
+    "open"
+   ],
+   "ref": "W01 5.3; 2.3",
+   "sources": "ALL",
+   "statement": "Only its owner reads qualk8s_apiserver_cred_t",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "qualk8s_apiserver_cred_t"
+   ]
+  },
+  {
+   "allow": [
+    "qualk8s_controller_manager_t"
+   ],
+   "class": "file",
+   "id": "A11.4",
+   "perms": [
+    "read",
+    "open"
+   ],
+   "ref": "W01 5.3; 2.3",
+   "sources": "ALL",
+   "statement": "Only its owner reads qualk8s_controller_manager_cred_t",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "qualk8s_controller_manager_cred_t"
+   ]
+  },
+  {
+   "allow": [
+    "qualk8s_apiserver_t"
+   ],
+   "class": "file",
+   "id": "A11.5",
+   "perms": [
+    "read",
+    "open"
+   ],
+   "ref": "W01 5.3; 2.3",
+   "sources": "ALL",
+   "statement": "Only its owner reads qualk8s_encryption_key_t",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "qualk8s_encryption_key_t"
+   ]
+  },
+  {
+   "allow": [
+    "qualk8s_kubelet_t"
+   ],
+   "class": "file",
+   "id": "A11.6",
+   "perms": [
+    "read",
+    "open"
+   ],
+   "ref": "W01 5.3; 2.3",
+   "sources": "ALL",
+   "statement": "Only its owner reads qualk8s_kubelet_cred_t",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "qualk8s_kubelet_cred_t"
+   ]
+  },
+  {
+   "allow": [
+    "qualk8s_netpol_t"
+   ],
+   "class": "file",
+   "id": "A11.7",
+   "perms": [
+    "read",
+    "open"
+   ],
+   "ref": "W01 5.3; 2.3",
+   "sources": "ALL",
+   "statement": "Only its owner reads qualk8s_netpol_cred_t",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "qualk8s_netpol_cred_t"
+   ]
+  },
+  {
+   "allow": [
+    "qualk8s_proxy_t"
+   ],
+   "class": "file",
+   "id": "A11.8",
+   "perms": [
+    "read",
+    "open"
+   ],
+   "ref": "W01 5.3; 2.3",
+   "sources": "ALL",
+   "statement": "Only its owner reads qualk8s_proxy_cred_t",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "qualk8s_proxy_cred_t"
+   ]
+  },
+  {
+   "allow": [
+    "qualk8s_scheduler_t"
+   ],
+   "class": "file",
+   "id": "A11.9",
+   "perms": [
+    "read",
+    "open"
+   ],
+   "ref": "W01 5.3; 2.3",
+   "sources": "ALL",
+   "statement": "Only its owner reads qualk8s_scheduler_cred_t",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "qualk8s_scheduler_cred_t"
+   ]
+  },
+  {
+   "allow": [],
+   "class": "file",
+   "id": "A12",
+   "perms": [
+    "write",
+    "append",
+    "create",
+    "unlink",
+    "rename",
+    "relabelfrom",
+    "relabelto"
+   ],
+   "ref": "W01 5.5",
+   "sources": "ALL",
+   "statement": "No domain writes or relabels a sealed type in an enrolled boot (fs-verity is enabled in maintenance)",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED"
+   ],
+   "targets": [
+    "planeon_server_exec_t",
+    "planeon_observer_exec_t",
+    "planeon_broker_exec_t",
+    "planeon_gate_exec_t",
+    "planeon_worker_exec_t",
+    "planeon_policy_writer_exec_t",
+    "planeon_contain_exec_t",
+    "planeon_maint_exec_t",
+    "qualk8s_apiserver_exec_t",
+    "qualk8s_controller_manager_exec_t",
+    "qualk8s_scheduler_exec_t",
+    "qualk8s_kubelet_exec_t",
+    "qualk8s_runtime_exec_t",
+    "qualk8s_datastore_exec_t",
+    "qualk8s_netpol_exec_t",
+    "qualk8s_proxy_exec_t",
+    "planeon_interpreter_exec_t",
+    "planeon_etc_t",
+    "qualk8s_config_t",
+    "planeon_unit_file_t",
+    "qualk8s_unit_file_t",
+    "planeon_server_cred_t",
+    "planeon_observer_cred_t",
+    "planeon_gate_effect_cred_t",
+    "planeon_gate_writer_cred_t",
+    "qualk8s_sa_key_t",
+    "qualk8s_encryption_key_t",
+    "qualk8s_apiserver_cred_t",
+    "qualk8s_controller_manager_cred_t",
+    "qualk8s_scheduler_cred_t",
+    "qualk8s_kubelet_cred_t",
+    "qualk8s_netpol_cred_t",
+    "qualk8s_proxy_cred_t"
+   ]
+  },
+  {
+   "allow": [
+    "planeon_maint_t"
+   ],
+   "class": "file",
+   "id": "A13",
+   "perms": [
+    "write",
+    "append",
+    "create",
+    "unlink",
+    "rename",
+    "relabelfrom",
+    "relabelto"
+   ],
+   "ref": "W01 5.5 M1",
+   "sources": "ALL",
+   "statement": "In the maintenance boot only the maintenance domain writes or relabels a sealed type",
+   "states": [
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_server_exec_t",
+    "planeon_observer_exec_t",
+    "planeon_broker_exec_t",
+    "planeon_gate_exec_t",
+    "planeon_worker_exec_t",
+    "planeon_policy_writer_exec_t",
+    "planeon_contain_exec_t",
+    "planeon_maint_exec_t",
+    "qualk8s_apiserver_exec_t",
+    "qualk8s_controller_manager_exec_t",
+    "qualk8s_scheduler_exec_t",
+    "qualk8s_kubelet_exec_t",
+    "qualk8s_runtime_exec_t",
+    "qualk8s_datastore_exec_t",
+    "qualk8s_netpol_exec_t",
+    "qualk8s_proxy_exec_t",
+    "planeon_interpreter_exec_t",
+    "planeon_etc_t",
+    "qualk8s_config_t",
+    "planeon_unit_file_t",
+    "qualk8s_unit_file_t",
+    "planeon_server_cred_t",
+    "planeon_observer_cred_t",
+    "planeon_gate_effect_cred_t",
+    "planeon_gate_writer_cred_t",
+    "qualk8s_sa_key_t",
+    "qualk8s_encryption_key_t",
+    "qualk8s_apiserver_cred_t",
+    "qualk8s_controller_manager_cred_t",
+    "qualk8s_scheduler_cred_t",
+    "qualk8s_kubelet_cred_t",
+    "qualk8s_netpol_cred_t",
+    "qualk8s_proxy_cred_t"
+   ]
+  },
+  {
+   "allow": [
+    "planeon_contain_t",
+    "qualk8s_runtime_t"
+   ],
+   "class": "bpf",
+   "id": "A14",
+   "perms": [
+    "prog_load"
+   ],
+   "ref": "W01 5.1, 5.3; owner decision E1",
+   "sources": "ALL",
+   "statement": "Before the seal only containment and the runtime (E1) load BPF programs",
+   "states": [
+    "ENROLLED_CONTAINMENT"
+   ],
+   "targets": [
+    "SELF"
+   ]
+  },
+  {
+   "allow": [
+    "qualk8s_runtime_t"
+   ],
+   "class": "bpf",
+   "id": "A15",
+   "perms": [
+    "prog_load"
+   ],
+   "ref": "W01 5.1, 5.3; owner decision E1",
+   "sources": "ALL",
+   "statement": "After the seal and in maintenance only the runtime (E1) loads BPF programs",
+   "states": [
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "SELF"
+   ]
+  },
+  {
+   "allow": [],
+   "class": "bpf",
+   "id": "A16",
+   "perms": [
+    "map_create",
+    "map_read",
+    "map_write"
+   ],
+   "ref": "W01 5.1",
+   "sources": "ALL",
+   "statement": "Enrolled programs are map-free: no domain creates, reads or writes a BPF map",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "SELF"
+   ]
+  },
+  {
+   "allow": [
+    "planeon_contain_t",
+    "planeon_server_t",
+    "planeon_observer_t",
+    "planeon_broker_t"
+   ],
+   "class": "bpf",
+   "id": "A17",
+   "perms": [
+    "prog_run"
+   ],
+   "ref": "W01 5.1; review R1",
+   "sources": "ALL",
+   "statement": "Before the seal containment (as loader) and the reader roles obtain containment program descriptors",
+   "states": [
+    "ENROLLED_CONTAINMENT"
+   ],
+   "targets": [
+    "planeon_contain_t"
+   ]
+  },
+  {
+   "allow": [
+    "planeon_server_t",
+    "planeon_observer_t",
+    "planeon_broker_t"
+   ],
+   "class": "bpf",
+   "id": "A18",
+   "perms": [
+    "prog_run"
+   ],
+   "ref": "W01 5.1",
+   "sources": "ALL",
+   "statement": "After the seal only the reader roles obtain containment program descriptors",
+   "states": [
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_contain_t"
+   ]
+  },
+  {
+   "allow": [
+    "qualk8s_runtime_t"
+   ],
+   "class": "bpf",
+   "id": "A19",
+   "perms": [
+    "prog_run"
+   ],
+   "ref": "Owner decision E1; review R1",
+   "sources": "ALL",
+   "statement": "Only the runtime obtains descriptors of the runtime's own programs",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "qualk8s_runtime_t"
+   ]
+  },
+  {
+   "allow": [
+    "planeon_contain_t",
+    "init_t"
+   ],
+   "class": "security",
+   "id": "A20",
+   "perms": [
+    "setbool"
+   ],
+   "ref": "W01 5.2 S4, 5.5; review N4",
+   "sources": "ALL",
+   "statement": "Before the seal only containment (S4) and systemd (maintenance-boot entry) set booleans, each in one commit",
+   "states": [
+    "ENROLLED_CONTAINMENT"
+   ],
+   "targets": [
+    "security_t"
+   ]
+  },
+  {
+   "allow": [],
+   "class": "security",
+   "id": "A21",
+   "perms": [
+    "setbool",
+    "load_policy",
+    "setenforce"
+   ],
+   "ref": "W01 5.2 S4",
+   "sources": "ALL",
+   "statement": "After the seal no domain sets a boolean, loads policy or switches enforcing mode",
+   "states": [
+    "ENROLLED_SEALED"
+   ],
+   "targets": [
+    "security_t"
+   ]
+  },
+  {
+   "allow": [
+    "planeon_maint_t"
+   ],
+   "class": "security",
+   "id": "A22",
+   "perms": [
+    "setbool",
+    "load_policy"
+   ],
+   "ref": "W01 5.5 M1",
+   "sources": "ALL",
+   "statement": "In the maintenance boot only the maintenance domain changes booleans or loads policy",
+   "states": [
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "security_t"
+   ]
+  },
+  {
+   "allow": [],
+   "class": "security",
+   "id": "A23",
+   "perms": [
+    "setenforce"
+   ],
+   "ref": "W01 5.3",
+   "sources": "ALL",
+   "statement": "No domain ever switches SELinux to permissive",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "security_t"
+   ]
+  },
+  {
+   "allow": [
+    "init_t"
+   ],
+   "class": "process",
+   "id": "A24",
+   "perms": [
+    "transition"
+   ],
+   "ref": "W01 5.2 S2/S4",
+   "sources": "ALL",
+   "statement": "Only init enters containment, only before the seal",
+   "states": [
+    "ENROLLED_CONTAINMENT"
+   ],
+   "targets": [
+    "planeon_contain_t"
+   ]
+  },
+  {
+   "allow": [],
+   "class": "process",
+   "id": "A25",
+   "perms": [
+    "transition"
+   ],
+   "ref": "W01 5.2 S4",
+   "sources": "ALL",
+   "statement": "Nothing enters containment after the seal or in maintenance",
+   "states": [
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_contain_t"
+   ]
+  },
+  {
+   "allow": [
+    "planeon_admin_t"
+   ],
+   "class": "process",
+   "id": "A26",
+   "perms": [
+    "transition"
+   ],
+   "ref": "W01 5.5",
+   "sources": "ALL",
+   "statement": "Only the admin login enters maintenance, only in the maintenance boot",
+   "states": [
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_maint_t"
+   ]
+  },
+  {
+   "allow": [],
+   "class": "process",
+   "id": "A27",
+   "perms": [
+    "transition"
+   ],
+   "ref": "W01 5.5",
+   "sources": "ALL",
+   "statement": "Nothing enters maintenance in an enrolled boot",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED"
+   ],
+   "targets": [
+    "planeon_maint_t"
+   ]
+  },
+  {
+   "allow": [
+    "init_t"
+   ],
+   "class": "process",
+   "id": "A28",
+   "perms": [
+    "transition"
+   ],
+   "ref": "W01 5.2 S6",
+   "sources": "ALL",
+   "statement": "Only init starts the resident daemon roles",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED"
+   ],
+   "targets": [
+    "planeon_server_t",
+    "planeon_observer_t",
+    "planeon_broker_t",
+    "planeon_gate_t"
+   ]
+  },
+  {
+   "allow": [
+    "planeon_broker_t"
+   ],
+   "class": "process",
+   "id": "A29",
+   "perms": [
+    "transition"
+   ],
+   "ref": "W01 5.4",
+   "sources": "ALL",
+   "statement": "Only the broker starts the worker (after no_new_privs, through nnp_transition)",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED"
+   ],
+   "targets": [
+    "planeon_worker_t"
+   ]
+  },
+  {
+   "allow": [],
+   "class": "process",
+   "id": "A30",
+   "perms": [
+    "transition"
+   ],
+   "ref": "W01 5.5 M1",
+   "sources": "ALL",
+   "statement": "No planeon role or the writer starts in the maintenance boot",
+   "states": [
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_server_t",
+    "planeon_observer_t",
+    "planeon_broker_t",
+    "planeon_gate_t",
+    "planeon_worker_t",
+    "planeon_policy_writer_t"
+   ]
+  },
+  {
+   "allow": [
+    "planeon_admin_t"
+   ],
+   "class": "process",
+   "id": "A31",
+   "perms": [
+    "transition"
+   ],
+   "ref": "W01 2.4; W02a",
+   "sources": "ALL",
+   "statement": "Only the admin login enters the policy writer, through its entrypoint",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_policy_writer_t"
+   ]
+  },
+  {
+   "allow": [],
+   "class": "process",
+   "id": "A32",
+   "perms": [
+    "dyntransition"
+   ],
+   "ref": "W01 5.3; review R3",
+   "sources": "ALL",
+   "statement": "No dynamic transition into any declared domain",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_server_t",
+    "planeon_observer_t",
+    "planeon_broker_t",
+    "planeon_worker_t",
+    "planeon_gate_t",
+    "planeon_policy_writer_t",
+    "planeon_contain_t",
+    "planeon_maint_t",
+    "qualk8s_apiserver_t",
+    "qualk8s_controller_manager_t",
+    "qualk8s_scheduler_t",
+    "qualk8s_kubelet_t",
+    "qualk8s_runtime_t",
+    "qualk8s_datastore_t",
+    "qualk8s_netpol_t",
+    "qualk8s_proxy_t",
+    "qualk8s_container_t",
+    "planeon_admin_t",
+    "init_t"
+   ]
+  },
+  {
+   "allow": [],
+   "class": "process",
+   "id": "A33",
+   "perms": [
+    "setexec"
+   ],
+   "ref": "W01 5.3; review R3",
+   "sources": "DECLARED",
+   "statement": "No declared domain may setexec (checked on the caller itself)",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "SELF"
+   ]
+  },
+  {
+   "allow": [],
+   "class": "process",
+   "id": "A34",
+   "perms": [
+    "ptrace"
+   ],
+   "ref": "W01 5.3",
+   "sources": "ALL",
+   "statement": "No domain ptraces a declared domain",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_server_t",
+    "planeon_observer_t",
+    "planeon_broker_t",
+    "planeon_worker_t",
+    "planeon_gate_t",
+    "planeon_policy_writer_t",
+    "planeon_contain_t",
+    "planeon_maint_t",
+    "qualk8s_apiserver_t",
+    "qualk8s_controller_manager_t",
+    "qualk8s_scheduler_t",
+    "qualk8s_kubelet_t",
+    "qualk8s_runtime_t",
+    "qualk8s_datastore_t",
+    "qualk8s_netpol_t",
+    "qualk8s_proxy_t",
+    "qualk8s_container_t",
+    "planeon_admin_t",
+    "init_t"
+   ]
+  },
+  {
+   "allow": [],
+   "class": "process",
+   "id": "A35",
+   "perms": [
+    "execmem",
+    "execstack",
+    "execheap"
+   ],
+   "ref": "W01 5.3",
+   "sources": "DECLARED",
+   "statement": "No declared domain may execmem, execstack or execheap",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "SELF"
+   ]
+  },
+  {
+   "allow": [],
+   "class": "file",
+   "id": "A36",
+   "perms": [
+    "execmod"
+   ],
+   "ref": "W01 5.3; review R14",
+   "sources": "ALL",
+   "statement": "No domain has execmod on any declared type",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_server_exec_t",
+    "planeon_observer_exec_t",
+    "planeon_broker_exec_t",
+    "planeon_gate_exec_t",
+    "planeon_worker_exec_t",
+    "planeon_policy_writer_exec_t",
+    "planeon_contain_exec_t",
+    "planeon_maint_exec_t",
+    "qualk8s_apiserver_exec_t",
+    "qualk8s_controller_manager_exec_t",
+    "qualk8s_scheduler_exec_t",
+    "qualk8s_kubelet_exec_t",
+    "qualk8s_runtime_exec_t",
+    "qualk8s_datastore_exec_t",
+    "qualk8s_netpol_exec_t",
+    "qualk8s_proxy_exec_t",
+    "planeon_interpreter_exec_t",
+    "planeon_etc_t",
+    "qualk8s_config_t",
+    "planeon_unit_file_t",
+    "qualk8s_unit_file_t",
+    "planeon_server_cred_t",
+    "planeon_observer_cred_t",
+    "planeon_gate_effect_cred_t",
+    "planeon_gate_writer_cred_t",
+    "qualk8s_sa_key_t",
+    "qualk8s_encryption_key_t",
+    "qualk8s_apiserver_cred_t",
+    "qualk8s_controller_manager_cred_t",
+    "qualk8s_scheduler_cred_t",
+    "qualk8s_kubelet_cred_t",
+    "qualk8s_netpol_cred_t",
+    "qualk8s_proxy_cred_t",
+    "planeon_i05_sock_t",
+    "planeon_i07_sock_t",
+    "planeon_observer_sock_t",
+    "planeon_broker_sock_t",
+    "qualk8s_datastore_sock_t",
+    "qualk8s_runtime_sock_t",
+    "planeon_run_t",
+    "planeon_cgroup_slice_t",
+    "planeon_cgroup_contain_t",
+    "planeon_cgroup_server_t",
+    "planeon_cgroup_observer_t",
+    "planeon_cgroup_gate_t",
+    "planeon_cgroup_delegate_t",
+    "planeon_cgroup_broker_t",
+    "planeon_cgroup_worker_t",
+    "planeon_bpf_pin_t",
+    "planeon_seal_t",
+    "planeon_bool_maintenance_t",
+    "planeon_bool_containment_t",
+    "planeon_bool_policyload_t",
+    "planeon_gate_journal_t",
+    "qualk8s_datastore_data_t",
+    "qualk8s_container_file_t"
+   ]
+  },
+  {
+   "allow": [],
+   "class": "file",
+   "id": "A37",
+   "perms": [
+    "execute_no_trans"
+   ],
+   "ref": "W01 5.3 BROKER; review R11",
+   "sources": "ALL",
+   "statement": "No domain runs an entrypoint, the interpreter or container content without a transition",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_server_exec_t",
+    "planeon_observer_exec_t",
+    "planeon_broker_exec_t",
+    "planeon_gate_exec_t",
+    "planeon_worker_exec_t",
+    "planeon_policy_writer_exec_t",
+    "planeon_contain_exec_t",
+    "planeon_maint_exec_t",
+    "qualk8s_apiserver_exec_t",
+    "qualk8s_controller_manager_exec_t",
+    "qualk8s_scheduler_exec_t",
+    "qualk8s_kubelet_exec_t",
+    "qualk8s_runtime_exec_t",
+    "qualk8s_datastore_exec_t",
+    "qualk8s_netpol_exec_t",
+    "qualk8s_proxy_exec_t",
+    "planeon_interpreter_exec_t",
+    "qualk8s_container_file_t"
+   ]
+  },
+  {
+   "allow": [
+    "init_t",
+    "planeon_contain_t",
+    "planeon_server_t",
+    "planeon_observer_t",
+    "planeon_broker_t"
+   ],
+   "class": "dir",
+   "id": "A38",
+   "perms": [
+    "search",
+    "open",
+    "read",
+    "getattr"
+   ],
+   "ref": "W01 5.1; F2",
+   "sources": "ALL",
+   "statement": "Only init, containment and the reader roles search or open planeon cgroup directories",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_cgroup_slice_t",
+    "planeon_cgroup_contain_t",
+    "planeon_cgroup_server_t",
+    "planeon_cgroup_observer_t",
+    "planeon_cgroup_gate_t",
+    "planeon_cgroup_delegate_t",
+    "planeon_cgroup_broker_t",
+    "planeon_cgroup_worker_t"
+   ]
+  },
+  {
+   "allow": [
+    "init_t",
+    "planeon_contain_t",
+    "planeon_server_t",
+    "planeon_observer_t",
+    "planeon_broker_t"
+   ],
+   "class": "file",
+   "id": "A39",
+   "perms": [
+    "open",
+    "read"
+   ],
+   "ref": "W01 5.1; F2",
+   "sources": "ALL",
+   "statement": "Only init, containment and the reader roles open or read planeon cgroup files",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_cgroup_slice_t",
+    "planeon_cgroup_contain_t",
+    "planeon_cgroup_server_t",
+    "planeon_cgroup_observer_t",
+    "planeon_cgroup_gate_t",
+    "planeon_cgroup_delegate_t",
+    "planeon_cgroup_broker_t",
+    "planeon_cgroup_worker_t"
+   ]
+  },
+  {
+   "allow": [
+    "init_t",
+    "planeon_contain_t"
+   ],
+   "class": "file",
+   "id": "A40",
+   "perms": [
+    "write",
+    "append"
+   ],
+   "ref": "W01 5.2 S3; F2; review R6",
+   "sources": "ALL",
+   "statement": "Before the seal only init and containment write the slice, containment, server, observer and gate cgroups",
+   "states": [
+    "ENROLLED_CONTAINMENT"
+   ],
+   "targets": [
+    "planeon_cgroup_slice_t",
+    "planeon_cgroup_contain_t",
+    "planeon_cgroup_server_t",
+    "planeon_cgroup_observer_t",
+    "planeon_cgroup_gate_t"
+   ]
+  },
+  {
+   "allow": [
+    "init_t"
+   ],
+   "class": "file",
+   "id": "A41",
+   "perms": [
+    "write",
+    "append"
+   ],
+   "ref": "W01 5.1; F2",
+   "sources": "ALL",
+   "statement": "After the seal only init writes the slice, containment, server, observer and gate cgroups",
+   "states": [
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_cgroup_slice_t",
+    "planeon_cgroup_contain_t",
+    "planeon_cgroup_server_t",
+    "planeon_cgroup_observer_t",
+    "planeon_cgroup_gate_t"
+   ]
+  },
+  {
+   "allow": [
+    "init_t",
+    "planeon_broker_t",
+    "planeon_contain_t"
+   ],
+   "class": "file",
+   "id": "A42",
+   "perms": [
+    "write",
+    "append"
+   ],
+   "ref": "W01 5.4; F2; review R6",
+   "sources": "ALL",
+   "statement": "Only init, the broker and (before the seal) containment write the broker's delegated cgroups",
+   "states": [
+    "ENROLLED_CONTAINMENT"
+   ],
+   "targets": [
+    "planeon_cgroup_delegate_t",
+    "planeon_cgroup_broker_t",
+    "planeon_cgroup_worker_t"
+   ]
+  },
+  {
+   "allow": [
+    "init_t",
+    "planeon_broker_t"
+   ],
+   "class": "file",
+   "id": "A43",
+   "perms": [
+    "write",
+    "append"
+   ],
+   "ref": "W01 5.4; F2",
+   "sources": "ALL",
+   "statement": "After the seal only init and the broker write the broker's delegated cgroups",
+   "states": [
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_cgroup_delegate_t",
+    "planeon_cgroup_broker_t",
+    "planeon_cgroup_worker_t"
+   ]
+  },
+  {
+   "allow": [],
+   "class": "dir",
+   "id": "A44",
+   "perms": [
+    "relabelfrom",
+    "relabelto"
+   ],
+   "ref": "W01 5.1; review R6, R13, N1",
+   "sources": "ALL",
+   "statement": "No domain relabels a planeon cgroup or a pin: their labels come from genfscon path rules",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_cgroup_slice_t",
+    "planeon_cgroup_contain_t",
+    "planeon_cgroup_server_t",
+    "planeon_cgroup_observer_t",
+    "planeon_cgroup_gate_t",
+    "planeon_cgroup_delegate_t",
+    "planeon_cgroup_broker_t",
+    "planeon_cgroup_worker_t",
+    "planeon_bpf_pin_t"
+   ]
+  },
+  {
+   "allow": [
+    "init_t"
+   ],
+   "class": "capability",
+   "id": "A45",
+   "perms": [
+    "dac_read_search"
+   ],
+   "ref": "F2",
+   "sources": "DECLARED",
+   "statement": "No declared domain except systemd holds CAP_DAC_READ_SEARCH",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "SELF"
+   ]
+  },
+  {
+   "allow": [],
+   "class": "cap_userns",
+   "id": "A46",
+   "perms": [
+    "dac_read_search"
+   ],
+   "ref": "F2",
+   "sources": "DECLARED",
+   "statement": "No declared domain holds CAP_DAC_READ_SEARCH in a user namespace",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "SELF"
+   ]
+  },
+  {
+   "allow": [
+    "init_t",
+    "qualk8s_kubelet_t",
+    "qualk8s_runtime_t"
+   ],
+   "class": "capability",
+   "id": "A47",
+   "perms": [
+    "sys_admin"
+   ],
+   "ref": "W01 5.3; W02a N1",
+   "sources": "DECLARED",
+   "statement": "Only systemd and the confined kubelet and runtime hold CAP_SYS_ADMIN",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "SELF"
+   ]
+  },
+  {
+   "allow": [
+    "init_t",
+    "planeon_server_t",
+    "planeon_gate_t",
+    "planeon_admin_t",
+    "qualk8s_runtime_t"
+   ],
+   "class": "capability",
+   "id": "A48",
+   "perms": [
+    "net_bind_service"
+   ],
+   "ref": "W01 5.3; W02a",
+   "sources": "DECLARED",
+   "statement": "CAP_NET_BIND_SERVICE only for systemd, the server and gate (enrolled only with a signed port below 1024), the admin login and the runtime",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "SELF"
+   ]
+  },
+  {
+   "allow": [
+    "planeon_contain_t",
+    "planeon_server_t",
+    "planeon_observer_t",
+    "planeon_broker_t"
+   ],
+   "class": "file",
+   "id": "A49",
+   "perms": [
+    "read",
+    "open"
+   ],
+   "ref": "W01 5.1",
+   "sources": "ALL",
+   "statement": "Only containment and the reader roles read bpffs pins (readers open them with BPF_F_RDONLY)",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_bpf_pin_t"
+   ]
+  },
+  {
+   "allow": [
+    "planeon_contain_t"
+   ],
+   "class": "file",
+   "id": "A50",
+   "perms": [
+    "write",
+    "create"
+   ],
+   "ref": "W01 5.1",
+   "sources": "ALL",
+   "statement": "Only containment creates pins, only before the seal",
+   "states": [
+    "ENROLLED_CONTAINMENT"
+   ],
+   "targets": [
+    "planeon_bpf_pin_t"
+   ]
+  },
+  {
+   "allow": [],
+   "class": "file",
+   "id": "A51",
+   "perms": [
+    "write",
+    "create"
+   ],
+   "ref": "W01 5.1",
+   "sources": "ALL",
+   "statement": "Nothing creates pins after the seal or in maintenance",
+   "states": [
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_bpf_pin_t"
+   ]
+  },
+  {
+   "allow": [
+    "planeon_contain_t"
+   ],
+   "class": "file",
+   "id": "A52",
+   "perms": [
+    "write",
+    "create",
+    "unlink"
+   ],
+   "ref": "W02a seal marker; W01 5.2 S5; review R10",
+   "sources": "ALL",
+   "statement": "Only containment writes the seal marker, in the enrolled boot (S5, after S4)",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED"
+   ],
+   "targets": [
+    "planeon_seal_t"
+   ]
+  },
+  {
+   "allow": [],
+   "class": "file",
+   "id": "A53",
+   "perms": [
+    "write",
+    "create",
+    "unlink"
+   ],
+   "ref": "W02a seal marker",
+   "sources": "ALL",
+   "statement": "Nothing writes the seal marker in the maintenance boot",
+   "states": [
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_seal_t"
+   ]
+  },
+  {
+   "allow": [
+    "planeon_gate_t"
+   ],
+   "class": "file",
+   "id": "A54",
+   "perms": [
+    "read",
+    "write",
+    "append",
+    "unlink"
+   ],
+   "ref": "W02b journal",
+   "sources": "ALL",
+   "statement": "Only the gate reads or writes its journal in an enrolled boot",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED"
+   ],
+   "targets": [
+    "planeon_gate_journal_t"
+   ]
+  },
+  {
+   "allow": [
+    "qualk8s_datastore_t"
+   ],
+   "class": "file",
+   "id": "A55",
+   "perms": [
+    "read",
+    "write",
+    "unlink"
+   ],
+   "ref": "W01 counterexample 25",
+   "sources": "ALL",
+   "statement": "Only the datastore touches its data in an enrolled boot",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED"
+   ],
+   "targets": [
+    "qualk8s_datastore_data_t"
+   ]
+  },
+  {
+   "allow": [
+    "init_t"
+   ],
+   "class": "service",
+   "id": "A56",
+   "perms": [
+    "start",
+    "stop",
+    "reload"
+   ],
+   "ref": "W01 5.3",
+   "sources": "ALL",
+   "statement": "Only systemd starts, stops or reloads planeon and backend units in an enrolled boot",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED"
+   ],
+   "targets": [
+    "planeon_unit_file_t",
+    "qualk8s_unit_file_t"
+   ]
+  },
+  {
+   "allow": [
+    "init_t"
+   ],
+   "class": "process",
+   "id": "A57",
+   "perms": [
+    "sigkill",
+    "sigstop",
+    "signal"
+   ],
+   "ref": "W01 5.3; review R15",
+   "sources": "ALL",
+   "statement": "Only systemd signals the resident roles, the writer and containment",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_server_t",
+    "planeon_observer_t",
+    "planeon_broker_t",
+    "planeon_gate_t",
+    "planeon_policy_writer_t",
+    "planeon_contain_t"
+   ]
+  },
+  {
+   "allow": [
+    "init_t",
+    "planeon_broker_t"
+   ],
+   "class": "process",
+   "id": "A58",
+   "perms": [
+    "sigkill"
+   ],
+   "ref": "W01 5.4; review R15",
+   "sources": "ALL",
+   "statement": "Only systemd and the broker kill the worker",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_worker_t"
+   ]
+  },
+  {
+   "allow": [
+    "planeon_gate_t",
+    "planeon_broker_t",
+    "planeon_server_t",
+    "planeon_observer_t",
+    "planeon_broker_t"
+   ],
+   "class": "file",
+   "id": "A59",
+   "perms": [
+    "read",
+    "open"
+   ],
+   "ref": "W01 4.3, 5.3; review R4, N8",
+   "sources": "ALL",
+   "statement": "No domain outside the union of the /proc peers reads any planeon domain's /proc entries (per-target pairs: A59.<target>)",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_server_t",
+    "planeon_observer_t",
+    "planeon_broker_t",
+    "planeon_worker_t",
+    "planeon_gate_t",
+    "planeon_policy_writer_t",
+    "planeon_contain_t",
+    "planeon_maint_t"
+   ]
+  },
+  {
+   "allow": [
+    "planeon_server_t"
+   ],
+   "class": "tcp_socket",
+   "id": "A61",
+   "perms": [
+    "name_bind"
+   ],
+   "ref": "W01 5.3; W02a listenEndpointIds; review N2",
+   "sources": "ALL",
+   "statement": "Only the server binds its signed listener port",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_server_port_t"
+   ]
+  },
+  {
+   "allow": [
+    "init_t"
+   ],
+   "class": "file",
+   "id": "A62",
+   "perms": [
+    "write"
+   ],
+   "ref": "W01 5.5; review N4",
+   "sources": "ALL",
+   "statement": "Only systemd writes the planeon_maintenance_mode boolean, only in the initial state of the boot",
+   "states": [
+    "ENROLLED_CONTAINMENT"
+   ],
+   "targets": [
+    "planeon_bool_maintenance_t"
+   ]
+  },
+  {
+   "allow": [
+    "init_t",
+    "planeon_contain_t"
+   ],
+   "class": "file",
+   "id": "A63",
+   "perms": [
+    "write"
+   ],
+   "ref": "W01 5.2 S4; review N4",
+   "sources": "ALL",
+   "statement": "Only systemd and containment write planeon_containment_enabled, only in the initial state",
+   "states": [
+    "ENROLLED_CONTAINMENT"
+   ],
+   "targets": [
+    "planeon_bool_containment_t"
+   ]
+  },
+  {
+   "allow": [
+    "planeon_contain_t"
+   ],
+   "class": "file",
+   "id": "A64",
+   "perms": [
+    "write"
+   ],
+   "ref": "W01 5.2 S4; review N4",
+   "sources": "ALL",
+   "statement": "Only containment writes secure_mode_policyload, only before the seal",
+   "states": [
+    "ENROLLED_CONTAINMENT"
+   ],
+   "targets": [
+    "planeon_bool_policyload_t"
+   ]
+  },
+  {
+   "allow": [],
+   "class": "file",
+   "id": "A65",
+   "perms": [
+    "write"
+   ],
+   "ref": "W01 5.5; review N4",
+   "sources": "ALL",
+   "statement": "After the seal and in the maintenance boot no domain, maintenance included, writes the three planeon boolean files",
+   "states": [
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_bool_maintenance_t",
+    "planeon_bool_containment_t",
+    "planeon_bool_policyload_t"
+   ]
+  },
+  {
+   "allow": [],
+   "class": "tcp_socket",
+   "id": "A60.1.name_connect",
+   "perms": [
+    "name_connect"
+   ],
+   "ref": "W01 5.3; review R5, N5",
+   "sources": [
+    "planeon_server_t"
+   ],
+   "statement": "planeon_server_t name_connect nothing beyond its listed targets, declared or not",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_server_port_t",
+    "planeon_kubeapi_port_t",
+    "qualk8s_kubelet_port_t",
+    "http_port_t"
+   ]
+  },
+  {
+   "allow": [],
+   "class": "tcp_socket",
+   "id": "A60.1.name_bind",
+   "perms": [
+    "name_bind"
+   ],
+   "ref": "W01 5.3; review R5, N5",
+   "sources": [
+    "planeon_server_t"
+   ],
+   "statement": "planeon_server_t name_bind nothing beyond its listed targets, declared or not",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_kubeapi_port_t",
+    "planeon_i04_port_t",
+    "qualk8s_kubelet_port_t",
+    "http_port_t"
+   ]
+  },
+  {
+   "allow": [],
+   "class": "tcp_socket",
+   "id": "A60.2.name_connect",
+   "perms": [
+    "name_connect"
+   ],
+   "ref": "W01 5.3; review R5, N5",
+   "sources": [
+    "planeon_observer_t"
+   ],
+   "statement": "planeon_observer_t name_connect nothing beyond its listed targets, declared or not",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_server_port_t",
+    "planeon_i04_port_t",
+    "qualk8s_kubelet_port_t",
+    "http_port_t"
+   ]
+  },
+  {
+   "allow": [],
+   "class": "tcp_socket",
+   "id": "A60.2.name_bind",
+   "perms": [
+    "name_bind"
+   ],
+   "ref": "W01 5.3; review R5, N5",
+   "sources": [
+    "planeon_observer_t"
+   ],
+   "statement": "planeon_observer_t name_bind nothing beyond its listed targets, declared or not",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_server_port_t",
+    "planeon_kubeapi_port_t",
+    "planeon_i04_port_t",
+    "qualk8s_kubelet_port_t",
+    "http_port_t"
+   ]
+  },
+  {
+   "allow": [],
+   "class": "tcp_socket",
+   "id": "A60.3.name_connect",
+   "perms": [
+    "name_connect"
+   ],
+   "ref": "W01 5.3; review R5, N5",
+   "sources": [
+    "planeon_broker_t"
+   ],
+   "statement": "planeon_broker_t name_connect nothing beyond its listed targets, declared or not",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_server_port_t",
+    "planeon_kubeapi_port_t",
+    "planeon_i04_port_t",
+    "qualk8s_kubelet_port_t",
+    "http_port_t"
+   ]
+  },
+  {
+   "allow": [],
+   "class": "tcp_socket",
+   "id": "A60.3.name_bind",
+   "perms": [
+    "name_bind"
+   ],
+   "ref": "W01 5.3; review R5, N5",
+   "sources": [
+    "planeon_broker_t"
+   ],
+   "statement": "planeon_broker_t name_bind nothing beyond its listed targets, declared or not",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_server_port_t",
+    "planeon_kubeapi_port_t",
+    "planeon_i04_port_t",
+    "qualk8s_kubelet_port_t",
+    "http_port_t"
+   ]
+  },
+  {
+   "allow": [],
+   "class": "tcp_socket",
+   "id": "A60.4.name_connect",
+   "perms": [
+    "name_connect"
+   ],
+   "ref": "W01 5.3; review R5, N5",
+   "sources": [
+    "planeon_worker_t"
+   ],
+   "statement": "planeon_worker_t name_connect nothing beyond its listed targets, declared or not",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_server_port_t",
+    "planeon_kubeapi_port_t",
+    "planeon_i04_port_t",
+    "qualk8s_kubelet_port_t",
+    "http_port_t"
+   ]
+  },
+  {
+   "allow": [],
+   "class": "tcp_socket",
+   "id": "A60.4.name_bind",
+   "perms": [
+    "name_bind"
+   ],
+   "ref": "W01 5.3; review R5, N5",
+   "sources": [
+    "planeon_worker_t"
+   ],
+   "statement": "planeon_worker_t name_bind nothing beyond its listed targets, declared or not",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_server_port_t",
+    "planeon_kubeapi_port_t",
+    "planeon_i04_port_t",
+    "qualk8s_kubelet_port_t",
+    "http_port_t"
+   ]
+  },
+  {
+   "allow": [],
+   "class": "tcp_socket",
+   "id": "A60.5.name_connect",
+   "perms": [
+    "name_connect"
+   ],
+   "ref": "W01 5.3; review R5, N5",
+   "sources": [
+    "planeon_gate_t"
+   ],
+   "statement": "planeon_gate_t name_connect nothing beyond its listed targets, declared or not",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_server_port_t",
+    "planeon_i04_port_t",
+    "qualk8s_kubelet_port_t",
+    "http_port_t"
+   ]
+  },
+  {
+   "allow": [],
+   "class": "tcp_socket",
+   "id": "A60.5.name_bind",
+   "perms": [
+    "name_bind"
+   ],
+   "ref": "W01 5.3; review R5, N5",
+   "sources": [
+    "planeon_gate_t"
+   ],
+   "statement": "planeon_gate_t name_bind nothing beyond its listed targets, declared or not",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_server_port_t",
+    "planeon_kubeapi_port_t",
+    "qualk8s_kubelet_port_t",
+    "http_port_t"
+   ]
+  },
+  {
+   "allow": [],
+   "class": "tcp_socket",
+   "id": "A60.6.name_connect",
+   "perms": [
+    "name_connect"
+   ],
+   "ref": "W01 5.3; review R5, N5",
+   "sources": [
+    "planeon_policy_writer_t"
+   ],
+   "statement": "planeon_policy_writer_t name_connect nothing beyond its listed targets, declared or not",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_server_port_t",
+    "planeon_kubeapi_port_t",
+    "planeon_i04_port_t",
+    "qualk8s_kubelet_port_t",
+    "http_port_t"
+   ]
+  },
+  {
+   "allow": [],
+   "class": "tcp_socket",
+   "id": "A60.6.name_bind",
+   "perms": [
+    "name_bind"
+   ],
+   "ref": "W01 5.3; review R5, N5",
+   "sources": [
+    "planeon_policy_writer_t"
+   ],
+   "statement": "planeon_policy_writer_t name_bind nothing beyond its listed targets, declared or not",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_server_port_t",
+    "planeon_kubeapi_port_t",
+    "planeon_i04_port_t",
+    "qualk8s_kubelet_port_t",
+    "http_port_t"
+   ]
+  },
+  {
+   "allow": [],
+   "class": "tcp_socket",
+   "id": "A60.7.name_connect",
+   "perms": [
+    "name_connect"
+   ],
+   "ref": "W01 5.3; review R5, N5",
+   "sources": [
+    "planeon_contain_t"
+   ],
+   "statement": "planeon_contain_t name_connect nothing beyond its listed targets, declared or not",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_server_port_t",
+    "planeon_kubeapi_port_t",
+    "planeon_i04_port_t",
+    "qualk8s_kubelet_port_t",
+    "http_port_t"
+   ]
+  },
+  {
+   "allow": [],
+   "class": "tcp_socket",
+   "id": "A60.7.name_bind",
+   "perms": [
+    "name_bind"
+   ],
+   "ref": "W01 5.3; review R5, N5",
+   "sources": [
+    "planeon_contain_t"
+   ],
+   "statement": "planeon_contain_t name_bind nothing beyond its listed targets, declared or not",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_server_port_t",
+    "planeon_kubeapi_port_t",
+    "planeon_i04_port_t",
+    "qualk8s_kubelet_port_t",
+    "http_port_t"
+   ]
+  },
+  {
+   "allow": [],
+   "class": "unix_stream_socket",
+   "id": "A60.8.connectto",
+   "perms": [
+    "connectto"
+   ],
+   "ref": "W01 5.3; review R5, N5",
+   "sources": [
+    "planeon_server_t"
+   ],
+   "statement": "planeon_server_t connectto nothing beyond its listed targets, declared or not",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_i05_socket_t",
+    "planeon_i07_socket_t",
+    "qualk8s_datastore_t",
+    "qualk8s_runtime_t",
+    "syslogd_t"
+   ]
+  },
+  {
+   "allow": [],
+   "class": "unix_stream_socket",
+   "id": "A60.9.connectto",
+   "perms": [
+    "connectto"
+   ],
+   "ref": "W01 5.3; review R5, N5",
+   "sources": [
+    "planeon_observer_t"
+   ],
+   "statement": "planeon_observer_t connectto nothing beyond its listed targets, declared or not",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_i05_socket_t",
+    "planeon_i07_socket_t",
+    "planeon_observer_t",
+    "planeon_broker_t",
+    "qualk8s_datastore_t",
+    "qualk8s_runtime_t",
+    "syslogd_t"
+   ]
+  },
+  {
+   "allow": [],
+   "class": "unix_stream_socket",
+   "id": "A60.10.connectto",
+   "perms": [
+    "connectto"
+   ],
+   "ref": "W01 5.3; review R5, N5",
+   "sources": [
+    "planeon_broker_t"
+   ],
+   "statement": "planeon_broker_t connectto nothing beyond its listed targets, declared or not",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_i07_socket_t",
+    "planeon_observer_t",
+    "planeon_broker_t",
+    "qualk8s_datastore_t",
+    "qualk8s_runtime_t",
+    "syslogd_t"
+   ]
+  },
+  {
+   "allow": [],
+   "class": "unix_stream_socket",
+   "id": "A60.11.connectto",
+   "perms": [
+    "connectto"
+   ],
+   "ref": "W01 5.3; review R5, N5",
+   "sources": [
+    "planeon_worker_t"
+   ],
+   "statement": "planeon_worker_t connectto nothing beyond its listed targets, declared or not",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_i05_socket_t",
+    "planeon_i07_socket_t",
+    "planeon_observer_t",
+    "planeon_broker_t",
+    "qualk8s_datastore_t",
+    "qualk8s_runtime_t",
+    "syslogd_t"
+   ]
+  },
+  {
+   "allow": [],
+   "class": "unix_stream_socket",
+   "id": "A60.12.connectto",
+   "perms": [
+    "connectto"
+   ],
+   "ref": "W01 5.3; review R5, N5",
+   "sources": [
+    "planeon_gate_t"
+   ],
+   "statement": "planeon_gate_t connectto nothing beyond its listed targets, declared or not",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_i05_socket_t",
+    "planeon_i07_socket_t",
+    "planeon_observer_t",
+    "planeon_broker_t",
+    "qualk8s_datastore_t",
+    "qualk8s_runtime_t",
+    "syslogd_t"
+   ]
+  },
+  {
+   "allow": [],
+   "class": "unix_stream_socket",
+   "id": "A60.13.connectto",
+   "perms": [
+    "connectto"
+   ],
+   "ref": "W01 5.3; review R5, N5",
+   "sources": [
+    "planeon_policy_writer_t"
+   ],
+   "statement": "planeon_policy_writer_t connectto nothing beyond its listed targets, declared or not",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_i05_socket_t",
+    "planeon_observer_t",
+    "planeon_broker_t",
+    "qualk8s_datastore_t",
+    "qualk8s_runtime_t",
+    "syslogd_t"
+   ]
+  },
+  {
+   "allow": [],
+   "class": "unix_stream_socket",
+   "id": "A60.14.connectto",
+   "perms": [
+    "connectto"
+   ],
+   "ref": "W01 5.3; review R5, N5",
+   "sources": [
+    "planeon_contain_t"
+   ],
+   "statement": "planeon_contain_t connectto nothing beyond its listed targets, declared or not",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_i05_socket_t",
+    "planeon_i07_socket_t",
+    "planeon_observer_t",
+    "planeon_broker_t",
+    "qualk8s_datastore_t",
+    "qualk8s_runtime_t",
+    "syslogd_t"
+   ]
+  },
+  {
+   "allow": [],
+   "class": "file",
+   "id": "A60.15.execute_no_trans",
+   "perms": [
+    "execute_no_trans"
+   ],
+   "ref": "W01 5.3; review R5, N5",
+   "sources": [
+    "planeon_server_t"
+   ],
+   "statement": "planeon_server_t execute_no_trans nothing beyond its listed targets, declared or not",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_server_exec_t",
+    "planeon_observer_exec_t",
+    "planeon_broker_exec_t",
+    "planeon_gate_exec_t",
+    "planeon_worker_exec_t",
+    "planeon_policy_writer_exec_t",
+    "planeon_contain_exec_t",
+    "planeon_maint_exec_t",
+    "qualk8s_apiserver_exec_t",
+    "qualk8s_controller_manager_exec_t",
+    "qualk8s_scheduler_exec_t",
+    "qualk8s_kubelet_exec_t",
+    "qualk8s_runtime_exec_t",
+    "qualk8s_datastore_exec_t",
+    "qualk8s_netpol_exec_t",
+    "qualk8s_proxy_exec_t",
+    "planeon_interpreter_exec_t",
+    "qualk8s_container_file_t",
+    "bin_t",
+    "shell_exec_t"
+   ]
+  },
+  {
+   "allow": [],
+   "class": "file",
+   "id": "A60.16.execute_no_trans",
+   "perms": [
+    "execute_no_trans"
+   ],
+   "ref": "W01 5.3; review R5, N5",
+   "sources": [
+    "planeon_observer_t"
+   ],
+   "statement": "planeon_observer_t execute_no_trans nothing beyond its listed targets, declared or not",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_server_exec_t",
+    "planeon_observer_exec_t",
+    "planeon_broker_exec_t",
+    "planeon_gate_exec_t",
+    "planeon_worker_exec_t",
+    "planeon_policy_writer_exec_t",
+    "planeon_contain_exec_t",
+    "planeon_maint_exec_t",
+    "qualk8s_apiserver_exec_t",
+    "qualk8s_controller_manager_exec_t",
+    "qualk8s_scheduler_exec_t",
+    "qualk8s_kubelet_exec_t",
+    "qualk8s_runtime_exec_t",
+    "qualk8s_datastore_exec_t",
+    "qualk8s_netpol_exec_t",
+    "qualk8s_proxy_exec_t",
+    "planeon_interpreter_exec_t",
+    "qualk8s_container_file_t",
+    "bin_t",
+    "shell_exec_t"
+   ]
+  },
+  {
+   "allow": [],
+   "class": "file",
+   "id": "A60.17.execute_no_trans",
+   "perms": [
+    "execute_no_trans"
+   ],
+   "ref": "W01 5.3; review R5, N5",
+   "sources": [
+    "planeon_broker_t"
+   ],
+   "statement": "planeon_broker_t execute_no_trans nothing beyond its listed targets, declared or not",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_server_exec_t",
+    "planeon_observer_exec_t",
+    "planeon_broker_exec_t",
+    "planeon_gate_exec_t",
+    "planeon_worker_exec_t",
+    "planeon_policy_writer_exec_t",
+    "planeon_contain_exec_t",
+    "planeon_maint_exec_t",
+    "qualk8s_apiserver_exec_t",
+    "qualk8s_controller_manager_exec_t",
+    "qualk8s_scheduler_exec_t",
+    "qualk8s_kubelet_exec_t",
+    "qualk8s_runtime_exec_t",
+    "qualk8s_datastore_exec_t",
+    "qualk8s_netpol_exec_t",
+    "qualk8s_proxy_exec_t",
+    "planeon_interpreter_exec_t",
+    "qualk8s_container_file_t",
+    "bin_t",
+    "shell_exec_t"
+   ]
+  },
+  {
+   "allow": [],
+   "class": "file",
+   "id": "A60.18.execute_no_trans",
+   "perms": [
+    "execute_no_trans"
+   ],
+   "ref": "W01 5.3; review R5, N5",
+   "sources": [
+    "planeon_worker_t"
+   ],
+   "statement": "planeon_worker_t execute_no_trans nothing beyond its listed targets, declared or not",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_server_exec_t",
+    "planeon_observer_exec_t",
+    "planeon_broker_exec_t",
+    "planeon_gate_exec_t",
+    "planeon_worker_exec_t",
+    "planeon_policy_writer_exec_t",
+    "planeon_contain_exec_t",
+    "planeon_maint_exec_t",
+    "qualk8s_apiserver_exec_t",
+    "qualk8s_controller_manager_exec_t",
+    "qualk8s_scheduler_exec_t",
+    "qualk8s_kubelet_exec_t",
+    "qualk8s_runtime_exec_t",
+    "qualk8s_datastore_exec_t",
+    "qualk8s_netpol_exec_t",
+    "qualk8s_proxy_exec_t",
+    "planeon_interpreter_exec_t",
+    "qualk8s_container_file_t",
+    "bin_t",
+    "shell_exec_t"
+   ]
+  },
+  {
+   "allow": [],
+   "class": "file",
+   "id": "A60.19.execute_no_trans",
+   "perms": [
+    "execute_no_trans"
+   ],
+   "ref": "W01 5.3; review R5, N5",
+   "sources": [
+    "planeon_gate_t"
+   ],
+   "statement": "planeon_gate_t execute_no_trans nothing beyond its listed targets, declared or not",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_server_exec_t",
+    "planeon_observer_exec_t",
+    "planeon_broker_exec_t",
+    "planeon_gate_exec_t",
+    "planeon_worker_exec_t",
+    "planeon_policy_writer_exec_t",
+    "planeon_contain_exec_t",
+    "planeon_maint_exec_t",
+    "qualk8s_apiserver_exec_t",
+    "qualk8s_controller_manager_exec_t",
+    "qualk8s_scheduler_exec_t",
+    "qualk8s_kubelet_exec_t",
+    "qualk8s_runtime_exec_t",
+    "qualk8s_datastore_exec_t",
+    "qualk8s_netpol_exec_t",
+    "qualk8s_proxy_exec_t",
+    "planeon_interpreter_exec_t",
+    "qualk8s_container_file_t",
+    "bin_t",
+    "shell_exec_t"
+   ]
+  },
+  {
+   "allow": [],
+   "class": "file",
+   "id": "A60.20.execute_no_trans",
+   "perms": [
+    "execute_no_trans"
+   ],
+   "ref": "W01 5.3; review R5, N5",
+   "sources": [
+    "planeon_policy_writer_t"
+   ],
+   "statement": "planeon_policy_writer_t execute_no_trans nothing beyond its listed targets, declared or not",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_server_exec_t",
+    "planeon_observer_exec_t",
+    "planeon_broker_exec_t",
+    "planeon_gate_exec_t",
+    "planeon_worker_exec_t",
+    "planeon_policy_writer_exec_t",
+    "planeon_contain_exec_t",
+    "planeon_maint_exec_t",
+    "qualk8s_apiserver_exec_t",
+    "qualk8s_controller_manager_exec_t",
+    "qualk8s_scheduler_exec_t",
+    "qualk8s_kubelet_exec_t",
+    "qualk8s_runtime_exec_t",
+    "qualk8s_datastore_exec_t",
+    "qualk8s_netpol_exec_t",
+    "qualk8s_proxy_exec_t",
+    "planeon_interpreter_exec_t",
+    "qualk8s_container_file_t",
+    "bin_t",
+    "shell_exec_t"
+   ]
+  },
+  {
+   "allow": [],
+   "class": "file",
+   "id": "A60.21.execute_no_trans",
+   "perms": [
+    "execute_no_trans"
+   ],
+   "ref": "W01 5.3; review R5, N5",
+   "sources": [
+    "planeon_contain_t"
+   ],
+   "statement": "planeon_contain_t execute_no_trans nothing beyond its listed targets, declared or not",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_server_exec_t",
+    "planeon_observer_exec_t",
+    "planeon_broker_exec_t",
+    "planeon_gate_exec_t",
+    "planeon_worker_exec_t",
+    "planeon_policy_writer_exec_t",
+    "planeon_contain_exec_t",
+    "planeon_maint_exec_t",
+    "qualk8s_apiserver_exec_t",
+    "qualk8s_controller_manager_exec_t",
+    "qualk8s_scheduler_exec_t",
+    "qualk8s_kubelet_exec_t",
+    "qualk8s_runtime_exec_t",
+    "qualk8s_datastore_exec_t",
+    "qualk8s_netpol_exec_t",
+    "qualk8s_proxy_exec_t",
+    "planeon_interpreter_exec_t",
+    "qualk8s_container_file_t",
+    "bin_t",
+    "shell_exec_t"
+   ]
+  },
+  {
+   "allow": [
+    "planeon_broker_t",
+    "planeon_observer_t"
+   ],
+   "class": "file",
+   "id": "A59.planeon_server_t",
+   "perms": [
+    "read",
+    "open"
+   ],
+   "ref": "W01 4.3, 5.3; review R4, N8, K2",
+   "sources": "ALL",
+   "statement": "Only the enumerated peers read planeon_server_t's /proc entries",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_server_t"
+   ]
+  },
+  {
+   "allow": [
+    "planeon_broker_t",
+    "planeon_server_t"
+   ],
+   "class": "file",
+   "id": "A59.planeon_observer_t",
+   "perms": [
+    "read",
+    "open"
+   ],
+   "ref": "W01 4.3, 5.3; review R4, N8, K2",
+   "sources": "ALL",
+   "statement": "Only the enumerated peers read planeon_observer_t's /proc entries",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_observer_t"
+   ]
+  },
+  {
+   "allow": [
+    "planeon_gate_t",
+    "planeon_observer_t",
+    "planeon_server_t"
+   ],
+   "class": "file",
+   "id": "A59.planeon_broker_t",
+   "perms": [
+    "read",
+    "open"
+   ],
+   "ref": "W01 4.3, 5.3; review R4, N8, K2",
+   "sources": "ALL",
+   "statement": "Only the enumerated peers read planeon_broker_t's /proc entries",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_broker_t"
+   ]
+  },
+  {
+   "allow": [
+    "planeon_broker_t",
+    "planeon_observer_t",
+    "planeon_server_t"
+   ],
+   "class": "file",
+   "id": "A59.planeon_worker_t",
+   "perms": [
+    "read",
+    "open"
+   ],
+   "ref": "W01 4.3, 5.3; review R4, N8, K2",
+   "sources": "ALL",
+   "statement": "Only the enumerated peers read planeon_worker_t's /proc entries",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_worker_t"
+   ]
+  },
+  {
+   "allow": [
+    "planeon_broker_t",
+    "planeon_observer_t",
+    "planeon_server_t"
+   ],
+   "class": "file",
+   "id": "A59.planeon_gate_t",
+   "perms": [
+    "read",
+    "open"
+   ],
+   "ref": "W01 4.3, 5.3; review R4, N8, K2",
+   "sources": "ALL",
+   "statement": "Only the enumerated peers read planeon_gate_t's /proc entries",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_gate_t"
+   ]
+  },
+  {
+   "allow": [
+    "planeon_broker_t",
+    "planeon_gate_t",
+    "planeon_observer_t",
+    "planeon_server_t"
+   ],
+   "class": "file",
+   "id": "A59.planeon_policy_writer_t",
+   "perms": [
+    "read",
+    "open"
+   ],
+   "ref": "W01 4.3, 5.3; review R4, N8, K2",
+   "sources": "ALL",
+   "statement": "Only the enumerated peers read planeon_policy_writer_t's /proc entries",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_policy_writer_t"
+   ]
+  },
+  {
+   "allow": [
+    "planeon_broker_t",
+    "planeon_observer_t",
+    "planeon_server_t"
+   ],
+   "class": "file",
+   "id": "A59.planeon_contain_t",
+   "perms": [
+    "read",
+    "open"
+   ],
+   "ref": "W01 4.3, 5.3; review R4, N8, K2",
+   "sources": "ALL",
+   "statement": "Only the enumerated peers read planeon_contain_t's /proc entries",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_contain_t"
+   ]
+  },
+  {
+   "allow": [],
+   "class": "file",
+   "id": "A59.planeon_maint_t",
+   "perms": [
+    "read",
+    "open"
+   ],
+   "ref": "W01 4.3, 5.3; review R4, N8, K2",
+   "sources": "ALL",
+   "statement": "Only the enumerated peers read planeon_maint_t's /proc entries",
+   "states": [
+    "ENROLLED_CONTAINMENT",
+    "ENROLLED_SEALED",
+    "MAINTENANCE_BOOT"
+   ],
+   "targets": [
+    "planeon_maint_t"
+   ]
+  },
+  {
+   "allow": [],
+   "class": "security",
+   "id": "A66",
+   "perms": [
+    "load_policy"
+   ],
+   "ref": "W01 5.2 S1, S4; review K3",
+   "sources": "ALL",
+   "statement": "Before the seal no domain loads policy",
+   "states": [
+    "ENROLLED_CONTAINMENT"
+   ],
+   "targets": [
+    "security_t"
+   ]
+  }
+ ],
+ "booleans": {
+  "planeon_containment_enabled": {
+   "default": 1,
+   "meaning": "containment may run; cleared at S4"
+  },
+  "planeon_maintenance_mode": {
+   "default": 0,
+   "meaning": "set early only by the maintenance boot entry"
+  },
+  "secure_mode_policyload": {
+   "default": 0,
+   "meaning": "set at S4 in the same commit; freezes booleans, policy load and enforcing mode until reboot"
+  }
+ },
+ "bpf": {
+  "map_create": [],
+  "map_read": [],
+  "map_write": [],
+  "prog_load": [
+   {
+    "domain": "planeon_contain_t",
+    "when": {
+     "planeon_containment_enabled": 1,
+     "secure_mode_policyload": 0
+    }
+   },
+   {
+    "domain": "qualk8s_runtime_t"
+   }
+  ],
+  "prog_run": [
+   {
+    "domain": "planeon_server_t",
+    "object": "planeon_contain_t"
+   },
+   {
+    "domain": "planeon_observer_t",
+    "object": "planeon_contain_t"
+   },
+   {
+    "domain": "planeon_broker_t",
+    "object": "planeon_contain_t"
+   },
+   {
+    "domain": "planeon_contain_t",
+    "object": "planeon_contain_t",
+    "when": {
+     "planeon_containment_enabled": 1,
+     "secure_mode_policyload": 0
+    }
+   },
+   {
+    "domain": "qualk8s_runtime_t",
+    "object": "qualk8s_runtime_t"
+   }
+  ]
+ },
+ "capabilities": {
+  "init_t": [
+   {
+    "capability": "chown",
+    "class": "capability"
+   },
+   {
+    "capability": "dac_override",
+    "class": "capability"
+   },
+   {
+    "capability": "dac_read_search",
+    "class": "capability"
+   },
+   {
+    "capability": "fowner",
+    "class": "capability"
+   },
+   {
+    "capability": "fsetid",
+    "class": "capability"
+   },
+   {
+    "capability": "kill",
+    "class": "capability"
+   },
+   {
+    "capability": "setgid",
+    "class": "capability"
+   },
+   {
+    "capability": "setuid",
+    "class": "capability"
+   },
+   {
+    "capability": "setpcap",
+    "class": "capability"
+   },
+   {
+    "capability": "linux_immutable",
+    "class": "capability"
+   },
+   {
+    "capability": "net_bind_service",
+    "class": "capability"
+   },
+   {
+    "capability": "net_broadcast",
+    "class": "capability"
+   },
+   {
+    "capability": "net_admin",
+    "class": "capability"
+   },
+   {
+    "capability": "net_raw",
+    "class": "capability"
+   },
+   {
+    "capability": "ipc_lock",
+    "class": "capability"
+   },
+   {
+    "capability": "ipc_owner",
+    "class": "capability"
+   },
+   {
+    "capability": "sys_chroot",
+    "class": "capability"
+   },
+   {
+    "capability": "sys_ptrace",
+    "class": "capability"
+   },
+   {
+    "capability": "sys_pacct",
+    "class": "capability"
+   },
+   {
+    "capability": "sys_admin",
+    "class": "capability"
+   },
+   {
+    "capability": "sys_boot",
+    "class": "capability"
+   },
+   {
+    "capability": "sys_nice",
+    "class": "capability"
+   },
+   {
+    "capability": "sys_resource",
+    "class": "capability"
+   },
+   {
+    "capability": "sys_time",
+    "class": "capability"
+   },
+   {
+    "capability": "sys_tty_config",
+    "class": "capability"
+   },
+   {
+    "capability": "mknod",
+    "class": "capability"
+   },
+   {
+    "capability": "lease",
+    "class": "capability"
+   },
+   {
+    "capability": "audit_write",
+    "class": "capability"
+   },
+   {
+    "capability": "audit_control",
+    "class": "capability"
+   },
+   {
+    "capability": "setfcap",
+    "class": "capability"
+   },
+   {
+    "capability": "wake_alarm",
+    "class": "capability2"
+   },
+   {
+    "capability": "block_suspend",
+    "class": "capability2"
+   },
+   {
+    "capability": "audit_read",
+    "class": "capability2"
+   }
+  ],
+  "planeon_admin_t": [
+   {
+    "capability": "chown",
+    "class": "capability"
+   },
+   {
+    "capability": "dac_override",
+    "class": "capability"
+   },
+   {
+    "capability": "fowner",
+    "class": "capability"
+   },
+   {
+    "capability": "fsetid",
+    "class": "capability"
+   },
+   {
+    "capability": "kill",
+    "class": "capability"
+   },
+   {
+    "capability": "setgid",
+    "class": "capability"
+   },
+   {
+    "capability": "setuid",
+    "class": "capability"
+   },
+   {
+    "capability": "net_bind_service",
+    "class": "capability"
+   },
+   {
+    "capability": "sys_boot",
+    "class": "capability"
+   },
+   {
+    "capability": "sys_nice",
+    "class": "capability"
+   },
+   {
+    "capability": "sys_resource",
+    "class": "capability"
+   },
+   {
+    "capability": "audit_write",
+    "class": "capability"
+   }
+  ],
+  "planeon_broker_t": [
+   {
+    "capability": "net_admin",
+    "class": "capability"
+   },
+   {
+    "capability": "setuid",
+    "class": "capability"
+   },
+   {
+    "capability": "setgid",
+    "class": "capability"
+   },
+   {
+    "capability": "bpf",
+    "class": "capability2"
+   }
+  ],
+  "planeon_contain_t": [
+   {
+    "capability": "net_admin",
+    "class": "capability",
+    "when": {
+     "planeon_containment_enabled": 1,
+     "secure_mode_policyload": 0
+    }
+   },
+   {
+    "capability": "bpf",
+    "class": "capability2",
+    "when": {
+     "planeon_containment_enabled": 1,
+     "secure_mode_policyload": 0
+    }
+   }
+  ],
+  "planeon_gate_t": [
+   {
+    "capability": "net_bind_service",
+    "class": "capability"
+   }
+  ],
+  "planeon_maint_t": [
+   {
+    "capability": "chown",
+    "class": "capability",
+    "when": {
+     "planeon_maintenance_mode": 1
+    }
+   },
+   {
+    "capability": "dac_override",
+    "class": "capability",
+    "when": {
+     "planeon_maintenance_mode": 1
+    }
+   },
+   {
+    "capability": "fowner",
+    "class": "capability",
+    "when": {
+     "planeon_maintenance_mode": 1
+    }
+   },
+   {
+    "capability": "fsetid",
+    "class": "capability",
+    "when": {
+     "planeon_maintenance_mode": 1
+    }
+   },
+   {
+    "capability": "linux_immutable",
+    "class": "capability",
+    "when": {
+     "planeon_maintenance_mode": 1
+    }
+   }
+  ],
+  "planeon_observer_t": [
+   {
+    "capability": "net_admin",
+    "class": "capability"
+   },
+   {
+    "capability": "bpf",
+    "class": "capability2"
+   }
+  ],
+  "planeon_server_t": [
+   {
+    "capability": "net_admin",
+    "class": "capability"
+   },
+   {
+    "capability": "net_bind_service",
+    "class": "capability"
+   },
+   {
+    "capability": "bpf",
+    "class": "capability2"
+   }
+  ],
+  "qualk8s_kubelet_t": [
+   {
+    "capability": "chown",
+    "class": "capability"
+   },
+   {
+    "capability": "dac_override",
+    "class": "capability"
+   },
+   {
+    "capability": "fowner",
+    "class": "capability"
+   },
+   {
+    "capability": "fsetid",
+    "class": "capability"
+   },
+   {
+    "capability": "kill",
+    "class": "capability"
+   },
+   {
+    "capability": "setgid",
+    "class": "capability"
+   },
+   {
+    "capability": "setuid",
+    "class": "capability"
+   },
+   {
+    "capability": "sys_admin",
+    "class": "capability"
+   },
+   {
+    "capability": "sys_resource",
+    "class": "capability"
+   },
+   {
+    "capability": "mknod",
+    "class": "capability"
+   },
+   {
+    "capability": "net_admin",
+    "class": "capability"
+   }
+  ],
+  "qualk8s_netpol_t": [
+   {
+    "capability": "net_admin",
+    "class": "capability"
+   },
+   {
+    "capability": "net_raw",
+    "class": "capability"
+   }
+  ],
+  "qualk8s_proxy_t": [
+   {
+    "capability": "net_admin",
+    "class": "capability"
+   },
+   {
+    "capability": "net_raw",
+    "class": "capability"
+   }
+  ],
+  "qualk8s_runtime_t": [
+   {
+    "capability": "chown",
+    "class": "capability"
+   },
+   {
+    "capability": "dac_override",
+    "class": "capability"
+   },
+   {
+    "capability": "fowner",
+    "class": "capability"
+   },
+   {
+    "capability": "fsetid",
+    "class": "capability"
+   },
+   {
+    "capability": "kill",
+    "class": "capability"
+   },
+   {
+    "capability": "setgid",
+    "class": "capability"
+   },
+   {
+    "capability": "setuid",
+    "class": "capability"
+   },
+   {
+    "capability": "setpcap",
+    "class": "capability"
+   },
+   {
+    "capability": "net_bind_service",
+    "class": "capability"
+   },
+   {
+    "capability": "net_admin",
+    "class": "capability"
+   },
+   {
+    "capability": "net_raw",
+    "class": "capability"
+   },
+   {
+    "capability": "sys_chroot",
+    "class": "capability"
+   },
+   {
+    "capability": "sys_admin",
+    "class": "capability"
+   },
+   {
+    "capability": "mknod",
+    "class": "capability"
+   },
+   {
+    "capability": "audit_write",
+    "class": "capability"
+   },
+   {
+    "capability": "setfcap",
+    "class": "capability"
+   },
+   {
+    "capability": "sys_resource",
+    "class": "capability"
+   },
+   {
+    "capability": "bpf",
+    "class": "capability2"
+   }
+  ]
+ },
+ "domains": [
+  {
+   "kind": "RESIDENT_ROLE",
+   "label": "system_u:system_r:planeon_server_t:s0",
+   "name": "planeon_server_t",
+   "subject": "SERVER"
+  },
+  {
+   "kind": "RESIDENT_ROLE",
+   "label": "system_u:system_r:planeon_observer_t:s0",
+   "name": "planeon_observer_t",
+   "subject": "OBSERVER"
+  },
+  {
+   "kind": "RESIDENT_ROLE",
+   "label": "system_u:system_r:planeon_broker_t:s0",
+   "name": "planeon_broker_t",
+   "subject": "BROKER"
+  },
+  {
+   "kind": "RESIDENT_ROLE",
+   "label": "system_u:system_r:planeon_worker_t:s0",
+   "name": "planeon_worker_t",
+   "subject": "WORKER"
+  },
+  {
+   "kind": "RESIDENT_ROLE",
+   "label": "system_u:system_r:planeon_gate_t:s0",
+   "name": "planeon_gate_t",
+   "subject": "EFFECT_GATE"
+  },
+  {
+   "kind": "LIFECYCLE",
+   "label": "system_u:system_r:planeon_policy_writer_t:s0",
+   "name": "planeon_policy_writer_t",
+   "subject": "POLICY_WRITER"
+  },
+  {
+   "kind": "LIFECYCLE",
+   "label": "system_u:system_r:planeon_contain_t:s0",
+   "name": "planeon_contain_t",
+   "subject": "HOST_CONTAINMENT"
+  },
+  {
+   "kind": "MAINTENANCE",
+   "label": "system_u:system_r:planeon_maint_t:s0",
+   "name": "planeon_maint_t",
+   "subject": "REBOOT_MAINTENANCE"
+  },
+  {
+   "kind": "BACKEND",
+   "label": "system_u:system_r:qualk8s_apiserver_t:s0",
+   "name": "qualk8s_apiserver_t",
+   "subject": "APISERVER"
+  },
+  {
+   "kind": "BACKEND",
+   "label": "system_u:system_r:qualk8s_controller_manager_t:s0",
+   "name": "qualk8s_controller_manager_t",
+   "subject": "CONTROLLER_MANAGER"
+  },
+  {
+   "kind": "BACKEND",
+   "label": "system_u:system_r:qualk8s_scheduler_t:s0",
+   "name": "qualk8s_scheduler_t",
+   "subject": "SCHEDULER"
+  },
+  {
+   "kind": "BACKEND",
+   "label": "system_u:system_r:qualk8s_kubelet_t:s0",
+   "name": "qualk8s_kubelet_t",
+   "subject": "KUBELET"
+  },
+  {
+   "kind": "BACKEND",
+   "label": "system_u:system_r:qualk8s_runtime_t:s0",
+   "name": "qualk8s_runtime_t",
+   "subject": "CONTAINER_RUNTIME"
+  },
+  {
+   "kind": "BACKEND",
+   "label": "system_u:system_r:qualk8s_datastore_t:s0",
+   "name": "qualk8s_datastore_t",
+   "subject": "DATASTORE"
+  },
+  {
+   "kind": "BACKEND",
+   "label": "system_u:system_r:qualk8s_netpol_t:s0",
+   "name": "qualk8s_netpol_t",
+   "subject": "NETWORK_POLICY_AGENT"
+  },
+  {
+   "kind": "BACKEND",
+   "label": "system_u:system_r:qualk8s_proxy_t:s0",
+   "name": "qualk8s_proxy_t",
+   "subject": "SERVICE_PROXY"
+  },
+  {
+   "kind": "CONTAINER",
+   "label": "system_u:system_r:qualk8s_container_t:s0",
+   "name": "qualk8s_container_t",
+   "subject": "QUALIFICATION_POD"
+  },
+  {
+   "kind": "ADMIN",
+   "label": "system_u:system_r:planeon_admin_t:s0",
+   "name": "planeon_admin_t",
+   "subject": "ROOT_LOGIN"
+  },
+  {
+   "kind": "SYSTEM",
+   "label": "system_u:system_r:init_t:s0",
+   "name": "init_t",
+   "subject": "SYSTEMD"
+  }
+ ],
+ "genfscon": [
+  {
+   "fs": "cgroup2",
+   "path": "/planeon.slice",
+   "type": "planeon_cgroup_slice_t"
+  },
+  {
+   "fs": "cgroup2",
+   "path": "/planeon.slice/planeon-host-containment.service",
+   "type": "planeon_cgroup_contain_t"
+  },
+  {
+   "fs": "cgroup2",
+   "path": "/planeon.slice/planeon-proxy-server.service",
+   "type": "planeon_cgroup_server_t"
+  },
+  {
+   "fs": "cgroup2",
+   "path": "/planeon.slice/planeon-policy-observer.service",
+   "type": "planeon_cgroup_observer_t"
+  },
+  {
+   "fs": "cgroup2",
+   "path": "/planeon.slice/planeon-effect-gate.service",
+   "type": "planeon_cgroup_gate_t"
+  },
+  {
+   "fs": "cgroup2",
+   "path": "/planeon.slice/planeon-capacity-broker.service",
+   "type": "planeon_cgroup_delegate_t"
+  },
+  {
+   "fs": "cgroup2",
+   "path": "/planeon.slice/planeon-capacity-broker.service/broker",
+   "type": "planeon_cgroup_broker_t"
+  },
+  {
+   "fs": "cgroup2",
+   "path": "/planeon.slice/planeon-capacity-broker.service/probe-worker",
+   "type": "planeon_cgroup_worker_t"
+  },
+  {
+   "fs": "bpf",
+   "path": "/planeon",
+   "type": "planeon_bpf_pin_t"
+  },
+  {
+   "fs": "selinuxfs",
+   "path": "/booleans/planeon_maintenance_mode",
+   "type": "planeon_bool_maintenance_t"
+  },
+  {
+   "fs": "selinuxfs",
+   "path": "/booleans/planeon_containment_enabled",
+   "type": "planeon_bool_containment_t"
+  },
+  {
+   "fs": "selinuxfs",
+   "path": "/booleans/secure_mode_policyload",
+   "type": "planeon_bool_policyload_t"
+  }
+ ],
+ "policyCapabilities": [
+  "cgroup_seclabel",
+  "network_peer_controls",
+  "nnp_nosuid_transition",
+  "open_perms"
+ ],
+ "ports": [
+  {
+   "bind": [
+    {
+     "domain": "planeon_server_t"
+    }
+   ],
+   "connect": [
+    {
+     "domain": "ANY_DOMAIN"
+    }
+   ],
+   "label": "system_u:object_r:planeon_server_port_t:s0",
+   "type": "planeon_server_port_t"
+  },
+  {
+   "bind": [
+    {
+     "domain": "qualk8s_apiserver_t"
+    }
+   ],
+   "connect": [
+    {
+     "domain": "planeon_gate_t"
+    },
+    {
+     "domain": "planeon_observer_t"
+    },
+    {
+     "domain": "qualk8s_controller_manager_t"
+    },
+    {
+     "domain": "qualk8s_scheduler_t"
+    },
+    {
+     "domain": "qualk8s_kubelet_t"
+    },
+    {
+     "domain": "qualk8s_netpol_t"
+    },
+    {
+     "domain": "qualk8s_proxy_t"
+    }
+   ],
+   "label": "system_u:object_r:planeon_kubeapi_port_t:s0",
+   "type": "planeon_kubeapi_port_t"
+  },
+  {
+   "bind": [
+    {
+     "domain": "planeon_gate_t"
+    }
+   ],
+   "connect": [
+    {
+     "domain": "planeon_server_t"
+    }
+   ],
+   "label": "system_u:object_r:planeon_i04_port_t:s0",
+   "type": "planeon_i04_port_t"
+  },
+  {
+   "bind": [
+    {
+     "domain": "qualk8s_kubelet_t"
+    }
+   ],
+   "connect": [
+    {
+     "domain": "qualk8s_apiserver_t"
+    }
+   ],
+   "label": "system_u:object_r:qualk8s_kubelet_port_t:s0",
+   "type": "qualk8s_kubelet_port_t"
+  }
+ ],
+ "procAccess": [
+  {
+   "domain": "planeon_gate_t",
+   "target": "planeon_broker_t"
+  },
+  {
+   "domain": "planeon_gate_t",
+   "target": "planeon_policy_writer_t"
+  },
+  {
+   "domain": "planeon_broker_t",
+   "target": "planeon_gate_t"
+  },
+  {
+   "domain": "planeon_broker_t",
+   "target": "planeon_worker_t"
+  },
+  {
+   "domain": "planeon_server_t",
+   "target": "planeon_observer_t"
+  },
+  {
+   "domain": "planeon_server_t",
+   "target": "planeon_broker_t"
+  },
+  {
+   "domain": "planeon_server_t",
+   "target": "planeon_worker_t"
+  },
+  {
+   "domain": "planeon_server_t",
+   "target": "planeon_gate_t"
+  },
+  {
+   "domain": "planeon_server_t",
+   "target": "planeon_policy_writer_t"
+  },
+  {
+   "domain": "planeon_server_t",
+   "target": "planeon_contain_t"
+  },
+  {
+   "domain": "planeon_server_t",
+   "target": "qualk8s_apiserver_t"
+  },
+  {
+   "domain": "planeon_server_t",
+   "target": "qualk8s_controller_manager_t"
+  },
+  {
+   "domain": "planeon_server_t",
+   "target": "qualk8s_scheduler_t"
+  },
+  {
+   "domain": "planeon_server_t",
+   "target": "qualk8s_kubelet_t"
+  },
+  {
+   "domain": "planeon_server_t",
+   "target": "qualk8s_runtime_t"
+  },
+  {
+   "domain": "planeon_server_t",
+   "target": "qualk8s_datastore_t"
+  },
+  {
+   "domain": "planeon_server_t",
+   "target": "qualk8s_netpol_t"
+  },
+  {
+   "domain": "planeon_server_t",
+   "target": "qualk8s_proxy_t"
+  },
+  {
+   "domain": "planeon_server_t",
+   "target": "qualk8s_container_t"
+  },
+  {
+   "domain": "planeon_observer_t",
+   "target": "planeon_server_t"
+  },
+  {
+   "domain": "planeon_observer_t",
+   "target": "planeon_broker_t"
+  },
+  {
+   "domain": "planeon_observer_t",
+   "target": "planeon_worker_t"
+  },
+  {
+   "domain": "planeon_observer_t",
+   "target": "planeon_gate_t"
+  },
+  {
+   "domain": "planeon_observer_t",
+   "target": "planeon_policy_writer_t"
+  },
+  {
+   "domain": "planeon_observer_t",
+   "target": "planeon_contain_t"
+  },
+  {
+   "domain": "planeon_observer_t",
+   "target": "qualk8s_apiserver_t"
+  },
+  {
+   "domain": "planeon_observer_t",
+   "target": "qualk8s_controller_manager_t"
+  },
+  {
+   "domain": "planeon_observer_t",
+   "target": "qualk8s_scheduler_t"
+  },
+  {
+   "domain": "planeon_observer_t",
+   "target": "qualk8s_kubelet_t"
+  },
+  {
+   "domain": "planeon_observer_t",
+   "target": "qualk8s_runtime_t"
+  },
+  {
+   "domain": "planeon_observer_t",
+   "target": "qualk8s_datastore_t"
+  },
+  {
+   "domain": "planeon_observer_t",
+   "target": "qualk8s_netpol_t"
+  },
+  {
+   "domain": "planeon_observer_t",
+   "target": "qualk8s_proxy_t"
+  },
+  {
+   "domain": "planeon_observer_t",
+   "target": "qualk8s_container_t"
+  },
+  {
+   "domain": "planeon_broker_t",
+   "target": "planeon_server_t"
+  },
+  {
+   "domain": "planeon_broker_t",
+   "target": "planeon_observer_t"
+  },
+  {
+   "domain": "planeon_broker_t",
+   "target": "planeon_policy_writer_t"
+  },
+  {
+   "domain": "planeon_broker_t",
+   "target": "planeon_contain_t"
+  },
+  {
+   "domain": "planeon_broker_t",
+   "target": "qualk8s_apiserver_t"
+  },
+  {
+   "domain": "planeon_broker_t",
+   "target": "qualk8s_controller_manager_t"
+  },
+  {
+   "domain": "planeon_broker_t",
+   "target": "qualk8s_scheduler_t"
+  },
+  {
+   "domain": "planeon_broker_t",
+   "target": "qualk8s_kubelet_t"
+  },
+  {
+   "domain": "planeon_broker_t",
+   "target": "qualk8s_runtime_t"
+  },
+  {
+   "domain": "planeon_broker_t",
+   "target": "qualk8s_datastore_t"
+  },
+  {
+   "domain": "planeon_broker_t",
+   "target": "qualk8s_netpol_t"
+  },
+  {
+   "domain": "planeon_broker_t",
+   "target": "qualk8s_proxy_t"
+  },
+  {
+   "domain": "planeon_broker_t",
+   "target": "qualk8s_container_t"
+  }
+ ],
+ "process": {
+  "dyntransition": [],
+  "execheap": [],
+  "execmem": [],
+  "execstack": [],
+  "ptrace": [],
+  "setexec": [],
+  "setsockcreate": [
+   {
+    "domain": "planeon_gate_t"
+   }
+  ],
+  "sigkill": [
+   {
+    "domain": "init_t",
+    "target": "planeon_server_t"
+   },
+   {
+    "domain": "init_t",
+    "target": "planeon_observer_t"
+   },
+   {
+    "domain": "init_t",
+    "target": "planeon_broker_t"
+   },
+   {
+    "domain": "init_t",
+    "target": "planeon_worker_t"
+   },
+   {
+    "domain": "init_t",
+    "target": "planeon_gate_t"
+   },
+   {
+    "domain": "init_t",
+    "target": "planeon_policy_writer_t"
+   },
+   {
+    "domain": "init_t",
+    "target": "planeon_contain_t"
+   },
+   {
+    "domain": "init_t",
+    "target": "planeon_maint_t"
+   },
+   {
+    "domain": "init_t",
+    "target": "qualk8s_apiserver_t"
+   },
+   {
+    "domain": "init_t",
+    "target": "qualk8s_controller_manager_t"
+   },
+   {
+    "domain": "init_t",
+    "target": "qualk8s_scheduler_t"
+   },
+   {
+    "domain": "init_t",
+    "target": "qualk8s_kubelet_t"
+   },
+   {
+    "domain": "init_t",
+    "target": "qualk8s_runtime_t"
+   },
+   {
+    "domain": "init_t",
+    "target": "qualk8s_datastore_t"
+   },
+   {
+    "domain": "init_t",
+    "target": "qualk8s_netpol_t"
+   },
+   {
+    "domain": "init_t",
+    "target": "qualk8s_proxy_t"
+   },
+   {
+    "domain": "init_t",
+    "target": "qualk8s_container_t"
+   },
+   {
+    "domain": "planeon_broker_t",
+    "target": "planeon_worker_t"
+   },
+   {
+    "domain": "qualk8s_runtime_t",
+    "target": "qualk8s_container_t"
+   }
+  ],
+  "signal": [
+   {
+    "domain": "init_t",
+    "target": "planeon_server_t"
+   },
+   {
+    "domain": "init_t",
+    "target": "planeon_observer_t"
+   },
+   {
+    "domain": "init_t",
+    "target": "planeon_broker_t"
+   },
+   {
+    "domain": "init_t",
+    "target": "planeon_worker_t"
+   },
+   {
+    "domain": "init_t",
+    "target": "planeon_gate_t"
+   },
+   {
+    "domain": "init_t",
+    "target": "planeon_policy_writer_t"
+   },
+   {
+    "domain": "init_t",
+    "target": "planeon_contain_t"
+   },
+   {
+    "domain": "init_t",
+    "target": "planeon_maint_t"
+   },
+   {
+    "domain": "init_t",
+    "target": "qualk8s_apiserver_t"
+   },
+   {
+    "domain": "init_t",
+    "target": "qualk8s_controller_manager_t"
+   },
+   {
+    "domain": "init_t",
+    "target": "qualk8s_scheduler_t"
+   },
+   {
+    "domain": "init_t",
+    "target": "qualk8s_kubelet_t"
+   },
+   {
+    "domain": "init_t",
+    "target": "qualk8s_runtime_t"
+   },
+   {
+    "domain": "init_t",
+    "target": "qualk8s_datastore_t"
+   },
+   {
+    "domain": "init_t",
+    "target": "qualk8s_netpol_t"
+   },
+   {
+    "domain": "init_t",
+    "target": "qualk8s_proxy_t"
+   },
+   {
+    "domain": "init_t",
+    "target": "qualk8s_container_t"
+   },
+   {
+    "domain": "qualk8s_runtime_t",
+    "target": "qualk8s_container_t"
+   }
+  ],
+  "sigstop": [
+   {
+    "domain": "init_t",
+    "target": "planeon_server_t"
+   },
+   {
+    "domain": "init_t",
+    "target": "planeon_observer_t"
+   },
+   {
+    "domain": "init_t",
+    "target": "planeon_broker_t"
+   },
+   {
+    "domain": "init_t",
+    "target": "planeon_worker_t"
+   },
+   {
+    "domain": "init_t",
+    "target": "planeon_gate_t"
+   },
+   {
+    "domain": "init_t",
+    "target": "planeon_policy_writer_t"
+   },
+   {
+    "domain": "init_t",
+    "target": "planeon_contain_t"
+   },
+   {
+    "domain": "init_t",
+    "target": "planeon_maint_t"
+   },
+   {
+    "domain": "init_t",
+    "target": "qualk8s_apiserver_t"
+   },
+   {
+    "domain": "init_t",
+    "target": "qualk8s_controller_manager_t"
+   },
+   {
+    "domain": "init_t",
+    "target": "qualk8s_scheduler_t"
+   },
+   {
+    "domain": "init_t",
+    "target": "qualk8s_kubelet_t"
+   },
+   {
+    "domain": "init_t",
+    "target": "qualk8s_runtime_t"
+   },
+   {
+    "domain": "init_t",
+    "target": "qualk8s_datastore_t"
+   },
+   {
+    "domain": "init_t",
+    "target": "qualk8s_netpol_t"
+   },
+   {
+    "domain": "init_t",
+    "target": "qualk8s_proxy_t"
+   },
+   {
+    "domain": "init_t",
+    "target": "qualk8s_container_t"
+   },
+   {
+    "domain": "qualk8s_runtime_t",
+    "target": "qualk8s_container_t"
+   }
+  ]
+ },
+ "process2": {
+  "nnp_transition": [
+   {
+    "domain": "planeon_broker_t",
+    "target": "planeon_worker_t"
+   },
+   {
+    "domain": "qualk8s_runtime_t",
+    "target": "qualk8s_container_t"
+   }
+  ],
+  "nosuid_transition": []
+ },
+ "schemaVersion": "planeon.internal.selinux-matrix/v4",
+ "security": {
+  "load_policy": [
+   {
+    "domain": "planeon_maint_t",
+    "when": {
+     "planeon_maintenance_mode": 1,
+     "secure_mode_policyload": 0
+    }
+   }
+  ],
+  "setbool": [
+   {
+    "domain": "init_t",
+    "when": {
+     "planeon_containment_enabled": 1,
+     "secure_mode_policyload": 0
+    }
+   },
+   {
+    "domain": "planeon_contain_t",
+    "when": {
+     "planeon_containment_enabled": 1,
+     "secure_mode_policyload": 0
+    }
+   },
+   {
+    "domain": "planeon_maint_t",
+    "when": {
+     "planeon_maintenance_mode": 1,
+     "secure_mode_policyload": 0
+    }
+   }
+  ],
+  "setenforce": []
+ },
+ "service": {
+  "disable": [
+   {
+    "domain": "init_t",
+    "units": [
+     "planeon_unit_file_t",
+     "qualk8s_unit_file_t"
+    ]
+   },
+   {
+    "domain": "planeon_maint_t",
+    "units": [
+     "planeon_unit_file_t",
+     "qualk8s_unit_file_t"
+    ],
+    "when": {
+     "planeon_maintenance_mode": 1
+    }
+   }
+  ],
+  "enable": [
+   {
+    "domain": "init_t",
+    "units": [
+     "planeon_unit_file_t",
+     "qualk8s_unit_file_t"
+    ]
+   },
+   {
+    "domain": "planeon_maint_t",
+    "units": [
+     "planeon_unit_file_t",
+     "qualk8s_unit_file_t"
+    ],
+    "when": {
+     "planeon_maintenance_mode": 1
+    }
+   }
+  ],
+  "reload": [
+   {
+    "domain": "init_t",
+    "units": [
+     "planeon_unit_file_t",
+     "qualk8s_unit_file_t"
+    ]
+   },
+   {
+    "domain": "planeon_maint_t",
+    "units": [
+     "planeon_unit_file_t",
+     "qualk8s_unit_file_t"
+    ],
+    "when": {
+     "planeon_maintenance_mode": 1
+    }
+   }
+  ],
+  "start": [
+   {
+    "domain": "init_t",
+    "units": [
+     "planeon_unit_file_t",
+     "qualk8s_unit_file_t"
+    ]
+   },
+   {
+    "domain": "planeon_maint_t",
+    "units": [
+     "planeon_unit_file_t",
+     "qualk8s_unit_file_t"
+    ],
+    "when": {
+     "planeon_maintenance_mode": 1
+    }
+   }
+  ],
+  "status": [
+   {
+    "domain": "init_t",
+    "units": [
+     "planeon_unit_file_t",
+     "qualk8s_unit_file_t"
+    ]
+   },
+   {
+    "domain": "planeon_maint_t",
+    "units": [
+     "planeon_unit_file_t",
+     "qualk8s_unit_file_t"
+    ],
+    "when": {
+     "planeon_maintenance_mode": 1
+    }
+   }
+  ],
+  "stop": [
+   {
+    "domain": "init_t",
+    "units": [
+     "planeon_unit_file_t",
+     "qualk8s_unit_file_t"
+    ]
+   },
+   {
+    "domain": "planeon_maint_t",
+    "units": [
+     "planeon_unit_file_t",
+     "qualk8s_unit_file_t"
+    ],
+    "when": {
+     "planeon_maintenance_mode": 1
+    }
+   }
+  ]
+ },
+ "sockets": [
+  {
+   "connect": [
+    {
+     "domain": "planeon_broker_t"
+    }
+   ],
+   "file": "planeon_i05_sock_t",
+   "listener": "planeon_gate_t",
+   "object": "planeon_i05_socket_t"
+  },
+  {
+   "connect": [
+    {
+     "domain": "planeon_policy_writer_t"
+    }
+   ],
+   "file": "planeon_i07_sock_t",
+   "listener": "planeon_gate_t",
+   "object": "planeon_i07_socket_t"
+  },
+  {
+   "connect": [
+    {
+     "domain": "planeon_server_t"
+    }
+   ],
+   "file": "planeon_observer_sock_t",
+   "listener": "planeon_observer_t",
+   "object": "planeon_observer_t"
+  },
+  {
+   "connect": [
+    {
+     "domain": "planeon_server_t"
+    }
+   ],
+   "file": "planeon_broker_sock_t",
+   "listener": "planeon_broker_t",
+   "object": "planeon_broker_t"
+  },
+  {
+   "connect": [
+    {
+     "domain": "qualk8s_apiserver_t"
+    }
+   ],
+   "file": "qualk8s_datastore_sock_t",
+   "listener": "qualk8s_datastore_t",
+   "object": "qualk8s_datastore_t"
+  },
+  {
+   "connect": [
+    {
+     "domain": "qualk8s_kubelet_t"
+    }
+   ],
+   "file": "qualk8s_runtime_sock_t",
+   "listener": "qualk8s_runtime_t",
+   "object": "qualk8s_runtime_t"
+  }
+ ],
+ "sourceClosures": [
+  {
+   "class": "tcp_socket",
+   "domain": "planeon_server_t",
+   "perms": [
+    "name_connect",
+    "name_bind"
+   ]
+  },
+  {
+   "class": "tcp_socket",
+   "domain": "planeon_observer_t",
+   "perms": [
+    "name_connect",
+    "name_bind"
+   ]
+  },
+  {
+   "class": "tcp_socket",
+   "domain": "planeon_broker_t",
+   "perms": [
+    "name_connect",
+    "name_bind"
+   ]
+  },
+  {
+   "class": "tcp_socket",
+   "domain": "planeon_worker_t",
+   "perms": [
+    "name_connect",
+    "name_bind"
+   ]
+  },
+  {
+   "class": "tcp_socket",
+   "domain": "planeon_gate_t",
+   "perms": [
+    "name_connect",
+    "name_bind"
+   ]
+  },
+  {
+   "class": "tcp_socket",
+   "domain": "planeon_policy_writer_t",
+   "perms": [
+    "name_connect",
+    "name_bind"
+   ]
+  },
+  {
+   "class": "tcp_socket",
+   "domain": "planeon_contain_t",
+   "perms": [
+    "name_connect",
+    "name_bind"
+   ]
+  },
+  {
+   "class": "unix_stream_socket",
+   "domain": "planeon_server_t",
+   "perms": [
+    "connectto"
+   ]
+  },
+  {
+   "class": "unix_stream_socket",
+   "domain": "planeon_observer_t",
+   "perms": [
+    "connectto"
+   ]
+  },
+  {
+   "class": "unix_stream_socket",
+   "domain": "planeon_broker_t",
+   "perms": [
+    "connectto"
+   ]
+  },
+  {
+   "class": "unix_stream_socket",
+   "domain": "planeon_worker_t",
+   "perms": [
+    "connectto"
+   ]
+  },
+  {
+   "class": "unix_stream_socket",
+   "domain": "planeon_gate_t",
+   "perms": [
+    "connectto"
+   ]
+  },
+  {
+   "class": "unix_stream_socket",
+   "domain": "planeon_policy_writer_t",
+   "perms": [
+    "connectto"
+   ]
+  },
+  {
+   "class": "unix_stream_socket",
+   "domain": "planeon_contain_t",
+   "perms": [
+    "connectto"
+   ]
+  },
+  {
+   "class": "file",
+   "domain": "planeon_server_t",
+   "perms": [
+    "execute_no_trans"
+   ]
+  },
+  {
+   "class": "file",
+   "domain": "planeon_observer_t",
+   "perms": [
+    "execute_no_trans"
+   ]
+  },
+  {
+   "class": "file",
+   "domain": "planeon_broker_t",
+   "perms": [
+    "execute_no_trans"
+   ]
+  },
+  {
+   "class": "file",
+   "domain": "planeon_worker_t",
+   "perms": [
+    "execute_no_trans"
+   ]
+  },
+  {
+   "class": "file",
+   "domain": "planeon_gate_t",
+   "perms": [
+    "execute_no_trans"
+   ]
+  },
+  {
+   "class": "file",
+   "domain": "planeon_policy_writer_t",
+   "perms": [
+    "execute_no_trans"
+   ]
+  },
+  {
+   "class": "file",
+   "domain": "planeon_contain_t",
+   "perms": [
+    "execute_no_trans"
+   ]
+  }
+ ],
+ "states": {
+  "ENROLLED_CONTAINMENT": {
+   "planeon_containment_enabled": 1,
+   "planeon_maintenance_mode": 0,
+   "secure_mode_policyload": 0
+  },
+  "ENROLLED_SEALED": {
+   "planeon_containment_enabled": 0,
+   "planeon_maintenance_mode": 0,
+   "secure_mode_policyload": 1
+  },
+  "MAINTENANCE_BOOT": {
+   "planeon_containment_enabled": 0,
+   "planeon_maintenance_mode": 1,
+   "secure_mode_policyload": 0
+  }
+ },
+ "transitions": [
+  {
+   "from": "init_t",
+   "to": "planeon_server_t",
+   "via": "planeon_server_exec_t",
+   "when": {
+    "planeon_maintenance_mode": 0
+   }
+  },
+  {
+   "from": "init_t",
+   "to": "planeon_observer_t",
+   "via": "planeon_observer_exec_t",
+   "when": {
+    "planeon_maintenance_mode": 0
+   }
+  },
+  {
+   "from": "init_t",
+   "to": "planeon_broker_t",
+   "via": "planeon_broker_exec_t",
+   "when": {
+    "planeon_maintenance_mode": 0
+   }
+  },
+  {
+   "from": "init_t",
+   "to": "planeon_gate_t",
+   "via": "planeon_gate_exec_t",
+   "when": {
+    "planeon_maintenance_mode": 0
+   }
+  },
+  {
+   "from": "planeon_broker_t",
+   "noNewPrivs": true,
+   "to": "planeon_worker_t",
+   "via": "planeon_worker_exec_t",
+   "when": {
+    "planeon_maintenance_mode": 0
+   }
+  },
+  {
+   "from": "planeon_admin_t",
+   "to": "planeon_policy_writer_t",
+   "via": "planeon_policy_writer_exec_t",
+   "when": {
+    "planeon_maintenance_mode": 0
+   }
+  },
+  {
+   "from": "init_t",
+   "to": "planeon_contain_t",
+   "via": "planeon_contain_exec_t",
+   "when": {
+    "planeon_containment_enabled": 1
+   }
+  },
+  {
+   "from": "planeon_admin_t",
+   "to": "planeon_maint_t",
+   "via": "planeon_maint_exec_t",
+   "when": {
+    "planeon_maintenance_mode": 1
+   }
+  },
+  {
+   "from": "init_t",
+   "to": "qualk8s_apiserver_t",
+   "via": "qualk8s_apiserver_exec_t"
+  },
+  {
+   "from": "init_t",
+   "to": "qualk8s_controller_manager_t",
+   "via": "qualk8s_controller_manager_exec_t"
+  },
+  {
+   "from": "init_t",
+   "to": "qualk8s_scheduler_t",
+   "via": "qualk8s_scheduler_exec_t"
+  },
+  {
+   "from": "init_t",
+   "to": "qualk8s_kubelet_t",
+   "via": "qualk8s_kubelet_exec_t"
+  },
+  {
+   "from": "init_t",
+   "to": "qualk8s_runtime_t",
+   "via": "qualk8s_runtime_exec_t"
+  },
+  {
+   "from": "init_t",
+   "to": "qualk8s_datastore_t",
+   "via": "qualk8s_datastore_exec_t"
+  },
+  {
+   "from": "init_t",
+   "to": "qualk8s_netpol_t",
+   "via": "qualk8s_netpol_exec_t"
+  },
+  {
+   "from": "init_t",
+   "to": "qualk8s_proxy_t",
+   "via": "qualk8s_proxy_exec_t"
+  },
+  {
+   "from": "qualk8s_runtime_t",
+   "noNewPrivs": true,
+   "to": "qualk8s_container_t",
+   "via": "qualk8s_container_file_t"
+  }
+ ],
+ "typeTransitions": [
+  {
+   "class": "dir",
+   "name": "planeon",
+   "new": "planeon_run_t",
+   "parent": "var_run_t",
+   "source": "init_t"
+  },
+  {
+   "class": "file",
+   "name": "sealed",
+   "new": "planeon_seal_t",
+   "parent": "planeon_run_t",
+   "source": "planeon_contain_t"
+  },
+  {
+   "class": "sock_file",
+   "name": "effect-admission.sock",
+   "new": "planeon_i05_sock_t",
+   "parent": "planeon_run_t",
+   "source": "planeon_gate_t"
+  },
+  {
+   "class": "sock_file",
+   "name": "policy-write.sock",
+   "new": "planeon_i07_sock_t",
+   "parent": "planeon_run_t",
+   "source": "planeon_gate_t"
+  }
+ ],
+ "types": [
+  {
+   "access": {
+    "ENTRYPOINT": [
+     {
+      "domain": "planeon_server_t",
+      "when": {
+       "planeon_maintenance_mode": 0
+      }
+     }
+    ],
+    "EXECUTE": [
+     {
+      "domain": "init_t",
+      "when": {
+       "planeon_maintenance_mode": 0
+      }
+     }
+    ],
+    "READ": [
+     {
+      "domain": "ANY_DOMAIN"
+     }
+    ],
+    "RELABEL": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ],
+    "WRITE": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ]
+   },
+   "category": "ENTRYPOINT",
+   "classes": [
+    "file"
+   ],
+   "label": "system_u:object_r:planeon_server_exec_t:s0",
+   "name": "planeon_server_exec_t"
+  },
+  {
+   "access": {
+    "ENTRYPOINT": [
+     {
+      "domain": "planeon_observer_t",
+      "when": {
+       "planeon_maintenance_mode": 0
+      }
+     }
+    ],
+    "EXECUTE": [
+     {
+      "domain": "init_t",
+      "when": {
+       "planeon_maintenance_mode": 0
+      }
+     }
+    ],
+    "READ": [
+     {
+      "domain": "ANY_DOMAIN"
+     }
+    ],
+    "RELABEL": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ],
+    "WRITE": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ]
+   },
+   "category": "ENTRYPOINT",
+   "classes": [
+    "file"
+   ],
+   "label": "system_u:object_r:planeon_observer_exec_t:s0",
+   "name": "planeon_observer_exec_t"
+  },
+  {
+   "access": {
+    "ENTRYPOINT": [
+     {
+      "domain": "planeon_broker_t",
+      "when": {
+       "planeon_maintenance_mode": 0
+      }
+     }
+    ],
+    "EXECUTE": [
+     {
+      "domain": "init_t",
+      "when": {
+       "planeon_maintenance_mode": 0
+      }
+     }
+    ],
+    "READ": [
+     {
+      "domain": "ANY_DOMAIN"
+     }
+    ],
+    "RELABEL": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ],
+    "WRITE": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ]
+   },
+   "category": "ENTRYPOINT",
+   "classes": [
+    "file"
+   ],
+   "label": "system_u:object_r:planeon_broker_exec_t:s0",
+   "name": "planeon_broker_exec_t"
+  },
+  {
+   "access": {
+    "ENTRYPOINT": [
+     {
+      "domain": "planeon_gate_t",
+      "when": {
+       "planeon_maintenance_mode": 0
+      }
+     }
+    ],
+    "EXECUTE": [
+     {
+      "domain": "init_t",
+      "when": {
+       "planeon_maintenance_mode": 0
+      }
+     }
+    ],
+    "READ": [
+     {
+      "domain": "ANY_DOMAIN"
+     }
+    ],
+    "RELABEL": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ],
+    "WRITE": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ]
+   },
+   "category": "ENTRYPOINT",
+   "classes": [
+    "file"
+   ],
+   "label": "system_u:object_r:planeon_gate_exec_t:s0",
+   "name": "planeon_gate_exec_t"
+  },
+  {
+   "access": {
+    "ENTRYPOINT": [
+     {
+      "domain": "planeon_worker_t",
+      "when": {
+       "planeon_maintenance_mode": 0
+      }
+     }
+    ],
+    "EXECUTE": [
+     {
+      "domain": "planeon_broker_t",
+      "when": {
+       "planeon_maintenance_mode": 0
+      }
+     }
+    ],
+    "READ": [
+     {
+      "domain": "ANY_DOMAIN"
+     }
+    ],
+    "RELABEL": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ],
+    "WRITE": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ]
+   },
+   "category": "ENTRYPOINT",
+   "classes": [
+    "file"
+   ],
+   "label": "system_u:object_r:planeon_worker_exec_t:s0",
+   "name": "planeon_worker_exec_t"
+  },
+  {
+   "access": {
+    "ENTRYPOINT": [
+     {
+      "domain": "planeon_policy_writer_t",
+      "when": {
+       "planeon_maintenance_mode": 0
+      }
+     }
+    ],
+    "EXECUTE": [
+     {
+      "domain": "planeon_admin_t",
+      "when": {
+       "planeon_maintenance_mode": 0
+      }
+     }
+    ],
+    "READ": [
+     {
+      "domain": "ANY_DOMAIN"
+     }
+    ],
+    "RELABEL": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ],
+    "WRITE": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ]
+   },
+   "category": "ENTRYPOINT",
+   "classes": [
+    "file"
+   ],
+   "label": "system_u:object_r:planeon_policy_writer_exec_t:s0",
+   "name": "planeon_policy_writer_exec_t"
+  },
+  {
+   "access": {
+    "ENTRYPOINT": [
+     {
+      "domain": "planeon_contain_t",
+      "when": {
+       "planeon_containment_enabled": 1
+      }
+     }
+    ],
+    "EXECUTE": [
+     {
+      "domain": "init_t",
+      "when": {
+       "planeon_containment_enabled": 1
+      }
+     }
+    ],
+    "READ": [
+     {
+      "domain": "ANY_DOMAIN"
+     }
+    ],
+    "RELABEL": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ],
+    "WRITE": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ]
+   },
+   "category": "ENTRYPOINT",
+   "classes": [
+    "file"
+   ],
+   "label": "system_u:object_r:planeon_contain_exec_t:s0",
+   "name": "planeon_contain_exec_t"
+  },
+  {
+   "access": {
+    "ENTRYPOINT": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ],
+    "EXECUTE": [
+     {
+      "domain": "planeon_admin_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ],
+    "READ": [
+     {
+      "domain": "ANY_DOMAIN"
+     }
+    ],
+    "RELABEL": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ],
+    "WRITE": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ]
+   },
+   "category": "ENTRYPOINT",
+   "classes": [
+    "file"
+   ],
+   "label": "system_u:object_r:planeon_maint_exec_t:s0",
+   "name": "planeon_maint_exec_t"
+  },
+  {
+   "access": {
+    "ENTRYPOINT": [
+     {
+      "domain": "qualk8s_apiserver_t"
+     }
+    ],
+    "EXECUTE": [
+     {
+      "domain": "init_t"
+     }
+    ],
+    "READ": [
+     {
+      "domain": "ANY_DOMAIN"
+     }
+    ],
+    "RELABEL": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ],
+    "WRITE": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ]
+   },
+   "category": "ENTRYPOINT",
+   "classes": [
+    "file"
+   ],
+   "label": "system_u:object_r:qualk8s_apiserver_exec_t:s0",
+   "name": "qualk8s_apiserver_exec_t"
+  },
+  {
+   "access": {
+    "ENTRYPOINT": [
+     {
+      "domain": "qualk8s_controller_manager_t"
+     }
+    ],
+    "EXECUTE": [
+     {
+      "domain": "init_t"
+     }
+    ],
+    "READ": [
+     {
+      "domain": "ANY_DOMAIN"
+     }
+    ],
+    "RELABEL": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ],
+    "WRITE": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ]
+   },
+   "category": "ENTRYPOINT",
+   "classes": [
+    "file"
+   ],
+   "label": "system_u:object_r:qualk8s_controller_manager_exec_t:s0",
+   "name": "qualk8s_controller_manager_exec_t"
+  },
+  {
+   "access": {
+    "ENTRYPOINT": [
+     {
+      "domain": "qualk8s_scheduler_t"
+     }
+    ],
+    "EXECUTE": [
+     {
+      "domain": "init_t"
+     }
+    ],
+    "READ": [
+     {
+      "domain": "ANY_DOMAIN"
+     }
+    ],
+    "RELABEL": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ],
+    "WRITE": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ]
+   },
+   "category": "ENTRYPOINT",
+   "classes": [
+    "file"
+   ],
+   "label": "system_u:object_r:qualk8s_scheduler_exec_t:s0",
+   "name": "qualk8s_scheduler_exec_t"
+  },
+  {
+   "access": {
+    "ENTRYPOINT": [
+     {
+      "domain": "qualk8s_kubelet_t"
+     }
+    ],
+    "EXECUTE": [
+     {
+      "domain": "init_t"
+     }
+    ],
+    "READ": [
+     {
+      "domain": "ANY_DOMAIN"
+     }
+    ],
+    "RELABEL": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ],
+    "WRITE": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ]
+   },
+   "category": "ENTRYPOINT",
+   "classes": [
+    "file"
+   ],
+   "label": "system_u:object_r:qualk8s_kubelet_exec_t:s0",
+   "name": "qualk8s_kubelet_exec_t"
+  },
+  {
+   "access": {
+    "ENTRYPOINT": [
+     {
+      "domain": "qualk8s_runtime_t"
+     }
+    ],
+    "EXECUTE": [
+     {
+      "domain": "init_t"
+     }
+    ],
+    "READ": [
+     {
+      "domain": "ANY_DOMAIN"
+     }
+    ],
+    "RELABEL": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ],
+    "WRITE": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ]
+   },
+   "category": "ENTRYPOINT",
+   "classes": [
+    "file"
+   ],
+   "label": "system_u:object_r:qualk8s_runtime_exec_t:s0",
+   "name": "qualk8s_runtime_exec_t"
+  },
+  {
+   "access": {
+    "ENTRYPOINT": [
+     {
+      "domain": "qualk8s_datastore_t"
+     }
+    ],
+    "EXECUTE": [
+     {
+      "domain": "init_t"
+     }
+    ],
+    "READ": [
+     {
+      "domain": "ANY_DOMAIN"
+     }
+    ],
+    "RELABEL": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ],
+    "WRITE": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ]
+   },
+   "category": "ENTRYPOINT",
+   "classes": [
+    "file"
+   ],
+   "label": "system_u:object_r:qualk8s_datastore_exec_t:s0",
+   "name": "qualk8s_datastore_exec_t"
+  },
+  {
+   "access": {
+    "ENTRYPOINT": [
+     {
+      "domain": "qualk8s_netpol_t"
+     }
+    ],
+    "EXECUTE": [
+     {
+      "domain": "init_t"
+     }
+    ],
+    "READ": [
+     {
+      "domain": "ANY_DOMAIN"
+     }
+    ],
+    "RELABEL": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ],
+    "WRITE": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ]
+   },
+   "category": "ENTRYPOINT",
+   "classes": [
+    "file"
+   ],
+   "label": "system_u:object_r:qualk8s_netpol_exec_t:s0",
+   "name": "qualk8s_netpol_exec_t"
+  },
+  {
+   "access": {
+    "ENTRYPOINT": [
+     {
+      "domain": "qualk8s_proxy_t"
+     }
+    ],
+    "EXECUTE": [
+     {
+      "domain": "init_t"
+     }
+    ],
+    "READ": [
+     {
+      "domain": "ANY_DOMAIN"
+     }
+    ],
+    "RELABEL": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ],
+    "WRITE": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ]
+   },
+   "category": "ENTRYPOINT",
+   "classes": [
+    "file"
+   ],
+   "label": "system_u:object_r:qualk8s_proxy_exec_t:s0",
+   "name": "qualk8s_proxy_exec_t"
+  },
+  {
+   "access": {
+    "EXECUTE": [
+     {
+      "domain": "init_t",
+      "when": {
+       "planeon_maintenance_mode": 0
+      }
+     },
+     {
+      "domain": "planeon_broker_t",
+      "when": {
+       "planeon_maintenance_mode": 0
+      }
+     },
+     {
+      "domain": "planeon_server_t",
+      "when": {
+       "planeon_maintenance_mode": 0
+      }
+     },
+     {
+      "domain": "planeon_worker_t",
+      "when": {
+       "planeon_maintenance_mode": 0
+      }
+     }
+    ],
+    "READ": [
+     {
+      "domain": "ANY_DOMAIN"
+     }
+    ],
+    "RELABEL": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ],
+    "WRITE": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ]
+   },
+   "category": "INTERPRETER",
+   "classes": [
+    "file"
+   ],
+   "label": "system_u:object_r:planeon_interpreter_exec_t:s0",
+   "name": "planeon_interpreter_exec_t"
+  },
+  {
+   "access": {
+    "READ": [
+     {
+      "domain": "ANY_DOMAIN"
+     }
+    ],
+    "RELABEL": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ],
+    "WRITE": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ]
+   },
+   "category": "SEALED_CONFIG",
+   "classes": [
+    "file",
+    "dir"
+   ],
+   "label": "system_u:object_r:planeon_etc_t:s0",
+   "name": "planeon_etc_t"
+  },
+  {
+   "access": {
+    "READ": [
+     {
+      "domain": "ANY_DOMAIN"
+     }
+    ],
+    "RELABEL": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ],
+    "WRITE": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ]
+   },
+   "category": "SEALED_CONFIG",
+   "classes": [
+    "file",
+    "dir"
+   ],
+   "label": "system_u:object_r:qualk8s_config_t:s0",
+   "name": "qualk8s_config_t"
+  },
+  {
+   "access": {
+    "READ": [
+     {
+      "domain": "ANY_DOMAIN"
+     }
+    ],
+    "RELABEL": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ],
+    "WRITE": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ]
+   },
+   "category": "UNIT_FILE",
+   "classes": [
+    "file",
+    "dir"
+   ],
+   "label": "system_u:object_r:planeon_unit_file_t:s0",
+   "name": "planeon_unit_file_t"
+  },
+  {
+   "access": {
+    "READ": [
+     {
+      "domain": "ANY_DOMAIN"
+     }
+    ],
+    "RELABEL": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ],
+    "WRITE": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ]
+   },
+   "category": "UNIT_FILE",
+   "classes": [
+    "file",
+    "dir"
+   ],
+   "label": "system_u:object_r:qualk8s_unit_file_t:s0",
+   "name": "qualk8s_unit_file_t"
+  },
+  {
+   "access": {
+    "READ": [
+     {
+      "domain": "planeon_server_t"
+     }
+    ],
+    "RELABEL": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ],
+    "WRITE": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ]
+   },
+   "category": "CREDENTIAL",
+   "classes": [
+    "file"
+   ],
+   "label": "system_u:object_r:planeon_server_cred_t:s0",
+   "name": "planeon_server_cred_t"
+  },
+  {
+   "access": {
+    "READ": [
+     {
+      "domain": "planeon_observer_t"
+     }
+    ],
+    "RELABEL": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ],
+    "WRITE": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ]
+   },
+   "category": "CREDENTIAL",
+   "classes": [
+    "file"
+   ],
+   "label": "system_u:object_r:planeon_observer_cred_t:s0",
+   "name": "planeon_observer_cred_t"
+  },
+  {
+   "access": {
+    "READ": [
+     {
+      "domain": "planeon_gate_t"
+     }
+    ],
+    "RELABEL": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ],
+    "WRITE": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ]
+   },
+   "category": "CREDENTIAL",
+   "classes": [
+    "file"
+   ],
+   "label": "system_u:object_r:planeon_gate_effect_cred_t:s0",
+   "name": "planeon_gate_effect_cred_t"
+  },
+  {
+   "access": {
+    "READ": [
+     {
+      "domain": "planeon_gate_t"
+     }
+    ],
+    "RELABEL": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ],
+    "WRITE": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ]
+   },
+   "category": "CREDENTIAL",
+   "classes": [
+    "file"
+   ],
+   "label": "system_u:object_r:planeon_gate_writer_cred_t:s0",
+   "name": "planeon_gate_writer_cred_t"
+  },
+  {
+   "access": {
+    "READ": [
+     {
+      "domain": "qualk8s_apiserver_t"
+     },
+     {
+      "domain": "qualk8s_controller_manager_t"
+     }
+    ],
+    "RELABEL": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ],
+    "WRITE": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ]
+   },
+   "category": "CREDENTIAL",
+   "classes": [
+    "file"
+   ],
+   "label": "system_u:object_r:qualk8s_sa_key_t:s0",
+   "name": "qualk8s_sa_key_t"
+  },
+  {
+   "access": {
+    "READ": [
+     {
+      "domain": "qualk8s_apiserver_t"
+     }
+    ],
+    "RELABEL": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ],
+    "WRITE": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ]
+   },
+   "category": "CREDENTIAL",
+   "classes": [
+    "file"
+   ],
+   "label": "system_u:object_r:qualk8s_encryption_key_t:s0",
+   "name": "qualk8s_encryption_key_t"
+  },
+  {
+   "access": {
+    "READ": [
+     {
+      "domain": "qualk8s_apiserver_t"
+     }
+    ],
+    "RELABEL": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ],
+    "WRITE": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ]
+   },
+   "category": "CREDENTIAL",
+   "classes": [
+    "file"
+   ],
+   "label": "system_u:object_r:qualk8s_apiserver_cred_t:s0",
+   "name": "qualk8s_apiserver_cred_t"
+  },
+  {
+   "access": {
+    "READ": [
+     {
+      "domain": "qualk8s_controller_manager_t"
+     }
+    ],
+    "RELABEL": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ],
+    "WRITE": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ]
+   },
+   "category": "CREDENTIAL",
+   "classes": [
+    "file"
+   ],
+   "label": "system_u:object_r:qualk8s_controller_manager_cred_t:s0",
+   "name": "qualk8s_controller_manager_cred_t"
+  },
+  {
+   "access": {
+    "READ": [
+     {
+      "domain": "qualk8s_scheduler_t"
+     }
+    ],
+    "RELABEL": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ],
+    "WRITE": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ]
+   },
+   "category": "CREDENTIAL",
+   "classes": [
+    "file"
+   ],
+   "label": "system_u:object_r:qualk8s_scheduler_cred_t:s0",
+   "name": "qualk8s_scheduler_cred_t"
+  },
+  {
+   "access": {
+    "READ": [
+     {
+      "domain": "qualk8s_kubelet_t"
+     }
+    ],
+    "RELABEL": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ],
+    "WRITE": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ]
+   },
+   "category": "CREDENTIAL",
+   "classes": [
+    "file"
+   ],
+   "label": "system_u:object_r:qualk8s_kubelet_cred_t:s0",
+   "name": "qualk8s_kubelet_cred_t"
+  },
+  {
+   "access": {
+    "READ": [
+     {
+      "domain": "qualk8s_netpol_t"
+     }
+    ],
+    "RELABEL": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ],
+    "WRITE": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ]
+   },
+   "category": "CREDENTIAL",
+   "classes": [
+    "file"
+   ],
+   "label": "system_u:object_r:qualk8s_netpol_cred_t:s0",
+   "name": "qualk8s_netpol_cred_t"
+  },
+  {
+   "access": {
+    "READ": [
+     {
+      "domain": "qualk8s_proxy_t"
+     }
+    ],
+    "RELABEL": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ],
+    "WRITE": [
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ]
+   },
+   "category": "CREDENTIAL",
+   "classes": [
+    "file"
+   ],
+   "label": "system_u:object_r:qualk8s_proxy_cred_t:s0",
+   "name": "qualk8s_proxy_cred_t"
+  },
+  {
+   "access": {
+    "READ": [
+     {
+      "domain": "planeon_gate_t"
+     },
+     {
+      "domain": "planeon_broker_t"
+     }
+    ],
+    "WRITE": [
+     {
+      "domain": "planeon_gate_t"
+     },
+     {
+      "domain": "planeon_broker_t"
+     }
+    ]
+   },
+   "category": "SOCKET_FILE",
+   "classes": [
+    "sock_file"
+   ],
+   "label": "system_u:object_r:planeon_i05_sock_t:s0",
+   "name": "planeon_i05_sock_t"
+  },
+  {
+   "access": {
+    "READ": [
+     {
+      "domain": "planeon_gate_t"
+     },
+     {
+      "domain": "planeon_policy_writer_t"
+     }
+    ],
+    "WRITE": [
+     {
+      "domain": "planeon_gate_t"
+     },
+     {
+      "domain": "planeon_policy_writer_t"
+     }
+    ]
+   },
+   "category": "SOCKET_FILE",
+   "classes": [
+    "sock_file"
+   ],
+   "label": "system_u:object_r:planeon_i07_sock_t:s0",
+   "name": "planeon_i07_sock_t"
+  },
+  {
+   "access": {
+    "READ": [
+     {
+      "domain": "planeon_observer_t"
+     },
+     {
+      "domain": "planeon_server_t"
+     }
+    ],
+    "WRITE": [
+     {
+      "domain": "planeon_observer_t"
+     },
+     {
+      "domain": "planeon_server_t"
+     }
+    ]
+   },
+   "category": "SOCKET_FILE",
+   "classes": [
+    "sock_file"
+   ],
+   "label": "system_u:object_r:planeon_observer_sock_t:s0",
+   "name": "planeon_observer_sock_t"
+  },
+  {
+   "access": {
+    "READ": [
+     {
+      "domain": "planeon_broker_t"
+     },
+     {
+      "domain": "planeon_server_t"
+     }
+    ],
+    "WRITE": [
+     {
+      "domain": "planeon_broker_t"
+     },
+     {
+      "domain": "planeon_server_t"
+     }
+    ]
+   },
+   "category": "SOCKET_FILE",
+   "classes": [
+    "sock_file"
+   ],
+   "label": "system_u:object_r:planeon_broker_sock_t:s0",
+   "name": "planeon_broker_sock_t"
+  },
+  {
+   "access": {
+    "READ": [
+     {
+      "domain": "qualk8s_datastore_t"
+     },
+     {
+      "domain": "qualk8s_apiserver_t"
+     }
+    ],
+    "WRITE": [
+     {
+      "domain": "qualk8s_datastore_t"
+     },
+     {
+      "domain": "qualk8s_apiserver_t"
+     }
+    ]
+   },
+   "category": "SOCKET_FILE",
+   "classes": [
+    "sock_file"
+   ],
+   "label": "system_u:object_r:qualk8s_datastore_sock_t:s0",
+   "name": "qualk8s_datastore_sock_t"
+  },
+  {
+   "access": {
+    "READ": [
+     {
+      "domain": "qualk8s_runtime_t"
+     },
+     {
+      "domain": "qualk8s_kubelet_t"
+     }
+    ],
+    "WRITE": [
+     {
+      "domain": "qualk8s_runtime_t"
+     },
+     {
+      "domain": "qualk8s_kubelet_t"
+     }
+    ]
+   },
+   "category": "SOCKET_FILE",
+   "classes": [
+    "sock_file"
+   ],
+   "label": "system_u:object_r:qualk8s_runtime_sock_t:s0",
+   "name": "qualk8s_runtime_sock_t"
+  },
+  {
+   "access": {
+    "READ": [
+     {
+      "domain": "planeon_server_t"
+     },
+     {
+      "domain": "planeon_observer_t"
+     },
+     {
+      "domain": "planeon_broker_t"
+     },
+     {
+      "domain": "planeon_gate_t"
+     },
+     {
+      "domain": "planeon_policy_writer_t"
+     },
+     {
+      "domain": "planeon_contain_t"
+     },
+     {
+      "domain": "init_t"
+     }
+    ],
+    "WRITE": [
+     {
+      "domain": "planeon_observer_t"
+     },
+     {
+      "domain": "planeon_broker_t"
+     },
+     {
+      "domain": "planeon_gate_t"
+     },
+     {
+      "domain": "planeon_contain_t"
+     },
+     {
+      "domain": "init_t"
+     }
+    ]
+   },
+   "category": "RUNTIME_DIR",
+   "classes": [
+    "dir"
+   ],
+   "label": "system_u:object_r:planeon_run_t:s0",
+   "name": "planeon_run_t"
+  },
+  {
+   "access": {
+    "READ": [
+     {
+      "domain": "init_t"
+     },
+     {
+      "domain": "planeon_contain_t"
+     },
+     {
+      "domain": "planeon_server_t"
+     },
+     {
+      "domain": "planeon_observer_t"
+     },
+     {
+      "domain": "planeon_broker_t"
+     }
+    ],
+    "WRITE": [
+     {
+      "domain": "init_t"
+     },
+     {
+      "domain": "planeon_contain_t",
+      "when": {
+       "planeon_containment_enabled": 1,
+       "secure_mode_policyload": 0
+      }
+     }
+    ]
+   },
+   "category": "CGROUP",
+   "classes": [
+    "dir",
+    "file"
+   ],
+   "label": "system_u:object_r:planeon_cgroup_slice_t:s0",
+   "name": "planeon_cgroup_slice_t"
+  },
+  {
+   "access": {
+    "READ": [
+     {
+      "domain": "init_t"
+     },
+     {
+      "domain": "planeon_contain_t"
+     },
+     {
+      "domain": "planeon_server_t"
+     },
+     {
+      "domain": "planeon_observer_t"
+     },
+     {
+      "domain": "planeon_broker_t"
+     }
+    ],
+    "WRITE": [
+     {
+      "domain": "init_t"
+     },
+     {
+      "domain": "planeon_contain_t",
+      "when": {
+       "planeon_containment_enabled": 1,
+       "secure_mode_policyload": 0
+      }
+     }
+    ]
+   },
+   "category": "CGROUP",
+   "classes": [
+    "dir",
+    "file"
+   ],
+   "label": "system_u:object_r:planeon_cgroup_contain_t:s0",
+   "name": "planeon_cgroup_contain_t"
+  },
+  {
+   "access": {
+    "READ": [
+     {
+      "domain": "init_t"
+     },
+     {
+      "domain": "planeon_contain_t"
+     },
+     {
+      "domain": "planeon_server_t"
+     },
+     {
+      "domain": "planeon_observer_t"
+     },
+     {
+      "domain": "planeon_broker_t"
+     }
+    ],
+    "WRITE": [
+     {
+      "domain": "init_t"
+     },
+     {
+      "domain": "planeon_contain_t",
+      "when": {
+       "planeon_containment_enabled": 1,
+       "secure_mode_policyload": 0
+      }
+     }
+    ]
+   },
+   "category": "CGROUP",
+   "classes": [
+    "dir",
+    "file"
+   ],
+   "label": "system_u:object_r:planeon_cgroup_server_t:s0",
+   "name": "planeon_cgroup_server_t"
+  },
+  {
+   "access": {
+    "READ": [
+     {
+      "domain": "init_t"
+     },
+     {
+      "domain": "planeon_contain_t"
+     },
+     {
+      "domain": "planeon_server_t"
+     },
+     {
+      "domain": "planeon_observer_t"
+     },
+     {
+      "domain": "planeon_broker_t"
+     }
+    ],
+    "WRITE": [
+     {
+      "domain": "init_t"
+     },
+     {
+      "domain": "planeon_contain_t",
+      "when": {
+       "planeon_containment_enabled": 1,
+       "secure_mode_policyload": 0
+      }
+     }
+    ]
+   },
+   "category": "CGROUP",
+   "classes": [
+    "dir",
+    "file"
+   ],
+   "label": "system_u:object_r:planeon_cgroup_observer_t:s0",
+   "name": "planeon_cgroup_observer_t"
+  },
+  {
+   "access": {
+    "READ": [
+     {
+      "domain": "init_t"
+     },
+     {
+      "domain": "planeon_contain_t"
+     },
+     {
+      "domain": "planeon_server_t"
+     },
+     {
+      "domain": "planeon_observer_t"
+     },
+     {
+      "domain": "planeon_broker_t"
+     }
+    ],
+    "WRITE": [
+     {
+      "domain": "init_t"
+     },
+     {
+      "domain": "planeon_contain_t",
+      "when": {
+       "planeon_containment_enabled": 1,
+       "secure_mode_policyload": 0
+      }
+     }
+    ]
+   },
+   "category": "CGROUP",
+   "classes": [
+    "dir",
+    "file"
+   ],
+   "label": "system_u:object_r:planeon_cgroup_gate_t:s0",
+   "name": "planeon_cgroup_gate_t"
+  },
+  {
+   "access": {
+    "READ": [
+     {
+      "domain": "init_t"
+     },
+     {
+      "domain": "planeon_contain_t"
+     },
+     {
+      "domain": "planeon_server_t"
+     },
+     {
+      "domain": "planeon_observer_t"
+     },
+     {
+      "domain": "planeon_broker_t"
+     }
+    ],
+    "WRITE": [
+     {
+      "domain": "init_t"
+     },
+     {
+      "domain": "planeon_broker_t"
+     },
+     {
+      "domain": "planeon_contain_t",
+      "when": {
+       "planeon_containment_enabled": 1,
+       "secure_mode_policyload": 0
+      }
+     }
+    ]
+   },
+   "category": "CGROUP",
+   "classes": [
+    "dir",
+    "file"
+   ],
+   "label": "system_u:object_r:planeon_cgroup_delegate_t:s0",
+   "name": "planeon_cgroup_delegate_t"
+  },
+  {
+   "access": {
+    "READ": [
+     {
+      "domain": "init_t"
+     },
+     {
+      "domain": "planeon_contain_t"
+     },
+     {
+      "domain": "planeon_server_t"
+     },
+     {
+      "domain": "planeon_observer_t"
+     },
+     {
+      "domain": "planeon_broker_t"
+     }
+    ],
+    "WRITE": [
+     {
+      "domain": "init_t"
+     },
+     {
+      "domain": "planeon_broker_t"
+     },
+     {
+      "domain": "planeon_contain_t",
+      "when": {
+       "planeon_containment_enabled": 1,
+       "secure_mode_policyload": 0
+      }
+     }
+    ]
+   },
+   "category": "CGROUP",
+   "classes": [
+    "dir",
+    "file"
+   ],
+   "label": "system_u:object_r:planeon_cgroup_broker_t:s0",
+   "name": "planeon_cgroup_broker_t"
+  },
+  {
+   "access": {
+    "READ": [
+     {
+      "domain": "init_t"
+     },
+     {
+      "domain": "planeon_contain_t"
+     },
+     {
+      "domain": "planeon_server_t"
+     },
+     {
+      "domain": "planeon_observer_t"
+     },
+     {
+      "domain": "planeon_broker_t"
+     }
+    ],
+    "WRITE": [
+     {
+      "domain": "init_t"
+     },
+     {
+      "domain": "planeon_broker_t"
+     },
+     {
+      "domain": "planeon_contain_t",
+      "when": {
+       "planeon_containment_enabled": 1,
+       "secure_mode_policyload": 0
+      }
+     }
+    ]
+   },
+   "category": "CGROUP",
+   "classes": [
+    "dir",
+    "file"
+   ],
+   "label": "system_u:object_r:planeon_cgroup_worker_t:s0",
+   "name": "planeon_cgroup_worker_t"
+  },
+  {
+   "access": {
+    "READ": [
+     {
+      "domain": "planeon_contain_t"
+     },
+     {
+      "domain": "planeon_server_t"
+     },
+     {
+      "domain": "planeon_observer_t"
+     },
+     {
+      "domain": "planeon_broker_t"
+     }
+    ],
+    "WRITE": [
+     {
+      "domain": "planeon_contain_t",
+      "when": {
+       "planeon_containment_enabled": 1,
+       "secure_mode_policyload": 0
+      }
+     }
+    ]
+   },
+   "category": "BPF_PIN",
+   "classes": [
+    "dir",
+    "file"
+   ],
+   "label": "system_u:object_r:planeon_bpf_pin_t:s0",
+   "name": "planeon_bpf_pin_t"
+  },
+  {
+   "access": {
+    "READ": [
+     {
+      "domain": "planeon_contain_t"
+     },
+     {
+      "domain": "planeon_server_t"
+     },
+     {
+      "domain": "planeon_observer_t"
+     },
+     {
+      "domain": "planeon_broker_t"
+     }
+    ],
+    "WRITE": [
+     {
+      "domain": "planeon_contain_t",
+      "when": {
+       "planeon_maintenance_mode": 0
+      }
+     }
+    ]
+   },
+   "category": "SEAL_MARKER",
+   "classes": [
+    "file"
+   ],
+   "label": "system_u:object_r:planeon_seal_t:s0",
+   "name": "planeon_seal_t"
+  },
+  {
+   "access": {
+    "READ": [
+     {
+      "domain": "ANY_DOMAIN"
+     }
+    ],
+    "WRITE": [
+     {
+      "domain": "init_t",
+      "when": {
+       "planeon_containment_enabled": 1,
+       "secure_mode_policyload": 0
+      }
+     }
+    ]
+   },
+   "category": "BOOLEAN_FILE",
+   "classes": [
+    "file"
+   ],
+   "label": "system_u:object_r:planeon_bool_maintenance_t:s0",
+   "name": "planeon_bool_maintenance_t"
+  },
+  {
+   "access": {
+    "READ": [
+     {
+      "domain": "ANY_DOMAIN"
+     }
+    ],
+    "WRITE": [
+     {
+      "domain": "init_t",
+      "when": {
+       "planeon_containment_enabled": 1,
+       "secure_mode_policyload": 0
+      }
+     },
+     {
+      "domain": "planeon_contain_t",
+      "when": {
+       "planeon_containment_enabled": 1,
+       "secure_mode_policyload": 0
+      }
+     }
+    ]
+   },
+   "category": "BOOLEAN_FILE",
+   "classes": [
+    "file"
+   ],
+   "label": "system_u:object_r:planeon_bool_containment_t:s0",
+   "name": "planeon_bool_containment_t"
+  },
+  {
+   "access": {
+    "READ": [
+     {
+      "domain": "ANY_DOMAIN"
+     }
+    ],
+    "WRITE": [
+     {
+      "domain": "planeon_contain_t",
+      "when": {
+       "planeon_containment_enabled": 1,
+       "secure_mode_policyload": 0
+      }
+     }
+    ]
+   },
+   "category": "BOOLEAN_FILE",
+   "classes": [
+    "file"
+   ],
+   "label": "system_u:object_r:planeon_bool_policyload_t:s0",
+   "name": "planeon_bool_policyload_t"
+  },
+  {
+   "access": {
+    "READ": [
+     {
+      "domain": "planeon_gate_t"
+     },
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ],
+    "WRITE": [
+     {
+      "domain": "planeon_gate_t"
+     }
+    ]
+   },
+   "category": "JOURNAL",
+   "classes": [
+    "dir",
+    "file"
+   ],
+   "label": "system_u:object_r:planeon_gate_journal_t:s0",
+   "name": "planeon_gate_journal_t"
+  },
+  {
+   "access": {
+    "READ": [
+     {
+      "domain": "qualk8s_datastore_t"
+     },
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ],
+    "WRITE": [
+     {
+      "domain": "qualk8s_datastore_t"
+     },
+     {
+      "domain": "planeon_maint_t",
+      "when": {
+       "planeon_maintenance_mode": 1
+      }
+     }
+    ]
+   },
+   "category": "DATA",
+   "classes": [
+    "dir",
+    "file"
+   ],
+   "label": "system_u:object_r:qualk8s_datastore_data_t:s0",
+   "name": "qualk8s_datastore_data_t"
+  },
+  {
+   "access": {
+    "ENTRYPOINT": [
+     {
+      "domain": "qualk8s_container_t"
+     }
+    ],
+    "EXECUTE": [
+     {
+      "domain": "qualk8s_runtime_t"
+     },
+     {
+      "domain": "qualk8s_container_t"
+     }
+    ],
+    "READ": [
+     {
+      "domain": "qualk8s_runtime_t"
+     },
+     {
+      "domain": "qualk8s_container_t"
+     }
+    ],
+    "WRITE": [
+     {
+      "domain": "qualk8s_runtime_t"
+     }
+    ]
+   },
+   "category": "CONTAINER_FILE",
+   "classes": [
+    "dir",
+    "file"
+   ],
+   "label": "system_u:object_r:qualk8s_container_file_t:s0",
+   "name": "qualk8s_container_file_t"
+  }
+ ]
+}

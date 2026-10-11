@@ -1,0 +1,198 @@
+"""CONF-ENF-001 (W04-1): the enforcement test area's snapshots, independence attestations and toolchain record.
+
+Standard library unittest only (owner decision Q-T1, 2026-10-11). Nothing here reads or runs an implementation.
+"""
+from __future__ import annotations
+
+import ast
+import hashlib
+import json
+import os
+import re
+import stat
+import sys
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+AREA = ROOT / "tests/enforcement"
+SNAPSHOTS = AREA / "snapshots"
+MANIFEST = SNAPSHOTS / "manifest.json"
+PLAN_PATH = "architecture/enforcement-test-plan/traceability.json"
+MANIFEST_FIELDS = {"schemaVersion", "sourceRepository", "sourceCommit", "root", "rule", "files"}
+FILE_FIELDS = {"contract", "path", "sha256", "size"}
+# Recorded gaps (tests/enforcement/toolchains.json): the only non-stdlib import, and the one sibling model not snapshotted.
+EXTERNAL_IMPORTS = {"scripts/i05_gate_channel_v3.py": {"jsonschema"}, "scripts/native_qualification_v3.py": {"jsonschema"}}
+MISSING_SIBLINGS = {"scripts/i06_backend_profile_v2.py": ("i06_backend_profile",)}
+ALLOWED_TOP = set(sys.stdlib_module_names) | {"__future__"}
+
+
+def strict(raw):
+    def pairs(items):
+        value = {}
+        for key, item in items:
+            if key in value:
+                raise ValueError("duplicate key " + key)
+            value[key] = item
+        return value
+    return json.loads(raw, object_pairs_hook=pairs)
+
+
+def regular(path):
+    info = os.lstat(path)
+    if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+        raise ValueError("regular unlinked file required: %s" % path)
+    return Path(path).read_bytes()
+
+
+def manifest():
+    return strict(regular(MANIFEST))
+
+
+def plan():
+    return strict(regular(SNAPSHOTS / "harness-onion" / PLAN_PATH))
+
+
+def imported_tops(raw):
+    """Top-level module names an AST imports; relative imports are reported as '.'."""
+    tops = set()
+    for node in ast.walk(ast.parse(raw)):
+        if isinstance(node, ast.Import):
+            tops |= {alias.name.split(".")[0] for alias in node.names}
+        elif isinstance(node, ast.ImportFrom):
+            tops.add("." if node.level else node.module.split(".")[0])
+        elif isinstance(node, ast.Call) and getattr(node.func, "attr", getattr(node.func, "id", None)) in ("import_module", "__import__"):
+            tops.add("<dynamic>")
+    return tops
+
+
+def walk_files(top, skip=()):
+    found = []
+    for current, directories, files in os.walk(top, followlinks=False):
+        directories[:] = sorted(d for d in directories if d != "__pycache__" and Path(current, d) not in skip)
+        for name in directories + files:
+            if stat.S_ISLNK(os.lstat(Path(current, name)).st_mode):
+                raise ValueError("link in the enforcement area: %s" % Path(current, name))
+        found += [Path(current, name) for name in files if not name.endswith(".pyc")]
+    return sorted(found)
+
+
+class SnapshotTests(unittest.TestCase):
+    def test_manifest_is_closed_and_pins_every_snapshot_byte_exactly(self):
+        value = manifest()
+        self.assertEqual(set(value), MANIFEST_FIELDS)
+        self.assertEqual(value["schemaVersion"], "r12.enforcement-snapshot-manifest/v1")
+        self.assertEqual(value["sourceRepository"], "harness-onion")
+        self.assertRegex(value["sourceCommit"], "^[0-9a-f]{40}$")
+        self.assertEqual(value["root"], "tests/enforcement/snapshots/harness-onion")
+        paths = [row["path"] for row in value["files"]]
+        self.assertEqual(len(paths), len(set(paths)))
+        for row in value["files"]:
+            with self.subTest(path=row["path"]):
+                self.assertEqual(set(row), FILE_FIELDS)
+                self.assertFalse(row["path"].startswith("/") or ".." in row["path"].split("/") or "\\" in row["path"])
+                raw = regular(ROOT / value["root"] / row["path"])
+                self.assertEqual((len(raw), hashlib.sha256(raw).hexdigest()), (row["size"], row["sha256"]))
+
+    def test_snapshot_tree_holds_exactly_the_manifest_files(self):
+        value = manifest()
+        top = ROOT / value["root"]
+        found = {path.relative_to(top).as_posix() for path in walk_files(top)}
+        self.assertEqual(found, {row["path"] for row in value["files"]})
+        self.assertEqual({path.name for path in SNAPSHOTS.iterdir()}, {"manifest.json", "harness-onion"})
+
+    def test_manifest_is_exactly_the_plans_contract_set(self):
+        source = plan()
+        self.assertEqual(source["schemaVersion"], "planeon.internal.enforcement-test-plan/v1")
+        self.assertEqual(source["planLabel"], "W04-0")
+        expected = [{"contract": "W04-0 enforcement test plan", "path": PLAN_PATH}]
+        expected += [{"contract": contract["name"], "path": row["path"], "sha256": row["sha256"]}
+                     for contract in source["contracts"] for row in contract["files"]]
+        observed = [{key: row[key] for key in ("contract", "path", "sha256") if key in expected[index]}
+                    for index, row in enumerate(manifest()["files"])]
+        self.assertEqual(observed, expected)
+        self.assertEqual(len(expected), 37)
+
+    def test_reference_model_imports_are_exactly_the_recorded_gaps(self):
+        value = manifest()
+        models = {row["path"]: row for row in value["files"] if row["path"].endswith(".py")}
+        self.assertEqual(len(models), 8)
+        siblings = {Path(path).stem for path in models}
+        external, missing = {}, {}
+        for path in models:
+            tops = imported_tops(regular(ROOT / value["root"] / path)) - ALLOWED_TOP - {"scripts"}
+            outside = tops - {Path(path).stem for path in models} - set(MISSING_SIBLINGS.get(path, ()))
+            if outside:
+                external[path] = outside
+            absent = (tops - siblings) & set(MISSING_SIBLINGS.get(path, ()))
+            if absent:
+                missing[path] = absent
+        self.assertEqual(external, EXTERNAL_IMPORTS)
+        self.assertEqual(missing, {path: set(names) for path, names in MISSING_SIBLINGS.items()})
+        gaps = {row["id"]: row["snapshots"] for row in strict(regular(AREA / "toolchains.json"))["gaps"]}
+        self.assertEqual(gaps, {"G-JSONSCHEMA": sorted(EXTERNAL_IMPORTS), "G-I06-V1": sorted(MISSING_SIBLINGS)})
+
+
+class IndependenceTests(unittest.TestCase):
+    def test_every_attestation_is_closed_with_the_plans_fields(self):
+        fields = plan()["independence"]["attestationFields"]
+        files = sorted((AREA / "attestations").iterdir())
+        self.assertIn(AREA / "attestations/conf-enf-001.json", files)
+        for path in files:
+            with self.subTest(path=path.name):
+                value = strict(regular(path))
+                self.assertEqual(set(value), set(fields) | {"schemaVersion"})
+                self.assertEqual(value["schemaVersion"], "r12.enforcement-independence-attestation/v1")
+                self.assertEqual(path.name, value["packet"].lower() + ".json")
+                self.assertIs(value["r10SourceRead"], False)
+                self.assertIs(value["w03WorkInProgressRead"], False)
+                self.assertIs(value["implementationReadOrRunForExpectedResults"], False)
+                self.assertTrue(value["inputs"] and value["lane"] and value["reviewer"])
+                for relative, sha in value["inputDigests"].items():
+                    self.assertEqual(hashlib.sha256(regular(ROOT / relative)).hexdigest(), sha)
+
+    def test_the_reader_never_imports_the_enforcement_area(self):
+        for path in walk_files(ROOT / "src"):
+            if path.suffix != ".py":
+                continue
+            with self.subTest(path=path.relative_to(ROOT).as_posix()):
+                raw = regular(path)
+                self.assertLessEqual(imported_tops(raw) - {"harness_conformance", "."}, ALLOWED_TOP)
+                self.assertNotIn(b"enforcement/", raw)
+                self.assertIsNone(re.search(rb"tests\.enforcement|\benforcement_tests\b", raw))
+
+    def test_the_area_code_is_stdlib_only(self):
+        for path in walk_files(AREA, skip=(SNAPSHOTS,)):
+            if path.suffix != ".py":
+                continue
+            with self.subTest(path=path.relative_to(ROOT).as_posix()):
+                self.assertLessEqual(imported_tops(regular(path)) - {"."}, ALLOWED_TOP)
+
+
+class ToolchainTests(unittest.TestCase):
+    def test_the_toolchain_record_holds_the_owner_amendments(self):
+        value = strict(regular(AREA / "toolchains.json"))
+        self.assertEqual(set(value), {"schemaVersion", "packet", "planDecision", "amendments", "toolchains", "gaps"})
+        tool = next(row for row in plan()["ownerDecisions"] if row["id"] == "D-TOOL")
+        self.assertEqual(value["planDecision"], {key: tool[key] for key in ("id", "date", "decision")})
+        self.assertEqual([(row["id"], row["date"]) for row in value["amendments"]], [("Q-T1", "2026-10-11"), ("Q-T2", "2026-10-11")])
+        states = {row["id"]: row["state"] for row in value["toolchains"]}
+        self.assertEqual(states, {"python-stdlib-unittest": "IN_USE", "rust-musl-static-probes": "DEFERRED"})
+        self.assertIs(value["toolchains"][1]["installed"], False)
+        self.assertEqual(value["toolchains"][0]["dependencies"], [])
+
+    def test_the_area_runs_as_one_offline_command(self):
+        runner = strict(regular(AREA / "toolchains.json"))["toolchains"][0]["runner"]
+        packet = regular(ROOT / "task-packets/CONF-ENF-001.yaml").decode()
+        line = next(line for line in packet.splitlines() if line.startswith("offlineAcceptanceCommands: "))
+        commands = strict(line.split(": ", 1)[1])
+        self.assertEqual(commands[-1], runner)
+        self.assertEqual(len(commands), 13)
+
+    def test_no_dependency_is_added(self):
+        self.assertIn("dependencies = []", regular(ROOT / "pyproject.toml").decode())
+        self.assertEqual(strict(regular(ROOT / "toolchain.lock"))["dependencies"], [])
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -1,0 +1,131 @@
+{
+ "schemaVersion": "planeon.internal.seccomp-allowlists-status/v2",
+ "contract": "planeon.internal.seccomp-allowlists/v2",
+ "kernel": {
+  "tag": "v6.12",
+  "commit": "adc218676eef25575469234709c2d87185ca223a"
+ },
+ "supersedes": {
+  "directory": "architecture/seccomp-allowlists/",
+  "contract": "planeon.internal.seccomp-allowlists/v1",
+  "status": "architecture/seccomp-allowlists/status.json"
+ },
+ "ownerDecisions": [
+  {
+   "date": "2026-10-09",
+   "decision": "W02d defines the WORKER allowlist from the worker's duties; the W01 section 5.3 WORKER row text 'Existing worker allowlist' is amended to 'the W02d worker allowlist' (carried to W01's record)",
+   "id": "W02d-Q1"
+  },
+  {
+   "date": "2026-10-09",
+   "decision": "exact duty syscalls per role from its row plus one closed runtime base per role (CPython 3.12 for SERVER and WORKER, one native static base for the five native roles); W03's language and libc must fit inside it or W02d reopens",
+   "id": "W02d-Q2"
+  },
+  {
+   "date": "2026-10-09",
+   "decision": "seccompFilterDigest is the SHA-256 of the classic-BPF sock_filter array (little-endian) the reference compiler emits per role and architecture; the boot-time proof that the installed filter equals it is an open T04/W02a-F obligation",
+   "id": "W02d-Q3"
+  },
+  {
+   "date": "2026-10-10",
+   "decision": "the broker kills the worker through cgroup.kill only (it has no CAP_KILL); W6 becomes freeze, cgroup.kill, wait for populated 0, and the unused pidfd_send_signal grant is dropped",
+   "id": "W01-AMEND-QW1"
+  },
+  {
+   "date": "2026-10-10",
+   "decision": "the broker runs with no supplementary groups and W3 checks the child holds none; no role may grant setgroups",
+   "id": "W01-AMEND-QW2"
+  },
+  {
+   "date": "2026-10-10",
+   "decision": "M-a: memfd_create flags are MFD_CLOEXEC | MFD_NOEXEC_SEAL, so the kernel clears exec and sets F_SEAL_EXEC on every call with no reliance on host state (not a vm.memfd_noexec pin, which a CAP_SYS_ADMIN holder in the initial namespaces can lower)",
+   "id": "W01-AMEND-QW3"
+  },
+  {
+   "date": "2026-10-10",
+   "decision": "the native roles are Rust with musl, fully static (analysed reference: musl 1.2.5, Rust 1.90.0; W03 pins these or re-checks against W02d); NATIVE_STATIC adds poll, which Rust std calls on fds 0-2 at start-up and musl issues as SYS_poll on x86_64 (aarch64 has no poll syscall); musl creates threads with clone, never clone3, so the clone3 ENOSYS rule serves the CPython roles' glibc",
+   "id": "W01-AMEND-QW4"
+  }
+ ],
+ "reviewRounds": [
+  {
+   "round": 1,
+   "record": "architecture/host-interface-amendment-w02d/review-round1.json",
+   "recordSha256": "5f32cb233e2ff865c60a716e918974c8f12bc522dd50e068650080279036f967",
+   "verdict": "CHANGES_REQUIRED",
+   "subjectDirectory": "architecture/host-interface-amendment-w02d/round1/"
+  },
+  {
+   "round": 2,
+   "record": "architecture/host-interface-amendment-w02d/review-round2.json",
+   "recordSha256": "322fd998ca4c359e072ec8ccfc67d332945f8325d4eb68161b1ca34df2508d86",
+   "verdict": "CHANGES_REQUIRED",
+   "subjectDirectory": "architecture/host-interface-amendment-w02d/round2/"
+  },
+  {
+   "round": 3,
+   "record": "architecture/host-interface-amendment-w02d/review-round3.json",
+   "recordSha256": "d8aeecb0e82f4c10ca02debf9ac592e51d9289809cc0f56a84570cc70ce2ff51",
+   "verdict": "PASS_FOR_SOURCE_PUBLICATION",
+   "subjectDirectory": "architecture/host-interface-amendment-w02d/round3/"
+  },
+  {
+   "round": 4,
+   "record": "architecture/host-interface-amendment-w02d/review-round4.json",
+   "recordSha256": "a672b082bfca8ac6017affdaa6052804e1782bde927d6bb0d2b82633dab06618",
+   "verdict": "PASS_FOR_SOURCE_PUBLICATION",
+   "subjectDirectory": "CURRENT"
+  }
+ ],
+ "carriedFindings": {
+  "F10": "W03: planeon units must not use systemd options that install seccomp filters",
+  "F18": "next revision (NOTE): README CPYTHON_3_12 table row split across two lines",
+  "F19": "next revision (NOTE): module docstring omits ERRNO and decide_stack, action_name, require_covers",
+  "R4-1": "W03 (NOTE): further Rust/musl paths NATIVE_STATIC does not grant, stated from upstream knowledge and to be settled by W03's start-up and steady-state trace (W02d-Q2): named threads call prctl(PR_SET_NAME); musl's setresuid and setresgid wrappers signal other threads with tkill when threaded (the broker's W4 child should use raw syscalls); available_parallelism opens cgroup and /proc files; a closed fd 0-2 makes Rust std open /dev/null; abort() uses tkill"
+ },
+ "closedByThisSuccessor": {
+  "F9": "CLOSED: memfd_create flags are MFD_CLOEXEC | MFD_NOEXEC_SEAL (W01-AMEND-QW3)",
+  "W6 pidfd kill": "CLOSED: the broker's pidfd_send_signal grant is dropped (W01-AMEND-QW1)"
+ },
+ "carriedToW01": [],
+ "carriedToW01Answered": "architecture/host-interface-amendment-w02d/status.json",
+ "carriedToW03": [
+  "runtime bases are closed requirements; trace the selected build at start-up and steady state on both arches",
+  "glibc 2.34+ without CET/shadow-stack arch_prctl at start-up",
+  "no systemd seccomp options (F10)",
+  "install exactly the compiled programs",
+  "the broker runs with no supplementary groups",
+  "pin musl 1.2.5 and Rust 1.90.0 for the native roles, or re-check the NATIVE_STATIC base and the clone3 rule against W02d for the pinned versions (W01-AMEND-QW4)",
+  "the SERVER role's sealed-credential code passes MFD_CLOEXEC | MFD_NOEXEC_SEAL (O-SERVER-MEMFD)",
+  "no transition or nnp_transition out of planeon_worker_t (O-W03-WORKER-EXEC)",
+  "trace the Rust/musl native roles against NATIVE_STATIC, including review note R4-1's paths (thread names, tkill in setresuid/setresgid and abort, available_parallelism, stdio open at start)"
+ ],
+ "openObligations": [
+  "T04/W02a-F: boot-time proof that the installed filter equals the published v2 digest (W02d-Q3)"
+ ],
+ "contractState": "ADOPTED_DATA_CONTRACT",
+ "obligations": {
+  "E01": "OPEN_UNPROVEN",
+  "E02": "OPEN_UNPROVEN",
+  "E03": "OPEN_UNPROVEN",
+  "E04": "OPEN_UNPROVEN",
+  "E05": "OPEN_UNPROVEN",
+  "E06": "OPEN_UNPROVEN",
+  "E07": "OPEN_UNPROVEN",
+  "E08": "OPEN_UNPROVEN",
+  "E09": "OPEN_UNPROVEN",
+  "E10": "OPEN_UNPROVEN",
+  "E11": "OPEN_UNPROVEN",
+  "E12": "OPEN_UNPROVEN"
+ },
+ "independentReviewer": "SEPARATE_AGENT_NOT_AUTHOR",
+ "nativeAcceptance": false,
+ "tenantAcceptance": false,
+ "filtersInstalled": false,
+ "roleCodeExists": false,
+ "traceValidated": false,
+ "distributionSelected": false,
+ "productExecution": false,
+ "runnerActivated": false,
+ "phaseComplete": false
+}

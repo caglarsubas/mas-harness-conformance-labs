@@ -1,0 +1,70 @@
+{
+ "schemaVersion": "r12.enforcement-toolchains/v1",
+ "packet": "CONF-ENF-001",
+ "planDecision": {
+  "id": "D-TOOL",
+  "date": "2026-10-10",
+  "decision": "Python 3.12 + pytest for the source and offline groups; static Rust+musl probe binaries for the native TG-04/TG-05 probes"
+ },
+ "amendments": [
+  {
+   "id": "Q-T1",
+   "selected": "a",
+   "date": "2026-10-11",
+   "decision": "amend D-TOOL to stdlib unittest for the source and offline groups. No pytest, no root change, R12 stays at dependencies = []."
+  },
+  {
+   "id": "Q-T2",
+   "selected": "defer",
+   "date": "2026-10-11",
+   "decision": "defer. W04-1 records the Rust+musl need for the TG-04/TG-05 probes and installs nothing. Decide it in the first W04 packet that needs native probe source (W04-4/5)."
+  }
+ ],
+ "toolchains": [
+  {
+   "id": "python-stdlib-unittest",
+   "groups": "source and offline groups",
+   "state": "IN_USE",
+   "runner": [
+    "python3",
+    "-m",
+    "unittest",
+    "discover",
+    "-s",
+    "tests/enforcement",
+    "-p",
+    "test_*.py"
+   ],
+   "profile": "python-conformance-stdlib (Python 3.12, standard library only)",
+   "dependencies": []
+  },
+  {
+   "id": "rust-musl-static-probes",
+   "groups": "native TG-04/TG-05 probes",
+   "state": "DEFERRED",
+   "decideIn": "the first W04 packet that needs native probe source (W04-4/5)",
+   "installed": false
+  }
+ ],
+ "gaps": [
+  {
+   "id": "G-JSONSCHEMA",
+   "snapshots": [
+    "scripts/i05_gate_channel_v3.py",
+    "scripts/native_qualification_v3.py"
+   ],
+   "finding": "jsonschema is outside the standard library: native_qualification_v3.py imports it at module load, and i05_gate_channel_v3.py imports it inside check_frame (the F00 closed-schema frame check). Through their sibling imports, i06_backend_profile_v2.py (loads native_qualification_v3) and i07_policy_write_v3.py (loads i05_gate_channel_v3) depend on it too. Under Q-T1 these reference-model paths cannot run in R12 as it stands.",
+   "decideIn": "before W04-2 (TG-01 MATRIX and CONTRACT-DATA replay I05, I07 and I06 v2 through these models)",
+   "affectsW04_2": true
+  },
+  {
+   "id": "G-I06-V1",
+   "snapshots": [
+    "scripts/i06_backend_profile_v2.py"
+   ],
+   "finding": "i06_backend_profile_v2.py imports scripts/i06_backend_profile.py (I06 v1), which the plan's contract set does not name, so it is not snapshotted; the I06 v2 reference model cannot load from the snapshots alone.",
+   "decideIn": "before W04-2 (TG-01 CONTRACT-DATA replays I06 v2)",
+   "affectsW04_2": true
+  }
+ ]
+}

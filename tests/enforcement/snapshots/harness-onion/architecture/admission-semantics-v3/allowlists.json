@@ -1,0 +1,1515 @@
+{
+ "schemaVersion": "planeon.internal.admission-allowlists/v2",
+ "semantics": "POLICY-ADMISSION-SEMANTICS/v3",
+ "constraintCoverage": {
+  "MC00": "SIGNER_GUARANTEED (A1 bytes; the per-kind policies match only their kind, so A2 never sees another kind)",
+  "MC01": "SIGNER_GUARANTEED (A1 bytes)",
+  "MC02": "SIGNER_GUARANTEED (A1 bytes; A2 is scoped by its namespaceSelector and C26, and a namespace defaulted from the URL is invisible to it)",
+  "MC03": "SIGNER_GUARANTEED (A1 bytes; some fields are wiped by the server)",
+  "MC04": "RECHECKED_BY_A2 A2-RESERVED",
+  "MC05": "SIGNER_GUARANTEED (status reset by the server)",
+  "MC10": "RECHECKED_BY_A2 A2-CM-IMMUTABLE",
+  "MC11": "RECHECKED_BY_A2 A2-CM-PUBLISHER",
+  "MC20": "RECHECKED_BY_A2 A2-SVC-TYPE",
+  "MC21": "RECHECKED_BY_A2 A2-SVC-TYPE and A2-SVC-ALLOCATION",
+  "MC22": "RECHECKED_BY_A2 A2-SVC-DEFAULTS",
+  "MC30": "RECHECKED_BY_A2 A2-POD-PULL-SECRETS, A2-POD-TOLERATIONS, A2-POD-PRIORITY and A2-POD-PLACEMENT (host namespaces, ephemeral containers, scheduling gates and resource claims: SIGNER_GUARANTEED)",
+  "MC31": "RECHECKED_BY_A2 A2-POD-TOKEN",
+  "MC32": "SIGNER_GUARANTEED (A1 bytes)",
+  "MC33": "RECHECKED_BY_A2 A2-POD-PULL-POLICY for the policy; SIGNER_GUARANTEED for the digest pin",
+  "MC34": "SIGNER_GUARANTEED (A2 has no resources check; LimitRanger's action is caught by its annotation, A2-RESERVED)",
+  "MC35": "SIGNER_GUARANTEED",
+  "MC36": "SIGNER_GUARANTEED (a token volume added by the server fails A2-POD-ECHO)",
+  "MC37": "RECHECKED_BY_A2 A2-POD-ECHO",
+  "MC38": "RECHECKED_BY_A2 A2-POD-IMAGE-VOLUME",
+  "MC39": "SIGNER_GUARANTEED (A2 has no pod-level resources check)",
+  "MC40": "SIGNER_GUARANTEED (A2 has no affinity or topology spread check)",
+  "MC41": "SIGNER_GUARANTEED (A2 checks volume names through A2-POD-ECHO and image volumes, not the volume source)",
+  "DISABLED_GATE_FIELDS": "SIGNER_GUARANTEED, not by check_manifest: the claim evidence disabledGateFieldsAbsentAtSigning (C27) says the signer refused fields of feature gates the W02g profile pins off (SC15); the apiserver drops them before A2"
+ },
+ "publisherIdentity": "system:serviceaccount:kube-system:root-ca-cert-publisher",
+ "kubernetes": {
+  "tag": "v1.37.1",
+  "commit": "f78e722310e50bcaca9276be22276d9e91d91308",
+  "files": [
+   {
+    "path": "pkg/api/pod/util.go",
+    "sha256": "e47a528ba9c0e49c335f902ff459eb55929d92e127b35585774f8dcf11652ef0",
+    "lines": 2468
+   },
+   {
+    "path": "pkg/api/v1/service/util.go",
+    "sha256": "50736a20be6af5682f6779bd3188aece6d67c2bee656f0e62be27848e585690a",
+    "lines": 99
+   },
+   {
+    "path": "pkg/apis/admissionregistration/validation/validation.go",
+    "sha256": "31190358aab37062353e942b84f064ce706d659e66d7c97e4f4a23a738017799",
+    "lines": 1537
+   },
+   {
+    "path": "pkg/apis/core/helper/qos/qos.go",
+    "sha256": "f5cfeacb14bf8dafdc98b97d1012ccc3e584b95741f77ba12db4c171615b5b7c",
+    "lines": 126
+   },
+   {
+    "path": "pkg/apis/core/v1/defaults.go",
+    "sha256": "95f7ccc5c2f1416e96761df8b23dfb19fa41f3afaa85f69486b9d715ff7a55d0",
+    "lines": 622
+   },
+   {
+    "path": "pkg/apis/core/v1/zz_generated.conversion.go",
+    "sha256": "c85440d0b321b74ce2e792f5fe02141afc9891f900ff606b474127fbec1d8a0e",
+    "lines": 8068
+   },
+   {
+    "path": "pkg/apis/core/v1/zz_generated.defaults.go",
+    "sha256": "b6a42315f4988c258a2a85819877bdfcb83b186a9262d727427670873d337359",
+    "lines": 1265
+   },
+   {
+    "path": "pkg/apis/scheduling/types.go",
+    "sha256": "26064e2d6d7bf3acc5b5e8a9f9027871eed93ec7a1e6215ab759b24157e2b494",
+    "lines": 944
+   },
+   {
+    "path": "pkg/features/kube_features.go",
+    "sha256": "7f2c61046c31b81a5555499440589b576e74a8af4e6daed803e7335f8d8e249c",
+    "lines": 3025
+   },
+   {
+    "path": "pkg/kubeapiserver/options/plugins.go",
+    "sha256": "a68443c235648928c04aa64b994203e7e7e1de40de58ec26103ee1b45394da58",
+    "lines": 194
+   },
+   {
+    "path": "pkg/registry/core/configmap/storage/storage.go",
+    "sha256": "f2cb2988fcde7e8869ff92aa4235f4a8899acd7ecb4f7944fedc2e8ff45170ae",
+    "lines": 67
+   },
+   {
+    "path": "pkg/registry/core/configmap/strategy.go",
+    "sha256": "366ceacf27375e392e31d09e70fda331530cf096160799309bf67433a380c7c9",
+    "lines": 121
+   },
+   {
+    "path": "pkg/registry/core/pod/storage/storage.go",
+    "sha256": "a781286c7977e0f94ffe5fea9853f79732308548e0cc6d61224d5cd1f460626e",
+    "lines": 432
+   },
+   {
+    "path": "pkg/registry/core/pod/strategy.go",
+    "sha256": "5ad78f632f6d85cab3f4c736612ffe92ce7d3c765e26ef7492a2ca263a15566a",
+    "lines": 1037
+   },
+   {
+    "path": "pkg/registry/core/service/ipallocator/cidrallocator.go",
+    "sha256": "fd5e4fee4f5bbf1733af1f269eed71796f6a6a4f6ef90ab3014204a4ee719132",
+    "lines": 567
+   },
+   {
+    "path": "pkg/registry/core/service/ipallocator/ipallocator.go",
+    "sha256": "f3730f8e59f4dc824e54db12ee2854323bef98bf0a827a8f168d4aa468a54090",
+    "lines": 629
+   },
+   {
+    "path": "pkg/registry/core/service/storage/alloc.go",
+    "sha256": "8f8e9c066109aadbfe6e9e39ff949429693fa28397312bafa46fda3e0cd3aa5f",
+    "lines": 1107
+   },
+   {
+    "path": "pkg/registry/core/service/storage/storage.go",
+    "sha256": "7ba0fe206016002e65080f694cea238f56972ffdd7a91cb62b78ee8878aa59df",
+    "lines": 642
+   },
+   {
+    "path": "pkg/registry/core/service/strategy.go",
+    "sha256": "27c57f18d2a65b800c7d7dbbf8eb6ba5fc8893579679e180822ee4c1de176dc0",
+    "lines": 405
+   },
+   {
+    "path": "pkg/serviceaccount/claims.go",
+    "sha256": "d5ca314bde3eabe1cf74162b141a440f207eb5c099b6b5703add5a09a6e3c3ff",
+    "lines": 381
+   },
+   {
+    "path": "pkg/util/parsers/parsers.go",
+    "sha256": "993af789dcfab15ab676039ffd7d77ffafe2a715abcceca67408d6b457787c46",
+    "lines": 69
+   },
+   {
+    "path": "plugin/pkg/admission/alwayspullimages/admission.go",
+    "sha256": "325c6870c9eafe1415afd2a169f6235307d5bfeb102aa69b3c66cb04f1aa5858",
+    "lines": 178
+   },
+   {
+    "path": "plugin/pkg/admission/certificates/approval/admission.go",
+    "sha256": "aab97ddaf0780abffe5b273c32768f41035b6fcec88a535cb1828e3bd9dd2d45",
+    "lines": 97
+   },
+   {
+    "path": "plugin/pkg/admission/certificates/ctbattest/admission.go",
+    "sha256": "7c646c7495509ff28adab5a9a964a6ea251540326f19c747d9cbb9ecf849d1fa",
+    "lines": 125
+   },
+   {
+    "path": "plugin/pkg/admission/certificates/signing/admission.go",
+    "sha256": "b8f4c9510c1fedd3f45e208393e0e32976dbf8b93f2a458a7b907d44a186a84b",
+    "lines": 106
+   },
+   {
+    "path": "plugin/pkg/admission/certificates/subjectrestriction/admission.go",
+    "sha256": "e81d170bfa0dea6d2132b9fe4d5698f7dfc27881560ff4796ad4d85272d68f77",
+    "lines": 93
+   },
+   {
+    "path": "plugin/pkg/admission/defaulttolerationseconds/admission.go",
+    "sha256": "04c3c09d4431051824327da73aaf505d901ab92c1679201c5e2ac43322bc9d4b",
+    "lines": 165
+   },
+   {
+    "path": "plugin/pkg/admission/eventratelimit/admission.go",
+    "sha256": "c58a3c77a51802e4f1fbf1ef1e6c3c07e837068fb7b3558272340b9c48e9bf3b",
+    "lines": 112
+   },
+   {
+    "path": "plugin/pkg/admission/gc/gc_admission.go",
+    "sha256": "6a71b3f304971d3dc92785cae2d497f9e89d973d8c9a2c7520204d85790c54e3",
+    "lines": 312
+   },
+   {
+    "path": "plugin/pkg/admission/limitranger/admission.go",
+    "sha256": "560c6a9e053f29031b13a1a27591036275a0c0d26e9f4f76380286cc0b120b42",
+    "lines": 710
+   },
+   {
+    "path": "plugin/pkg/admission/network/defaultingressclass/admission.go",
+    "sha256": "ce23437faabd2fa7ccc12edd106199b486d427eaf8da541e86cbf870a58e0dca",
+    "lines": 156
+   },
+   {
+    "path": "plugin/pkg/admission/network/denyserviceexternalips/admission.go",
+    "sha256": "f6c537900452cd402351340d6d323f9e9ecacb7cb284749262fb7df366e93c78",
+    "lines": 114
+   },
+   {
+    "path": "plugin/pkg/admission/nodedeclaredfeatures/admission.go",
+    "sha256": "a8aecefbcd0ae0986fb66746955551f816ca38015ac64dde489d139e6d093848",
+    "lines": 328
+   },
+   {
+    "path": "plugin/pkg/admission/noderestriction/admission.go",
+    "sha256": "7d74de9d711472e2b4275bdcda64a193f59e4941a0f1103901c4718b8ddc3deb",
+    "lines": 1137
+   },
+   {
+    "path": "plugin/pkg/admission/nodetaint/admission.go",
+    "sha256": "afddc338146386efb604320de6bb8509f8700fe96c2095b2251fb374635575a3",
+    "lines": 95
+   },
+   {
+    "path": "plugin/pkg/admission/podresize/admission.go",
+    "sha256": "3901be02f301a191ac702b70ede9f3034ba227adb9dc82228b6460872c0cffb7",
+    "lines": 215
+   },
+   {
+    "path": "plugin/pkg/admission/podtopologylabels/admission.go",
+    "sha256": "e09ea6f9d5581ad1f1ec4d119c54d575786055816062c5f596291feb8c064c60",
+    "lines": 243
+   },
+   {
+    "path": "plugin/pkg/admission/priority/admission.go",
+    "sha256": "e6915c66ac8434696087a73bbb09e5184d87628da3d194ad64efa2edeb275d87",
+    "lines": 368
+   },
+   {
+    "path": "plugin/pkg/admission/runtimeclass/admission.go",
+    "sha256": "2a78ad72903b4205c8b8beec10f7799ee0803133574159a25b62ea47ae02ac78",
+    "lines": 246
+   },
+   {
+    "path": "plugin/pkg/admission/scheduling/podgroupprotection/admission.go",
+    "sha256": "217bc70a0a18b1ce03111c543ba71c740a422767b67de88abf1052ad9ca98504",
+    "lines": 101
+   },
+   {
+    "path": "plugin/pkg/admission/security/podsecurity/admission.go",
+    "sha256": "a1a783366edefdc811ce2b1dc60374c939db919c40dc68bdfafd90acd4477957",
+    "lines": 299
+   },
+   {
+    "path": "plugin/pkg/admission/serviceaccount/admission.go",
+    "sha256": "afe23217c751925f8dcd9b47338cd632dfc5042ee12a7be444c90c281c2ddc42",
+    "lines": 526
+   },
+   {
+    "path": "plugin/pkg/admission/storage/persistentvolume/resize/admission.go",
+    "sha256": "0f94186bc681bcded084ba964748126ded17d4f780dc3a81282d7a092e51ebad",
+    "lines": 131
+   },
+   {
+    "path": "plugin/pkg/admission/storage/storageclass/setdefault/admission.go",
+    "sha256": "5be63ec3c2b08fb2bc0048200669b68eb7cd183e0f502fba87fc3e24e89d661c",
+    "lines": 120
+   },
+   {
+    "path": "plugin/pkg/admission/storage/storageobjectinuseprotection/admission.go",
+    "sha256": "9dccf3c117085ad0f8de4720aa4d4070eb7c9ddf797229c9113c6fc80db0a91b",
+    "lines": 153
+   },
+   {
+    "path": "staging/src/k8s.io/api/admissionregistration/v1/types.go",
+    "sha256": "4c1db0c2783f4d79f20964f6da2b0406756accee4dc1f458c71237a880702197",
+    "lines": 1575
+   },
+   {
+    "path": "staging/src/k8s.io/api/core/v1/types.go",
+    "sha256": "64b70c914fe25eba63bfb325401a551bbd0871e37eb7fd9b9878283a53e6e062",
+    "lines": 8967
+   },
+   {
+    "path": "staging/src/k8s.io/api/core/v1/well_known_taints.go",
+    "sha256": "b68a78d587f14c338269a9bed0438778193a049d4fdddf55cfa3b2151a737cd8",
+    "lines": 52
+   },
+   {
+    "path": "staging/src/k8s.io/apimachinery/pkg/api/resource/quantity.go",
+    "sha256": "4fa0e4ed172530e50bc757fd7c4ee3c1f29796ce70ebbe2b590d2a64452f1619",
+    "lines": 891
+   },
+   {
+    "path": "staging/src/k8s.io/apimachinery/pkg/api/validation/objectmeta.go",
+    "sha256": "9930a19ca9cdabe68625370624de7a2bc5e9ebea6727b670f5ef8c5a4ee7be80",
+    "lines": 369
+   },
+   {
+    "path": "staging/src/k8s.io/apimachinery/pkg/apis/meta/v1/time.go",
+    "sha256": "37cd5782b9d943dec986050636ff06b1b4d319338241079cc92d80d36dc4876c",
+    "lines": 211
+   },
+   {
+    "path": "staging/src/k8s.io/apimachinery/pkg/apis/meta/v1/types.go",
+    "sha256": "a544ea7354cf745449e42db03a512f505aea91dc4adcdc79d6e656406066ebc6",
+    "lines": 1695
+   },
+   {
+    "path": "staging/src/k8s.io/apimachinery/pkg/runtime/serializer/codec_factory.go",
+    "sha256": "017d544a7acf4d9fc2869a3b4ceab9fb66aee9fe84f6884b7ac32ec00c3ecd16",
+    "lines": 322
+   },
+   {
+    "path": "staging/src/k8s.io/apimachinery/pkg/runtime/serializer/versioning/versioning.go",
+    "sha256": "e20fe7605558eab53615d18dfb3f1b23adf85c3fddfaccc8d277161f9be7b7ff",
+    "lines": 292
+   },
+   {
+    "path": "staging/src/k8s.io/apimachinery/pkg/util/managedfields/internal/buildmanagerinfo.go",
+    "sha256": "a34885bc22f5ef9331187b67a68032041132ee0120a7e44c1f4d90267f93dd1a",
+    "lines": 74
+   },
+   {
+    "path": "staging/src/k8s.io/apimachinery/pkg/util/managedfields/internal/fieldmanager.go",
+    "sha256": "ed067b19f1b73c0a8699ea82178e738f8125e408031ed3ecfd7a4aa3bc8bdb55",
+    "lines": 213
+   },
+   {
+    "path": "staging/src/k8s.io/apimachinery/pkg/util/managedfields/internal/managedfields.go",
+    "sha256": "11ff223dd687cbb958d27b34c503f5dca367cba5e48a92cd786235c16b04a074",
+    "lines": 248
+   },
+   {
+    "path": "staging/src/k8s.io/apimachinery/pkg/util/managedfields/internal/managedfieldsupdater.go",
+    "sha256": "e466e832c426859a4d1c6de489641ca12c24d6376c67428bd67635b84548ab72",
+    "lines": 82
+   },
+   {
+    "path": "staging/src/k8s.io/apimachinery/pkg/util/managedfields/internal/stripmeta.go",
+    "sha256": "aa411b417ffe560e5b9106ee9598ca80b5a8dab596072bae5ab7f27fc82cd992",
+    "lines": 90
+   },
+   {
+    "path": "staging/src/k8s.io/apimachinery/pkg/util/managedfields/internal/structuredmerge.go",
+    "sha256": "fc691aa924d068aff78ec0f59a614c482797efcc0d1085318f356f2c3ad88d6d",
+    "lines": 190
+   },
+   {
+    "path": "staging/src/k8s.io/apiserver/pkg/admission/chain.go",
+    "sha256": "3c14ef25df1b0070858d61ec14c95b84e2031a994e047d5710de09c1ac3eb7dc",
+    "lines": 70
+   },
+   {
+    "path": "staging/src/k8s.io/apiserver/pkg/admission/conversion.go",
+    "sha256": "c19fa47c44a13e2d995d30483ad05c363ab048ae07a64e0fb5c27555800b04fa",
+    "lines": 213
+   },
+   {
+    "path": "staging/src/k8s.io/apiserver/pkg/admission/plugin/cel/activation.go",
+    "sha256": "6c8d0292bc48339f17b75f1cc306a3a913d5de80fc0dbd01467e5c830a13c515",
+    "lines": 212
+   },
+   {
+    "path": "staging/src/k8s.io/apiserver/pkg/admission/plugin/cel/compile.go",
+    "sha256": "cbcdbe5d490ea272eda66e598b1c8cd166bf66ed99b4b6c376260850e99a3022",
+    "lines": 301
+   },
+   {
+    "path": "staging/src/k8s.io/apiserver/pkg/admission/plugin/cel/condition.go",
+    "sha256": "b0cbb577b08f914d00f936689a1bf761cd2ade89167c29bfa53b46b26b7a58fa",
+    "lines": 196
+   },
+   {
+    "path": "staging/src/k8s.io/apiserver/pkg/admission/plugin/manifest/loader.go",
+    "sha256": "7962b1e403a976cd9893397fd11b8c289e620a1a25cd5ff15fda6c4de2846385",
+    "lines": 120
+   },
+   {
+    "path": "staging/src/k8s.io/apiserver/pkg/admission/plugin/manifest/metrics/metrics.go",
+    "sha256": "56724dabdc0a1964f1a8c4931f6ed3e9989d0c8219d8c4e31e90b31d047dc2c4",
+    "lines": 161
+   },
+   {
+    "path": "staging/src/k8s.io/apiserver/pkg/admission/plugin/manifest/validation.go",
+    "sha256": "27d06a90e950e83de0968712358fcd39041007e506ba1c89c46426819f670b44",
+    "lines": 74
+   },
+   {
+    "path": "staging/src/k8s.io/apiserver/pkg/admission/plugin/namespace/lifecycle/admission.go",
+    "sha256": "d4165db1a44372b36811c4b3530c180116d96969829ace37e2d0e017bb5c9849",
+    "lines": 238
+   },
+   {
+    "path": "staging/src/k8s.io/apiserver/pkg/admission/plugin/policy/generic/plugin.go",
+    "sha256": "c3dd310a66d667eb9de439b7eeecfa44b73c537666244abb1faf1cbbdecc3196",
+    "lines": 347
+   },
+   {
+    "path": "staging/src/k8s.io/apiserver/pkg/admission/plugin/policy/generic/policy_dispatcher.go",
+    "sha256": "810189f9b6c801d70558f21ef1c0c7586675fbb951ab1ef940ae995a9f3d7ec2",
+    "lines": 514
+   },
+   {
+    "path": "staging/src/k8s.io/apiserver/pkg/admission/plugin/policy/generic/policy_source.go",
+    "sha256": "5c627922ab08adf02948ffecdc6056bc31ec92d3793eb80ace6b54de6dbe3012",
+    "lines": 508
+   },
+   {
+    "path": "staging/src/k8s.io/apiserver/pkg/admission/plugin/policy/manifest/loader/loader.go",
+    "sha256": "46662e1abe3e01bae1d8b7f7903ea1d14ccb541fa5b2925fcd5f373a37499276",
+    "lines": 227
+   },
+   {
+    "path": "staging/src/k8s.io/apiserver/pkg/admission/plugin/policy/manifest/source/source.go",
+    "sha256": "f17cd3172d5a2a20260b4170c0ce19b166c24ba49a2ec0c6fa83f70fb64d8d3a",
+    "lines": 192
+   },
+   {
+    "path": "staging/src/k8s.io/apiserver/pkg/admission/plugin/policy/matching/matching.go",
+    "sha256": "fe01c1cbb836ad717dddb5b698765cccdec3a8f6e0d0f743afbe5a6052b4f56a",
+    "lines": 201
+   },
+   {
+    "path": "staging/src/k8s.io/apiserver/pkg/admission/plugin/policy/validating/dispatcher.go",
+    "sha256": "88b84b4ed1efcf064863d8a2061636582d876d38c5ba9c91f4ea51a5ff31d39b",
+    "lines": 446
+   },
+   {
+    "path": "staging/src/k8s.io/apiserver/pkg/admission/plugin/policy/validating/plugin.go",
+    "sha256": "e8127fc3a629020e5e3dd0828e425bb7c466f88586a1d5ab1fe996758cbd5fd4",
+    "lines": 227
+   },
+   {
+    "path": "staging/src/k8s.io/apiserver/pkg/admission/plugin/policy/validating/validator.go",
+    "sha256": "594cc649f4eb8a2f5d838f88cd693191c056c68333d8d3bb15c0f174af39e4b6",
+    "lines": 268
+   },
+   {
+    "path": "staging/src/k8s.io/apiserver/pkg/admission/plugin/resourcequota/admission.go",
+    "sha256": "82e1fcc2a7677ec306178223d726fe609605ae9cdd0690d1c5bd1af488a627e0",
+    "lines": 171
+   },
+   {
+    "path": "staging/src/k8s.io/apiserver/pkg/admission/reinvocation.go",
+    "sha256": "2ba2d0156e327132e9776598b576298c471ef61be41096b4fdc3919cb9ee33b9",
+    "lines": 64
+   },
+   {
+    "path": "staging/src/k8s.io/apiserver/pkg/apis/cel/config.go",
+    "sha256": "e31d2a1e32e4b057cd5b1046a94f295d93f30edc729e199f2f6fab11677845ab",
+    "lines": 45
+   },
+   {
+    "path": "staging/src/k8s.io/apiserver/pkg/cel/common/valuesschemalesstyped.go",
+    "sha256": "1a781f0b7b5cb6158e32807e9275a0b27d69305655aafcafc0cafef26205b524",
+    "lines": 565
+   },
+   {
+    "path": "staging/src/k8s.io/apiserver/pkg/cel/environment/base.go",
+    "sha256": "0c1e1a6134c6a169e7d618882d92e1b3c8dbb1c6dd51494b00857216778f5f8e",
+    "lines": 263
+   },
+   {
+    "path": "staging/src/k8s.io/apiserver/pkg/endpoints/handlers/create.go",
+    "sha256": "2f17325a969d02a31057d3241bf99d9b3837746a991c12d1784ef067f53117ac",
+    "lines": 284
+   },
+   {
+    "path": "staging/src/k8s.io/apiserver/pkg/endpoints/handlers/fieldmanager/admission.go",
+    "sha256": "19b05f978097fc5b3b65062f99e393a3da8777abe173eec63b95b1326db4f517",
+    "lines": 90
+   },
+   {
+    "path": "staging/src/k8s.io/apiserver/pkg/endpoints/handlers/rest.go",
+    "sha256": "345a88590def20fe1e3a2568c3482c00b88aae9faa2813b0495c18dd0a4ed69c",
+    "lines": 471
+   },
+   {
+    "path": "staging/src/k8s.io/apiserver/pkg/registry/generic/registry/dryrun.go",
+    "sha256": "41727a443af0d9a06ef167bbc66f1644f9733f31e2ec7a53555163788df3635f",
+    "lines": 123
+   },
+   {
+    "path": "staging/src/k8s.io/apiserver/pkg/registry/generic/registry/store.go",
+    "sha256": "b0e1b669df3de70beb228b2be79ce6544439bb36edcf9464633cf40588176ab3",
+    "lines": 1780
+   },
+   {
+    "path": "staging/src/k8s.io/apiserver/pkg/registry/rest/create.go",
+    "sha256": "acc7237bf96a77871c8360d0d3ea1df81b10c70a2f8f8bdc4cca668ecd948541",
+    "lines": 250
+   },
+   {
+    "path": "staging/src/k8s.io/apiserver/pkg/registry/rest/meta.go",
+    "sha256": "e45c086237e098f80c9250e98b07be26ea06c8dd31bfa33a0ee13343e16dab5e",
+    "lines": 84
+   },
+   {
+    "path": "staging/src/k8s.io/apiserver/pkg/storage/api_object_versioner.go",
+    "sha256": "e69bb647fbff622302800b7452fe0a2e620aa9b16519faea5e77f71767e9bfe0",
+    "lines": 130
+   },
+   {
+    "path": "staging/src/k8s.io/apiserver/pkg/storage/etcd3/store.go",
+    "sha256": "924757121f7fd91454770637b8af692d287cd584d3da62eea06d9e021de2bc9a",
+    "lines": 1324
+   },
+   {
+    "path": "staging/src/k8s.io/apiserver/pkg/storage/names/generate.go",
+    "sha256": "5869881ebfcdf805e66a414f30c9e41d786906edd74493da25065e8392afb79a",
+    "lines": 54
+   },
+   {
+    "path": "vendor/sigs.k8s.io/structured-merge-diff/v6/value/jsontagutil.go",
+    "sha256": "bfa632e628f87f86032f2508dd661c3c100b4d7506f01ab857f41a8b297ebc14",
+    "lines": 151
+   },
+   {
+    "path": "vendor/sigs.k8s.io/structured-merge-diff/v6/value/reflectcache.go",
+    "sha256": "11d5d3a578ec5285c77fa6cfc94a41fa55a492f7eab9e146cd15090cc7b7aecb",
+    "lines": 523
+   }
+  ]
+ },
+ "createOrdering": [
+  {
+   "step": 1,
+   "name": "Request body read and CreateOptions decoded",
+   "detail": "Body is read with the MaxRequestBodyBytes limit, CreateOptions are decoded from the query and validated. fieldValidation defaults to Warn when unset; only Warn/Strict select the strict decoder, and under Warn unknown or duplicate fields become warnings and are dropped from the object.",
+   "citation": "staging/src/k8s.io/apiserver/pkg/endpoints/handlers/create.go:94-114; staging/src/k8s.io/apiserver/pkg/endpoints/handlers/create.go:119-141; staging/src/k8s.io/apiserver/pkg/endpoints/handlers/rest.go:409-414"
+  },
+  {
+   "step": 2,
+   "name": "Decode, scheme defaulting, conversion to the internal version",
+   "detail": "The decoder is DecoderToVersion(serializer, HubGroupVersion), a defaulting codec built on the scheme. Decode applies the registered defaulters (SetObjectDefaults_Pod/Service/ConfigMap) to the decoded v1 object before converting it to the internal type. Defaulting therefore runs before field management and before any admission plugin, and fields that admission later adds are not scheme-defaulted.",
+   "citation": "staging/src/k8s.io/apiserver/pkg/endpoints/handlers/create.go:116-127; staging/src/k8s.io/apimachinery/pkg/runtime/serializer/codec_factory.go:279-293; staging/src/k8s.io/apimachinery/pkg/runtime/serializer/versioning/versioning.go:31-41; staging/src/k8s.io/apimachinery/pkg/runtime/serializer/versioning/versioning.go:167-183; pkg/apis/core/v1/zz_generated.defaults.go:32-64"
+  },
+  {
+   "step": 3,
+   "name": "Name/namespace resolution",
+   "detail": "The name is taken from the object if the URL has none. The context namespace comes from the URL.",
+   "citation": "staging/src/k8s.io/apiserver/pkg/endpoints/handlers/create.go:151-158"
+  },
+  {
+   "step": 4,
+   "name": "System metadata wipe and namespace defaulting",
+   "detail": "WipeObjectMetaSystemFields clears creationTimestamp, uid, deletionTimestamp, deletionGracePeriodSeconds and selfLink. It does not clear generation, resourceVersion or managedFields. EnsureObjectNamespaceMatchesRequestNamespace sets metadata.namespace to the request namespace when it is empty and rejects a mismatch.",
+   "citation": "staging/src/k8s.io/apiserver/pkg/endpoints/handlers/create.go:165-179; staging/src/k8s.io/apiserver/pkg/registry/rest/meta.go:29-36; staging/src/k8s.io/apiserver/pkg/registry/rest/meta.go:44-68"
+  },
+  {
+   "step": 5,
+   "name": "Admission attributes built; ownerReferences deduplicated",
+   "detail": "Attributes carry the (possibly empty, for generateName) name, operation Create and the CreateOptions. Duplicate ownerReferences (same UID and semantically equal) are removed before and again after mutating admission, with a warning.",
+   "citation": "staging/src/k8s.io/apiserver/pkg/endpoints/handlers/create.go:182; staging/src/k8s.io/apiserver/pkg/endpoints/handlers/create.go:193; staging/src/k8s.io/apiserver/pkg/endpoints/handlers/create.go:208; staging/src/k8s.io/apiserver/pkg/endpoints/handlers/rest.go:297-313; staging/src/k8s.io/apiserver/pkg/endpoints/handlers/rest.go:334-353"
+  },
+  {
+   "step": 6,
+   "name": "Field manager computes metadata.managedFields",
+   "detail": "FieldManager.UpdateNoErrors runs on the decoded, defaulted object against an empty live object before mutating admission. The manager is the fieldManager query option, else the User-Agent prefix, else 'unknown'. The operation is Update, the apiVersion is v1, fieldsType is FieldsV1 and time is time.Now().UTC(). A non-empty, decodable client-supplied managedFields list is kept and merged.",
+   "citation": "staging/src/k8s.io/apiserver/pkg/endpoints/handlers/create.go:194-200; staging/src/k8s.io/apiserver/pkg/endpoints/handlers/create.go:257-264; staging/src/k8s.io/apimachinery/pkg/util/managedfields/internal/fieldmanager.go:77-108; staging/src/k8s.io/apimachinery/pkg/util/managedfields/internal/fieldmanager.go:117-168; staging/src/k8s.io/apimachinery/pkg/util/managedfields/internal/managedfieldsupdater.go:44-67; staging/src/k8s.io/apimachinery/pkg/util/managedfields/internal/buildmanagerinfo.go:45-74; staging/src/k8s.io/apimachinery/pkg/util/managedfields/internal/structuredmerge.go:91-118; staging/src/k8s.io/apimachinery/pkg/util/managedfields/internal/managedfields.go:175-243"
+  },
+  {
+   "step": 7,
+   "name": "Mutating admission",
+   "detail": "The chain calls Admit on every plugin that handles Create and implements MutationInterface, in AllOrderedPlugins order. A reinvocation wrapper may run the chain a second time if a plugin requests it. A wrapper restores the pre-admission managedFields if admission leaves them invalid.",
+   "citation": "staging/src/k8s.io/apiserver/pkg/endpoints/handlers/create.go:200-206; staging/src/k8s.io/apiserver/pkg/admission/chain.go:30-44; staging/src/k8s.io/apiserver/pkg/admission/reinvocation.go:31-51; staging/src/k8s.io/apiserver/pkg/endpoints/handlers/fieldmanager/admission.go:55-82; pkg/kubeapiserver/options/plugins.go:71-116"
+  },
+  {
+   "step": 8,
+   "name": "Store.Create entry; generateName retry",
+   "detail": "requestFunc calls the registry's Create with createValidation = AdmissionToValidateObjectFunc(admit). If generateName is set without a name, create is retried up to 8 times with fresh random names on AlreadyExists.",
+   "citation": "staging/src/k8s.io/apiserver/pkg/endpoints/handlers/create.go:183-191; staging/src/k8s.io/apiserver/pkg/endpoints/handlers/create.go:209; staging/src/k8s.io/apiserver/pkg/registry/generic/registry/store.go:508-543"
+  },
+  {
+   "step": 9,
+   "name": "FillObjectMetaSystemFields and name generation",
+   "detail": "creationTimestamp = metav1.Now() and uid = new random UUID. The name is generated from generateName as base + 5 random characters. Both happen before validating admission.",
+   "citation": "staging/src/k8s.io/apiserver/pkg/registry/generic/registry/store.go:545-556; staging/src/k8s.io/apiserver/pkg/registry/rest/meta.go:38-42; staging/src/k8s.io/apiserver/pkg/storage/names/generate.go:44-54"
+  },
+  {
+   "step": 10,
+   "name": "BeginCreate hook (Service only among the three kinds)",
+   "detail": "Service: normalizeClusterIPs, then allocateCreate runs initIPFamilyFields (ipFamilyPolicy, ipFamilies), ClusterIP allocation and NodePort allocation (NodePort/LoadBalancer only). Allocation happens before strategy validation and before validating admission. It is committed after a successful storage write and reverted otherwise. Pod and ConfigMap stores set no BeginCreate.",
+   "citation": "staging/src/k8s.io/apiserver/pkg/registry/generic/registry/store.go:558-567; pkg/registry/core/service/storage/storage.go:124-127; pkg/registry/core/service/storage/storage.go:342-369; pkg/registry/core/service/storage/alloc.go:65-100; pkg/registry/core/pod/storage/storage.go:85-89; pkg/registry/core/configmap/storage/storage.go:45"
+  },
+  {
+   "step": 11,
+   "name": "rest.BeforeCreate: PrepareForCreate, strategy Validate, WarningsOnCreate, Canonicalize",
+   "detail": "Checks that system metadata is filled and the name generated, ensures the namespace, calls strategy.PrepareForCreate (Pod: generation=1, status reset to phase Pending, DropDisabledPodFields, scheduling-gated condition, matchLabelKeys merge, AppArmor sync, pod-level resource defaulting, qosClass; Service: status reset; ConfigMap: no-op), then strategy.Validate plus ObjectMeta validation and declarative validation, then warnings and Canonicalize (a no-op for all three kinds).",
+   "citation": "staging/src/k8s.io/apiserver/pkg/registry/generic/registry/store.go:569-571; staging/src/k8s.io/apiserver/pkg/registry/rest/create.go:100-167; pkg/registry/core/pod/strategy.go:86-104; pkg/registry/core/pod/strategy.go:142-144; pkg/registry/core/service/strategy.go:69-75; pkg/registry/core/service/strategy.go:99-101; pkg/registry/core/configmap/strategy.go:56-59; pkg/registry/core/configmap/strategy.go:70-72"
+  },
+  {
+   "step": 12,
+   "name": "createValidation: validating admission chain, including ValidatingAdmissionPolicy",
+   "detail": "Called with obj.DeepCopyObject() after BeforeCreate, so the policy cannot mutate the persisted object. The final attributes take the generated name if the request had none. Validating plugins run in AllOrderedPlugins order. ValidatingAdmissionPolicy runs before ValidatingAdmissionWebhook and ResourceQuota.",
+   "citation": "staging/src/k8s.io/apiserver/pkg/registry/generic/registry/store.go:572-578; staging/src/k8s.io/apiserver/pkg/registry/rest/create.go:217-250; staging/src/k8s.io/apiserver/pkg/admission/chain.go:46-60; pkg/kubeapiserver/options/plugins.go:110-116"
+  },
+  {
+   "step": 13,
+   "name": "Storage write",
+   "detail": "etcd3 Create refuses a non-zero resourceVersion and clears resourceVersion and selfLink before encoding. It writes with OptimisticPut and decodes the result into 'out' at the etcd revision, which sets metadata.resourceVersion. resourceVersion is assigned only here, after validating admission.",
+   "citation": "staging/src/k8s.io/apiserver/pkg/registry/generic/registry/store.go:580-612; staging/src/k8s.io/apiserver/pkg/registry/generic/registry/dryrun.go:39-47; staging/src/k8s.io/apiserver/pkg/storage/etcd3/store.go:284-350; staging/src/k8s.io/apiserver/pkg/storage/api_object_versioner.go:33-44; staging/src/k8s.io/apiserver/pkg/storage/api_object_versioner.go:63-71"
+  },
+  {
+   "step": 14,
+   "name": "Post-write hooks",
+   "detail": "finishCreate(true) commits the Service IP/port transaction. AfterCreate and Decorator run on 'out' only (Service Decorator defaultOnRead fills ipFamilies/ipFamilyPolicy only when empty, for objects written before those fields existed).",
+   "citation": "staging/src/k8s.io/apiserver/pkg/registry/generic/registry/store.go:613-625; pkg/registry/core/service/storage/storage.go:222-267; pkg/registry/core/service/storage/storage.go:359-366"
+  },
+  {
+   "step": 15,
+   "name": "Too-large retry",
+   "detail": "If the write fails because the serialized object is too large, the handler sets managedFields to nil and calls requestFunc again. Store.create runs again, including FillObjectMetaSystemFields (new uid and timestamp), BeginCreate and createValidation, so the policy sees a second object without managedFields.",
+   "citation": "staging/src/k8s.io/apiserver/pkg/endpoints/handlers/create.go:209-218; staging/src/k8s.io/apiserver/pkg/registry/generic/registry/store.go:545-578"
+  }
+ ],
+ "mutatorsByKind": [
+  {
+   "plugin": "LimitRanger",
+   "mutatesOnCreate": [
+    "Pod"
+   ],
+   "citation": "plugin/pkg/admission/limitranger/admission.go:110-113; plugin/pkg/admission/limitranger/admission.go:418-440; plugin/pkg/admission/limitranger/admission.go:476-482",
+   "note": "Mutates pods only; validates pods and PVCs. Depends on LimitRange objects in the namespace."
+  },
+  {
+   "plugin": "ServiceAccount",
+   "mutatesOnCreate": [
+    "Pod"
+   ],
+   "citation": "plugin/pkg/admission/serviceaccount/admission.go:100-110; plugin/pkg/admission/serviceaccount/admission.go:137-177; plugin/pkg/admission/serviceaccount/admission.go:240-254",
+   "note": "Pods only (no subresource except ephemeralcontainers on update)."
+  },
+  {
+   "plugin": "DefaultTolerationSeconds",
+   "mutatesOnCreate": [
+    "Pod"
+   ],
+   "citation": "plugin/pkg/admission/defaulttolerationseconds/admission.go:84-88; plugin/pkg/admission/defaulttolerationseconds/admission.go:124-165",
+   "note": "Pods only, no subresources."
+  },
+  {
+   "plugin": "Priority",
+   "mutatesOnCreate": [
+    "Pod"
+   ],
+   "citation": "plugin/pkg/admission/priority/admission.go:64-68; plugin/pkg/admission/priority/admission.go:100-127",
+   "note": "Pods, PodGroups (gate GenericWorkload Beta default false) and CompositePodGroups."
+  },
+  {
+   "plugin": "RuntimeClass",
+   "mutatesOnCreate": [
+    "Pod"
+   ],
+   "citation": "plugin/pkg/admission/runtimeclass/admission.go:95-114; plugin/pkg/admission/runtimeclass/admission.go:134-139; plugin/pkg/admission/runtimeclass/admission.go:239-246",
+   "note": "Pods only; only acts when runtimeClassName is set."
+  },
+  {
+   "plugin": "PodTopologyLabels",
+   "mutatesOnCreate": [
+    "Pod"
+   ],
+   "citation": "plugin/pkg/admission/podtopologylabels/admission.go:65-70; plugin/pkg/admission/podtopologylabels/admission.go:88-91; plugin/pkg/admission/podtopologylabels/admission.go:109-125; plugin/pkg/admission/podtopologylabels/admission.go:221-243",
+   "note": "Pods (nodeName set) and pods/binding; gate PodTopologyLabelsAdmission default true."
+  },
+  {
+   "plugin": "AlwaysPullImages (optional in W02g)",
+   "mutatesOnCreate": [
+    "Pod"
+   ],
+   "citation": "plugin/pkg/admission/alwayspullimages/admission.go:61-84; plugin/pkg/admission/alwayspullimages/admission.go:173-178",
+   "note": "Off by default upstream."
+  },
+  {
+   "plugin": "NamespaceLifecycle",
+   "mutatesOnCreate": [],
+   "citation": "staging/src/k8s.io/apiserver/pkg/admission/plugin/namespace/lifecycle/admission.go:77-118; staging/src/k8s.io/apiserver/pkg/admission/plugin/namespace/lifecycle/admission.go:201",
+   "note": "Its Admit only rejects (e.g. a create in a missing or terminating namespace); no object mutation in the lines read."
+  },
+  {
+   "plugin": "NodeRestriction",
+   "mutatesOnCreate": [],
+   "citation": "plugin/pkg/admission/noderestriction/admission.go:191-215",
+   "note": "Acts only for node identities; the run-owned client is not a node."
+  },
+  {
+   "plugin": "PodGroupProtection",
+   "mutatesOnCreate": [],
+   "citation": "plugin/pkg/admission/scheduling/podgroupprotection/admission.go:77-100",
+   "note": "PodGroups only."
+  },
+  {
+   "plugin": "StorageObjectInUseProtection",
+   "mutatesOnCreate": [],
+   "citation": "plugin/pkg/admission/storage/storageobjectinuseprotection/admission.go:70-85",
+   "note": "PV/PVC/VolumeAttributesClass only."
+  },
+  {
+   "plugin": "TaintNodesByCondition",
+   "mutatesOnCreate": [],
+   "citation": "plugin/pkg/admission/nodetaint/admission.go:63-67",
+   "note": "Nodes only."
+  },
+  {
+   "plugin": "DefaultStorageClass",
+   "mutatesOnCreate": [],
+   "citation": "plugin/pkg/admission/storage/storageclass/setdefault/admission.go:86-99",
+   "note": "PVCs only."
+  },
+  {
+   "plugin": "DefaultIngressClass",
+   "mutatesOnCreate": [],
+   "citation": "plugin/pkg/admission/network/defaultingressclass/admission.go:85-99",
+   "note": "Ingresses only."
+  },
+  {
+   "plugin": "ResourceQuota, PodSecurity, NodeDeclaredFeatureValidator, PodResizeValidator, DenyServiceExternalIPs, OwnerReferencesPermissionEnforcement, PersistentVolumeClaimResize, EventRateLimit, CertificateApproval, CertificateSigning, ClusterTrustBundleAttest, CertificateSubjectRestriction",
+   "mutatesOnCreate": [],
+   "citation": "staging/src/k8s.io/apiserver/pkg/admission/plugin/resourcequota/admission.go:75; staging/src/k8s.io/apiserver/pkg/admission/plugin/resourcequota/admission.go:161; plugin/pkg/admission/security/podsecurity/admission.go:82; plugin/pkg/admission/security/podsecurity/admission.go:193; plugin/pkg/admission/nodedeclaredfeatures/admission.go:67; plugin/pkg/admission/nodedeclaredfeatures/admission.go:110; plugin/pkg/admission/podresize/admission.go:62; plugin/pkg/admission/podresize/admission.go:68; plugin/pkg/admission/network/denyserviceexternalips/admission.go:49; plugin/pkg/admission/network/denyserviceexternalips/admission.go:60; plugin/pkg/admission/gc/gc_admission.go:71; plugin/pkg/admission/gc/gc_admission.go:89; plugin/pkg/admission/storage/persistentvolume/resize/admission.go:46; plugin/pkg/admission/storage/persistentvolume/resize/admission.go:57; plugin/pkg/admission/eventratelimit/admission.go:64; plugin/pkg/admission/eventratelimit/admission.go:86; plugin/pkg/admission/certificates/approval/admission.go:61; plugin/pkg/admission/certificates/signing/admission.go:64; plugin/pkg/admission/certificates/ctbattest/admission.go:57; plugin/pkg/admission/certificates/subjectrestriction/admission.go:50",
+   "note": "Implement only ValidationInterface (no Admit), so they cannot change the object."
+  },
+  {
+   "plugin": "ValidatingAdmissionPolicy",
+   "mutatesOnCreate": [],
+   "citation": "staging/src/k8s.io/apiserver/pkg/admission/plugin/policy/validating/plugin.go:76-77; staging/src/k8s.io/apiserver/pkg/admission/plugin/policy/validating/plugin.go:142-145",
+   "note": "Validation only; runs before ValidatingAdmissionWebhook and ResourceQuota."
+  }
+ ],
+ "kinds": {
+  "Pod": {
+   "ALLOWED_FIXED": [
+    "metadata.generation",
+    "spec.dnsPolicy",
+    "spec.restartPolicy",
+    "spec.securityContext",
+    "spec.terminationGracePeriodSeconds",
+    "spec.schedulerName",
+    "spec.enableServiceLinks",
+    "spec.serviceAccountName (default when omitted)",
+    "spec.serviceAccount (alias)",
+    "spec.tolerations (two default NoExecute tolerations, sealed seconds)",
+    "spec.priority 0",
+    "spec.preemptionPolicy PreemptLowerPriority",
+    "containers[*].terminationMessagePath",
+    "containers[*].terminationMessagePolicy",
+    "containers[*].ports[*].protocol",
+    "probe defaults (not modelled by final_object; native T03)",
+    "resource quantities in canonical form",
+    "status (phase Pending, qosClass)",
+    "containers[*] and initContainers[*]: env[*].valueFrom.fieldRef.apiVersion v1 (when omitted)",
+    "containers[*] and initContainers[*]: env[*].valueFrom.fileKeyRef.optional false (when omitted)",
+    "volumes[*].configMap, .secret, .downwardAPI and .projected defaultMode 420 (when omitted)",
+    "volumes[*].downwardAPI.items[*] and volumes[*].projected.sources[*].downwardAPI.items[*]: fieldRef.apiVersion v1 (when omitted)"
+   ],
+   "ALLOWED_SERVER_CHOSEN": [
+    "metadata.uid",
+    "metadata.creationTimestamp",
+    "metadata.managedFields"
+   ],
+   "RULED_OUT_BY_MANIFEST": {
+    "metadata.namespace defaulting": "MC02",
+    "metadata.name from generateName": "MC01",
+    "token volume and mounts (ServiceAccount)": "MC31",
+    "imagePullSecrets copied (ServiceAccount)": "MC30",
+    "priorityClassName (Priority global default)": "MC30",
+    "LimitRanger defaults and annotation": "MC34",
+    "overhead, nodeSelector, tolerations (RuntimeClass)": "MC30",
+    "topology labels (PodTopologyLabels)": "MC30",
+    "imagePullPolicy (AlwaysPullImages)": "MC33",
+    "image volume pullPolicy (AlwaysPullImages)": "MC38",
+    "requests copied from limits": "MC34",
+    "pod-level resource defaulting (DefaultPodLevelResources)": "MC39",
+    "matchLabelKeys and mismatchLabelKeys merged into affinity and topology spread selectors": "MC40",
+    "defaults of other volume sources (hostPath type, RBD, AzureDisk, ScaleIO, ephemeral claims, projected token expiry, ...)": "MC41",
+    "fields of disabled feature gates": "signer evidence disabledGateFieldsAbsentAtSigning (C27)"
+   },
+   "CHECKED_BY_A2": [
+    "A2-RESERVED",
+    "A2-POD-ECHO",
+    "A2-POD-TOKEN",
+    "A2-POD-PULL-SECRETS",
+    "A2-POD-IMAGE-VOLUME",
+    "A2-POD-TOLERATIONS",
+    "A2-POD-PRIORITY",
+    "A2-POD-PLACEMENT",
+    "A2-POD-PULL-POLICY"
+   ],
+   "upstreamFields": [
+    {
+     "path": "metadata.uid",
+     "source": "BEFORE_CREATE",
+     "value": "SERVER_CHOSEN",
+     "presentAtPolicy": true,
+     "condition": "Always. A client-supplied uid is wiped first. A new random UUID is set inside Store.create before BeginCreate and validation; the too-large retry generates another.",
+     "citation": "staging/src/k8s.io/apiserver/pkg/registry/rest/meta.go:38-42; staging/src/k8s.io/apiserver/pkg/registry/generic/registry/store.go:552; staging/src/k8s.io/apiserver/pkg/endpoints/handlers/create.go:165-172; staging/src/k8s.io/apiserver/pkg/registry/rest/meta.go:29-36"
+    },
+    {
+     "path": "metadata.creationTimestamp",
+     "source": "BEFORE_CREATE",
+     "value": "SERVER_CHOSEN",
+     "presentAtPolicy": true,
+     "condition": "Always (metav1.Now()). In the CEL view it is an RFC3339 UTC string with second precision.",
+     "citation": "staging/src/k8s.io/apiserver/pkg/registry/rest/meta.go:38-42; staging/src/k8s.io/apiserver/pkg/registry/generic/registry/store.go:552; staging/src/k8s.io/apimachinery/pkg/apis/meta/v1/time.go:184-191; staging/src/k8s.io/apimachinery/pkg/apis/meta/v1/types.go:213"
+    },
+    {
+     "path": "metadata.managedFields",
+     "source": "FIELD_MANAGER",
+     "value": "SERVER_CHOSEN",
+     "presentAtPolicy": true,
+     "condition": "Always, except on the too-large retry (nil). One entry {manager: fieldManager option | User-Agent prefix | 'unknown', operation: Update, apiVersion: v1, fieldsType: FieldsV1, time: now UTC, fieldsV1: computed from the decoded+defaulted object before mutating admission}. Client-supplied managedFields that decode and are non-empty are kept and merged, so extra entries are possible. apiVersion, kind and the metadata system fields are stripped from the field set.",
+     "citation": "staging/src/k8s.io/apiserver/pkg/endpoints/handlers/create.go:194-200; staging/src/k8s.io/apiserver/pkg/endpoints/handlers/create.go:210-216; staging/src/k8s.io/apiserver/pkg/endpoints/handlers/create.go:257-264; staging/src/k8s.io/apimachinery/pkg/util/managedfields/internal/fieldmanager.go:77-108; staging/src/k8s.io/apimachinery/pkg/util/managedfields/internal/managedfieldsupdater.go:44-67; staging/src/k8s.io/apimachinery/pkg/util/managedfields/internal/buildmanagerinfo.go:63-74; staging/src/k8s.io/apimachinery/pkg/util/managedfields/internal/managedfields.go:175-243; staging/src/k8s.io/apimachinery/pkg/util/managedfields/internal/stripmeta.go:40-51"
+    },
+    {
+     "path": "metadata.resourceVersion",
+     "source": "STORAGE",
+     "value": "SERVER_CHOSEN",
+     "presentAtPolicy": false,
+     "condition": "Set from the etcd revision on the returned object after the write. The create path read here does not wipe a client-supplied resourceVersion before admission, so a policy would see it, and etcd3 Create then rejects it with ErrResourceVersionSetOnCreate.",
+     "citation": "staging/src/k8s.io/apiserver/pkg/storage/etcd3/store.go:297-302; staging/src/k8s.io/apiserver/pkg/storage/etcd3/store.go:339-341; staging/src/k8s.io/apiserver/pkg/storage/api_object_versioner.go:33-44; staging/src/k8s.io/apiserver/pkg/storage/api_object_versioner.go:63-71"
+    },
+    {
+     "path": "metadata.namespace",
+     "source": "REQUEST_HANDLER",
+     "value": "FIXED <request URL namespace>",
+     "presentAtPolicy": true,
+     "condition": "Only differs when the manifest omits metadata.namespace. A mismatching namespace is rejected with BadRequest.",
+     "citation": "staging/src/k8s.io/apiserver/pkg/endpoints/handlers/create.go:174-178; staging/src/k8s.io/apiserver/pkg/registry/rest/meta.go:44-68; staging/src/k8s.io/apiserver/pkg/registry/rest/create.go:119-126"
+    },
+    {
+     "path": "metadata.name",
+     "source": "BEFORE_CREATE",
+     "value": "SERVER_CHOSEN",
+     "presentAtPolicy": true,
+     "condition": "Only when the manifest uses generateName without a name: base truncated to 58 characters plus 5 random characters, up to 8 attempts. request.name in the policy is the generated name.",
+     "citation": "staging/src/k8s.io/apiserver/pkg/registry/generic/registry/store.go:553-555; staging/src/k8s.io/apiserver/pkg/storage/names/generate.go:44-54; staging/src/k8s.io/apiserver/pkg/registry/rest/create.go:224-230; staging/src/k8s.io/apiserver/pkg/registry/generic/registry/store.go:535-543"
+    },
+    {
+     "path": "metadata.selfLink, metadata.deletionTimestamp, metadata.deletionGracePeriodSeconds",
+     "source": "REQUEST_HANDLER",
+     "value": "FIXED <absent>",
+     "presentAtPolicy": true,
+     "condition": "Wiped if the client supplied them.",
+     "citation": "staging/src/k8s.io/apiserver/pkg/endpoints/handlers/create.go:165-172; staging/src/k8s.io/apiserver/pkg/registry/rest/meta.go:29-36"
+    },
+    {
+     "path": "metadata.ownerReferences",
+     "source": "REQUEST_HANDLER",
+     "value": "FIXED <manifest list with semantic duplicates of the same UID removed>",
+     "presentAtPolicy": true,
+     "condition": "Only if the manifest contains duplicate ownerReferences.",
+     "citation": "staging/src/k8s.io/apiserver/pkg/endpoints/handlers/create.go:193; staging/src/k8s.io/apiserver/pkg/endpoints/handlers/create.go:208; staging/src/k8s.io/apiserver/pkg/endpoints/handlers/rest.go:297-313; staging/src/k8s.io/apiserver/pkg/endpoints/handlers/rest.go:334-353"
+    },
+    {
+     "path": "metadata.generation",
+     "source": "BEFORE_CREATE",
+     "value": "FIXED 1",
+     "presentAtPolicy": true,
+     "condition": "Pod PrepareForCreate always sets 1.",
+     "citation": "pkg/registry/core/pod/strategy.go:89"
+    },
+    {
+     "path": "metadata.annotations['kubernetes.io/limit-ranger']",
+     "source": "ADMISSION_PLUGIN",
+     "value": "SERVER_CHOSEN",
+     "presentAtPolicy": true,
+     "condition": "LimitRanger (W02g allowlist, default on): only if a LimitRange in the namespace has default/defaultRequest for a resource a container or initContainer omits. The text lists the defaulted resources.",
+     "citation": "plugin/pkg/admission/limitranger/admission.go:49; plugin/pkg/admission/limitranger/admission.go:272-292; plugin/pkg/admission/limitranger/admission.go:236-270"
+    },
+    {
+     "path": "metadata.labels['topology.kubernetes.io/zone'|'topology.kubernetes.io/region']",
+     "source": "ADMISSION_PLUGIN",
+     "value": "SERVER_CHOSEN",
+     "presentAtPolicy": true,
+     "condition": "PodTopologyLabels (allowlist, default on, gate PodTopologyLabelsAdmission Beta default true): on pods CREATE only when spec.nodeName is set and that Node carries those labels. It overwrites existing pod label values.",
+     "citation": "plugin/pkg/admission/podtopologylabels/admission.go:43-45; plugin/pkg/admission/podtopologylabels/admission.go:109-125; plugin/pkg/admission/podtopologylabels/admission.go:154-179; plugin/pkg/admission/podtopologylabels/admission.go:221-243; pkg/features/kube_features.go:2000-2003"
+    },
+    {
+     "path": "spec.dnsPolicy",
+     "source": "DEFAULTING",
+     "value": "FIXED ClusterFirst",
+     "presentAtPolicy": true,
+     "condition": "When omitted.",
+     "citation": "pkg/apis/core/v1/defaults.go:257-259; staging/src/k8s.io/api/core/v1/types.go:3972"
+    },
+    {
+     "path": "spec.restartPolicy",
+     "source": "DEFAULTING",
+     "value": "FIXED Always",
+     "presentAtPolicy": true,
+     "condition": "When omitted.",
+     "citation": "pkg/apis/core/v1/defaults.go:260-262; staging/src/k8s.io/api/core/v1/types.go:3892"
+    },
+    {
+     "path": "spec.securityContext",
+     "source": "DEFAULTING",
+     "value": "FIXED {}",
+     "presentAtPolicy": true,
+     "condition": "When omitted (pointer, so {} is visible).",
+     "citation": "pkg/apis/core/v1/defaults.go:263-266; staging/src/k8s.io/api/core/v1/types.go:4484"
+    },
+    {
+     "path": "spec.terminationGracePeriodSeconds",
+     "source": "DEFAULTING",
+     "value": "FIXED 30",
+     "presentAtPolicy": true,
+     "condition": "When omitted; a negative value becomes 1 (Pod only).",
+     "citation": "pkg/apis/core/v1/defaults.go:267-270; pkg/apis/core/v1/defaults.go:164-168; staging/src/k8s.io/api/core/v1/types.go:3985-3987"
+    },
+    {
+     "path": "spec.schedulerName",
+     "source": "DEFAULTING",
+     "value": "FIXED default-scheduler",
+     "presentAtPolicy": true,
+     "condition": "When omitted.",
+     "citation": "pkg/apis/core/v1/defaults.go:271-273; staging/src/k8s.io/api/core/v1/types.go:8777"
+    },
+    {
+     "path": "spec.enableServiceLinks",
+     "source": "DEFAULTING",
+     "value": "FIXED true",
+     "presentAtPolicy": true,
+     "condition": "When omitted.",
+     "citation": "pkg/apis/core/v1/defaults.go:209-212; staging/src/k8s.io/api/core/v1/types.go:5037"
+    },
+    {
+     "path": "spec.serviceAccount (deprecated alias)",
+     "source": "DEFAULTING",
+     "value": "FIXED <= spec.serviceAccountName>",
+     "presentAtPolicy": true,
+     "condition": "Always kept in sync with serviceAccountName, both by defaulting and by the ServiceAccount plugin when it sets 'default'.",
+     "citation": "pkg/apis/core/v1/defaults.go:249-256; plugin/pkg/admission/serviceaccount/admission.go:155-160; staging/src/k8s.io/api/core/v1/types.go:4447"
+    },
+    {
+     "path": "spec.serviceAccountName",
+     "source": "ADMISSION_PLUGIN",
+     "value": "FIXED default",
+     "presentAtPolicy": true,
+     "condition": "ServiceAccount plugin (required in W02g), CREATE only, when empty and not a mirror pod.",
+     "citation": "plugin/pkg/admission/serviceaccount/admission.go:44-47; plugin/pkg/admission/serviceaccount/admission.go:137-160"
+    },
+    {
+     "path": "spec.volumes[name=kube-api-access-<5 random>] (projected token volume)",
+     "source": "ADMISSION_PLUGIN",
+     "value": "SERVER_CHOSEN",
+     "presentAtPolicy": true,
+     "condition": "Only when effective automount is true (pod field, else ServiceAccount field, else true) and a container/initContainer has no mount at /var/run/secrets/kubernetes.io/serviceaccount. The name suffix is random; an existing volume named kube-api-access-* is reused. The content is fixed: defaultMode 420, sources [serviceAccountToken{path token, expirationSeconds 3607}, configMap kube-root-ca.crt {ca.crt->ca.crt}, downwardAPI {namespace <- metadata.namespace, apiVersion v1}].",
+     "citation": "plugin/pkg/admission/serviceaccount/admission.go:52-57; plugin/pkg/admission/serviceaccount/admission.go:166-168; plugin/pkg/admission/serviceaccount/admission.go:256-267; plugin/pkg/admission/serviceaccount/admission.go:418-484; plugin/pkg/admission/serviceaccount/admission.go:486-526; pkg/serviceaccount/claims.go:43; staging/src/k8s.io/apiserver/pkg/storage/names/generate.go:44-54; staging/src/k8s.io/api/core/v1/types.go:2316"
+    },
+    {
+     "path": "spec.containers[*].volumeMounts[+], spec.initContainers[*].volumeMounts[+]",
+     "source": "ADMISSION_PLUGIN",
+     "value": "SERVER_CHOSEN",
+     "presentAtPolicy": true,
+     "condition": "Same condition as the token volume: {name: kube-api-access-<random>, readOnly: true, mountPath: /var/run/secrets/kubernetes.io/serviceaccount} is appended to every container without a mount at that path.",
+     "citation": "plugin/pkg/admission/serviceaccount/admission.go:437-473"
+    },
+    {
+     "path": "spec.imagePullSecrets",
+     "source": "ADMISSION_PLUGIN",
+     "value": "SERVER_CHOSEN",
+     "presentAtPolicy": true,
+     "condition": "When the pod lists none, copied from the ServiceAccount object's imagePullSecrets. An empty list is omitted in the JSON/CEL view.",
+     "citation": "plugin/pkg/admission/serviceaccount/admission.go:169-174; staging/src/k8s.io/api/core/v1/types.go:4493"
+    },
+    {
+     "path": "spec.tolerations[+node.kubernetes.io/not-ready, +node.kubernetes.io/unreachable]",
+     "source": "ADMISSION_PLUGIN",
+     "value": "FIXED {operator: Exists, effect: NoExecute, tolerationSeconds: 300}",
+     "presentAtPolicy": true,
+     "condition": "DefaultTolerationSeconds (allowlist, default on): appended unless an existing toleration matches the key (or empty key) with effect NoExecute (or empty). 300 is the flag default; --default-not-ready-toleration-seconds / --default-unreachable-toleration-seconds change it.",
+     "citation": "plugin/pkg/admission/defaulttolerationseconds/admission.go:44-59; plugin/pkg/admission/defaulttolerationseconds/admission.go:90-111; plugin/pkg/admission/defaulttolerationseconds/admission.go:124-165; staging/src/k8s.io/api/core/v1/well_known_taints.go:22; staging/src/k8s.io/api/core/v1/well_known_taints.go:27"
+    },
+    {
+     "path": "spec.priority",
+     "source": "ADMISSION_PLUGIN",
+     "value": "FIXED 0",
+     "presentAtPolicy": true,
+     "condition": "Priority (allowlist, default on). It is 0 only when priorityClassName is empty and no globalDefault PriorityClass exists. Otherwise it is the PriorityClass value (SERVER_CHOSEN from PriorityClass state). A manifest value that differs from the computed one is rejected.",
+     "citation": "plugin/pkg/admission/priority/admission.go:64-68; plugin/pkg/admission/priority/admission.go:100-127; plugin/pkg/admission/priority/admission.go:149-199; plugin/pkg/admission/priority/admission.go:313-357; pkg/apis/scheduling/types.go:25-28"
+    },
+    {
+     "path": "spec.preemptionPolicy",
+     "source": "ADMISSION_PLUGIN",
+     "value": "FIXED PreemptLowerPriority",
+     "presentAtPolicy": true,
+     "condition": "With no default PriorityClass. Otherwise it is the PriorityClass preemptionPolicy if set. A conflicting manifest value is rejected.",
+     "citation": "plugin/pkg/admission/priority/admission.go:189-196; plugin/pkg/admission/priority/admission.go:347-357; staging/src/k8s.io/api/core/v1/types.go:3020"
+    },
+    {
+     "path": "spec.priorityClassName",
+     "source": "ADMISSION_PLUGIN",
+     "value": "SERVER_CHOSEN",
+     "presentAtPolicy": true,
+     "condition": "Only when the manifest omits it and a globalDefault PriorityClass exists (the lowest value wins if several do).",
+     "citation": "plugin/pkg/admission/priority/admission.go:178-182; plugin/pkg/admission/priority/admission.go:329-354"
+    },
+    {
+     "path": "spec.overhead",
+     "source": "ADMISSION_PLUGIN",
+     "value": "SERVER_CHOSEN",
+     "presentAtPolicy": true,
+     "condition": "RuntimeClass (allowlist, default on): only when spec.runtimeClassName is set and that RuntimeClass has overhead. A conflicting manifest overhead is rejected.",
+     "citation": "plugin/pkg/admission/runtimeclass/admission.go:95-114; plugin/pkg/admission/runtimeclass/admission.go:142-185"
+    },
+    {
+     "path": "spec.nodeSelector, spec.tolerations (merge)",
+     "source": "ADMISSION_PLUGIN",
+     "value": "SERVER_CHOSEN",
+     "presentAtPolicy": true,
+     "condition": "RuntimeClass: only when runtimeClassName is set and the RuntimeClass has scheduling.",
+     "citation": "plugin/pkg/admission/runtimeclass/admission.go:187-217"
+    },
+    {
+     "path": "spec.containers[*].resources.limits/requests (LimitRange defaults)",
+     "source": "ADMISSION_PLUGIN",
+     "value": "SERVER_CHOSEN",
+     "presentAtPolicy": true,
+     "condition": "LimitRanger: only for resource keys a LimitRange default/defaultRequest names and the container omits. It also sets empty limits/requests maps, which are omitted in the JSON/CEL view.",
+     "citation": "plugin/pkg/admission/limitranger/admission.go:110-156; plugin/pkg/admission/limitranger/admission.go:214-292; plugin/pkg/admission/limitranger/admission.go:395-403; plugin/pkg/admission/limitranger/admission.go:418-440; plugin/pkg/admission/limitranger/admission.go:476-482"
+    },
+    {
+     "path": "spec.containers[*].imagePullPolicy, spec.initContainers[*].imagePullPolicy",
+     "source": "DEFAULTING",
+     "value": "FIXED Always if the image tag is 'latest' or it has no tag and no digest, else IfNotPresent",
+     "presentAtPolicy": true,
+     "condition": "When omitted. If the optional AlwaysPullImages plugin (in the W02g allowlist, off by default) is enabled, it is forced to Always for every container and image volume.",
+     "citation": "pkg/apis/core/v1/defaults.go:82-93; pkg/util/parsers/parsers.go:30-55; staging/src/k8s.io/api/core/v1/types.go:2980-2984"
+    },
+    {
+     "path": "spec.containers[*].imagePullPolicy (AlwaysPullImages)",
+     "source": "ADMISSION_PLUGIN",
+     "value": "FIXED Always",
+     "presentAtPolicy": true,
+     "condition": "Only if AlwaysPullImages is enabled (allowed by W02g, off by default upstream).",
+     "citation": "plugin/pkg/admission/alwayspullimages/admission.go:61-84; plugin/pkg/admission/alwayspullimages/admission.go:173-178; pkg/kubeapiserver/options/plugins.go:82"
+    },
+    {
+     "path": "spec.containers[*].terminationMessagePath",
+     "source": "DEFAULTING",
+     "value": "FIXED /dev/termination-log",
+     "presentAtPolicy": true,
+     "condition": "When omitted.",
+     "citation": "pkg/apis/core/v1/defaults.go:94-96; staging/src/k8s.io/api/core/v1/types.go:3118-3119"
+    },
+    {
+     "path": "spec.containers[*].terminationMessagePolicy",
+     "source": "DEFAULTING",
+     "value": "FIXED File",
+     "presentAtPolicy": true,
+     "condition": "When omitted.",
+     "citation": "pkg/apis/core/v1/defaults.go:97-99; staging/src/k8s.io/api/core/v1/types.go:3032"
+    },
+    {
+     "path": "spec.containers[*].ports[*].protocol",
+     "source": "DEFAULTING",
+     "value": "FIXED TCP",
+     "presentAtPolicy": true,
+     "condition": "When omitted (containers and initContainers).",
+     "citation": "pkg/apis/core/v1/zz_generated.defaults.go:297-305; pkg/apis/core/v1/zz_generated.defaults.go:371-379; staging/src/k8s.io/api/core/v1/types.go:1360"
+    },
+    {
+     "path": "spec.containers[*].ports[*].hostPort",
+     "source": "DEFAULTING",
+     "value": "FIXED <= containerPort>",
+     "presentAtPolicy": true,
+     "condition": "Only with hostNetwork: true and hostPort 0.",
+     "citation": "pkg/apis/core/v1/defaults.go:214-217; pkg/apis/core/v1/defaults.go:439-448"
+    },
+    {
+     "path": "spec.containers[*].resources.requests",
+     "source": "DEFAULTING",
+     "value": "FIXED <copied from limits for keys without a request>",
+     "presentAtPolicy": true,
+     "condition": "Only when limits are given without matching requests (Pod defaulting, also initContainers).",
+     "citation": "pkg/apis/core/v1/defaults.go:170-197"
+    },
+    {
+     "path": "resource quantities (all ResourceList values)",
+     "source": "DEFAULTING",
+     "value": "FIXED <rounded up to milli scale, re-emitted in canonical form>",
+     "presentAtPolicy": true,
+     "condition": "Always. Semantically equal, but the string form can differ from the manifest (e.g. 1.5Gi becomes 1536Mi).",
+     "citation": "pkg/apis/core/v1/defaults.go:39-48; pkg/apis/core/v1/zz_generated.defaults.go:394-395; pkg/apis/core/v1/zz_generated.defaults.go:519-523; staging/src/k8s.io/apimachinery/pkg/api/resource/quantity.go:66-91; staging/src/k8s.io/apimachinery/pkg/api/resource/quantity.go:725-729"
+    },
+    {
+     "path": "spec.containers[*].{liveness,readiness,startup}Probe.{timeoutSeconds,periodSeconds,successThreshold,failureThreshold}",
+     "source": "DEFAULTING",
+     "value": "FIXED 1 / 10 / 1 / 3",
+     "presentAtPolicy": true,
+     "condition": "Only when the probe is present and the field is 0.",
+     "citation": "pkg/apis/core/v1/defaults.go:275-288; pkg/apis/core/v1/zz_generated.defaults.go:396-431"
+    },
+    {
+     "path": "probe/lifecycle httpGet.path, httpGet.scheme; grpc.service",
+     "source": "DEFAULTING",
+     "value": "FIXED '/' / HTTP; ''",
+     "presentAtPolicy": true,
+     "condition": "Only when present and empty.",
+     "citation": "pkg/apis/core/v1/defaults.go:358-365; pkg/apis/core/v1/zz_generated.defaults.go:396-443"
+    },
+    {
+     "path": "probe/lifecycle httpGet.protocol",
+     "source": "DEFAULTING",
+     "value": "FIXED <absent>",
+     "presentAtPolicy": true,
+     "condition": "Not defaulted: gate H2CContainerProbe is Alpha, default false in 1.37.",
+     "citation": "pkg/apis/core/v1/defaults.go:219-223; pkg/features/kube_features.go:1643-1645"
+    },
+    {
+     "path": "env[*].valueFrom.fieldRef.apiVersion; env[*].valueFrom.fileKeyRef.optional",
+     "source": "DEFAULTING",
+     "value": "FIXED v1; false",
+     "presentAtPolicy": true,
+     "condition": "Only when present and unset.",
+     "citation": "pkg/apis/core/v1/defaults.go:397-401; pkg/apis/core/v1/zz_generated.defaults.go:380-393"
+    },
+    {
+     "path": "spec.volumes[*] (emptyDir if no source; defaultMode 420 for secret/configMap/downwardAPI/projected; hostPath.type ''; serviceAccountToken.expirationSeconds 3600; image.pullPolicy)",
+     "source": "DEFAULTING",
+     "value": "FIXED <per sub-field>",
+     "presentAtPolicy": true,
+     "condition": "Per sub-field when omitted. The image volume pullPolicy default applies because ImageVolume is GA and locked true in 1.37.",
+     "citation": "pkg/apis/core/v1/defaults.go:66-81; pkg/apis/core/v1/defaults.go:289-323; pkg/apis/core/v1/defaults.go:501-506; pkg/apis/core/v1/zz_generated.defaults.go:209-296; staging/src/k8s.io/api/core/v1/types.go:1573; staging/src/k8s.io/api/core/v1/types.go:2025; staging/src/k8s.io/api/core/v1/types.go:2316; pkg/features/kube_features.go:1682-1687"
+    },
+    {
+     "path": "spec.resources (pod-level requests/limits)",
+     "source": "BEFORE_CREATE",
+     "value": "FIXED <aggregated from containers / pod limits>",
+     "presentAtPolicy": true,
+     "condition": "Only when spec.resources has requests or limits. With PodLevelResources and PodLevelResourcesFixDefaulting both Beta and on in 1.37, this runs in PrepareForCreate rather than in decode-time defaulting.",
+     "citation": "pkg/registry/core/pod/strategy.go:101; pkg/api/pod/util.go:2253-2279; pkg/apis/core/v1/defaults.go:199-207; pkg/features/kube_features.go:1965-1972"
+    },
+    {
+     "path": "spec.affinity.(anti)podAffinity terms labelSelector.matchExpressions[+]",
+     "source": "BEFORE_CREATE",
+     "value": "FIXED <key In/NotIn pod label value>",
+     "presentAtPolicy": true,
+     "condition": "Only when matchLabelKeys/mismatchLabelKeys are used (MatchLabelKeysInPodAffinity GA, locked).",
+     "citation": "pkg/registry/core/pod/strategy.go:98; pkg/registry/core/pod/strategy.go:882-930; pkg/features/kube_features.go:1824-1828"
+    },
+    {
+     "path": "spec.topologySpreadConstraints[*].labelSelector.matchExpressions[+]",
+     "source": "BEFORE_CREATE",
+     "value": "FIXED <key In pod label value>",
+     "presentAtPolicy": true,
+     "condition": "Only when matchLabelKeys are used (both gates Beta, default true).",
+     "citation": "pkg/registry/core/pod/strategy.go:99; pkg/registry/core/pod/strategy.go:932-949; pkg/features/kube_features.go:1830-1837"
+    },
+    {
+     "path": "spec.containers[*].securityContext.appArmorProfile",
+     "source": "BEFORE_CREATE",
+     "value": "FIXED <derived from deprecated container.apparmor annotation>",
+     "presentAtPolicy": true,
+     "condition": "Only when the deprecated AppArmor annotation is present without the field.",
+     "citation": "pkg/registry/core/pod/strategy.go:100; pkg/registry/core/pod/strategy.go:973-1029"
+    },
+    {
+     "path": "<any field of a disabled feature gate>",
+     "source": "BEFORE_CREATE",
+     "value": "FIXED <absent>",
+     "presentAtPolicy": true,
+     "condition": "DropDisabledPodFields silently drops fields whose gate is off, so manifests must not use them.",
+     "citation": "pkg/registry/core/pod/strategy.go:95; pkg/api/pod/util.go:703-726"
+    },
+    {
+     "path": "status",
+     "source": "STATUS",
+     "value": "FIXED {phase: Pending, qosClass: <computed>} (+ conditions below)",
+     "presentAtPolicy": true,
+     "condition": "Always. Any submitted status is discarded. The status struct is never omitted in the CEL view.",
+     "citation": "pkg/registry/core/pod/strategy.go:91-93; staging/src/k8s.io/api/core/v1/types.go:5809; vendor/sigs.k8s.io/structured-merge-diff/v6/value/jsontagutil.go:100-118; vendor/sigs.k8s.io/structured-merge-diff/v6/value/reflectcache.go:87-95"
+    },
+    {
+     "path": "status.phase",
+     "source": "STATUS",
+     "value": "FIXED Pending",
+     "presentAtPolicy": true,
+     "condition": "Always.",
+     "citation": "pkg/registry/core/pod/strategy.go:91-93; staging/src/k8s.io/api/core/v1/types.go:3721"
+    },
+    {
+     "path": "status.qosClass",
+     "source": "STATUS",
+     "value": "FIXED <BestEffort|Burstable|Guaranteed computed from the final resources, after LimitRanger>",
+     "presentAtPolicy": true,
+     "condition": "Always. Deterministic from the final spec.",
+     "citation": "pkg/registry/core/pod/strategy.go:103; pkg/apis/core/helper/qos/qos.go:30-89"
+    },
+    {
+     "path": "status.conditions[type=PodScheduled,status=False,reason=SchedulingGated]",
+     "source": "STATUS",
+     "value": "FIXED <message 'Scheduling is blocked due to non-empty scheduling gates'>",
+     "presentAtPolicy": true,
+     "condition": "Only when spec.schedulingGates is non-empty.",
+     "citation": "pkg/registry/core/pod/strategy.go:97; pkg/registry/core/pod/strategy.go:951-971"
+    }
+   ]
+  },
+  "ConfigMap": {
+   "ALLOWED_FIXED": [
+    "data {} when nil (invisible)"
+   ],
+   "ALLOWED_SERVER_CHOSEN": [
+    "metadata.uid",
+    "metadata.creationTimestamp",
+    "metadata.managedFields"
+   ],
+   "RULED_OUT_BY_MANIFEST": {
+    "metadata.namespace defaulting": "MC02",
+    "metadata.name from generateName": "MC01"
+   },
+   "CHECKED_BY_A2": [
+    "A2-CM-PUBLISHER",
+    "A2-RESERVED",
+    "A2-CM-IMMUTABLE"
+   ],
+   "nonGateCreators": {
+    "kube-root-ca.crt": "the root-CA publisher (system:serviceaccount:kube-system:root-ca-cert-publisher); A2-CM-PUBLISHER admits, from exactly that identity and only under that name, an object of the publisher's shape (only ca.crt, no binaryData or labels, at most the description annotation); W01 section 2.5"
+   },
+   "upstreamFields": [
+    {
+     "path": "metadata.uid",
+     "source": "BEFORE_CREATE",
+     "value": "SERVER_CHOSEN",
+     "presentAtPolicy": true,
+     "condition": "Always. A client-supplied uid is wiped first. A new random UUID is set inside Store.create before BeginCreate and validation; the too-large retry generates another.",
+     "citation": "staging/src/k8s.io/apiserver/pkg/registry/rest/meta.go:38-42; staging/src/k8s.io/apiserver/pkg/registry/generic/registry/store.go:552; staging/src/k8s.io/apiserver/pkg/endpoints/handlers/create.go:165-172; staging/src/k8s.io/apiserver/pkg/registry/rest/meta.go:29-36"
+    },
+    {
+     "path": "metadata.creationTimestamp",
+     "source": "BEFORE_CREATE",
+     "value": "SERVER_CHOSEN",
+     "presentAtPolicy": true,
+     "condition": "Always (metav1.Now()). In the CEL view it is an RFC3339 UTC string with second precision.",
+     "citation": "staging/src/k8s.io/apiserver/pkg/registry/rest/meta.go:38-42; staging/src/k8s.io/apiserver/pkg/registry/generic/registry/store.go:552; staging/src/k8s.io/apimachinery/pkg/apis/meta/v1/time.go:184-191; staging/src/k8s.io/apimachinery/pkg/apis/meta/v1/types.go:213"
+    },
+    {
+     "path": "metadata.managedFields",
+     "source": "FIELD_MANAGER",
+     "value": "SERVER_CHOSEN",
+     "presentAtPolicy": true,
+     "condition": "Always, except on the too-large retry (nil). One entry {manager: fieldManager option | User-Agent prefix | 'unknown', operation: Update, apiVersion: v1, fieldsType: FieldsV1, time: now UTC, fieldsV1: computed from the decoded+defaulted object before mutating admission}. Client-supplied managedFields that decode and are non-empty are kept and merged, so extra entries are possible. apiVersion, kind and the metadata system fields are stripped from the field set.",
+     "citation": "staging/src/k8s.io/apiserver/pkg/endpoints/handlers/create.go:194-200; staging/src/k8s.io/apiserver/pkg/endpoints/handlers/create.go:210-216; staging/src/k8s.io/apiserver/pkg/endpoints/handlers/create.go:257-264; staging/src/k8s.io/apimachinery/pkg/util/managedfields/internal/fieldmanager.go:77-108; staging/src/k8s.io/apimachinery/pkg/util/managedfields/internal/managedfieldsupdater.go:44-67; staging/src/k8s.io/apimachinery/pkg/util/managedfields/internal/buildmanagerinfo.go:63-74; staging/src/k8s.io/apimachinery/pkg/util/managedfields/internal/managedfields.go:175-243; staging/src/k8s.io/apimachinery/pkg/util/managedfields/internal/stripmeta.go:40-51"
+    },
+    {
+     "path": "metadata.resourceVersion",
+     "source": "STORAGE",
+     "value": "SERVER_CHOSEN",
+     "presentAtPolicy": false,
+     "condition": "Set from the etcd revision on the returned object after the write. The create path read here does not wipe a client-supplied resourceVersion before admission, so a policy would see it, and etcd3 Create then rejects it with ErrResourceVersionSetOnCreate.",
+     "citation": "staging/src/k8s.io/apiserver/pkg/storage/etcd3/store.go:297-302; staging/src/k8s.io/apiserver/pkg/storage/etcd3/store.go:339-341; staging/src/k8s.io/apiserver/pkg/storage/api_object_versioner.go:33-44; staging/src/k8s.io/apiserver/pkg/storage/api_object_versioner.go:63-71"
+    },
+    {
+     "path": "metadata.namespace",
+     "source": "REQUEST_HANDLER",
+     "value": "FIXED <request URL namespace>",
+     "presentAtPolicy": true,
+     "condition": "Only differs when the manifest omits metadata.namespace. A mismatching namespace is rejected with BadRequest.",
+     "citation": "staging/src/k8s.io/apiserver/pkg/endpoints/handlers/create.go:174-178; staging/src/k8s.io/apiserver/pkg/registry/rest/meta.go:44-68; staging/src/k8s.io/apiserver/pkg/registry/rest/create.go:119-126"
+    },
+    {
+     "path": "metadata.name",
+     "source": "BEFORE_CREATE",
+     "value": "SERVER_CHOSEN",
+     "presentAtPolicy": true,
+     "condition": "Only when the manifest uses generateName without a name: base truncated to 58 characters plus 5 random characters, up to 8 attempts. request.name in the policy is the generated name.",
+     "citation": "staging/src/k8s.io/apiserver/pkg/registry/generic/registry/store.go:553-555; staging/src/k8s.io/apiserver/pkg/storage/names/generate.go:44-54; staging/src/k8s.io/apiserver/pkg/registry/rest/create.go:224-230; staging/src/k8s.io/apiserver/pkg/registry/generic/registry/store.go:535-543"
+    },
+    {
+     "path": "metadata.selfLink, metadata.deletionTimestamp, metadata.deletionGracePeriodSeconds",
+     "source": "REQUEST_HANDLER",
+     "value": "FIXED <absent>",
+     "presentAtPolicy": true,
+     "condition": "Wiped if the client supplied them.",
+     "citation": "staging/src/k8s.io/apiserver/pkg/endpoints/handlers/create.go:165-172; staging/src/k8s.io/apiserver/pkg/registry/rest/meta.go:29-36"
+    },
+    {
+     "path": "metadata.ownerReferences",
+     "source": "REQUEST_HANDLER",
+     "value": "FIXED <manifest list with semantic duplicates of the same UID removed>",
+     "presentAtPolicy": true,
+     "condition": "Only if the manifest contains duplicate ownerReferences.",
+     "citation": "staging/src/k8s.io/apiserver/pkg/endpoints/handlers/create.go:193; staging/src/k8s.io/apiserver/pkg/endpoints/handlers/create.go:208; staging/src/k8s.io/apiserver/pkg/endpoints/handlers/rest.go:297-313; staging/src/k8s.io/apiserver/pkg/endpoints/handlers/rest.go:334-353"
+    },
+    {
+     "path": "metadata.generation",
+     "source": "REQUEST_HANDLER",
+     "value": "FIXED <as submitted; normally absent>",
+     "presentAtPolicy": true,
+     "condition": "No server code in the create path read sets generation for this kind. The wipe does not clear it and validation only requires it to be non-negative, so a client-supplied value survives (static reading, not run).",
+     "citation": "staging/src/k8s.io/apiserver/pkg/registry/rest/create.go:100-142; staging/src/k8s.io/apiserver/pkg/registry/rest/meta.go:29-36; staging/src/k8s.io/apimachinery/pkg/api/validation/objectmeta.go:290; pkg/registry/core/configmap/strategy.go:56-59"
+    },
+    {
+     "path": "data",
+     "source": "DEFAULTING",
+     "value": "FIXED {} (invisible)",
+     "presentAtPolicy": true,
+     "condition": "When nil, set to an empty map. Empty maps with omitempty are omitted in the JSON and CEL view, so nothing differs there.",
+     "citation": "pkg/apis/core/v1/defaults.go:433-437; pkg/apis/core/v1/zz_generated.defaults.go:67-69; staging/src/k8s.io/api/core/v1/types.go:8454; vendor/sigs.k8s.io/structured-merge-diff/v6/value/jsontagutil.go:100-104; vendor/sigs.k8s.io/structured-merge-diff/v6/value/reflectcache.go:87-90"
+    },
+    {
+     "path": "immutable, binaryData, data (non-empty)",
+     "source": "DEFAULTING",
+     "value": "FIXED <as submitted>",
+     "presentAtPolicy": true,
+     "condition": "PrepareForCreate only calls an empty dropDisabledFields, and conversion is a direct copy. No admission plugin in the W02g allowlist handles configmaps (see admissionPluginsForKinds).",
+     "citation": "pkg/registry/core/configmap/strategy.go:56-59; pkg/registry/core/configmap/strategy.go:93-94; pkg/apis/core/v1/zz_generated.conversion.go:3034-3040; staging/src/k8s.io/api/core/v1/types.go:8446-8466"
+    }
+   ]
+  },
+  "Service": {
+   "ALLOWED_FIXED": [
+    "spec.sessionAffinity None",
+    "spec.internalTrafficPolicy Cluster",
+    "ports[*].protocol TCP",
+    "ports[*].targetPort = port",
+    "spec.ipFamilyPolicy SingleStack",
+    "spec.ipFamilies (sealed family)",
+    "status.loadBalancer {}"
+   ],
+   "ALLOWED_SERVER_CHOSEN": [
+    "metadata.uid",
+    "metadata.creationTimestamp",
+    "metadata.managedFields",
+    "spec.clusterIP and spec.clusterIPs (one address in the sealed service CIDR)"
+   ],
+   "RULED_OUT_BY_MANIFEST": {
+    "metadata.namespace defaulting": "MC02",
+    "metadata.name from generateName": "MC01",
+    "external, node-port and load-balancer fields": "MC21",
+    "type defaulting": "MC20"
+   },
+   "CHECKED_BY_A2": [
+    "A2-RESERVED",
+    "A2-SVC-TYPE",
+    "A2-SVC-ALLOCATION",
+    "A2-SVC-DEFAULTS"
+   ],
+   "upstreamFields": [
+    {
+     "path": "metadata.uid",
+     "source": "BEFORE_CREATE",
+     "value": "SERVER_CHOSEN",
+     "presentAtPolicy": true,
+     "condition": "Always. A client-supplied uid is wiped first. A new random UUID is set inside Store.create before BeginCreate and validation; the too-large retry generates another.",
+     "citation": "staging/src/k8s.io/apiserver/pkg/registry/rest/meta.go:38-42; staging/src/k8s.io/apiserver/pkg/registry/generic/registry/store.go:552; staging/src/k8s.io/apiserver/pkg/endpoints/handlers/create.go:165-172; staging/src/k8s.io/apiserver/pkg/registry/rest/meta.go:29-36"
+    },
+    {
+     "path": "metadata.creationTimestamp",
+     "source": "BEFORE_CREATE",
+     "value": "SERVER_CHOSEN",
+     "presentAtPolicy": true,
+     "condition": "Always (metav1.Now()). In the CEL view it is an RFC3339 UTC string with second precision.",
+     "citation": "staging/src/k8s.io/apiserver/pkg/registry/rest/meta.go:38-42; staging/src/k8s.io/apiserver/pkg/registry/generic/registry/store.go:552; staging/src/k8s.io/apimachinery/pkg/apis/meta/v1/time.go:184-191; staging/src/k8s.io/apimachinery/pkg/apis/meta/v1/types.go:213"
+    },
+    {
+     "path": "metadata.managedFields",
+     "source": "FIELD_MANAGER",
+     "value": "SERVER_CHOSEN",
+     "presentAtPolicy": true,
+     "condition": "Always, except on the too-large retry (nil). One entry {manager: fieldManager option | User-Agent prefix | 'unknown', operation: Update, apiVersion: v1, fieldsType: FieldsV1, time: now UTC, fieldsV1: computed from the decoded+defaulted object before mutating admission}. Client-supplied managedFields that decode and are non-empty are kept and merged, so extra entries are possible. apiVersion, kind and the metadata system fields are stripped from the field set.",
+     "citation": "staging/src/k8s.io/apiserver/pkg/endpoints/handlers/create.go:194-200; staging/src/k8s.io/apiserver/pkg/endpoints/handlers/create.go:210-216; staging/src/k8s.io/apiserver/pkg/endpoints/handlers/create.go:257-264; staging/src/k8s.io/apimachinery/pkg/util/managedfields/internal/fieldmanager.go:77-108; staging/src/k8s.io/apimachinery/pkg/util/managedfields/internal/managedfieldsupdater.go:44-67; staging/src/k8s.io/apimachinery/pkg/util/managedfields/internal/buildmanagerinfo.go:63-74; staging/src/k8s.io/apimachinery/pkg/util/managedfields/internal/managedfields.go:175-243; staging/src/k8s.io/apimachinery/pkg/util/managedfields/internal/stripmeta.go:40-51"
+    },
+    {
+     "path": "metadata.resourceVersion",
+     "source": "STORAGE",
+     "value": "SERVER_CHOSEN",
+     "presentAtPolicy": false,
+     "condition": "Set from the etcd revision on the returned object after the write. The create path read here does not wipe a client-supplied resourceVersion before admission, so a policy would see it, and etcd3 Create then rejects it with ErrResourceVersionSetOnCreate.",
+     "citation": "staging/src/k8s.io/apiserver/pkg/storage/etcd3/store.go:297-302; staging/src/k8s.io/apiserver/pkg/storage/etcd3/store.go:339-341; staging/src/k8s.io/apiserver/pkg/storage/api_object_versioner.go:33-44; staging/src/k8s.io/apiserver/pkg/storage/api_object_versioner.go:63-71"
+    },
+    {
+     "path": "metadata.namespace",
+     "source": "REQUEST_HANDLER",
+     "value": "FIXED <request URL namespace>",
+     "presentAtPolicy": true,
+     "condition": "Only differs when the manifest omits metadata.namespace. A mismatching namespace is rejected with BadRequest.",
+     "citation": "staging/src/k8s.io/apiserver/pkg/endpoints/handlers/create.go:174-178; staging/src/k8s.io/apiserver/pkg/registry/rest/meta.go:44-68; staging/src/k8s.io/apiserver/pkg/registry/rest/create.go:119-126"
+    },
+    {
+     "path": "metadata.name",
+     "source": "BEFORE_CREATE",
+     "value": "SERVER_CHOSEN",
+     "presentAtPolicy": true,
+     "condition": "Only when the manifest uses generateName without a name: base truncated to 58 characters plus 5 random characters, up to 8 attempts. request.name in the policy is the generated name.",
+     "citation": "staging/src/k8s.io/apiserver/pkg/registry/generic/registry/store.go:553-555; staging/src/k8s.io/apiserver/pkg/storage/names/generate.go:44-54; staging/src/k8s.io/apiserver/pkg/registry/rest/create.go:224-230; staging/src/k8s.io/apiserver/pkg/registry/generic/registry/store.go:535-543"
+    },
+    {
+     "path": "metadata.selfLink, metadata.deletionTimestamp, metadata.deletionGracePeriodSeconds",
+     "source": "REQUEST_HANDLER",
+     "value": "FIXED <absent>",
+     "presentAtPolicy": true,
+     "condition": "Wiped if the client supplied them.",
+     "citation": "staging/src/k8s.io/apiserver/pkg/endpoints/handlers/create.go:165-172; staging/src/k8s.io/apiserver/pkg/registry/rest/meta.go:29-36"
+    },
+    {
+     "path": "metadata.ownerReferences",
+     "source": "REQUEST_HANDLER",
+     "value": "FIXED <manifest list with semantic duplicates of the same UID removed>",
+     "presentAtPolicy": true,
+     "condition": "Only if the manifest contains duplicate ownerReferences.",
+     "citation": "staging/src/k8s.io/apiserver/pkg/endpoints/handlers/create.go:193; staging/src/k8s.io/apiserver/pkg/endpoints/handlers/create.go:208; staging/src/k8s.io/apiserver/pkg/endpoints/handlers/rest.go:297-313; staging/src/k8s.io/apiserver/pkg/endpoints/handlers/rest.go:334-353"
+    },
+    {
+     "path": "metadata.generation",
+     "source": "REQUEST_HANDLER",
+     "value": "FIXED <as submitted; normally absent>",
+     "presentAtPolicy": true,
+     "condition": "No server code in the create path read sets generation for this kind. The wipe does not clear it and validation only requires it to be non-negative, so a client-supplied value survives (static reading, not run).",
+     "citation": "staging/src/k8s.io/apiserver/pkg/registry/rest/create.go:100-142; staging/src/k8s.io/apiserver/pkg/registry/rest/meta.go:29-36; staging/src/k8s.io/apimachinery/pkg/api/validation/objectmeta.go:290; pkg/registry/core/service/strategy.go:69-75"
+    },
+    {
+     "path": "spec.type",
+     "source": "DEFAULTING",
+     "value": "FIXED ClusterIP",
+     "presentAtPolicy": true,
+     "condition": "When omitted.",
+     "citation": "pkg/apis/core/v1/defaults.go:123-125; staging/src/k8s.io/api/core/v1/types.go:6066"
+    },
+    {
+     "path": "spec.sessionAffinity",
+     "source": "DEFAULTING",
+     "value": "FIXED None",
+     "presentAtPolicy": true,
+     "condition": "When omitted. With None, sessionAffinityConfig is cleared.",
+     "citation": "pkg/apis/core/v1/defaults.go:107-112; staging/src/k8s.io/api/core/v1/types.go:6038"
+    },
+    {
+     "path": "spec.sessionAffinityConfig.clientIP.timeoutSeconds",
+     "source": "DEFAULTING",
+     "value": "FIXED 10800",
+     "presentAtPolicy": true,
+     "condition": "Only with sessionAffinity ClientIP and no timeout.",
+     "citation": "pkg/apis/core/v1/defaults.go:113-122; staging/src/k8s.io/api/core/v1/types.go:6041"
+    },
+    {
+     "path": "spec.ports[*].protocol",
+     "source": "DEFAULTING",
+     "value": "FIXED TCP",
+     "presentAtPolicy": true,
+     "condition": "When omitted.",
+     "citation": "pkg/apis/core/v1/defaults.go:126-130; pkg/apis/core/v1/zz_generated.defaults.go:1250-1258"
+    },
+    {
+     "path": "spec.ports[*].targetPort",
+     "source": "DEFAULTING",
+     "value": "FIXED <= ports[*].port (int)>",
+     "presentAtPolicy": true,
+     "condition": "When omitted, 0 or empty string.",
+     "citation": "pkg/apis/core/v1/defaults.go:131-133; staging/src/k8s.io/api/core/v1/types.go:6560"
+    },
+    {
+     "path": "spec.internalTrafficPolicy",
+     "source": "DEFAULTING",
+     "value": "FIXED Cluster",
+     "presentAtPolicy": true,
+     "condition": "When omitted for ClusterIP/NodePort/LoadBalancer.",
+     "citation": "pkg/apis/core/v1/defaults.go:141-146; staging/src/k8s.io/api/core/v1/types.go:6090"
+    },
+    {
+     "path": "spec.externalTrafficPolicy",
+     "source": "DEFAULTING",
+     "value": "FIXED Cluster",
+     "presentAtPolicy": true,
+     "condition": "Only for ClusterIP when spec.externalIPs is non-empty (externally accessible).",
+     "citation": "pkg/apis/core/v1/defaults.go:135-139; pkg/api/v1/service/util.go:71-75"
+    },
+    {
+     "path": "spec.ipFamilyPolicy",
+     "source": "ALLOCATION",
+     "value": "FIXED SingleStack",
+     "presentAtPolicy": true,
+     "condition": "Set in BeginCreate when omitted. Headless + selectorless gets RequireDualStack instead.",
+     "citation": "pkg/registry/core/service/storage/alloc.go:75-79; pkg/registry/core/service/storage/alloc.go:124-150; staging/src/k8s.io/api/core/v1/types.go:6242"
+    },
+    {
+     "path": "spec.ipFamilies",
+     "source": "ALLOCATION",
+     "value": "FIXED <cluster primary service IP family; configuration-dependent>",
+     "presentAtPolicy": true,
+     "condition": "Inferred from clusterIPs if given, else the cluster default family. A second family is appended only if ipFamilyPolicy is not SingleStack and the cluster has two service CIDRs.",
+     "citation": "pkg/registry/core/service/storage/alloc.go:201-225; pkg/registry/core/service/storage/alloc.go:284-300; pkg/registry/core/service/storage/storage.go:110-114"
+    },
+    {
+     "path": "spec.clusterIP, spec.clusterIPs",
+     "source": "ALLOCATION",
+     "value": "SERVER_CHOSEN",
+     "presentAtPolicy": true,
+     "condition": "Allocated in BeginCreate before validation and before the policy, at a random offset in the service CIDR (MultiCIDRServiceAllocator GA, locked). FIXED only if the manifest pins clusterIP(s), which must be free and in range; clusterIPs is then filled from a singular clusterIP. Headless 'None' gets no allocation. A dry-run gets the CIDR base address.",
+     "citation": "pkg/registry/core/service/storage/storage.go:342-369; pkg/registry/core/service/storage/storage.go:493-521; pkg/registry/core/service/storage/alloc.go:305-393; pkg/registry/core/service/storage/alloc.go:395-450; pkg/registry/core/service/ipallocator/ipallocator.go:237-290; pkg/registry/core/service/ipallocator/cidrallocator.go:364-378; pkg/features/kube_features.go:1850-1855"
+    },
+    {
+     "path": "spec.ports[*].nodePort, spec.healthCheckNodePort",
+     "source": "ALLOCATION",
+     "value": "FIXED <absent>",
+     "presentAtPolicy": true,
+     "condition": "Not allocated for type ClusterIP.",
+     "citation": "pkg/registry/core/service/storage/alloc.go:481-500"
+    },
+    {
+     "path": "status",
+     "source": "STATUS",
+     "value": "FIXED {loadBalancer: {}}",
+     "presentAtPolicy": true,
+     "condition": "PrepareForCreate resets status. Struct-typed fields with omitempty are never omitted, so status and status.loadBalancer appear as empty maps in the CEL view.",
+     "citation": "pkg/registry/core/service/strategy.go:69-75; staging/src/k8s.io/api/core/v1/types.go:6171; staging/src/k8s.io/api/core/v1/types.go:6602; vendor/sigs.k8s.io/structured-merge-diff/v6/value/jsontagutil.go:100-118; vendor/sigs.k8s.io/structured-merge-diff/v6/value/reflectcache.go:87-95"
+    }
+   ]
+  }
+ },
+ "notPresentAtPolicy": [
+  "metadata.resourceVersion (set by storage after the policy)"
+ ],
+ "unverified": [
+  "The exact fieldsV1 content of the server-created managedFields entry was not traced into structured-merge-diff. That the set is computed from the decoded and defaulted object against an empty live object, and so includes defaulted fields, is an inference from create.go:194-199 and structuredmerge.go:91-117.",
+  "CEL equality on schemaless list values (ordered or not) and int/double heterogeneous equality were not traced into cel-go. The Validation doc comment (types.go:347) describes set/map list semantics for typed lists, but the schemaless path may not apply it.",
+  "The admissionregistration v1 Validation doc comment (types.go:330-331) says only apiVersion, kind, metadata.name and metadata.generateName are accessible from the object root. The 1.37 evaluation path (condition.go:78 -> SchemalessTypedToVal) exposes the full JSON shape. typechecking.go was not read and nothing was run, so access to object.metadata.labels/annotations/managedFields is inferred from code, not observed.",
+  "Whether request.options.fieldValidation / fieldManager can be read in CEL was not traced. options is declared DynType (compile.go:87) and filled with RawExtension{Object: CreateOptions} (condition.go:154-156); the RawExtension rendering by SchemalessTypedToVal was not read.",
+  "The absence of any hashing or canonical-serialization function in the CEL environment is inferred from the library list in environment/base.go:57-189. The individual libraries (library.Format, library.Lists, ext.Strings, etc.) were not read.",
+  "Size ceilings for policy objects and manifests were not read: MaxRequestBodyBytes, the etcd request size, and file-size limits in manifest/loader.go LoadFiles (read only for hashing). Embedding large expected objects in a policy is therefore unbounded only as far as this research knows.",
+  "That a client-supplied metadata.generation survives on Service/ConfigMap CREATE is a static reading: no SetGeneration in the create path read, and objectmeta.go:290 checks only non-negativity. Not executed.",
+  "The ValidatingAdmissionPolicy status controller (typeChecking, observedGeneration) and its relation to the admission plugin's in-memory hooks were not read. No API signal was found that proves an API-registered policy is active in the plugin.",
+  "Static manifest reload: only the polling interval, the hash short-circuit and the metrics were read. Atomicity of a reload with respect to in-flight requests, and behaviour on a partially written directory, were not traced.",
+  "The W02g allowlist assumes MutatingAdmissionPolicy and the mutating webhook are disabled. If either were on, it would run before ValidatingAdmissionPolicy (plugins.go:110-112) and could mutate any field. This research covers only the in-tree plugins listed.",
+  "Cluster-specific values (service CIDR families, default toleration flags, the presence of LimitRange/PriorityClass/RuntimeClass objects, Node topology labels) depend on the W03 distribution and sealed configuration and were not observed.",
+  "Nothing was executed against a running apiserver. All presentAtVAP values come from static reading of the create path at the pinned commit."
+ ]
+}

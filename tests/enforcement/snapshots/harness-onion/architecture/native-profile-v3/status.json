@@ -1,0 +1,90 @@
+{
+ "schemaVersion": "planeon.internal.native-profile-v3-status/v1",
+ "contract": "planeon.internal.native-qualification/v3",
+ "supersedes": "planeon.internal.native-qualification/v2",
+ "reviewRounds": [
+  {
+   "round": 1,
+   "record": "architecture/native-profile-v3/review-round1.json",
+   "recordSha256": "6c2b96c5ad22be96c0c9877a62496930077514e686d18102d2ba9bfd6bd54706",
+   "verdict": "CHANGES_REQUIRED",
+   "subjectDirectory": "architecture/native-profile-v3/round1/"
+  },
+  {
+   "round": 2,
+   "record": "architecture/native-profile-v3/review-round2.json",
+   "recordSha256": "d7efcbbb00bbc32cd9d9fdeacd4413e7fd2f63a4f7be415c3082b6fe9ab1d741",
+   "verdict": "CHANGES_REQUIRED",
+   "subjectDirectory": "architecture/native-profile-v3/round2/"
+  },
+  {
+   "round": 3,
+   "record": "architecture/native-profile-v3/review-round3.json",
+   "recordSha256": "5a9db56cc15cd08615b395696d020e0771a574d2c7d8d77be03cdf6c7bcbad34",
+   "verdict": "CHANGES_REQUIRED",
+   "subjectDirectory": "architecture/native-profile-v3/round3/"
+  },
+  {
+   "round": 4,
+   "record": "architecture/native-profile-v3/review-round4.json",
+   "recordSha256": "853aa4dc70e0ebaa20d1e05ef7ba4f8fca7c06550e91ba3142d30f8260f82990",
+   "verdict": "CHANGES_REQUIRED",
+   "subjectDirectory": "architecture/native-profile-v3/round4/"
+  },
+  {
+   "round": 5,
+   "record": "architecture/native-profile-v3/review-round5.json",
+   "recordSha256": "2bea5b50f492de29bd0fc2b8beddb0447f6146bf63c86fa520464b1bb739306f",
+   "verdict": "CHANGES_REQUIRED",
+   "subjectDirectory": "architecture/native-profile-v3/round5/"
+  },
+  {
+   "round": 6,
+   "record": "architecture/native-profile-v3/review-round6.json",
+   "recordSha256": "dce53008c9b21f670935a6fb0c434678dec2538599fc757c46ac5a54a718c929",
+   "verdict": "PASS_FOR_SOURCE_PUBLICATION",
+   "subjectDirectory": "CURRENT"
+  }
+ ],
+ "carriedFindings": {
+  "R6-1": "W02a-F2 (restate the K1 guarantee in decision-2 terms: root=, ro and rw drive only systemd fixed root-mount units; the binding fixes the initrd= and root= words; name initrd= and security= in the environment sentence) and W03/T04 (the kernel image or UKI each entry loads with its built-in initramfs, embedded .initrd and .cmdline and addons; systemd-stub sidecars /.extra/global_credentials, sysext and confext; network roots)",
+  "R6-2": "W02a-F2: restore that on a non-confidential VM systemd-boot and systemd-stub append SMBIOS kernel-cmdline-extra words to /proc/cmdline, which are part of both declared entries and must be inside the grammar",
+  "R6-3": "W02a-F2: bound-pair grammar and lockdown negatives (or list them as also breaking the binding); maintenance entries differing only by a grammar word or by word order; optional negatives for security=apparmor, rootfstype= and initrd=<addr>,<size>, accepted root=LABEL= and root=/dev/"
+ },
+ "closedFindings": {
+  "P1": "Closures list no other role's executable (path or content) and, for native-only roles, nothing from the interpreter tree (path or content); every member's running image is its role's image; one file per inode across captures",
+  "P3": "Slice census checked against the role captures (no cgroup below a role cgroup, exactly the two delegated leaves, enrolled cgroups populated), canonical paths, listed parents and the slice's nr_descendants",
+  "P4": "(pid, startTicks) unique over every role cgroup member and backend process",
+  "P5": "The slice's own members are observed and required empty; the counts row names role domains only",
+  "P6": "Member thread counts equal pids.current within pids.max; inspectors read a frozen cgroup with no unreaped task, freezing through an ancestor and never writing the broker-owned leaf's cgroup.freeze (carried to the W02e/W03 inspector policy)",
+  "P7": "unit-distribution is test-only and qualifies only in an explicit fixture call (a), type names stated per component (b), backend cgroups never nest (c)",
+  "NETWORK_POLICY_AGENT_IDENTITY": "Backend apiIdentities bound to the W02g identity closure by holder; the fixture agent is planeon:netpol-agent; at most one system:node: name",
+  "W02E_LABEL_SLOTS": "Role cgroup, pin and seal-marker labels are schema constants equal to the W02e slot values",
+  "E1-CENSUS": "Effective programs on every role cgroup are observed for the 22 other cgroup attach types of Linux v6.12 and required empty; narrowed to role cgroups (decision 3), carried to W03 and T04 together with the rule that planeon roles receive no socket created outside their role cgroup",
+  "K1": "Enrolled and maintenance boot entries recorded and distinct; the enrolled entry carries lockdown=integrity and never names planeon-maintenance.target, which is the maintenance entry's effective systemd.unit; every capture is on the enrolled entry; loader-reported, not measured (T04)"
+ },
+ "contractState": "ADOPTED_DATA_CONTRACT",
+ "obligations": {
+  "E01": "OPEN_UNPROVEN",
+  "E02": "OPEN_UNPROVEN",
+  "E03": "OPEN_UNPROVEN",
+  "E04": "OPEN_UNPROVEN",
+  "E05": "OPEN_UNPROVEN",
+  "E06": "OPEN_UNPROVEN",
+  "E07": "OPEN_UNPROVEN",
+  "E08": "OPEN_UNPROVEN",
+  "E09": "OPEN_UNPROVEN",
+  "E10": "OPEN_UNPROVEN",
+  "E11": "OPEN_UNPROVEN",
+  "E12": "OPEN_UNPROVEN"
+ },
+ "independentReviewer": "SEPARATE_AGENT_NOT_AUTHOR",
+ "nativeAcceptance": false,
+ "tenantAcceptance": false,
+ "productionProfileSelected": false,
+ "bootEntryMeasured": false,
+ "seccompFiltersDefined": false,
+ "productExecution": false,
+ "runnerActivated": false,
+ "phaseComplete": false
+}

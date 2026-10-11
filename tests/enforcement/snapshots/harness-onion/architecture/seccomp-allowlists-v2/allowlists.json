@@ -1,0 +1,2772 @@
+{
+ "defaultAction": "KILL_PROCESS",
+ "mode": 2,
+ "ownerDecisions": [
+  {
+   "date": "2026-10-09",
+   "decision": "W02d defines the WORKER allowlist from the worker's duties; the W01 section 5.3 WORKER row text 'Existing worker allowlist' is amended to 'the W02d worker allowlist' (carried to W01's record)",
+   "id": "W02d-Q1"
+  },
+  {
+   "date": "2026-10-09",
+   "decision": "exact duty syscalls per role from its row plus one closed runtime base per role (CPython 3.12 for SERVER and WORKER, one native static base for the five native roles); W03's language and libc must fit inside it or W02d reopens",
+   "id": "W02d-Q2"
+  },
+  {
+   "date": "2026-10-09",
+   "decision": "seccompFilterDigest is the SHA-256 of the classic-BPF sock_filter array (little-endian) the reference compiler emits per role and architecture; the boot-time proof that the installed filter equals it is an open T04/W02a-F obligation",
+   "id": "W02d-Q3"
+  },
+  {
+   "date": "2026-10-10",
+   "decision": "the broker kills the worker through cgroup.kill only (it has no CAP_KILL); W6 becomes freeze, cgroup.kill, wait for populated 0, and the unused pidfd_send_signal grant is dropped",
+   "id": "W01-AMEND-QW1"
+  },
+  {
+   "date": "2026-10-10",
+   "decision": "the broker runs with no supplementary groups and W3 checks the child holds none; no role may grant setgroups",
+   "id": "W01-AMEND-QW2"
+  },
+  {
+   "date": "2026-10-10",
+   "decision": "M-a: memfd_create flags are MFD_CLOEXEC | MFD_NOEXEC_SEAL, so the kernel clears exec and sets F_SEAL_EXEC on every call with no reliance on host state (not a vm.memfd_noexec pin, which a CAP_SYS_ADMIN holder in the initial namespaces can lower)",
+   "id": "W01-AMEND-QW3"
+  },
+  {
+   "date": "2026-10-10",
+   "decision": "the native roles are Rust with musl, fully static (analysed reference: musl 1.2.5, Rust 1.90.0; W03 pins these or re-checks against W02d); NATIVE_STATIC adds poll, which Rust std calls on fds 0-2 at start-up and musl issues as SYS_poll on x86_64 (aarch64 has no poll syscall); musl creates threads with clone, never clone3, so the clone3 ENOSYS rule serves the CPython roles' glibc",
+   "id": "W01-AMEND-QW4"
+  }
+ ],
+ "roles": {
+  "BROKER": {
+   "digestSlot": true,
+   "duties": [
+    {
+     "row": "I/O on held FDs",
+     "rules": [
+      {
+       "name": "read"
+      },
+      {
+       "name": "write"
+      },
+      {
+       "name": "readv"
+      },
+      {
+       "name": "writev"
+      },
+      {
+       "name": "recvfrom"
+      },
+      {
+       "name": "sendto"
+      },
+      {
+       "name": "recvmsg"
+      },
+      {
+       "name": "sendmsg"
+      },
+      {
+       "name": "shutdown"
+      },
+      {
+       "name": "close"
+      },
+      {
+       "name": "getsockopt"
+      },
+      {
+       "name": "setsockopt"
+      },
+      {
+       "name": "getsockname"
+      },
+      {
+       "name": "getpeername"
+      },
+      {
+       "name": "fcntl"
+      }
+     ],
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md:402"
+    },
+    {
+     "row": "socket(AF_INET/AF_INET6 stream, AF_UNIX seqpacket)",
+     "rules": [
+      {
+       "name": "socket",
+       "when": [
+        [
+         {
+          "arg": 0,
+          "eq": 2,
+          "mask": 4294967295
+         },
+         {
+          "arg": 1,
+          "eq": 1,
+          "mask": 4294440959
+         },
+         {
+          "arg": 2,
+          "eq": 0,
+          "mask": 4294967295
+         }
+        ],
+        [
+         {
+          "arg": 0,
+          "eq": 2,
+          "mask": 4294967295
+         },
+         {
+          "arg": 1,
+          "eq": 1,
+          "mask": 4294440959
+         },
+         {
+          "arg": 2,
+          "eq": 6,
+          "mask": 4294967295
+         }
+        ],
+        [
+         {
+          "arg": 0,
+          "eq": 10,
+          "mask": 4294967295
+         },
+         {
+          "arg": 1,
+          "eq": 1,
+          "mask": 4294440959
+         },
+         {
+          "arg": 2,
+          "eq": 0,
+          "mask": 4294967295
+         }
+        ],
+        [
+         {
+          "arg": 0,
+          "eq": 10,
+          "mask": 4294967295
+         },
+         {
+          "arg": 1,
+          "eq": 1,
+          "mask": 4294440959
+         },
+         {
+          "arg": 2,
+          "eq": 6,
+          "mask": 4294967295
+         }
+        ],
+        [
+         {
+          "arg": 0,
+          "eq": 1,
+          "mask": 4294967295
+         },
+         {
+          "arg": 1,
+          "eq": 5,
+          "mask": 4294440959
+         },
+         {
+          "arg": 2,
+          "eq": 0,
+          "mask": 4294967295
+         }
+        ]
+       ]
+      }
+     ],
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md:402"
+    },
+    {
+     "row": "connect",
+     "rules": [
+      {
+       "name": "connect"
+      }
+     ],
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md:402"
+    },
+    {
+     "row": "memory and clock calls TLS needs",
+     "rules": [
+      {
+       "name": "getrandom"
+      },
+      {
+       "name": "clock_gettime"
+      },
+      {
+       "name": "mmap"
+      },
+      {
+       "name": "munmap"
+      },
+      {
+       "name": "madvise"
+      }
+     ],
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md:402"
+    },
+    {
+     "row": "bpf with arg0 in {7,15,16} (inspection only; section 5.1 command limit)",
+     "rules": [
+      {
+       "name": "bpf",
+       "when": [
+        [
+         {
+          "arg": 0,
+          "eq": 7,
+          "mask": 4294967295
+         }
+        ],
+        [
+         {
+          "arg": 0,
+          "eq": 15,
+          "mask": 4294967295
+         }
+        ],
+        [
+         {
+          "arg": 0,
+          "eq": 16,
+          "mask": 4294967295
+         }
+        ]
+       ]
+      }
+     ],
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md:361-363,402"
+    },
+    {
+     "row": "inspection reads: selinuxfs status and policy, cgroup and /proc files, read-only; membarrier only QUERY, PRIVATE_EXPEDITED and REGISTER_PRIVATE_EXPEDITED with flags 0 and cpu 0",
+     "rules": [
+      {
+       "name": "openat",
+       "when": [
+        [
+         {
+          "arg": 2,
+          "eq": 0,
+          "mask": 4195907
+         }
+        ]
+       ]
+      },
+      {
+       "name": "read"
+      },
+      {
+       "name": "pread64"
+      },
+      {
+       "name": "lseek"
+      },
+      {
+       "name": "close"
+      },
+      {
+       "name": "fstat"
+      },
+      {
+       "name": "newfstatat"
+      },
+      {
+       "name": "statx"
+      },
+      {
+       "name": "fstatfs"
+      },
+      {
+       "name": "getdents64"
+      },
+      {
+       "name": "readlinkat"
+      },
+      {
+       "name": "membarrier",
+       "when": [
+        [
+         {
+          "arg": 0,
+          "eq": 0,
+          "mask": 4294967295
+         },
+         {
+          "arg": 1,
+          "eq": 0,
+          "mask": 4294967295
+         },
+         {
+          "arg": 2,
+          "eq": 0,
+          "mask": 4294967295
+         }
+        ],
+        [
+         {
+          "arg": 0,
+          "eq": 8,
+          "mask": 4294967295
+         },
+         {
+          "arg": 1,
+          "eq": 0,
+          "mask": 4294967295
+         },
+         {
+          "arg": 2,
+          "eq": 0,
+          "mask": 4294967295
+         }
+        ],
+        [
+         {
+          "arg": 0,
+          "eq": 16,
+          "mask": 4294967295
+         },
+         {
+          "arg": 1,
+          "eq": 0,
+          "mask": 4294967295
+         },
+         {
+          "arg": 2,
+          "eq": 0,
+          "mask": 4294967295
+         }
+        ]
+       ]
+      },
+      {
+       "name": "ioctl",
+       "when": [
+        [
+         {
+          "arg": 1,
+          "eq": 3221513862,
+          "mask": 4294967295
+         }
+        ]
+       ]
+      }
+     ],
+     "source": "owner decision W02d-QC; docs/alpha-2/NATIVE_QUALIFICATION_READINESS.md:90-96,112-135,145-162; architecture/native-profile-v3/README.md:60-71"
+    },
+    {
+     "row": "memfd_create with flags limited to MFD_CLOEXEC, MFD_NOEXEC_SEAL (sealed-credential path; every memfd non-executable and exec-sealed)",
+     "rules": [
+      {
+       "name": "memfd_create",
+       "when": [
+        [
+         {
+          "arg": 1,
+          "eq": 9,
+          "mask": 4294967295
+         }
+        ]
+       ]
+      }
+     ],
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md:402; owner decision W01-AMEND QW3 (M-a)"
+    },
+    {
+     "row": "pidfd_open",
+     "rules": [
+      {
+       "name": "pidfd_open"
+      }
+     ],
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md:402"
+    },
+    {
+     "row": "exit",
+     "rules": [
+      {
+       "name": "exit"
+      },
+      {
+       "name": "exit_group"
+      }
+     ],
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md:402"
+    },
+    {
+     "row": "the signed listener (OBSERVER is 'as SERVER without listener')",
+     "rules": [
+      {
+       "name": "bind"
+      },
+      {
+       "name": "listen"
+      },
+      {
+       "name": "accept4"
+      }
+     ],
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md:402,403"
+    },
+    {
+     "row": "clone3 (not argument-filterable; bounded by pids.max, SELinux and W1-W6)",
+     "rules": [
+      {
+       "name": "clone3"
+      }
+     ],
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md:404"
+    },
+    {
+     "row": "setresuid/setresgid",
+     "rules": [
+      {
+       "name": "setresuid"
+      },
+      {
+       "name": "setresgid"
+      }
+     ],
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md:404"
+    },
+    {
+     "row": "close_range",
+     "rules": [
+      {
+       "name": "close_range"
+      }
+     ],
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md:404"
+    },
+    {
+     "row": "execveat with flags limited to AT_EMPTY_PATH",
+     "rules": [
+      {
+       "name": "execveat",
+       "when": [
+        [
+         {
+          "arg": 4,
+          "eq": 4096,
+          "mask": 4294967295
+         }
+        ]
+       ]
+      }
+     ],
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md:404"
+    },
+    {
+     "row": "W4 pre-exec in the inherited filter: drop all capabilities",
+     "rules": [
+      {
+       "name": "capset"
+      }
+     ],
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md:435-437"
+    },
+    {
+     "row": "W4: no_new_privs=1",
+     "rules": [
+      {
+       "name": "prctl",
+       "when": [
+        [
+         {
+          "arg": 0,
+          "eq": 38,
+          "mask": 4294967295
+         }
+        ]
+       ]
+      }
+     ],
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md:435-437"
+    },
+    {
+     "row": "W4: install the worker seccomp filter",
+     "rules": [
+      {
+       "name": "seccomp",
+       "when": [
+        [
+         {
+          "arg": 0,
+          "eq": 1,
+          "mask": 4294967295
+         },
+         {
+          "arg": 1,
+          "eq": 0,
+          "mask": 4294967294
+         }
+        ]
+       ]
+      }
+     ],
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md:435-437"
+    },
+    {
+     "row": "W1, W6: write cgroup.freeze and cgroup.kill, read cgroup.events; W3: read /proc/<pid>",
+     "rules": [
+      {
+       "name": "openat",
+       "when": [
+        [
+         {
+          "arg": 2,
+          "eq": 0,
+          "mask": 4194880
+         }
+        ]
+       ]
+      }
+     ],
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md:426-427,432-434,442-447"
+    },
+    {
+     "row": "W6: waitid(P_PIDFD)",
+     "rules": [
+      {
+       "name": "waitid",
+       "when": [
+        [
+         {
+          "arg": 0,
+          "eq": 3,
+          "mask": 4294967295
+         }
+        ]
+       ]
+      }
+     ],
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md:442-447"
+    },
+    {
+     "row": "W3: the broker-created FD3 socketpair",
+     "rules": [
+      {
+       "name": "socketpair",
+       "when": [
+        [
+         {
+          "arg": 0,
+          "eq": 1,
+          "mask": 4294967295
+         },
+         {
+          "arg": 1,
+          "eq": 5,
+          "mask": 4294440959
+         },
+         {
+          "arg": 2,
+          "eq": 0,
+          "mask": 4294967295
+         }
+        ]
+       ]
+      }
+     ],
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md:432-434"
+    },
+    {
+     "row": "W3: check the child's descriptor table through /proc/<pid>/fd",
+     "rules": [
+      {
+       "name": "getdents64"
+      },
+      {
+       "name": "readlinkat"
+      },
+      {
+       "name": "newfstatat"
+      }
+     ],
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md:432-434"
+    },
+    {
+     "row": "W5: verify the worker executable's fs-verity digest before W2",
+     "rules": [
+      {
+       "name": "ioctl",
+       "when": [
+        [
+         {
+          "arg": 1,
+          "eq": 3221513862,
+          "mask": 4294967295
+         }
+        ]
+       ]
+      }
+     ],
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md:438-441"
+    },
+    {
+     "row": "the worker's calls after exec, which the inherited broker filter must also allow",
+     "rules": [
+      {
+       "name": "read"
+      },
+      {
+       "name": "write"
+      },
+      {
+       "name": "readv"
+      },
+      {
+       "name": "writev"
+      },
+      {
+       "name": "pread64"
+      },
+      {
+       "name": "close"
+      },
+      {
+       "name": "lseek"
+      },
+      {
+       "name": "fstat"
+      },
+      {
+       "name": "newfstatat"
+      },
+      {
+       "name": "statx"
+      },
+      {
+       "name": "getdents64"
+      },
+      {
+       "name": "readlinkat"
+      },
+      {
+       "name": "getcwd"
+      },
+      {
+       "name": "fcntl"
+      },
+      {
+       "name": "dup"
+      },
+      {
+       "name": "dup3"
+      },
+      {
+       "name": "mmap"
+      },
+      {
+       "name": "munmap"
+      },
+      {
+       "name": "mprotect"
+      },
+      {
+       "name": "madvise"
+      },
+      {
+       "name": "mremap"
+      },
+      {
+       "name": "brk"
+      },
+      {
+       "name": "rt_sigaction"
+      },
+      {
+       "name": "rt_sigprocmask"
+      },
+      {
+       "name": "rt_sigreturn"
+      },
+      {
+       "name": "sigaltstack"
+      },
+      {
+       "name": "futex"
+      },
+      {
+       "name": "set_robust_list"
+      },
+      {
+       "name": "rseq"
+      },
+      {
+       "name": "set_tid_address"
+      },
+      {
+       "name": "getpid"
+      },
+      {
+       "name": "gettid"
+      },
+      {
+       "name": "tgkill"
+      },
+      {
+       "name": "sched_yield"
+      },
+      {
+       "name": "sched_getaffinity"
+      },
+      {
+       "name": "clock_gettime"
+      },
+      {
+       "name": "clock_getres"
+      },
+      {
+       "name": "clock_nanosleep"
+      },
+      {
+       "name": "nanosleep"
+      },
+      {
+       "name": "gettimeofday"
+      },
+      {
+       "name": "getrandom"
+      },
+      {
+       "name": "getuid"
+      },
+      {
+       "name": "geteuid"
+      },
+      {
+       "name": "getgid"
+      },
+      {
+       "name": "getegid"
+      },
+      {
+       "name": "uname"
+      },
+      {
+       "name": "prlimit64"
+      },
+      {
+       "name": "epoll_create1"
+      },
+      {
+       "name": "epoll_ctl"
+      },
+      {
+       "name": "epoll_wait"
+      },
+      {
+       "name": "epoll_pwait"
+      },
+      {
+       "name": "poll"
+      },
+      {
+       "name": "ppoll"
+      },
+      {
+       "name": "pselect6"
+      },
+      {
+       "name": "exit"
+      },
+      {
+       "name": "exit_group"
+      },
+      {
+       "name": "restart_syscall"
+      },
+      {
+       "name": "access"
+      },
+      {
+       "name": "faccessat"
+      },
+      {
+       "name": "faccessat2"
+      },
+      {
+       "name": "readlink"
+      },
+      {
+       "name": "arch_prctl",
+       "when": [
+        [
+         {
+          "arg": 0,
+          "eq": 4098,
+          "mask": 4294967295
+         }
+        ]
+       ]
+      },
+      {
+       "name": "clone",
+       "when": [
+        [
+         {
+          "arg": 0,
+          "eq": 67840,
+          "mask": 2114128128
+         }
+        ]
+       ]
+      },
+      {
+       "name": "openat",
+       "when": [
+        [
+         {
+          "arg": 2,
+          "eq": 0,
+          "mask": 4195907
+         }
+        ]
+       ]
+      },
+      {
+       "name": "ioctl",
+       "when": [
+        [
+         {
+          "arg": 1,
+          "eq": 21505,
+          "mask": 4294967295
+         }
+        ],
+        [
+         {
+          "arg": 1,
+          "eq": 21537,
+          "mask": 4294967295
+         }
+        ],
+        [
+         {
+          "arg": 1,
+          "eq": 21584,
+          "mask": 4294967295
+         }
+        ],
+        [
+         {
+          "arg": 1,
+          "eq": 21585,
+          "mask": 4294967295
+         }
+        ]
+       ]
+      },
+      {
+       "name": "sendmsg",
+       "when": [
+        [
+         {
+          "arg": 0,
+          "eq": 3,
+          "mask": 4294967295
+         }
+        ]
+       ]
+      },
+      {
+       "name": "recvmsg",
+       "when": [
+        [
+         {
+          "arg": 0,
+          "eq": 3,
+          "mask": 4294967295
+         }
+        ]
+       ]
+      },
+      {
+       "name": "sendto",
+       "when": [
+        [
+         {
+          "arg": 0,
+          "eq": 3,
+          "mask": 4294967295
+         }
+        ]
+       ]
+      },
+      {
+       "name": "recvfrom",
+       "when": [
+        [
+         {
+          "arg": 0,
+          "eq": 3,
+          "mask": 4294967295
+         }
+        ]
+       ]
+      },
+      {
+       "name": "openat",
+       "when": [
+        [
+         {
+          "arg": 2,
+          "eq": 0,
+          "mask": 4195907
+         }
+        ]
+       ]
+      },
+      {
+       "name": "newfstatat"
+      },
+      {
+       "name": "statx"
+      },
+      {
+       "name": "getdents64"
+      },
+      {
+       "name": "readlinkat"
+      },
+      {
+       "name": "lseek"
+      },
+      {
+       "name": "fstat"
+      },
+      {
+       "name": "exit"
+      },
+      {
+       "name": "exit_group"
+      },
+      {
+       "name": "execveat",
+       "when": [
+        [
+         {
+          "arg": 4,
+          "eq": 4096,
+          "mask": 4294967295
+         }
+        ]
+       ]
+      }
+     ],
+     "source": "owner decision W02d-QD; architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md:404 ('The child inherits this filter')"
+    }
+   ],
+   "runtimeBase": "NATIVE_STATIC"
+  },
+  "EFFECT_GATE": {
+   "digestSlot": true,
+   "duties": [
+    {
+     "row": "network I/O",
+     "rules": [
+      {
+       "name": "read"
+      },
+      {
+       "name": "write"
+      },
+      {
+       "name": "readv"
+      },
+      {
+       "name": "writev"
+      },
+      {
+       "name": "recvfrom"
+      },
+      {
+       "name": "sendto"
+      },
+      {
+       "name": "recvmsg"
+      },
+      {
+       "name": "sendmsg"
+      },
+      {
+       "name": "shutdown"
+      },
+      {
+       "name": "close"
+      },
+      {
+       "name": "getsockopt"
+      },
+      {
+       "name": "setsockopt"
+      },
+      {
+       "name": "getsockname"
+      },
+      {
+       "name": "getpeername"
+      },
+      {
+       "name": "fcntl"
+      }
+     ],
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md:405"
+    },
+    {
+     "row": "the AF_UNIX listeners for I05/I07 and the I04 TLS listener; the upstream apiserver connection",
+     "rules": [
+      {
+       "name": "socket",
+       "when": [
+        [
+         {
+          "arg": 0,
+          "eq": 2,
+          "mask": 4294967295
+         },
+         {
+          "arg": 1,
+          "eq": 1,
+          "mask": 4294440959
+         },
+         {
+          "arg": 2,
+          "eq": 0,
+          "mask": 4294967295
+         }
+        ],
+        [
+         {
+          "arg": 0,
+          "eq": 2,
+          "mask": 4294967295
+         },
+         {
+          "arg": 1,
+          "eq": 1,
+          "mask": 4294440959
+         },
+         {
+          "arg": 2,
+          "eq": 6,
+          "mask": 4294967295
+         }
+        ],
+        [
+         {
+          "arg": 0,
+          "eq": 10,
+          "mask": 4294967295
+         },
+         {
+          "arg": 1,
+          "eq": 1,
+          "mask": 4294440959
+         },
+         {
+          "arg": 2,
+          "eq": 0,
+          "mask": 4294967295
+         }
+        ],
+        [
+         {
+          "arg": 0,
+          "eq": 10,
+          "mask": 4294967295
+         },
+         {
+          "arg": 1,
+          "eq": 1,
+          "mask": 4294440959
+         },
+         {
+          "arg": 2,
+          "eq": 6,
+          "mask": 4294967295
+         }
+        ],
+        [
+         {
+          "arg": 0,
+          "eq": 1,
+          "mask": 4294967295
+         },
+         {
+          "arg": 1,
+          "eq": 5,
+          "mask": 4294440959
+         },
+         {
+          "arg": 2,
+          "eq": 0,
+          "mask": 4294967295
+         }
+        ]
+       ]
+      },
+      {
+       "name": "bind"
+      },
+      {
+       "name": "listen"
+      },
+      {
+       "name": "accept4"
+      },
+      {
+       "name": "connect"
+      }
+     ],
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md:405"
+    },
+    {
+     "row": "fsync/fdatasync, flock (the durable journal and failure marker)",
+     "rules": [
+      {
+       "name": "fsync"
+      },
+      {
+       "name": "fdatasync"
+      },
+      {
+       "name": "flock"
+      },
+      {
+       "name": "openat"
+      },
+      {
+       "name": "pread64"
+      },
+      {
+       "name": "pwrite64"
+      },
+      {
+       "name": "fstat"
+      },
+      {
+       "name": "lseek"
+      }
+     ],
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md:405"
+    },
+    {
+     "row": "peers qualified with pidfd, SO_PEERCRED and same-uid /proc reads",
+     "rules": [
+      {
+       "name": "pidfd_open"
+      },
+      {
+       "name": "getsockopt"
+      }
+     ],
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md:405"
+    },
+    {
+     "row": "TLS randomness and clocks",
+     "rules": [
+      {
+       "name": "getrandom"
+      },
+      {
+       "name": "clock_gettime"
+      }
+     ],
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md:405"
+    },
+    {
+     "row": "clone3 fails with ENOSYS so glibc 2.34+ falls back to the thread-only clone rule",
+     "rules": [
+      {
+       "errno": 38,
+       "name": "clone3"
+      }
+     ],
+     "source": "owner decision W02d-QB"
+    }
+   ],
+   "runtimeBase": "NATIVE_STATIC"
+  },
+  "HOST_CONTAINMENT": {
+   "digestSlot": false,
+   "duties": [
+    {
+     "row": "S3: create or verify role cgroups, write their limits",
+     "rules": [
+      {
+       "name": "mkdirat"
+      },
+      {
+       "name": "openat"
+      },
+      {
+       "name": "newfstatat"
+      },
+      {
+       "name": "statx"
+      },
+      {
+       "name": "getdents64"
+      },
+      {
+       "name": "write"
+      },
+      {
+       "name": "fsync"
+      }
+     ],
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md:374-378"
+    },
+    {
+     "row": "S3: load (5), attach with BPF_F_ALLOW_MULTI (8) and pin (6) the programs; verify (7, 15, 16)",
+     "rules": [
+      {
+       "name": "bpf",
+       "when": [
+        [
+         {
+          "arg": 0,
+          "eq": 5,
+          "mask": 4294967295
+         }
+        ],
+        [
+         {
+          "arg": 0,
+          "eq": 6,
+          "mask": 4294967295
+         }
+        ],
+        [
+         {
+          "arg": 0,
+          "eq": 7,
+          "mask": 4294967295
+         }
+        ],
+        [
+         {
+          "arg": 0,
+          "eq": 8,
+          "mask": 4294967295
+         }
+        ],
+        [
+         {
+          "arg": 0,
+          "eq": 15,
+          "mask": 4294967295
+         }
+        ],
+        [
+         {
+          "arg": 0,
+          "eq": 16,
+          "mask": 4294967295
+         }
+        ]
+       ]
+      }
+     ],
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md:374-378"
+    },
+    {
+     "row": "S3: enable fs-verity on artifacts",
+     "rules": [
+      {
+       "name": "ioctl",
+       "when": [
+        [
+         {
+          "arg": 1,
+          "eq": 1082156677,
+          "mask": 4294967295
+         }
+        ]
+       ]
+      }
+     ],
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md:374-378"
+    },
+    {
+     "row": "S4: write the two booleans",
+     "rules": [
+      {
+       "name": "openat"
+      },
+      {
+       "name": "write"
+      }
+     ],
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md:379-382"
+    },
+    {
+     "row": "S5: read the sysctls, write the seal marker, exit",
+     "rules": [
+      {
+       "name": "openat"
+      },
+      {
+       "name": "read"
+      },
+      {
+       "name": "write"
+      },
+      {
+       "name": "fsync"
+      },
+      {
+       "name": "exit"
+      },
+      {
+       "name": "exit_group"
+      }
+     ],
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md:383-390"
+    },
+    {
+     "row": "clone3 fails with ENOSYS so glibc 2.34+ falls back to the thread-only clone rule",
+     "rules": [
+      {
+       "errno": 38,
+       "name": "clone3"
+      }
+     ],
+     "source": "owner decision W02d-QB"
+    }
+   ],
+   "runtimeBase": "NATIVE_STATIC"
+  },
+  "OBSERVER": {
+   "digestSlot": true,
+   "duties": [
+    {
+     "row": "I/O on held FDs",
+     "rules": [
+      {
+       "name": "read"
+      },
+      {
+       "name": "write"
+      },
+      {
+       "name": "readv"
+      },
+      {
+       "name": "writev"
+      },
+      {
+       "name": "recvfrom"
+      },
+      {
+       "name": "sendto"
+      },
+      {
+       "name": "recvmsg"
+      },
+      {
+       "name": "sendmsg"
+      },
+      {
+       "name": "shutdown"
+      },
+      {
+       "name": "close"
+      },
+      {
+       "name": "getsockopt"
+      },
+      {
+       "name": "setsockopt"
+      },
+      {
+       "name": "getsockname"
+      },
+      {
+       "name": "getpeername"
+      },
+      {
+       "name": "fcntl"
+      }
+     ],
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md:402"
+    },
+    {
+     "row": "socket(AF_INET/AF_INET6 stream, AF_UNIX seqpacket)",
+     "rules": [
+      {
+       "name": "socket",
+       "when": [
+        [
+         {
+          "arg": 0,
+          "eq": 2,
+          "mask": 4294967295
+         },
+         {
+          "arg": 1,
+          "eq": 1,
+          "mask": 4294440959
+         },
+         {
+          "arg": 2,
+          "eq": 0,
+          "mask": 4294967295
+         }
+        ],
+        [
+         {
+          "arg": 0,
+          "eq": 2,
+          "mask": 4294967295
+         },
+         {
+          "arg": 1,
+          "eq": 1,
+          "mask": 4294440959
+         },
+         {
+          "arg": 2,
+          "eq": 6,
+          "mask": 4294967295
+         }
+        ],
+        [
+         {
+          "arg": 0,
+          "eq": 10,
+          "mask": 4294967295
+         },
+         {
+          "arg": 1,
+          "eq": 1,
+          "mask": 4294440959
+         },
+         {
+          "arg": 2,
+          "eq": 0,
+          "mask": 4294967295
+         }
+        ],
+        [
+         {
+          "arg": 0,
+          "eq": 10,
+          "mask": 4294967295
+         },
+         {
+          "arg": 1,
+          "eq": 1,
+          "mask": 4294440959
+         },
+         {
+          "arg": 2,
+          "eq": 6,
+          "mask": 4294967295
+         }
+        ],
+        [
+         {
+          "arg": 0,
+          "eq": 1,
+          "mask": 4294967295
+         },
+         {
+          "arg": 1,
+          "eq": 5,
+          "mask": 4294440959
+         },
+         {
+          "arg": 2,
+          "eq": 0,
+          "mask": 4294967295
+         }
+        ]
+       ]
+      }
+     ],
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md:402"
+    },
+    {
+     "row": "connect",
+     "rules": [
+      {
+       "name": "connect"
+      }
+     ],
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md:402"
+    },
+    {
+     "row": "memory and clock calls TLS needs",
+     "rules": [
+      {
+       "name": "getrandom"
+      },
+      {
+       "name": "clock_gettime"
+      },
+      {
+       "name": "mmap"
+      },
+      {
+       "name": "munmap"
+      },
+      {
+       "name": "madvise"
+      }
+     ],
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md:402"
+    },
+    {
+     "row": "bpf with arg0 in {7,15,16} (inspection only; section 5.1 command limit)",
+     "rules": [
+      {
+       "name": "bpf",
+       "when": [
+        [
+         {
+          "arg": 0,
+          "eq": 7,
+          "mask": 4294967295
+         }
+        ],
+        [
+         {
+          "arg": 0,
+          "eq": 15,
+          "mask": 4294967295
+         }
+        ],
+        [
+         {
+          "arg": 0,
+          "eq": 16,
+          "mask": 4294967295
+         }
+        ]
+       ]
+      }
+     ],
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md:361-363,402"
+    },
+    {
+     "row": "inspection reads: selinuxfs status and policy, cgroup and /proc files, read-only; membarrier only QUERY, PRIVATE_EXPEDITED and REGISTER_PRIVATE_EXPEDITED with flags 0 and cpu 0",
+     "rules": [
+      {
+       "name": "openat",
+       "when": [
+        [
+         {
+          "arg": 2,
+          "eq": 0,
+          "mask": 4195907
+         }
+        ]
+       ]
+      },
+      {
+       "name": "read"
+      },
+      {
+       "name": "pread64"
+      },
+      {
+       "name": "lseek"
+      },
+      {
+       "name": "close"
+      },
+      {
+       "name": "fstat"
+      },
+      {
+       "name": "newfstatat"
+      },
+      {
+       "name": "statx"
+      },
+      {
+       "name": "fstatfs"
+      },
+      {
+       "name": "getdents64"
+      },
+      {
+       "name": "readlinkat"
+      },
+      {
+       "name": "membarrier",
+       "when": [
+        [
+         {
+          "arg": 0,
+          "eq": 0,
+          "mask": 4294967295
+         },
+         {
+          "arg": 1,
+          "eq": 0,
+          "mask": 4294967295
+         },
+         {
+          "arg": 2,
+          "eq": 0,
+          "mask": 4294967295
+         }
+        ],
+        [
+         {
+          "arg": 0,
+          "eq": 8,
+          "mask": 4294967295
+         },
+         {
+          "arg": 1,
+          "eq": 0,
+          "mask": 4294967295
+         },
+         {
+          "arg": 2,
+          "eq": 0,
+          "mask": 4294967295
+         }
+        ],
+        [
+         {
+          "arg": 0,
+          "eq": 16,
+          "mask": 4294967295
+         },
+         {
+          "arg": 1,
+          "eq": 0,
+          "mask": 4294967295
+         },
+         {
+          "arg": 2,
+          "eq": 0,
+          "mask": 4294967295
+         }
+        ]
+       ]
+      },
+      {
+       "name": "ioctl",
+       "when": [
+        [
+         {
+          "arg": 1,
+          "eq": 3221513862,
+          "mask": 4294967295
+         }
+        ]
+       ]
+      }
+     ],
+     "source": "owner decision W02d-QC; docs/alpha-2/NATIVE_QUALIFICATION_READINESS.md:90-96,112-135,145-162; architecture/native-profile-v3/README.md:60-71"
+    },
+    {
+     "row": "memfd_create with flags limited to MFD_CLOEXEC, MFD_NOEXEC_SEAL (sealed-credential path; every memfd non-executable and exec-sealed)",
+     "rules": [
+      {
+       "name": "memfd_create",
+       "when": [
+        [
+         {
+          "arg": 1,
+          "eq": 9,
+          "mask": 4294967295
+         }
+        ]
+       ]
+      }
+     ],
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md:402; owner decision W01-AMEND QW3 (M-a)"
+    },
+    {
+     "row": "pidfd_open",
+     "rules": [
+      {
+       "name": "pidfd_open"
+      }
+     ],
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md:402"
+    },
+    {
+     "row": "exit",
+     "rules": [
+      {
+       "name": "exit"
+      },
+      {
+       "name": "exit_group"
+      }
+     ],
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md:402"
+    },
+    {
+     "row": "I06 read connection",
+     "rules": [
+      {
+       "name": "connect"
+      }
+     ],
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md:403"
+    },
+    {
+     "row": "clone3 fails with ENOSYS so glibc 2.34+ falls back to the thread-only clone rule",
+     "rules": [
+      {
+       "errno": 38,
+       "name": "clone3"
+      }
+     ],
+     "source": "owner decision W02d-QB"
+    }
+   ],
+   "runtimeBase": "NATIVE_STATIC"
+  },
+  "POLICY_WRITER": {
+   "digestSlot": false,
+   "duties": [
+    {
+     "row": "AF_UNIX connect to I07",
+     "rules": [
+      {
+       "name": "socket",
+       "when": [
+        [
+         {
+          "arg": 0,
+          "eq": 1,
+          "mask": 4294967295
+         },
+         {
+          "arg": 1,
+          "eq": 5,
+          "mask": 4294440959
+         },
+         {
+          "arg": 2,
+          "eq": 0,
+          "mask": 4294967295
+         }
+        ]
+       ]
+      },
+      {
+       "name": "connect"
+      }
+     ],
+     "source": "architecture/native-profile-v2/README.md:128-131; architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md:407"
+    },
+    {
+     "row": "I/O",
+     "rules": [
+      {
+       "name": "read"
+      },
+      {
+       "name": "write"
+      },
+      {
+       "name": "sendmsg"
+      },
+      {
+       "name": "recvmsg"
+      },
+      {
+       "name": "sendto"
+      },
+      {
+       "name": "recvfrom"
+      },
+      {
+       "name": "shutdown"
+      },
+      {
+       "name": "close"
+      }
+     ],
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md:407"
+    },
+    {
+     "row": "exit",
+     "rules": [
+      {
+       "name": "exit"
+      },
+      {
+       "name": "exit_group"
+      }
+     ],
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md:407"
+    },
+    {
+     "row": "clone3 fails with ENOSYS so glibc 2.34+ falls back to the thread-only clone rule",
+     "rules": [
+      {
+       "errno": 38,
+       "name": "clone3"
+      }
+     ],
+     "source": "owner decision W02d-QB"
+    }
+   ],
+   "runtimeBase": "NATIVE_STATIC"
+  },
+  "SERVER": {
+   "digestSlot": true,
+   "duties": [
+    {
+     "row": "I/O on held FDs",
+     "rules": [
+      {
+       "name": "read"
+      },
+      {
+       "name": "write"
+      },
+      {
+       "name": "readv"
+      },
+      {
+       "name": "writev"
+      },
+      {
+       "name": "recvfrom"
+      },
+      {
+       "name": "sendto"
+      },
+      {
+       "name": "recvmsg"
+      },
+      {
+       "name": "sendmsg"
+      },
+      {
+       "name": "shutdown"
+      },
+      {
+       "name": "close"
+      },
+      {
+       "name": "getsockopt"
+      },
+      {
+       "name": "setsockopt"
+      },
+      {
+       "name": "getsockname"
+      },
+      {
+       "name": "getpeername"
+      },
+      {
+       "name": "fcntl"
+      }
+     ],
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md:402"
+    },
+    {
+     "row": "socket(AF_INET/AF_INET6 stream, AF_UNIX seqpacket)",
+     "rules": [
+      {
+       "name": "socket",
+       "when": [
+        [
+         {
+          "arg": 0,
+          "eq": 2,
+          "mask": 4294967295
+         },
+         {
+          "arg": 1,
+          "eq": 1,
+          "mask": 4294440959
+         },
+         {
+          "arg": 2,
+          "eq": 0,
+          "mask": 4294967295
+         }
+        ],
+        [
+         {
+          "arg": 0,
+          "eq": 2,
+          "mask": 4294967295
+         },
+         {
+          "arg": 1,
+          "eq": 1,
+          "mask": 4294440959
+         },
+         {
+          "arg": 2,
+          "eq": 6,
+          "mask": 4294967295
+         }
+        ],
+        [
+         {
+          "arg": 0,
+          "eq": 10,
+          "mask": 4294967295
+         },
+         {
+          "arg": 1,
+          "eq": 1,
+          "mask": 4294440959
+         },
+         {
+          "arg": 2,
+          "eq": 0,
+          "mask": 4294967295
+         }
+        ],
+        [
+         {
+          "arg": 0,
+          "eq": 10,
+          "mask": 4294967295
+         },
+         {
+          "arg": 1,
+          "eq": 1,
+          "mask": 4294440959
+         },
+         {
+          "arg": 2,
+          "eq": 6,
+          "mask": 4294967295
+         }
+        ],
+        [
+         {
+          "arg": 0,
+          "eq": 1,
+          "mask": 4294967295
+         },
+         {
+          "arg": 1,
+          "eq": 5,
+          "mask": 4294440959
+         },
+         {
+          "arg": 2,
+          "eq": 0,
+          "mask": 4294967295
+         }
+        ]
+       ]
+      }
+     ],
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md:402"
+    },
+    {
+     "row": "connect",
+     "rules": [
+      {
+       "name": "connect"
+      }
+     ],
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md:402"
+    },
+    {
+     "row": "memory and clock calls TLS needs",
+     "rules": [
+      {
+       "name": "getrandom"
+      },
+      {
+       "name": "clock_gettime"
+      },
+      {
+       "name": "mmap"
+      },
+      {
+       "name": "munmap"
+      },
+      {
+       "name": "madvise"
+      }
+     ],
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md:402"
+    },
+    {
+     "row": "bpf with arg0 in {7,15,16} (inspection only; section 5.1 command limit)",
+     "rules": [
+      {
+       "name": "bpf",
+       "when": [
+        [
+         {
+          "arg": 0,
+          "eq": 7,
+          "mask": 4294967295
+         }
+        ],
+        [
+         {
+          "arg": 0,
+          "eq": 15,
+          "mask": 4294967295
+         }
+        ],
+        [
+         {
+          "arg": 0,
+          "eq": 16,
+          "mask": 4294967295
+         }
+        ]
+       ]
+      }
+     ],
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md:361-363,402"
+    },
+    {
+     "row": "inspection reads: selinuxfs status and policy, cgroup and /proc files, read-only; membarrier only QUERY, PRIVATE_EXPEDITED and REGISTER_PRIVATE_EXPEDITED with flags 0 and cpu 0",
+     "rules": [
+      {
+       "name": "openat",
+       "when": [
+        [
+         {
+          "arg": 2,
+          "eq": 0,
+          "mask": 4195907
+         }
+        ]
+       ]
+      },
+      {
+       "name": "read"
+      },
+      {
+       "name": "pread64"
+      },
+      {
+       "name": "lseek"
+      },
+      {
+       "name": "close"
+      },
+      {
+       "name": "fstat"
+      },
+      {
+       "name": "newfstatat"
+      },
+      {
+       "name": "statx"
+      },
+      {
+       "name": "fstatfs"
+      },
+      {
+       "name": "getdents64"
+      },
+      {
+       "name": "readlinkat"
+      },
+      {
+       "name": "membarrier",
+       "when": [
+        [
+         {
+          "arg": 0,
+          "eq": 0,
+          "mask": 4294967295
+         },
+         {
+          "arg": 1,
+          "eq": 0,
+          "mask": 4294967295
+         },
+         {
+          "arg": 2,
+          "eq": 0,
+          "mask": 4294967295
+         }
+        ],
+        [
+         {
+          "arg": 0,
+          "eq": 8,
+          "mask": 4294967295
+         },
+         {
+          "arg": 1,
+          "eq": 0,
+          "mask": 4294967295
+         },
+         {
+          "arg": 2,
+          "eq": 0,
+          "mask": 4294967295
+         }
+        ],
+        [
+         {
+          "arg": 0,
+          "eq": 16,
+          "mask": 4294967295
+         },
+         {
+          "arg": 1,
+          "eq": 0,
+          "mask": 4294967295
+         },
+         {
+          "arg": 2,
+          "eq": 0,
+          "mask": 4294967295
+         }
+        ]
+       ]
+      },
+      {
+       "name": "ioctl",
+       "when": [
+        [
+         {
+          "arg": 1,
+          "eq": 3221513862,
+          "mask": 4294967295
+         }
+        ]
+       ]
+      }
+     ],
+     "source": "owner decision W02d-QC; docs/alpha-2/NATIVE_QUALIFICATION_READINESS.md:90-96,112-135,145-162; architecture/native-profile-v3/README.md:60-71"
+    },
+    {
+     "row": "memfd_create with flags limited to MFD_CLOEXEC, MFD_NOEXEC_SEAL (sealed-credential path; every memfd non-executable and exec-sealed)",
+     "rules": [
+      {
+       "name": "memfd_create",
+       "when": [
+        [
+         {
+          "arg": 1,
+          "eq": 9,
+          "mask": 4294967295
+         }
+        ]
+       ]
+      }
+     ],
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md:402; owner decision W01-AMEND QW3 (M-a)"
+    },
+    {
+     "row": "pidfd_open",
+     "rules": [
+      {
+       "name": "pidfd_open"
+      }
+     ],
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md:402"
+    },
+    {
+     "row": "exit",
+     "rules": [
+      {
+       "name": "exit"
+      },
+      {
+       "name": "exit_group"
+      }
+     ],
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md:402"
+    },
+    {
+     "row": "the signed listener (OBSERVER is 'as SERVER without listener')",
+     "rules": [
+      {
+       "name": "bind"
+      },
+      {
+       "name": "listen"
+      },
+      {
+       "name": "accept4"
+      }
+     ],
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md:402,403"
+    },
+    {
+     "row": "accept4",
+     "rules": [
+      {
+       "name": "accept4"
+      }
+     ],
+     "source": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md:402"
+    },
+    {
+     "row": "clone3 fails with ENOSYS so glibc 2.34+ falls back to the thread-only clone rule",
+     "rules": [
+      {
+       "errno": 38,
+       "name": "clone3"
+      }
+     ],
+     "source": "owner decision W02d-QB"
+    }
+   ],
+   "runtimeBase": "CPYTHON_3_12"
+  },
+  "WORKER": {
+   "capabilityRule": "owner decision D5: the bounding set is inherited from the broker; permitted, effective, inheritable and ambient sets are empty (W4 drops all capabilities)",
+   "digestSlot": true,
+   "duties": [
+    {
+     "row": "FD3 seqpacket I/O (fd 3 only)",
+     "rules": [
+      {
+       "name": "sendmsg",
+       "when": [
+        [
+         {
+          "arg": 0,
+          "eq": 3,
+          "mask": 4294967295
+         }
+        ]
+       ]
+      },
+      {
+       "name": "recvmsg",
+       "when": [
+        [
+         {
+          "arg": 0,
+          "eq": 3,
+          "mask": 4294967295
+         }
+        ]
+       ]
+      },
+      {
+       "name": "sendto",
+       "when": [
+        [
+         {
+          "arg": 0,
+          "eq": 3,
+          "mask": 4294967295
+         }
+        ]
+       ]
+      },
+      {
+       "name": "recvfrom",
+       "when": [
+        [
+         {
+          "arg": 0,
+          "eq": 3,
+          "mask": 4294967295
+         }
+        ]
+       ]
+      }
+     ],
+     "source": "owner decision W02d-Q1 (amends architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md:406 'Existing worker allowlist')"
+    },
+    {
+     "row": "reads on the read-only root",
+     "rules": [
+      {
+       "name": "openat",
+       "when": [
+        [
+         {
+          "arg": 2,
+          "eq": 0,
+          "mask": 4195907
+         }
+        ]
+       ]
+      },
+      {
+       "name": "newfstatat"
+      },
+      {
+       "name": "statx"
+      },
+      {
+       "name": "getdents64"
+      },
+      {
+       "name": "readlinkat"
+      },
+      {
+       "name": "lseek"
+      },
+      {
+       "name": "fstat"
+      }
+     ],
+     "source": "owner decision W02d-Q1"
+    },
+    {
+     "row": "exit",
+     "rules": [
+      {
+       "name": "exit"
+      },
+      {
+       "name": "exit_group"
+      }
+     ],
+     "source": "owner decision W02d-Q1"
+    },
+    {
+     "row": "W5: execveat in W5's form only (flags AT_EMPTY_PATH); a second exec is refused by SELinux",
+     "rules": [
+      {
+       "name": "execveat",
+       "when": [
+        [
+         {
+          "arg": 4,
+          "eq": 4096,
+          "mask": 4294967295
+         }
+        ]
+       ]
+      }
+     ],
+     "source": "owner decision W02d-QA (amends W02d-Q1 'no exec'); architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md:438-441"
+    },
+    {
+     "row": "clone3 fails with ENOSYS so glibc 2.34+ falls back to the thread-only clone rule",
+     "rules": [
+      {
+       "errno": 38,
+       "name": "clone3"
+      }
+     ],
+     "source": "owner decision W02d-QB"
+    }
+   ],
+   "runtimeBase": "CPYTHON_3_12"
+  }
+ },
+ "runtimeBases": {
+  "CPYTHON_3_12": {
+   "description": "The closed set the CPython 3.12.14 interpreter needs at run time (SERVER and WORKER run on /opt/planeon/python/3.12.14): memory, signals, threads, futexes, clocks, randomness, ids, read-only module and file access, descriptor control, readiness waiting and exit. W03 must make the role run inside it; a further need reopens W02d (owner decision W02d-Q2).",
+   "rules": [
+    {
+     "name": "read"
+    },
+    {
+     "name": "write"
+    },
+    {
+     "name": "readv"
+    },
+    {
+     "name": "writev"
+    },
+    {
+     "name": "pread64"
+    },
+    {
+     "name": "close"
+    },
+    {
+     "name": "lseek"
+    },
+    {
+     "name": "fstat"
+    },
+    {
+     "name": "newfstatat"
+    },
+    {
+     "name": "statx"
+    },
+    {
+     "name": "getdents64"
+    },
+    {
+     "name": "readlinkat"
+    },
+    {
+     "name": "getcwd"
+    },
+    {
+     "name": "fcntl"
+    },
+    {
+     "name": "dup"
+    },
+    {
+     "name": "dup3"
+    },
+    {
+     "name": "mmap"
+    },
+    {
+     "name": "munmap"
+    },
+    {
+     "name": "mprotect"
+    },
+    {
+     "name": "madvise"
+    },
+    {
+     "name": "mremap"
+    },
+    {
+     "name": "brk"
+    },
+    {
+     "name": "rt_sigaction"
+    },
+    {
+     "name": "rt_sigprocmask"
+    },
+    {
+     "name": "rt_sigreturn"
+    },
+    {
+     "name": "sigaltstack"
+    },
+    {
+     "name": "futex"
+    },
+    {
+     "name": "set_robust_list"
+    },
+    {
+     "name": "rseq"
+    },
+    {
+     "name": "set_tid_address"
+    },
+    {
+     "name": "getpid"
+    },
+    {
+     "name": "gettid"
+    },
+    {
+     "name": "tgkill"
+    },
+    {
+     "name": "sched_yield"
+    },
+    {
+     "name": "sched_getaffinity"
+    },
+    {
+     "name": "clock_gettime"
+    },
+    {
+     "name": "clock_getres"
+    },
+    {
+     "name": "clock_nanosleep"
+    },
+    {
+     "name": "nanosleep"
+    },
+    {
+     "name": "gettimeofday"
+    },
+    {
+     "name": "getrandom"
+    },
+    {
+     "name": "getuid"
+    },
+    {
+     "name": "geteuid"
+    },
+    {
+     "name": "getgid"
+    },
+    {
+     "name": "getegid"
+    },
+    {
+     "name": "uname"
+    },
+    {
+     "name": "prlimit64"
+    },
+    {
+     "name": "epoll_create1"
+    },
+    {
+     "name": "epoll_ctl"
+    },
+    {
+     "name": "epoll_wait"
+    },
+    {
+     "name": "epoll_pwait"
+    },
+    {
+     "name": "poll"
+    },
+    {
+     "name": "ppoll"
+    },
+    {
+     "name": "pselect6"
+    },
+    {
+     "name": "exit"
+    },
+    {
+     "name": "exit_group"
+    },
+    {
+     "name": "restart_syscall"
+    },
+    {
+     "name": "access"
+    },
+    {
+     "name": "faccessat"
+    },
+    {
+     "name": "faccessat2"
+    },
+    {
+     "name": "readlink"
+    },
+    {
+     "name": "arch_prctl",
+     "when": [
+      [
+       {
+        "arg": 0,
+        "eq": 4098,
+        "mask": 4294967295
+       }
+      ]
+     ]
+    },
+    {
+     "name": "clone",
+     "when": [
+      [
+       {
+        "arg": 0,
+        "eq": 67840,
+        "mask": 2114128128
+       }
+      ]
+     ]
+    },
+    {
+     "name": "openat",
+     "when": [
+      [
+       {
+        "arg": 2,
+        "eq": 0,
+        "mask": 4195907
+       }
+      ]
+     ]
+    },
+    {
+     "name": "ioctl",
+     "when": [
+      [
+       {
+        "arg": 1,
+        "eq": 21505,
+        "mask": 4294967295
+       }
+      ],
+      [
+       {
+        "arg": 1,
+        "eq": 21537,
+        "mask": 4294967295
+       }
+      ],
+      [
+       {
+        "arg": 1,
+        "eq": 21584,
+        "mask": 4294967295
+       }
+      ],
+      [
+       {
+        "arg": 1,
+        "eq": 21585,
+        "mask": 4294967295
+       }
+      ]
+     ]
+    }
+   ]
+  },
+  "NATIVE_STATIC": {
+   "description": "The closed set a statically linked native role needs at run time (OBSERVER, BROKER, EFFECT_GATE, POLICY_WRITER, HOST_CONTAINMENT; Rust with musl, fully static, owner decision W01-AMEND-QW4): memory, signals, threads, futexes, clocks, randomness, readiness waiting, descriptor control and exit. No file access: a role that opens files gets it from its row. W03's language and libc must fit inside it, or W02d reopens (owner decision W02d-Q2).",
+   "rules": [
+    {
+     "name": "read"
+    },
+    {
+     "name": "write"
+    },
+    {
+     "name": "close"
+    },
+    {
+     "name": "fcntl"
+    },
+    {
+     "name": "mmap"
+    },
+    {
+     "name": "munmap"
+    },
+    {
+     "name": "mprotect"
+    },
+    {
+     "name": "madvise"
+    },
+    {
+     "name": "brk"
+    },
+    {
+     "name": "rt_sigaction"
+    },
+    {
+     "name": "rt_sigprocmask"
+    },
+    {
+     "name": "rt_sigreturn"
+    },
+    {
+     "name": "sigaltstack"
+    },
+    {
+     "name": "futex"
+    },
+    {
+     "name": "set_robust_list"
+    },
+    {
+     "name": "rseq"
+    },
+    {
+     "name": "set_tid_address"
+    },
+    {
+     "name": "getpid"
+    },
+    {
+     "name": "gettid"
+    },
+    {
+     "name": "tgkill"
+    },
+    {
+     "name": "sched_yield"
+    },
+    {
+     "name": "sched_getaffinity"
+    },
+    {
+     "name": "clock_gettime"
+    },
+    {
+     "name": "clock_nanosleep"
+    },
+    {
+     "name": "nanosleep"
+    },
+    {
+     "name": "getrandom"
+    },
+    {
+     "name": "prlimit64"
+    },
+    {
+     "name": "epoll_create1"
+    },
+    {
+     "name": "epoll_ctl"
+    },
+    {
+     "name": "epoll_wait"
+    },
+    {
+     "name": "epoll_pwait"
+    },
+    {
+     "name": "ppoll"
+    },
+    {
+     "name": "poll"
+    },
+    {
+     "name": "exit"
+    },
+    {
+     "name": "exit_group"
+    },
+    {
+     "name": "restart_syscall"
+    },
+    {
+     "name": "arch_prctl",
+     "when": [
+      [
+       {
+        "arg": 0,
+        "eq": 4098,
+        "mask": 4294967295
+       }
+      ]
+     ]
+    },
+    {
+     "name": "clone",
+     "when": [
+      [
+       {
+        "arg": 0,
+        "eq": 67840,
+        "mask": 2114128128
+       }
+      ]
+     ]
+    }
+   ]
+  }
+ },
+ "schemaVersion": "planeon.internal.seccomp-allowlists/v2"
+}
