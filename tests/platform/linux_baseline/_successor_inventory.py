@@ -755,7 +755,9 @@ def chain_record(entries, index, sources):
                   "closed record: " + entry["packetId"])
     chain_require(type(record["ownerDecisions"]) is list and record["ownerDecisions"] and all(
         type(row) is dict and set(row) == CHAIN_DECISION_FIELDS and all(type(row[key]) is str and row[key] for key in row)
-        for row in record["ownerDecisions"]), "owner decisions: " + entry["packetId"])
+        for row in record["ownerDecisions"])
+        # Review E2-3: each decision id once.
+        and len({row["id"] for row in record["ownerDecisions"]}) == len(record["ownerDecisions"]), "owner decisions: " + entry["packetId"])
     chain_require(all(type(record[key]) is dict for key in ("deleted", "changed", "added")), "closed record: " + entry["packetId"])
     paths = [*record["deleted"], *record["changed"], *record["added"]]
     reserved = {CHAIN_REGISTRY_PATH} | {row["path"] for row in entries}
@@ -797,6 +799,11 @@ def chain_step(entries, index, rows, sources):
         view_rows.append(chain_row(CHAIN_REGISTRY_PATH, registry, "100644"))
         view_sources[CHAIN_REGISTRY_PATH] = registry
     view_rows.sort(key=lambda row: row["path"].encode())
+    # Review E2-2: the view must be a tree git can hold; no path is also a directory of another path.
+    paths = set(view_sources)
+    for path in paths:
+        parts = path.split("/")
+        chain_require(not any("/".join(parts[:end]) in paths for end in range(1, len(parts))), "path collision: " + path)
     return view_rows, view_sources
 
 

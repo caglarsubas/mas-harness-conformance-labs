@@ -7,8 +7,8 @@
   },
   "tests/ci_checkpoint/test_checkpoint_chain.py": {
    "mode": "100644",
-   "sha256": "7ce7eef701ccaad67d22d22edb3123ef5fec6a6e86e81b5eb70db2c0bca10215",
-   "size": 10949
+   "sha256": "c8ee05882a24a762b2ba65f63d3db2f3757ad836a48915c171e7d024f1dbbe5b",
+   "size": 11393
   },
   "tests/enforcement/README.md": {
    "mode": "100644",
@@ -212,8 +212,8 @@
   },
   "tests/enforcement/test_bootstrap.py": {
    "mode": "100644",
-   "sha256": "c36dcb978005146a0c25a1398585f89e566cebdc95d80cc61d4e8ce8e6b0a018",
-   "size": 10999
+   "sha256": "521f117ce44dbf2f53182804f710449cfdd61d2faa10e3d6eca963623d54d08a",
+   "size": 12310
   },
   "tests/enforcement/toolchains.json": {
    "mode": "100644",
@@ -226,7 +226,7 @@
   "tests/live_backend/_inventory.py": {
    "after": {
     "mode": "100644",
-    "sha256": "0fd8123c9d8fc15778473345f84621c667a6cc49ad3995a5cdc2d690b0c7e18b",
+    "sha256": "f804877d59362842db2e02fc17d12cfd8244be86d9ddc2f6223f9c9dc2a99b08",
     "size": 4839
    },
    "before": {
@@ -239,8 +239,8 @@
   "tests/platform/linux_baseline/_successor_inventory.py": {
    "after": {
     "mode": "100644",
-    "sha256": "2924dcb83bc4f32f559c71333b51782744dff9a8f108a238ec06642a1c30e58c",
-    "size": 78941
+    "sha256": "a2c6e09bba59187a36256bbdf233deb18e9778089e72417678b166ad0fe90ac9",
+    "size": 79394
    },
    "before": {
     "mode": "100644",

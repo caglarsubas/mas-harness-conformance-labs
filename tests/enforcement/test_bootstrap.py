@@ -28,9 +28,12 @@ FILE_FIELDS = {"contract", "path", "sha256", "size"}
 EXTERNAL_IMPORTS = {"scripts/i05_gate_channel_v3.py": {"jsonschema"}, "scripts/native_qualification_v3.py": {"jsonschema"}}
 MISSING_SIBLINGS = {"scripts/i06_backend_profile_v2.py": ("i06_backend_profile",)}
 ALLOWED_TOP = set(sys.stdlib_module_names) | {"__future__"}
-# Review E1-4: path-based loading is reported too, so area code that runs a snapshot model must declare it.
+# Review E1-4/E2-1: dynamic and path-based loading is reported too (called by name, as an attribute, or through getattr),
+# so area code that loads a module this way fails these tests until a later reviewed packet admits it explicitly.
 DYNAMIC_LOADERS = {"import_module", "spec_from_file_location", "exec_module", "run_path", "run_module", "SourceFileLoader"}
 DYNAMIC_BUILTINS = {"__import__", "exec", "eval", "compile"}
+# As an attribute or a getattr name, "compile" is re.compile and the like; the builtin alone loads nothing without exec.
+DYNAMIC_ATTRS = DYNAMIC_LOADERS | DYNAMIC_BUILTINS - {"compile"}
 
 
 def strict(raw):
@@ -67,8 +70,10 @@ def imported_tops(raw):
             tops |= {alias.name.split(".")[0] for alias in node.names}
         elif isinstance(node, ast.ImportFrom):
             tops.add("." if node.level else node.module.split(".")[0])
-        elif isinstance(node, ast.Call) and (getattr(node.func, "attr", None) in DYNAMIC_LOADERS
-                                             or getattr(node.func, "id", None) in DYNAMIC_LOADERS | DYNAMIC_BUILTINS):
+        elif isinstance(node, ast.Call) and (getattr(node.func, "attr", None) in DYNAMIC_ATTRS
+                                             or getattr(node.func, "id", None) in DYNAMIC_LOADERS | DYNAMIC_BUILTINS
+                                             or any(isinstance(arg, ast.Constant) and arg.value in DYNAMIC_ATTRS
+                                                    for arg in node.args)):
             tops.add("<dynamic>")
     return tops
 
@@ -178,6 +183,17 @@ class IndependenceTests(unittest.TestCase):
                 continue
             with self.subTest(path=path.relative_to(ROOT).as_posix()):
                 self.assertLessEqual(imported_tops(regular(path)) - {"."}, ALLOWED_TOP)
+
+
+class DetectorTests(unittest.TestCase):
+    def test_dynamic_loading_is_reported_in_every_call_form(self):
+        for source in ("__import__('jsonschema')", "import builtins\nbuiltins.__import__('jsonschema')",
+                       "import importlib\nimportlib.import_module('jsonschema')", "exec('import jsonschema')",
+                       "import builtins\nbuiltins.exec('import jsonschema')", "import importlib\ngetattr(importlib, 'import_module')('x')",
+                       "import importlib.util\nimportlib.util.spec_from_file_location('m', 'p.py')", "import runpy\nrunpy.run_path('p.py')"):
+            with self.subTest(source=source):
+                self.assertIn("<dynamic>", imported_tops(source.encode()))
+        self.assertNotIn("<dynamic>", imported_tops(b"import re\nre.compile('x')"))
 
 
 class ToolchainTests(unittest.TestCase):

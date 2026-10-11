@@ -171,7 +171,11 @@ class ChainRefusalTests(unittest.TestCase):
                                 (lambda value: value.update(ownerDecisions=[]), "owner decisions"),
                                 (lambda value: next(iter(value["added"].values())).update(size=5.0), "closed after-pin"),
                                 (lambda value: value["deleted"].update({"a/b": {"before": before, "beforeSourceBase64": "eB=="}}),
-                                 "canonical before-image: a/b")):
+                                 "canonical before-image: a/b"),
+                                # Review E2-2, E2-3: a restored path under a file, a repeated decision id.
+                                (lambda value: value["deleted"].update({"README.md/x": {"before": before, "beforeSourceBase64": "eA=="}}),
+                                 "path collision: README.md/x"),
+                                (lambda value: value["ownerDecisions"].append(dict(value["ownerDecisions"][0])), "owner decisions")):
             with self.subTest(message=message):
                 self.forge(change, message)
 
