@@ -1,0 +1,15 @@
+{
+ "schemaVersion": "r12.enforcement-independence-attestation/v1",
+ "packet": "CONF-ENF-001",
+ "lane": "parallel development lane (W04)",
+ "inputs": [
+  "harness-onion a2eab9365c8663cc1ae23a666e864b821f600fa6: the 36 adopted contract files the W04-0 plan names and the plan itself, as listed in tests/enforcement/snapshots/manifest.json"
+ ],
+ "inputDigests": {
+  "tests/enforcement/snapshots/manifest.json": "4f7bf51d37be06daa8319c180a01d6bca3e4ac86a82b3993283f54181b52b365"
+ },
+ "r10SourceRead": false,
+ "w03WorkInProgressRead": false,
+ "implementationReadOrRunForExpectedResults": false,
+ "reviewer": "a separate agent, never the author, checks this attestation in the packet's independent review"
+}

@@ -1,0 +1,231 @@
+{
+ "files": [
+  {
+   "contract": "W04-0 enforcement test plan",
+   "path": "architecture/enforcement-test-plan/traceability.json",
+   "sha256": "762c2dfa4356b5ac59491fc51359dc4e6ef26f6a22f08c7cca6982c0b2979f72",
+   "size": 50595
+  },
+  {
+   "contract": "I05 gate channel v3",
+   "path": "architecture/i05-gate-channel-v3/channel.schema.json",
+   "sha256": "3bfee13c9d32e82fe5ab908eb6f716bc11881f9d57b324f8ea4a21a3ad35356f",
+   "size": 26557
+  },
+  {
+   "contract": "I05 gate channel v3",
+   "path": "architecture/i05-gate-channel-v3/outcome-mapping.json",
+   "sha256": "4466f379f1cc669e047cffd8afa5fa88b2cc7648a51e2d38b17f0bd5e2252a3a",
+   "size": 6832
+  },
+  {
+   "contract": "I05 gate channel v3",
+   "path": "architecture/i05-gate-channel-v3/vectors.json",
+   "sha256": "ab75d86fe54ade7ee2695ef84b200d0473e14e4112e64e7702032593658763ed",
+   "size": 817047
+  },
+  {
+   "contract": "I05 gate channel v3",
+   "path": "architecture/i05-gate-channel-v3/status.json",
+   "sha256": "7cd5302ba7fe8bbb47b2859c4311e247ae6d730cf37d31d8c7140a61e3e8c5c4",
+   "size": 2821
+  },
+  {
+   "contract": "I05 gate channel v3",
+   "path": "scripts/i05_gate_channel_v3.py",
+   "sha256": "2c7985b539c0ce8eb79eaabfa1f1ab7d43bdca7515defc590a76ecb1697ca959",
+   "size": 50260
+  },
+  {
+   "contract": "I06 backend profile v2",
+   "path": "architecture/i06-backend-profile-v2/criteria.json",
+   "sha256": "026206c57d3025c0f0129b6615e46c83d5a8000ddc3288f000a1fe4570050cda",
+   "size": 10154
+  },
+  {
+   "contract": "I06 backend profile v2",
+   "path": "architecture/i06-backend-profile-v2/vectors.json",
+   "sha256": "1a5e168f0d8fff233f5072b1440e75a633b38e428f87b2893a96e579122a430e",
+   "size": 213022
+  },
+  {
+   "contract": "I06 backend profile v2",
+   "path": "architecture/i06-backend-profile-v2/status.json",
+   "sha256": "44217baf7857b86abfa9c8ccadb953e2678592e437c9caf049096c402abb9c20",
+   "size": 5539
+  },
+  {
+   "contract": "I06 backend profile v2",
+   "path": "scripts/i06_backend_profile_v2.py",
+   "sha256": "58ceb7a6817aab512a56f9f2a614868ce27660d174be353c5629cc8de335e426",
+   "size": 6349
+  },
+  {
+   "contract": "I07 policy write v3",
+   "path": "architecture/i07-policy-write-v3/channel.schema.json",
+   "sha256": "c68721a1002fccc7d6e59eeee9016a0a0f4a7428fad714e5a3d90a362d30ce09",
+   "size": 22739
+  },
+  {
+   "contract": "I07 policy write v3",
+   "path": "architecture/i07-policy-write-v3/policy-kinds.json",
+   "sha256": "4e427204b89959cb855d8641c3fa6f95d358b0b6a6a7730bfc7776adc4a173c0",
+   "size": 6541
+  },
+  {
+   "contract": "I07 policy write v3",
+   "path": "architecture/i07-policy-write-v3/vectors.json",
+   "sha256": "c4c24c5ff15618aa2f0fe0f016011359bc4316220c6e40d5168f9ee24b6f736d",
+   "size": 470344
+  },
+  {
+   "contract": "I07 policy write v3",
+   "path": "architecture/i07-policy-write-v3/status.json",
+   "sha256": "b95b720e1741bc8db86cce3259ae3c6c4eda4b4b6970def95a06e47f0544e983",
+   "size": 2338
+  },
+  {
+   "contract": "I07 policy write v3",
+   "path": "scripts/i07_policy_write_v3.py",
+   "sha256": "6cc7ea0d3df0c7f2966184bb6d322189de3b49b5b02dfe2429911121973afe08",
+   "size": 26392
+  },
+  {
+   "contract": "Admission semantics v3",
+   "path": "architecture/admission-semantics-v3/allowlists.json",
+   "sha256": "9314cd0732880a8e6af91df562af0a392183f6ef078c12fa9b479f6953fad5d4",
+   "size": 86744
+  },
+  {
+   "contract": "Admission semantics v3",
+   "path": "architecture/admission-semantics-v3/admission-manifests/planeon-a2.json",
+   "sha256": "1096b3cc71c4fe6b5a17ed61e8bf8c17ee17fcf52b192503534d60aed9ce4741",
+   "size": 8126
+  },
+  {
+   "contract": "Admission semantics v3",
+   "path": "architecture/admission-semantics-v3/vectors.json",
+   "sha256": "a3e2dc9818742ae2188e0e83cf91bb833be836115975b3fb23d5f280f6928cc1",
+   "size": 249833
+  },
+  {
+   "contract": "Admission semantics v3",
+   "path": "architecture/admission-semantics-v3/status.json",
+   "sha256": "65fedb6284ae7ee70686166db0bcf0f2fdf37756b59ee3f3f8267b25b0ccfda7",
+   "size": 3027
+  },
+  {
+   "contract": "Admission semantics v3",
+   "path": "scripts/admission_semantics_v3.py",
+   "sha256": "3db8f51ab55f49dc33cf6f028306bfb6d7aa1c5d7d96f264cfe709dae925ad22",
+   "size": 38172
+  },
+  {
+   "contract": "Native qualification profile v3",
+   "path": "architecture/native-profile-v3/qualification.schema.json",
+   "sha256": "ae5cbb6aa39f4edfa2d9919f25e55bad9ab214a99ca927c5afe7e2d943946ac5",
+   "size": 78375
+  },
+  {
+   "contract": "Native qualification profile v3",
+   "path": "architecture/native-profile-v3/vectors.json",
+   "sha256": "14af47a69c972039294be8659c31332acd5326bfb0a3a38384a2c6bf9d11fe6d",
+   "size": 560411
+  },
+  {
+   "contract": "Native qualification profile v3",
+   "path": "architecture/native-profile-v3/status.json",
+   "sha256": "f242944dd7a03eb64fd4f14d811711f7ed4ccf9bdb00bca82ea8abbaa5cb0538",
+   "size": 5454
+  },
+  {
+   "contract": "Native qualification profile v3",
+   "path": "scripts/native_qualification_v3.py",
+   "sha256": "2ef5c14ad5d8c962cf3703ccd076059685ed8dcc852059e4f863e8d9dc8965ad",
+   "size": 43006
+  },
+  {
+   "contract": "SELinux matrix v4",
+   "path": "architecture/selinux-matrix-v2/matrix.json",
+   "sha256": "1d2f27e53d7b1a77d1c80b5e167fd477bc5c25dd78250399edc33de8397eebff",
+   "size": 123940
+  },
+  {
+   "contract": "SELinux matrix v4",
+   "path": "architecture/selinux-matrix-v2/vectors.json",
+   "sha256": "e6a0afb937443d6f6cb941ba06e9bd46d9bda5b8f1bcdf97d6dba0b634f25961",
+   "size": 564103
+  },
+  {
+   "contract": "SELinux matrix v4",
+   "path": "architecture/selinux-matrix-v2/status.json",
+   "sha256": "0a9edabf6c2136bf0f5acc2055e7757af0704fb69b2538c56180bf9f2d600aa8",
+   "size": 4433
+  },
+  {
+   "contract": "SELinux matrix v4",
+   "path": "scripts/selinux_matrix_v2.py",
+   "sha256": "09fe67b911e66adfc4eb6ba26b5cb75a16a90748157f628c9ca2d9066412ddd8",
+   "size": 23079
+  },
+  {
+   "contract": "Seccomp allowlists v2",
+   "path": "architecture/seccomp-allowlists-v2/syscalls.json",
+   "sha256": "343176d6518530ba9a4d71c36eec7f6e5a98a87198e5e08d53ac0d68d746ad67",
+   "size": 47490
+  },
+  {
+   "contract": "Seccomp allowlists v2",
+   "path": "architecture/seccomp-allowlists-v2/allowlists.json",
+   "sha256": "c041263a9526a3526e1fa10bf7e73d1d26cba70931c9329f31cfce2d9ce74344",
+   "size": 50871
+  },
+  {
+   "contract": "Seccomp allowlists v2",
+   "path": "architecture/seccomp-allowlists-v2/vectors.json",
+   "sha256": "7aec409b0b6520d11beec0a89a8600ab87c3a5083cfd3860e2b1550c0f25eb47",
+   "size": 804827
+  },
+  {
+   "contract": "Seccomp allowlists v2",
+   "path": "architecture/seccomp-allowlists-v2/status.json",
+   "sha256": "9695c5e4a19fbaec760c0745485c5cd3237951e3c316092bef8f00ba0007a419",
+   "size": 6484
+  },
+  {
+   "contract": "Seccomp allowlists v2",
+   "path": "scripts/seccomp_allowlists_v2.py",
+   "sha256": "12845115589add9e1b0562c6f764decda7685b32a63c9f11872f847af2a54caf",
+   "size": 16618
+  },
+  {
+   "contract": "W01 amendment W02D",
+   "path": "architecture/host-interface-amendment-w02d/amendment.json",
+   "sha256": "8c20ccc25ae504073d89d052b1618c21ab53108dcc44af26f747024709e8f6f9",
+   "size": 19360
+  },
+  {
+   "contract": "W01 amendment W02D",
+   "path": "architecture/host-interface-amendment-w02d/HOST_INTERFACE_SPEC.md",
+   "sha256": "2ac2751cbddd7fae20ee92a93a8fc18c7988dd0c96853d1ccb2d08cb3753f83b",
+   "size": 46098
+  },
+  {
+   "contract": "W01 amendment W02D",
+   "path": "architecture/host-interface-amendment-w02d/status.json",
+   "sha256": "5a3479778f70c73cf956886712bbe5cff691f741dcd73240a9465ec03360866f",
+   "size": 5089
+  },
+  {
+   "contract": "W01 amendment W02D",
+   "path": "scripts/host_interface_amendment.py",
+   "sha256": "cc7e3fd22aaf5dff057184c9aff47ee358b27b2c65afbfc527c8f3d19d78262b",
+   "size": 10324
+  }
+ ],
+ "root": "tests/enforcement/snapshots/harness-onion",
+ "rule": "Byte-exact copies of the adopted contract data and reference models the W04-0 plan names, and the plan itself; never W03 or R10 source. Each file is pinned by sha256 and size; the plan's own pins must agree.",
+ "schemaVersion": "r12.enforcement-snapshot-manifest/v1",
+ "sourceCommit": "a2eab9365c8663cc1ae23a666e864b821f600fa6",
+ "sourceRepository": "harness-onion"
+}

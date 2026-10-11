@@ -1,0 +1,63 @@
+{
+  "schemaVersion": "planeon.internal.i07-policy-write-v3-status/v1",
+  "contract": "planeon.internal.policy-write-frame/v3",
+  "supersedes": "planeon.internal.policy-write-frame/v2",
+  "baseGate": "planeon.internal.effect-gate-frame/v3",
+  "reviewRounds": [
+    {
+      "round": 1,
+      "record": "architecture/w02-adm-f/review-round1.json",
+      "recordSha256": "acd1e7f0ce7b85eb44c4278355db88102cd3c2ca88a78e1f137376950755935c",
+      "verdict": "PASS_FOR_SOURCE_PUBLICATION",
+      "subjectDirectory": "architecture/w02-adm-f/round1/"
+    },
+    {
+      "round": 2,
+      "record": "architecture/w02-adm-f/review-round2.json",
+      "recordSha256": "7cc7456d01896203003d269804a9c1f50f663c5dc6f83d1bd93683660c7fd206",
+      "verdict": "PASS_FOR_SOURCE_PUBLICATION",
+      "subjectDirectory": "CURRENT"
+    }
+  ],
+  "ownerDecisions": [
+    {
+      "id": "W02-ADM-F",
+      "date": "2026-10-08",
+      "decision": "fold W02b-F2, W02f-F and W02c-F2 into one combined packet with successor revisions under one review"
+    }
+  ],
+  "contractState": "ADOPTED_DATA_CONTRACT",
+  "obligations": {
+    "E01": "OPEN_UNPROVEN",
+    "E02": "OPEN_UNPROVEN",
+    "E03": "OPEN_UNPROVEN",
+    "E04": "OPEN_UNPROVEN",
+    "E05": "OPEN_UNPROVEN",
+    "E06": "OPEN_UNPROVEN",
+    "E07": "OPEN_UNPROVEN",
+    "E08": "OPEN_UNPROVEN",
+    "E09": "OPEN_UNPROVEN",
+    "E10": "OPEN_UNPROVEN",
+    "E11": "OPEN_UNPROVEN",
+    "E12": "OPEN_UNPROVEN"
+  },
+  "independentReviewer": "SEPARATE_AGENT_NOT_AUTHOR",
+  "nativeAcceptance": false,
+  "tenantAcceptance": false,
+  "closedFindings": {
+    "W1": "architecture/i07-policy-write-v2/review-round1.json W1: CLOSED in W02-ADM-F review round 2",
+    "W2": "architecture/i07-policy-write-v2/review-round1.json W2: CLOSED in W02-ADM-F review round 2",
+    "W3": "architecture/i07-policy-write-v2/review-round1.json W3: CLOSED in W02-ADM-F review round 2",
+    "W4": "architecture/i07-policy-write-v2/review-round1.json W4: CLOSED in W02-ADM-F review round 2",
+    "AF-I07-1": "architecture/w02-adm-f/review-round1.json AF-I07-1: CLOSED in round 2"
+  },
+  "carriedFindings": {},
+  "gateInstalled": false,
+  "writerInstalled": false,
+  "substrateSelected": false,
+  "enrollmentRulesDefined": false,
+  "staticGuardInstalled": false,
+  "productExecution": false,
+  "runnerActivated": false,
+  "phaseComplete": false
+}

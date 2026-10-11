@@ -1,0 +1,1427 @@
+{
+ "arches": {
+  "aarch64": {
+   "auditArch": 3221225655,
+   "x32Bit": null
+  },
+  "x86_64": {
+   "auditArch": 3221225534,
+   "x32Bit": 1073741824
+  }
+ },
+ "constantCitations": {
+  "ARCH_SET_FS": [
+   "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/include/uapi/asm/prctl.h:6"
+  ],
+  "AT_EMPTY_PATH": [
+   "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) include/uapi/linux/fcntl.h:93,101,107",
+   "execveat(int fd, const char *filename, argv, envp, int flags) - flags is arg4 (torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) fs/exec.c:2105-2109)"
+  ],
+  "ENOSYS": [
+   "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) include/uapi/asm-generic/errno.h:18"
+  ],
+  "IPPROTO": [
+   "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) include/uapi/linux/in.h:30,38"
+  ],
+  "P_PIDFD": [
+   "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) include/uapi/linux/wait.h:20"
+  ],
+  "auditArch": [
+   "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) include/uapi/linux/audit.h:443; EM_X86_64=62 torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) include/uapi/linux/elf-em.h:31",
+   "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) include/uapi/linux/audit.h:391; EM_AARCH64=183 torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) include/uapi/linux/elf-em.h:46"
+  ],
+  "classicBpf": [
+   "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) include/uapi/linux/filter.h:24-29"
+  ],
+  "clone": [
+   "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) include/uapi/linux/sched.h:10-44"
+  ],
+  "ioctls": [
+   "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) include/uapi/asm-generic/ioctls.h:20,53,85-86",
+   "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) include/uapi/linux/fsverity.h:19-35,98-99"
+  ],
+  "memfd": [
+   "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) include/uapi/linux/memfd.h:8,12 (MFD_CLOEXEC 0x0001, MFD_NOEXEC_SEAL 0x0008)",
+   "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) mm/memfd.c:313-317,401-410 (an explicit MFD_NOEXEC_SEAL clears the exec bits, sets F_SEAL_EXEC and allows further seals; vm.memfd_noexec cannot add MFD_EXEC)",
+   "memfd_create(const char __user *uname, unsigned int flags) - flags is arg1 (torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) mm/memfd.c:330-332)"
+  ],
+  "openFlags": [
+   "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) include/uapi/asm-generic/fcntl.h:21-36,84-93 (O_WRONLY, O_RDWR, O_CREAT, O_TRUNC, O_APPEND, __O_TMPFILE)",
+   "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/arm64/include/uapi/asm/fcntl.h:23-26 (overrides only O_DIRECTORY, O_NOFOLLOW, O_DIRECT, O_LARGEFILE)"
+  ],
+  "prctl": [
+   "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) include/uapi/linux/prctl.h:9-291 (individual defines at 9,10,13,14,25,56,57,67,68,71,72,81,82,111,155,158,175,176,178,180,195,203,205,226,234,285,289,291)"
+  ],
+  "seccomp": [
+   "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) include/uapi/linux/seccomp.h:15-18"
+  ],
+  "socket": [
+   "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) include/linux/socket.h:191-207",
+   "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) include/linux/net.h:64-72",
+   "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) include/linux/net.h:48,77-85"
+  ]
+ },
+ "constants": {
+  "AF_INET": 2,
+  "AF_INET6": 10,
+  "AF_UNIX": 1,
+  "ARCH_SET_FS": 4098,
+  "AT_EMPTY_PATH": 4096,
+  "CLONE_THREAD_REQUIRED": {
+   "eq": 67840,
+   "mask": 2114128128
+  },
+  "ENOSYS": 38,
+  "FIOCLEX": 21585,
+  "FIONBIO": 21537,
+  "FIONCLEX": 21584,
+  "FS_IOC_ENABLE_VERITY": 1082156677,
+  "FS_IOC_MEASURE_VERITY": 3221513862,
+  "IPPROTO_IP": 0,
+  "IPPROTO_TCP": 6,
+  "MFD_CLOEXEC_NOEXEC_SEAL": 9,
+  "OPEN_NO_CREATE_MASK": 4194880,
+  "OPEN_READ_ONLY_MASK": 4195907,
+  "PR_SET_NO_NEW_PRIVS": 38,
+  "P_PIDFD": 3,
+  "SECCOMP_FLAGS_TSYNC_ONLY_MASK": 4294967294,
+  "SECCOMP_SET_MODE_FILTER": 1,
+  "SOCK_SEQPACKET": 5,
+  "SOCK_STREAM": 1,
+  "SOCK_TYPE_FLAGS_MASK": 4294440959,
+  "TCGETS": 21505
+ },
+ "deniedEverywhere": [
+  "execve",
+  "mount",
+  "umount2",
+  "move_mount",
+  "open_tree",
+  "fsopen",
+  "fsconfig",
+  "fsmount",
+  "fspick",
+  "mount_setattr",
+  "pivot_root",
+  "setns",
+  "unshare",
+  "ptrace",
+  "process_vm_readv",
+  "process_vm_writev",
+  "init_module",
+  "finit_module",
+  "delete_module",
+  "kexec_load",
+  "kexec_file_load"
+ ],
+ "kernel": {
+  "commit": "adc218676eef25575469234709c2d87185ca223a",
+  "tag": "v6.12"
+ },
+ "schemaVersion": "planeon.internal.seccomp-syscall-table/v2",
+ "sources": {
+  "aarch64": {
+   "abis": [
+    "64",
+    "common",
+    "memfd_secret",
+    "renameat",
+    "rlimit"
+   ],
+   "path": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl",
+   "sha256": "8872daa692005172eccfee147ee38591ce2c005103026ea33a049f044418d41d"
+  },
+  "x86_64": {
+   "abis": [
+    "64",
+    "common"
+   ],
+   "path": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl",
+   "sha256": "980ce3115028c71c5618e7864d262017bde8103bcfe7b413147a14fd312c92ac"
+  }
+ },
+ "syscalls": {
+  "accept4": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:288",
+    "nr": 242
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:300",
+    "nr": 288
+   }
+  },
+  "access": {
+   "aarch64": null,
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:33",
+    "nr": 21
+   }
+  },
+  "arch_prctl": {
+   "aarch64": null,
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:170",
+    "nr": 158
+   }
+  },
+  "bind": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:244",
+    "nr": 200
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:61",
+    "nr": 49
+   }
+  },
+  "bpf": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:330",
+    "nr": 280
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:333",
+    "nr": 321
+   }
+  },
+  "brk": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:258",
+    "nr": 214
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:24",
+    "nr": 12
+   }
+  },
+  "capset": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:118",
+    "nr": 91
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:138",
+    "nr": 126
+   }
+  },
+  "chroot": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:69",
+    "nr": 51
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:173",
+    "nr": 161
+   }
+  },
+  "clock_getres": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:148",
+    "nr": 114
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:241",
+    "nr": 229
+   }
+  },
+  "clock_gettime": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:146",
+    "nr": 113
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:240",
+    "nr": 228
+   }
+  },
+  "clock_nanosleep": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:150",
+    "nr": 115
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:242",
+    "nr": 230
+   }
+  },
+  "clone": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:264",
+    "nr": 220
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:68",
+    "nr": 56
+   }
+  },
+  "clone3": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:378",
+    "nr": 435
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:361",
+    "nr": 435
+   }
+  },
+  "close": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:75",
+    "nr": 57
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:15",
+    "nr": 3
+   }
+  },
+  "close_range": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:379",
+    "nr": 436
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:362",
+    "nr": 436
+   }
+  },
+  "connect": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:247",
+    "nr": 203
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:54",
+    "nr": 42
+   }
+  },
+  "delete_module": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:135",
+    "nr": 106
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:188",
+    "nr": 176
+   }
+  },
+  "dup": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:35",
+    "nr": 23
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:44",
+    "nr": 32
+   }
+  },
+  "dup3": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:36",
+    "nr": 24
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:304",
+    "nr": 292
+   }
+  },
+  "epoll_create1": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:32",
+    "nr": 20
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:303",
+    "nr": 291
+   }
+  },
+  "epoll_ctl": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:33",
+    "nr": 21
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:245",
+    "nr": 233
+   }
+  },
+  "epoll_pwait": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:34",
+    "nr": 22
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:293",
+    "nr": 281
+   }
+  },
+  "epoll_wait": {
+   "aarch64": null,
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:244",
+    "nr": 232
+   }
+  },
+  "execve": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:265",
+    "nr": 221
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:71",
+    "nr": 59
+   }
+  },
+  "execveat": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:331",
+    "nr": 281
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:334",
+    "nr": 322
+   }
+  },
+  "exit": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:120",
+    "nr": 93
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:72",
+    "nr": 60
+   }
+  },
+  "exit_group": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:121",
+    "nr": 94
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:243",
+    "nr": 231
+   }
+  },
+  "faccessat": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:66",
+    "nr": 48
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:281",
+    "nr": 269
+   }
+  },
+  "faccessat2": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:382",
+    "nr": 439
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:365",
+    "nr": 439
+   }
+  },
+  "fcntl": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:38",
+    "nr": 25
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:84",
+    "nr": 72
+   }
+  },
+  "fdatasync": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:107",
+    "nr": 83
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:87",
+    "nr": 75
+   }
+  },
+  "finit_module": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:323",
+    "nr": 273
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:325",
+    "nr": 313
+   }
+  },
+  "flock": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:45",
+    "nr": 32
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:85",
+    "nr": 73
+   }
+  },
+  "fsconfig": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:374",
+    "nr": 431
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:357",
+    "nr": 431
+   }
+  },
+  "fsmount": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:375",
+    "nr": 432
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:358",
+    "nr": 432
+   }
+  },
+  "fsopen": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:373",
+    "nr": 430
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:356",
+    "nr": 430
+   }
+  },
+  "fspick": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:376",
+    "nr": 433
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:359",
+    "nr": 433
+   }
+  },
+  "fstat": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:104",
+    "nr": 80
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:17",
+    "nr": 5
+   }
+  },
+  "fstatfs": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:60",
+    "nr": 44
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:150",
+    "nr": 138
+   }
+  },
+  "fsync": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:106",
+    "nr": 82
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:86",
+    "nr": 74
+   }
+  },
+  "futex": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:126",
+    "nr": 98
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:214",
+    "nr": 202
+   }
+  },
+  "getcwd": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:29",
+    "nr": 17
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:91",
+    "nr": 79
+   }
+  },
+  "getdents64": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:79",
+    "nr": 61
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:229",
+    "nr": 217
+   }
+  },
+  "getegid": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:218",
+    "nr": 177
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:120",
+    "nr": 108
+   }
+  },
+  "geteuid": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:216",
+    "nr": 175
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:119",
+    "nr": 107
+   }
+  },
+  "getgid": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:217",
+    "nr": 176
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:116",
+    "nr": 104
+   }
+  },
+  "getpeername": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:249",
+    "nr": 205
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:64",
+    "nr": 52
+   }
+  },
+  "getpid": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:213",
+    "nr": 172
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:51",
+    "nr": 39
+   }
+  },
+  "getrandom": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:328",
+    "nr": 278
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:330",
+    "nr": 318
+   }
+  },
+  "getsockname": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:248",
+    "nr": 204
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:63",
+    "nr": 51
+   }
+  },
+  "getsockopt": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:253",
+    "nr": 209
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:67",
+    "nr": 55
+   }
+  },
+  "gettid": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:219",
+    "nr": 178
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:198",
+    "nr": 186
+   }
+  },
+  "gettimeofday": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:208",
+    "nr": 169
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:108",
+    "nr": 96
+   }
+  },
+  "getuid": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:215",
+    "nr": 174
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:114",
+    "nr": 102
+   }
+  },
+  "init_module": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:134",
+    "nr": 105
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:187",
+    "nr": 175
+   }
+  },
+  "io_uring_setup": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:368",
+    "nr": 425
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:351",
+    "nr": 425
+   }
+  },
+  "ioctl": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:42",
+    "nr": 29
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:28",
+    "nr": 16
+   }
+  },
+  "kexec_file_load": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:345",
+    "nr": 294
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:332",
+    "nr": 320
+   }
+  },
+  "kexec_load": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:133",
+    "nr": 104
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:258",
+    "nr": 246
+   }
+  },
+  "keyctl": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:263",
+    "nr": 219
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:262",
+    "nr": 250
+   }
+  },
+  "kill": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:165",
+    "nr": 129
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:74",
+    "nr": 62
+   }
+  },
+  "listen": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:245",
+    "nr": 201
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:62",
+    "nr": 50
+   }
+  },
+  "lseek": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:81",
+    "nr": 62
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:20",
+    "nr": 8
+   }
+  },
+  "madvise": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:279",
+    "nr": 233
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:40",
+    "nr": 28
+   }
+  },
+  "membarrier": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:333",
+    "nr": 283
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:336",
+    "nr": 324
+   }
+  },
+  "memfd_create": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:329",
+    "nr": 279
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:331",
+    "nr": 319
+   }
+  },
+  "mkdirat": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:47",
+    "nr": 34
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:270",
+    "nr": 258
+   }
+  },
+  "mmap": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:267",
+    "nr": 222
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:21",
+    "nr": 9
+   }
+  },
+  "mount": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:54",
+    "nr": 40
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:177",
+    "nr": 165
+   }
+  },
+  "mount_setattr": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:385",
+    "nr": 442
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:368",
+    "nr": 442
+   }
+  },
+  "move_mount": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:372",
+    "nr": 429
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:355",
+    "nr": 429
+   }
+  },
+  "mprotect": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:272",
+    "nr": 226
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:22",
+    "nr": 10
+   }
+  },
+  "mremap": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:260",
+    "nr": 216
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:37",
+    "nr": 25
+   }
+  },
+  "munmap": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:259",
+    "nr": 215
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:23",
+    "nr": 11
+   }
+  },
+  "nanosleep": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:130",
+    "nr": 101
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:47",
+    "nr": 35
+   }
+  },
+  "newfstatat": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:102",
+    "nr": 79
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:274",
+    "nr": 262
+   }
+  },
+  "open": {
+   "aarch64": null,
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:14",
+    "nr": 2
+   }
+  },
+  "open_tree": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:371",
+    "nr": 428
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:354",
+    "nr": 428
+   }
+  },
+  "openat": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:74",
+    "nr": 56
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:269",
+    "nr": 257
+   }
+  },
+  "openat2": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:380",
+    "nr": 437
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:363",
+    "nr": 437
+   }
+  },
+  "personality": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:119",
+    "nr": 92
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:147",
+    "nr": 135
+   }
+  },
+  "pidfd_open": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:377",
+    "nr": 434
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:360",
+    "nr": 434
+   }
+  },
+  "pidfd_send_signal": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:367",
+    "nr": 424
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:350",
+    "nr": 424
+   }
+  },
+  "pivot_root": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:55",
+    "nr": 41
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:167",
+    "nr": 155
+   }
+  },
+  "poll": {
+   "aarch64": null,
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:19",
+    "nr": 7
+   }
+  },
+  "ppoll": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:95",
+    "nr": 73
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:283",
+    "nr": 271
+   }
+  },
+  "prctl": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:205",
+    "nr": 167
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:169",
+    "nr": 157
+   }
+  },
+  "pread64": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:86",
+    "nr": 67
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:29",
+    "nr": 17
+   }
+  },
+  "prlimit64": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:310",
+    "nr": 261
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:314",
+    "nr": 302
+   }
+  },
+  "process_vm_readv": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:320",
+    "nr": 270
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:322",
+    "nr": 310
+   }
+  },
+  "process_vm_writev": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:321",
+    "nr": 271
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:323",
+    "nr": 311
+   }
+  },
+  "pselect6": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:93",
+    "nr": 72
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:282",
+    "nr": 270
+   }
+  },
+  "ptrace": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:152",
+    "nr": 117
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:113",
+    "nr": 101
+   }
+  },
+  "pwrite64": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:87",
+    "nr": 68
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:30",
+    "nr": 18
+   }
+  },
+  "read": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:82",
+    "nr": 63
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:12",
+    "nr": 0
+   }
+  },
+  "readlink": {
+   "aarch64": null,
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:101",
+    "nr": 89
+   }
+  },
+  "readlinkat": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:100",
+    "nr": 78
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:279",
+    "nr": 267
+   }
+  },
+  "readv": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:84",
+    "nr": 65
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:31",
+    "nr": 19
+   }
+  },
+  "recvfrom": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:251",
+    "nr": 207
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:57",
+    "nr": 45
+   }
+  },
+  "recvmsg": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:256",
+    "nr": 212
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:59",
+    "nr": 47
+   }
+  },
+  "restart_syscall": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:164",
+    "nr": 128
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:231",
+    "nr": 219
+   }
+  },
+  "rseq": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:344",
+    "nr": 293
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:346",
+    "nr": 334
+   }
+  },
+  "rt_sigaction": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:170",
+    "nr": 134
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:25",
+    "nr": 13
+   }
+  },
+  "rt_sigprocmask": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:171",
+    "nr": 135
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:26",
+    "nr": 14
+   }
+  },
+  "rt_sigreturn": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:176",
+    "nr": 139
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:27",
+    "nr": 15
+   }
+  },
+  "sched_getaffinity": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:158",
+    "nr": 123
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:216",
+    "nr": 204
+   }
+  },
+  "sched_yield": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:159",
+    "nr": 124
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:36",
+    "nr": 24
+   }
+  },
+  "seccomp": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:327",
+    "nr": 277
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:329",
+    "nr": 317
+   }
+  },
+  "sendmsg": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:255",
+    "nr": 211
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:58",
+    "nr": 46
+   }
+  },
+  "sendto": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:250",
+    "nr": 206
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:56",
+    "nr": 44
+   }
+  },
+  "set_robust_list": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:127",
+    "nr": 99
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:285",
+    "nr": 273
+   }
+  },
+  "set_tid_address": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:123",
+    "nr": 96
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:230",
+    "nr": 218
+   }
+  },
+  "setgroups": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:196",
+    "nr": 159
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:128",
+    "nr": 116
+   }
+  },
+  "setns": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:318",
+    "nr": 268
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:320",
+    "nr": 308
+   }
+  },
+  "setresgid": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:186",
+    "nr": 149
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:131",
+    "nr": 119
+   }
+  },
+  "setresuid": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:184",
+    "nr": 147
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:129",
+    "nr": 117
+   }
+  },
+  "setsockopt": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:252",
+    "nr": 208
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:66",
+    "nr": 54
+   }
+  },
+  "shutdown": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:254",
+    "nr": 210
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:60",
+    "nr": 48
+   }
+  },
+  "sigaltstack": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:168",
+    "nr": 132
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:143",
+    "nr": 131
+   }
+  },
+  "socket": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:242",
+    "nr": 198
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:53",
+    "nr": 41
+   }
+  },
+  "socketpair": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:243",
+    "nr": 199
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:65",
+    "nr": 53
+   }
+  },
+  "statx": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:341",
+    "nr": 291
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:344",
+    "nr": 332
+   }
+  },
+  "tgkill": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:167",
+    "nr": 131
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:246",
+    "nr": 234
+   }
+  },
+  "umount2": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:53",
+    "nr": 39
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:178",
+    "nr": 166
+   }
+  },
+  "uname": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:197",
+    "nr": 160
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:75",
+    "nr": 63
+   }
+  },
+  "unshare": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:124",
+    "nr": 97
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:284",
+    "nr": 272
+   }
+  },
+  "userfaultfd": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:332",
+    "nr": 282
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:335",
+    "nr": 323
+   }
+  },
+  "waitid": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:122",
+    "nr": 95
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:259",
+    "nr": 247
+   }
+  },
+  "write": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:83",
+    "nr": 64
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:13",
+    "nr": 1
+   }
+  },
+  "writev": {
+   "aarch64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) scripts/syscall.tbl:85",
+    "nr": 66
+   },
+   "x86_64": {
+    "cite": "torvalds/linux@v6.12 (commit adc218676eef25575469234709c2d87185ca223a) arch/x86/entry/syscalls/syscall_64.tbl:32",
+    "nr": 20
+   }
+  }
+ }
+}

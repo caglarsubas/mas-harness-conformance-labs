@@ -1,0 +1,389 @@
+{
+ "schemaVersion": "planeon.internal.host-interface-amendment/v1",
+ "designLabel": "HOST-INTERFACE-DRAFT-002-W02D",
+ "base": {
+  "path": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md",
+  "sha256": "8a3a09bb5dbc08804dbea06dd0700a14648a9cdbc8efd62112dc64ba0b6ba1b4"
+ },
+ "effective": {
+  "path": "architecture/host-interface-amendment-w02d/HOST_INTERFACE_SPEC.md",
+  "sha256": "2ac2751cbddd7fae20ee92a93a8fc18c7988dd0c96853d1ccb2d08cb3753f83b"
+ },
+ "carriedFrom": {
+  "path": "architecture/seccomp-allowlists/status.json",
+  "field": "carriedToW01",
+  "items": [
+   "W02d-Q1 WORKER row text amendment",
+   "W02d-QA worker execveat in W5's form",
+   "W02d-QC readers' inspection-reads row amendment",
+   "W6 pidfd kill needs CAP_KILL the broker lacks; cgroup.kill is the effective path",
+   "W4 does not name setgroups",
+   "F9 executable memfd"
+  ]
+ },
+ "ownerDecisions": [
+  {
+   "id": "W02d-Q1",
+   "date": "2026-10-09",
+   "state": "OWNER_DECIDED",
+   "decision": "W02d defines the WORKER allowlist from the worker's duties; the W01 section 5.3 WORKER row text 'Existing worker allowlist' is amended to 'the W02d worker allowlist'"
+  },
+  {
+   "id": "W02d-QA",
+   "date": "2026-10-09",
+   "state": "OWNER_DECIDED",
+   "decision": "the worker filter, installed in W4, allows execveat only in W5's form (flags AT_EMPTY_PATH); a second exec stays refused by SELinux"
+  },
+  {
+   "id": "W02d-QB",
+   "date": "2026-10-09",
+   "state": "OWNER_DECIDED",
+   "decision": "clone3 fails with ENOSYS (not KILL_PROCESS) in the six non-broker roles, so glibc 2.34 and later fall back to the thread-only clone rule"
+  },
+  {
+   "id": "W02d-QC",
+   "date": "2026-10-09",
+   "state": "OWNER_DECIDED",
+   "decision": "SERVER, OBSERVER and BROKER get an inspection-reads duty; membarrier only QUERY (0), PRIVATE_EXPEDITED (8) and REGISTER_PRIVATE_EXPEDITED (16), flags 0, cpu 0; carried to W01 as a row amendment"
+  },
+  {
+   "id": "W02d-QD",
+   "date": "2026-10-09",
+   "state": "OWNER_DECIDED",
+   "decision": "the broker's filter is inherited by the worker and stays after exec, and the kernel applies the most restrictive of stacked filters, so the broker's allowlist covers the worker's"
+  },
+  {
+   "id": "W01-AMEND-QW1",
+   "date": "2026-10-10",
+   "state": "OWNER_DECIDED",
+   "decision": "W6 kills through cgroup.kill only: freeze, cgroup.kill, wait for populated 0 (the broker has no CAP_KILL); the unused pidfd_send_signal grant is dropped in the W02d successor seccomp-allowlists-v2"
+  },
+  {
+   "id": "W01-AMEND-QW2",
+   "date": "2026-10-10",
+   "state": "OWNER_DECIDED",
+   "decision": "the broker runs with no supplementary groups (a W03 unit requirement) and W3 checks that the child's /proc Groups: line lists none; no allowlist change"
+  },
+  {
+   "id": "W01-AMEND-QW4",
+   "date": "2026-10-10",
+   "state": "OWNER_DECIDED",
+   "decision": "the native roles are Rust with musl, fully static (analysed reference: musl 1.2.5, Rust 1.90.0; W03 pins these or re-checks them against W02d); the W02d successor's NATIVE_STATIC base adds poll, which Rust std calls on fds 0-2 at start-up and musl issues as SYS_poll on x86_64; musl creates threads with clone, never clone3"
+  },
+  {
+   "id": "W01-AMEND-QW3",
+   "date": "2026-10-10",
+   "state": "OWNER_DECIDED",
+   "decision": "M-a, replacing a vm.memfd_noexec pin (which a CAP_SYS_ADMIN holder in the initial namespaces can lower): memfd_create flags become MFD_CLOEXEC | MFD_NOEXEC_SEAL, so the kernel clears exec and sets F_SEAL_EXEC on every call with no reliance on host state; carried by the W02d successor seccomp-allowlists-v2"
+  }
+ ],
+ "items": [
+  {
+   "id": "E1",
+   "kind": "EDITORIAL",
+   "section": "title",
+   "baseLines": "1",
+   "current": "# W01 host interfaces — gate resolutions, candidate v2\n",
+   "proposed": "# W01 host interfaces — gate resolutions, candidate v2 with amendment W02D\n\nEffective text of `HOST-INTERFACE-DRAFT-002` with amendment W02D (`HOST-INTERFACE-DRAFT-002-W02D`, section 11) applied.\nThe reviewed v2 file (`architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md`) stays byte-identical;\n`architecture/host-interface-amendment-w02d/amendment.json` lists every change.\n",
+   "occurrences": 1,
+   "decisions": [],
+   "source": "amendment W02D",
+   "why": "Marks the file as the effective amended text."
+  },
+  {
+   "id": "A1",
+   "kind": "CARRIED",
+   "section": "5.3 WORKER row, seccomp",
+   "baseLines": "406",
+   "current": "Existing worker allowlist plus FD3 seqpacket I/O; no socket creation",
+   "proposed": "The W02d worker allowlist (`architecture/seccomp-allowlists-v2/`, W02d-Q1): its CPython 3.12 runtime base, FD3 seqpacket I/O on fd 3 only, reads of the read-only root and exit; `execveat` only with flags AT_EMPTY_PATH, for W5 (W02d-QA); `clone3` fails with ENOSYS (W02d-QB); no socket creation, no `bpf`. The inherited broker filter stays installed and covers it (W02d-QD)",
+   "occurrences": 1,
+   "decisions": [
+    "W02d-Q1",
+    "W02d-QA",
+    "W02d-QB",
+    "W02d-QD"
+   ],
+   "source": "architecture/seccomp-allowlists-v2/allowlists.json (WORKER)",
+   "why": "W01 cited a worker allowlist that existed nowhere in the repository; W02d defines it (Q1) and admits W5's exec in it (QA)."
+  },
+  {
+   "id": "A2",
+   "kind": "CARRIED",
+   "section": "5.3 WORKER row, SELinux",
+   "baseLines": "406",
+   "current": "| `planeon_worker_t`: no network `name_connect`, no ptrace, read-only root |",
+   "proposed": "| `planeon_worker_t`: no network `name_connect`, no ptrace, read-only root; no `execute_no_trans` on any type (SELinux matrix v4 A60.18) and no `transition` or `nnp_transition` into any declared domain (A24-A32), and the host policy gives it none into any other domain (obligation O-W03-WORKER-EXEC), so a second exec that the worker filter admits is still refused |",
+   "occurrences": 1,
+   "decisions": [
+    "W02d-QA"
+   ],
+   "source": "architecture/selinux-matrix-v2/matrix.json (A24-A32, A60.18)",
+   "why": "QA's 'a second exec stays refused by SELinux' rests on the worker domain's rules; the row now states them."
+  },
+  {
+   "id": "A3",
+   "kind": "CARRIED",
+   "section": "5.3 SERVER row, seccomp (OBSERVER and BROKER inherit it)",
+   "baseLines": "402",
+   "current": "pidfd_open, exit. Denied:",
+   "proposed": "pidfd_open, inspection reads (read-only `openat`, `read`, `pread64`, `lseek`, `fstat`, `newfstatat`, `statx`, `fstatfs`, `getdents64` and `readlinkat`; `ioctl` only FS_IOC_MEASURE_VERITY; `membarrier` only cmd 0, 8 or 16 with flags 0 and cpu 0; W02d-QC). Seccomp checks only the open flags of these reads; which files they reach is set by the role's SELinux domain (`architecture/selinux-matrix-v2/`), exit. Denied:",
+   "occurrences": 1,
+   "decisions": [
+    "W02d-QC"
+   ],
+   "source": "architecture/seccomp-allowlists-v2/allowlists.json (SERVER inspection reads); docs/alpha-2/NATIVE_QUALIFICATION_READINESS.md:112-135",
+   "why": "The readers' native qualification reads were not derivable from the SERVER row; W01 says such a need means the row is wrong."
+  },
+  {
+   "id": "A4",
+   "kind": "CARRIED",
+   "section": "5.3 SERVER row, seccomp (memfd_create)",
+   "baseLines": "402",
+   "current": "memfd_create with flags limited to the existing sealed-credential path (MFD_CLOEXEC, MFD_ALLOW_SEALING)",
+   "proposed": "memfd_create with flags exactly MFD_CLOEXEC and MFD_NOEXEC_SEAL for the sealed-credential path (the kernel clears the exec bits and sets F_SEAL_EXEC on every call, and further seals stay possible; the existing code passes MFD_CLOEXEC and MFD_ALLOW_SEALING and must change first, obligation O-SERVER-MEMFD)",
+   "occurrences": 1,
+   "decisions": [
+    "W01-AMEND-QW3"
+   ],
+   "source": "architecture/seccomp-allowlists-v2/allowlists.json; linux v6.12 (adc218676eef) mm/memfd.c:313-317,401-410; include/uapi/linux/memfd.h:8,12",
+   "why": "With MFD_CLOEXEC | MFD_ALLOW_SEALING the memfd is executable unless vm.memfd_noexec says otherwise (round-1 F9), and a CAP_SYS_ADMIN holder in the initial namespaces can lower that sysctl (linux v6.12 (adc218676eef) kernel/pid_sysctl.h:8-32; include/linux/pid_namespace.h:59-67)."
+  },
+  {
+   "id": "A5",
+   "kind": "RESTATED",
+   "section": "5.3 SERVER row, seccomp (clone3)",
+   "baseLines": "402",
+   "current": "clone3 (its flags are in a struct seccomp cannot read)",
+   "proposed": "clone3 (its flags are in a struct seccomp cannot read; it fails with ENOSYS rather than KILL_PROCESS, W02d-QB)",
+   "occurrences": 1,
+   "decisions": [
+    "W02d-QB"
+   ],
+   "source": "architecture/seccomp-allowlists-v2/allowlists.json (SERVER clone3 errno rule)",
+   "why": "States the refusal the allowlists use, which W04's tests must expect."
+  },
+  {
+   "id": "A6",
+   "kind": "RESTATED",
+   "section": "5.3 EFFECT_GATE row, seccomp",
+   "baseLines": "405",
+   "current": "no exec, no clone3, clone only with CLONE_THREAD",
+   "proposed": "no exec, no clone3 (it fails with ENOSYS, W02d-QB), clone only with CLONE_THREAD",
+   "occurrences": 1,
+   "decisions": [
+    "W02d-QB"
+   ],
+   "source": "architecture/seccomp-allowlists-v2/allowlists.json (EFFECT_GATE clone3 errno rule)",
+   "why": "As A5, for the gate."
+  },
+  {
+   "id": "A7",
+   "kind": "CARRIED",
+   "section": "5.3 BROKER row, seccomp",
+   "baseLines": "404",
+   "current": "The child inherits this filter, so it must cover the child's pre-exec steps; the narrower worker filter is installed in W4.",
+   "proposed": "The child inherits this filter, so it must cover the child's pre-exec steps; the narrower worker filter is installed in W4 and stacks on it. The inherited broker filter stays after exec and the kernel applies the most restrictive action of the two, so the broker allowlist covers the worker's (W02d-QD). The broker runs under exactly one filter, its own (W03 adds none, W02d F10), so the worker shows `Seccomp_filters: 2`.",
+   "occurrences": 1,
+   "decisions": [
+    "W02d-QD"
+   ],
+   "source": "architecture/seccomp-allowlists/README.md (filter digests and stacking); linux v6.12 (adc218676eef) kernel/seccomp.c:932; fs/proc/array.c:339-340",
+   "why": "The worker's effective policy is the intersection of both filters; the row now says so."
+  },
+  {
+   "id": "A8",
+   "kind": "CARRIED",
+   "section": "5.3 note",
+   "baseLines": "410",
+   "current": "allowlists (x86_64 and aarch64 numbers, argument filters) are W02 data, generated",
+   "proposed": "allowlists (x86_64 and aarch64 numbers, argument filters) are W02 data (W02d, `architecture/seccomp-allowlists-v2/`), generated",
+   "occurrences": 1,
+   "decisions": [
+    "W02d-Q1"
+   ],
+   "source": "architecture/seccomp-allowlists-v2/README.md",
+   "why": "Points the note at the data."
+  },
+  {
+   "id": "A9",
+   "kind": "RESTATED",
+   "section": "5.3 note",
+   "baseLines": "413",
+   "current": "added to the allowlist. For all roles:",
+   "proposed": "added to the allowlist. In every role except BROKER, `clone3` fails with ENOSYS rather than KILL_PROCESS (W02d-QB): in the CPython roles (SERVER, WORKER) glibc 2.34 and later then fall back to the thread-only `clone` rule, and the native roles' static musl runtime creates threads with `clone` only, never `clone3` (W01-AMEND-QW4). Every other call a role's allowlist does not name is KILL_PROCESS. For all roles:",
+   "occurrences": 1,
+   "decisions": [
+    "W02d-QB",
+    "W01-AMEND-QW4"
+   ],
+   "source": "architecture/seccomp-allowlists-v2/allowlists.json (clone3 errno rules: SERVER, OBSERVER, EFFECT_GATE, WORKER, POLICY_WRITER, HOST_CONTAINMENT); musl 1.2.5 src/thread/pthread_create.c:243-245,355, src/thread/x86_64/clone.s, src/thread/aarch64/clone.s (SYS_clone 56 and 220)",
+   "why": "Covers POLICY_WRITER and HOST_CONTAINMENT, whose rows name no clone3 refusal."
+  },
+  {
+   "id": "A10",
+   "kind": "CARRIED",
+   "section": "5.4 W3",
+   "baseLines": "432-434",
+   "current": "only stdio and the broker-created FD3 socketpair end.",
+   "proposed": "only stdio and the broker-created FD3 socketpair end. The child holds no supplementary groups: the `Groups:` line\nof `/proc/<pid>/status` lists none (the kernel writes `Groups:`, a tab and one space). W4's setresgid and setresuid\nleave supplementary groups unchanged, so the broker must run with none (obligation O-W03-GROUPS), and neither filter\nallows `setgroups`.",
+   "occurrences": 1,
+   "decisions": [
+    "W01-AMEND-QW2"
+   ],
+   "source": "linux v6.12 (adc218676eef) kernel/sys.c:676-750,778-839; fs/proc/array.c:199-206; architecture/seccomp-allowlists-v2/allowlists.json",
+   "why": "W4 changes uid and gid but never names setgroups; supplementary groups held by the broker would survive into the worker."
+  },
+  {
+   "id": "A11",
+   "kind": "CARRIED",
+   "section": "5.4 W4",
+   "baseLines": "437",
+   "current": "capabilities, `no_new_privs=1`, install the worker seccomp filter.",
+   "proposed": "capabilities, `no_new_privs=1`, install the worker seccomp filter (W02d). That filter admits W5's `execveat`\nform and no other exec, and it stacks on the inherited broker filter.",
+   "occurrences": 1,
+   "decisions": [
+    "W02d-QA",
+    "W02d-QD"
+   ],
+   "source": "architecture/seccomp-allowlists-v2/allowlists.json (WORKER, BROKER)",
+   "why": "Names the filter W4 installs and how it composes."
+  },
+  {
+   "id": "A12",
+   "kind": "CARRIED",
+   "section": "5.4 W6",
+   "baseLines": "443",
+   "current": "the leaf, kills through the pidfd and `cgroup.kill`, waits until `cgroup.events`",
+   "proposed": "the leaf, kills through `cgroup.kill` (a pidfd signal needs CAP_KILL once the child runs as the signed uid, and\nthe broker holds none; the pidfd serves `waitid` and identity), waits until `cgroup.events`",
+   "occurrences": 1,
+   "decisions": [
+    "W01-AMEND-QW1"
+   ],
+   "source": "linux v6.12 (adc218676eef) kernel/signal.c:814-824; architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md:404",
+   "why": "pidfd_send_signal to another uid needs CAP_KILL, which the BROKER row withholds; W6 contradicted the row. The W02d successor drops the unused grant."
+  },
+  {
+   "id": "E2",
+   "kind": "EDITORIAL",
+   "section": "11 (new)",
+   "baseLines": "end",
+   "current": "- https://kubernetes.io/docs/reference/access-authn-authz/authorization/\n",
+   "proposed": "- https://kubernetes.io/docs/reference/access-authn-authz/authorization/\n\n## 11. Amendment W02D (2026-10-10)\n\nW02d (`architecture/seccomp-allowlists/`, MET-ENFORCE-017) carried six items into this record. Amendment W02D applies them, restates W02d-QB's ENOSYS refusal where rows imply KILL_PROCESS, and points at\nthe W02d successor (`architecture/seccomp-allowlists-v2/`). Nothing else changes; `amendment.json` beside this file\ngives every change and its reason.\n\n| Item | Where | Decisions |\n|---|---|---|\n| A1 | 5.3 WORKER row, seccomp | W02d-Q1, W02d-QA, W02d-QB, W02d-QD |\n| A2 | 5.3 WORKER row, SELinux | W02d-QA |\n| A3 | 5.3 SERVER row, seccomp (OBSERVER and BROKER inherit it) | W02d-QC |\n| A4 | 5.3 SERVER row, seccomp (memfd_create) | W01-AMEND-QW3 |\n| A5 | 5.3 SERVER row, seccomp (clone3) | W02d-QB |\n| A6 | 5.3 EFFECT_GATE row, seccomp | W02d-QB |\n| A7 | 5.3 BROKER row, seccomp | W02d-QD |\n| A8 | 5.3 note | W02d-Q1 |\n| A9 | 5.3 note | W02d-QB, W01-AMEND-QW4 |\n| A10 | 5.4 W3 | W01-AMEND-QW2 |\n| A11 | 5.4 W4 | W02d-QA, W02d-QD |\n| A12 | 5.4 W6 | W01-AMEND-QW1 |\n\nObligations: O-SERVER-MEMFD (the sealed-credential code's memfd flags), O-W03-WORKER-EXEC (the worker's domain\ntransitions), O-W03-GROUPS (the broker's groups) and\nO-T04-AMEND (native confirmation). Every E01-E12 obligation stays OPEN_UNPROVEN.\n",
+   "occurrences": 1,
+   "decisions": [],
+   "source": "amendment W02D",
+   "why": "Summarises the amendment inside the effective text."
+  }
+ ],
+ "dispositions": [
+  {
+   "item": "W02d-Q1 WORKER row text amendment",
+   "decisions": [
+    "W02d-Q1"
+   ],
+   "items": [
+    "A1",
+    "A8"
+   ],
+   "obligations": [],
+   "summary": "The WORKER row names the W02d worker allowlist; the note points at the data."
+  },
+  {
+   "item": "W02d-QA worker execveat in W5's form",
+   "decisions": [
+    "W02d-QA",
+    "W02d-QD"
+   ],
+   "items": [
+    "A1",
+    "A2",
+    "A7",
+    "A11"
+   ],
+   "obligations": [
+    "O-W03-WORKER-EXEC"
+   ],
+   "summary": "The worker filter admits W5's execveat form only, SELinux refuses any second exec, and the worker runs under both filters."
+  },
+  {
+   "item": "W02d-QC readers' inspection-reads row amendment",
+   "decisions": [
+    "W02d-QC"
+   ],
+   "items": [
+    "A3"
+   ],
+   "obligations": [],
+   "summary": "SERVER, and through 'As SERVER' OBSERVER and BROKER, gain the inspection-reads duty; SELinux limits the paths."
+  },
+  {
+   "item": "W6 pidfd kill needs CAP_KILL the broker lacks; cgroup.kill is the effective path",
+   "decisions": [
+    "W01-AMEND-QW1"
+   ],
+   "items": [
+    "A12"
+   ],
+   "obligations": [
+    "O-T04-AMEND"
+   ],
+   "summary": "W6 kills through cgroup.kill only; the broker keeps no CAP_KILL, and the W02d successor drops pidfd_send_signal."
+  },
+  {
+   "item": "W4 does not name setgroups",
+   "decisions": [
+    "W01-AMEND-QW2"
+   ],
+   "items": [
+    "A10"
+   ],
+   "obligations": [
+    "O-W03-GROUPS",
+    "O-T04-AMEND"
+   ],
+   "summary": "The broker runs with no supplementary groups, and W3 checks the child's Groups: line."
+  },
+  {
+   "item": "F9 executable memfd",
+   "decisions": [
+    "W01-AMEND-QW3"
+   ],
+   "items": [
+    "A4"
+   ],
+   "obligations": [
+    "O-SERVER-MEMFD",
+    "O-T04-AMEND"
+   ],
+   "summary": "SERVER memfd_create flags become MFD_CLOEXEC | MFD_NOEXEC_SEAL; the W02d successor narrows its rule."
+  }
+ ],
+ "obligations": [
+  {
+   "id": "O-SERVER-MEMFD",
+   "owner": "the SERVER role's sealed-credential code (today the R12 live backend: mas-harness-conformance-labs src/harness_conformance/live_linux_boundary.py:976, pinned in architecture/credential-ordering-inputs/source-before.json)",
+   "text": "Call memfd_create with MFD_CLOEXEC | MFD_NOEXEC_SEAL instead of MFD_CLOEXEC | MFD_ALLOW_SEALING, and change its unit rig (tests/live_backend/test_linux_boundary.py:836-870, pinned in architecture/conformance-consumer-closure-inputs/consumer-sources.json) to expect those flags, before the code runs under the W02d v2 filter, which kills the old flags."
+  },
+  {
+   "id": "O-W03-WORKER-EXEC",
+   "owner": "W03",
+   "text": "Give planeon_worker_t no transition or nnp_transition into any domain in the host policy, beyond the declared domains SELinux matrix v4 already closes (A24-A32), so a second exec the worker filter admits stays refused (W02d-QA)."
+  },
+  {
+   "id": "O-W03-GROUPS",
+   "owner": "W03",
+   "text": "Start the broker with no supplementary groups (W02d carriedToW03), so the W3 Groups: check holds."
+  },
+  {
+   "id": "O-T04-AMEND",
+   "owner": "T04",
+   "text": "On the enrolled kernel, confirm that a pidfd signal from the root broker without CAP_KILL to the signed-uid child fails, that MFD_NOEXEC_SEAL memfds are non-executable and exec-sealed, that the worker shows Seccomp_filters: 2, and that its Groups: line lists none."
+  }
+ ],
+ "notAmended": [
+  "Items A5, A6, A9 restate W02d-QB's ENOSYS refusal; W02d-QB is not a carried item but the rows implied KILL_PROCESS",
+  "The W02d contract itself: its successor architecture/seccomp-allowlists-v2/ (same packet) carries W01-AMEND-QW1's dropped grant and QW3's flags",
+  "Every other W01 text, gate disposition and E01-E12 obligation"
+ ]
+}

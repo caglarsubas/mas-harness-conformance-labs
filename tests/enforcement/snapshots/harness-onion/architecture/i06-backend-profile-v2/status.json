@@ -1,0 +1,82 @@
+{
+ "schemaVersion": "planeon.internal.i06-backend-profile-v2-status/v1",
+ "contract": "SEALED_SINGLE_NODE_CONTROL_PLANE_V1/i06-backend-profile/v2",
+ "supersedes": "SEALED_SINGLE_NODE_CONTROL_PLANE_V1/i06-backend-profile",
+ "reviewRounds": [
+  {
+   "round": 1,
+   "record": "architecture/i06-backend-profile-v2/review-round1.json",
+   "recordSha256": "b1f6501655c1860d5b3c79e8de2b9080e4b373ad81d057904e2f0af5b7f35332",
+   "verdict": "CHANGES_REQUIRED",
+   "subjectDirectory": "architecture/i06-backend-profile-v2/round1/"
+  },
+  {
+   "round": 2,
+   "record": "architecture/i06-backend-profile-v2/review-round2.json",
+   "recordSha256": "a5eefd7c6fb0f53f2a14880a079a69bd786c95be1ca8b3a3c5ab7c6de04cc0df",
+   "verdict": "PASS_FOR_SOURCE_PUBLICATION",
+   "subjectDirectory": "architecture/i06-backend-profile-v2/round2/"
+  },
+  {
+   "round": 3,
+   "record": "architecture/i06-backend-profile-v2/review-round3.json",
+   "recordSha256": "1a04fb792d080ee70f24fc93da68df8238a1593e91c9072c2e6dd3f75bf48bd2",
+   "verdict": "PASS_FOR_SOURCE_PUBLICATION",
+   "subjectDirectory": "CURRENT"
+  }
+ ],
+ "closedFindings": {
+  "N1": "Evidence names one W02a v3 record by qualificationDigest ('sha256:' and the hex SHA-256 of W02a's canonical form); W02a v3's check_record accepts that record; evidence testOnly equals the backend's; a test-only backend qualifies only in an explicit fixture call; v1's checks run on the record's own backend. No production evidence is possible under W02a v3 (R1-4 carry)",
+  "N2": "Any non-empty effectiveRules on User system:apiserver is refused (IC03 'no resource rule'); non-resource-URL rules are an observer obligation (R1-7 carry)",
+  "N3": "Shared and nested backend cgroups are refused through W02a v3's check_record",
+  "W02A_P7": "Chain closed: W02a v2's status assigned P7 to W02g and W03; W02g closed the I06 part of P7(a) and carried the W02a side of P7(a), P7(b), P7(c) and the network-policy agent identity to W02a-F; W02a-F closed them (native-profile-v3 status closedFindings P7 and NETWORK_POLICY_AGENT_IDENTITY)",
+  "R1-1": "SC08 code distinctness is an I06 rule (W02a v3 allows shared backend code in one owner class), pinned by G19 and G20 with backends W02a v3 accepts",
+  "R1-2": "G18 reason restated",
+  "R1-3": "KUBELET node-name and APISERVER-none exceptions stated",
+  "R1-6": "W02a's qualificationDigest spelling adopted",
+  "R1-8": "P7 chain restated",
+  "R2-1": "Refusing steps 2, 4 and 5 named",
+  "R2-2": "Brief wording fixed",
+  "R2-3": "Module docstring aligned with IC03",
+  "PACKAGE_IMPORT": "Round 3 (author-opened after the round-2 pass): the model imports its predecessors by bare name or as scripts.* with identical results; no rule changed"
+ },
+ "carriedFindings": {
+  "R3-1": "W02g-F2: give the README's two 'Round-2 findings and dispositions' sections distinct names (W02g N1-N6; W02g-F R2-1 to R2-5 and round-3 changes) and update the pointers in the README status paragraph and the brief",
+  "R3-2": "W02g-F2: add review-round2.json/round2/ (and the later rounds) to the README Files table and list the R2-4 carry under 'Still open'",
+  "R3-3": "W02g-F2 (optional): narrow the import fallback to ModuleNotFoundError for the two bare predecessor names",
+  "R2-4": "W02g-F2 or W03: backend content distinctness compares SHA-256 only; either also require distinct verityDigest values for backend executables (as W02a does for role executables) or state that SHA-256 distinctness relies on the observed backend captures in the W03 composition",
+  "R2-5": "Fulfilled by this record: the R1-4, R1-5 and R1-7 carries below are written next to the P7 chain and N4-N6",
+  "R1-4": "W03: production evidence needs a reviewed W02a revision with a production backend profile AND an I06 successor bound to that revision (v2 fixes W02A_VERSION and W02a pins its schema digest); this holds for every W02a successor, including W02a-F2",
+  "R1-5": "W03: evidence binds to one W02a record and is re-issued per record; callers compose check_evidence with check_qualification's acceptance of the same record and keep W02a v3 caller obligations 1 (pinned proxy profile contract) and 4 (test_fixture only for fixtures)",
+  "R1-7": "W03 observer: a non-resource-URL rule bound to User system:apiserver is never dropped; the observer refuses to produce the snapshot",
+  "N4": "W02e and W03, unchanged from the I06 v1 status: file-level sealing map and apiserver-to-kubelet serving-certificate verification",
+  "N5": "W03, unchanged from the I06 v1 status: kubernetesVersion is the gitVersion every component reports; unmodified v1.37.1 builds or a reviewed vendor patch set",
+  "N6": "W02f and W02e, unchanged from the I06 v1 status: PodSecurity at least baseline in every namespace, refusal of hostPath and local PersistentVolumes, container domains unable to read component credentials"
+ },
+ "ownerDecisions": [],
+ "contractState": "ADOPTED_DATA_CONTRACT",
+ "obligations": {
+  "E01": "OPEN_UNPROVEN",
+  "E02": "OPEN_UNPROVEN",
+  "E03": "OPEN_UNPROVEN",
+  "E04": "OPEN_UNPROVEN",
+  "E05": "OPEN_UNPROVEN",
+  "E06": "OPEN_UNPROVEN",
+  "E07": "OPEN_UNPROVEN",
+  "E08": "OPEN_UNPROVEN",
+  "E09": "OPEN_UNPROVEN",
+  "E10": "OPEN_UNPROVEN",
+  "E11": "OPEN_UNPROVEN",
+  "E12": "OPEN_UNPROVEN"
+ },
+ "independentReviewer": "SEPARATE_AGENT_NOT_AUTHOR",
+ "nativeAcceptance": false,
+ "tenantAcceptance": false,
+ "installedProfile": false,
+ "distributionSelected": false,
+ "clusterObserved": false,
+ "productionBackendProfile": false,
+ "productExecution": false,
+ "runnerActivated": false,
+ "phaseComplete": false
+}

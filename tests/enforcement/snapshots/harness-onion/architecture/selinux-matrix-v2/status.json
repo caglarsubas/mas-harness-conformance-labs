@@ -1,0 +1,86 @@
+{
+  "schemaVersion": "planeon.internal.selinux-matrix-v2-status/v1",
+  "contract": "planeon.internal.selinux-matrix/v4",
+  "supersedes": "planeon.internal.selinux-matrix/v3",
+  "reviewRounds": [
+    {
+      "round": 1,
+      "record": "architecture/selinux-matrix-v2/review-round1.json",
+      "recordSha256": "459d874f7e3c50fdaac86f4a57eaeeaf756caf71f9b87dc07c9c46c3a07e3d32",
+      "verdict": "CHANGES_REQUIRED",
+      "subjectDirectory": "architecture/selinux-matrix-v2/round1/"
+    },
+    {
+      "round": 2,
+      "record": "architecture/selinux-matrix-v2/review-round2.json",
+      "recordSha256": "8f85b3c53c8a6b3e121ce3defb9df2f1c007e75146b917bcbdc9b44e768b328c",
+      "verdict": "PASS_FOR_SOURCE_PUBLICATION",
+      "subjectDirectory": "CURRENT"
+    }
+  ],
+  "closedFindings": {
+    "K2": "architecture/selinux-matrix/review-round3.json K2: CLOSED in W02e-F review round 2",
+    "K3": "architecture/selinux-matrix/review-round3.json K3: CLOSED in W02e-F review round 2",
+    "K4": "architecture/selinux-matrix/review-round3.json K4: CLOSED in W02e-F review round 2",
+    "K6": "architecture/selinux-matrix/review-round3.json K6: CLOSED in W02e-F review round 2",
+    "F1": "architecture/selinux-matrix-v2/review-round1.json F1: CLOSED in round 2",
+    "F2": "architecture/selinux-matrix-v2/review-round1.json F2: CLOSED in round 2",
+    "F3": "architecture/selinux-matrix-v2/review-round1.json F3: CLOSED in round 2",
+    "F4": "architecture/selinux-matrix-v2/review-round1.json F4: CLOSED in round 2",
+    "F5": "architecture/selinux-matrix-v2/review-round1.json F5: CLOSED in round 2"
+  },
+  "carriedFindings": {
+    "G1": "Next matrix revision (NOTE): README 'Booleans and states' and the round-3 disposition table should name K1's carry to W01's record as the introduction does"
+  },
+  "carriedElsewhere": {
+    "K1": "W02a-F, T04 and W01's record: A62-A65 hold under the pinned policy only; the maintenance domain's load_policy with boolean preservation can reach any boolean state, and the early maintenance-boot window relies on the systemd target. Needs a record-level boot-entry discriminator (measured boot entry or command line) or an explicit statement that the maintenance domain, as trusted installer, can reach any boolean state (keeps round-2 N4 PARTIAL)",
+    "K5": "W03 and T04: DelegateSubgroup=broker (systemd 254+) for the pre-created delegated leaves; the maintenance unit writes the planeon booleans in init_t itself; planeon_server_port_t assigned by portcon from the signed port at maintenance install"
+  },
+  "ownerDecisions": [
+    {
+      "id": "E1",
+      "date": "2026-10-07",
+      "finding": "W02e design: cgroup-v2 OCI runtimes load BPF_PROG_TYPE_CGROUP_DEVICE programs per container, so W01 5.3's containment-only prog_load would rule out every confined runtime",
+      "decision": "qualk8s_runtime_t gets bpf prog_load, CAP_BPF and prog_run on its own programs only, no maps, no access to planeon cgroups, pins or containment programs. Re-confirmed after review R7 at its real scope: the runtime is a trusted backend component for its BPF use, controlled by W03 runtime selection (cgroup-device programs only, cgroupfs driver), T04 and a W02a-F effective-program census of planeon cgroups",
+      "amends": "HOST-INTERFACE-DRAFT-002 section 5.3 HOST_CONTAINMENT row ('only domain with bpf { prog_load }')",
+      "carriedTo": [
+        "W01 record",
+        "W02a-F",
+        "W03",
+        "T04"
+      ]
+    },
+    {
+      "id": "W02e-F-LANE",
+      "date": "2026-10-09",
+      "decision": "W02e-F moves to the parallel lane; contract and review only until the primary's PERF packet merges"
+    }
+  ],
+  "contractState": "ADOPTED_DATA_CONTRACT",
+  "obligations": {
+    "E01": "OPEN_UNPROVEN",
+    "E02": "OPEN_UNPROVEN",
+    "E03": "OPEN_UNPROVEN",
+    "E04": "OPEN_UNPROVEN",
+    "E05": "OPEN_UNPROVEN",
+    "E06": "OPEN_UNPROVEN",
+    "E07": "OPEN_UNPROVEN",
+    "E08": "OPEN_UNPROVEN",
+    "E09": "OPEN_UNPROVEN",
+    "E10": "OPEN_UNPROVEN",
+    "E11": "OPEN_UNPROVEN",
+    "E12": "OPEN_UNPROVEN"
+  },
+  "independentReviewer": "SEPARATE_AGENT_NOT_AUTHOR",
+  "f2": "CLOSED_DESIGN",
+  "nativeAcceptance": false,
+  "tenantAcceptance": false,
+  "policyModuleWritten": false,
+  "policyLoaded": false,
+  "distributionSelected": false,
+  "seccompFiltersDefined": false,
+  "w02aSchemaConstantsFixed": false,
+  "productExecution": false,
+  "runnerActivated": false,
+  "phaseComplete": false
+}

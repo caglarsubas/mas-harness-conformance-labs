@@ -246,6 +246,12 @@ def tracked_inventory(root):
 
 
 def current_tracked_inventory(root):
+    """CONF-ENF-001 (owner decision Q-T3, 2026-10-11): the CONF-CI-002 head view. The registered checkpoint chain is
+    checked newest first against the git tree and projected away (checkpoint_chain_project)."""
+    return checkpoint_chain_project(root, *head_tracked_inventory(root))
+
+
+def head_tracked_inventory(root):
     root = checked_directory(root)
     env = {"PATH": os.defpath, "LANG": "C", "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1",
            "GIT_NO_REPLACE_OBJECTS": "1", "GIT_TERMINAL_PROMPT": "0"}
@@ -663,3 +669,148 @@ def ci_002_project(root, rows, sources):
         view_sources[path] = before
     view_rows.sort(key=lambda row: row["path"].encode())
     return view_rows, view_sources
+
+
+# CONF-ENF-001 checkpoint chain (owner decision Q-T3 = (a), 2026-10-11, via the lane monitor). CONF-CI-002's closed record
+# is entry 0 of the append-only registry fixtures/ci/checkpoints.json, still pinned by CI_002_RECORD_SHA256 above. Each
+# later R12 packet adds one closed record fixtures/ci/<packet>-checkpoint.json and one registry entry, and nothing else
+# in this helper: the record names every path the packet deleted, changed or added, with exact after-pins and before-
+# images, and pins its predecessor record's digest. The records are checked newest first against the git tree, and each
+# is projected away in turn (its additions and itself removed, its deletions and changes restored, the registry cut back
+# to the entries before it), down to the CONF-CI-002 head view that its own layer and tests read. Every path a record
+# does not name passes through unchanged. A record may not name the registry or any registered record.
+# Anchoring (review E1-2): entry 0 is pinned by CI_002_RECORD_SHA256; later records are anchored only by the registry
+# and their predecessor digests. That the registry is append-only and a merged record is never rewritten is enforced
+# by review of each packet's diff, not by this code.
+CHAIN_REGISTRY_PATH = "fixtures/ci/checkpoints.json"
+CHAIN_REGISTRY_FIELDS = {"schemaVersion", "records"}
+CHAIN_REGISTRY_SCHEMA = "r12.ci-checkpoint-registry/v1"
+CHAIN_ENTRY_FIELDS = {"packetId", "path", "sha256"}
+CHAIN_RECORD_SCHEMA = "r12.ci-checkpoint-chain-record/v1"
+CHAIN_RECORD_FIELDS = {"schemaVersion", "packetId", "evidenceClass", "nativeAcceptance", "tenantAcceptance",
+                       "baseCommit", "predecessor", "ownerDecisions", "deleted", "changed", "added"}
+CHAIN_DECISION_FIELDS = {"id", "selected", "date", "decision"}
+CHAIN_PACKET = re.compile(r"[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+")
+
+
+def chain_require(ok, reason):
+    if not ok:
+        raise ValueError("checkpoint chain: " + reason)
+
+
+def chain_pin_shape(pin):
+    """Review E1-3: a closed pin of exact types, a git file mode, a plain integer size and a lowercase sha256."""
+    return (type(pin) is dict and set(pin) == CI_002_PIN_FIELDS and pin["mode"] in ("100644", "100755")
+            and type(pin["size"]) is int and pin["size"] >= 0 and type(pin["sha256"]) is str
+            and re.fullmatch("[0-9a-f]{64}", pin["sha256"]) is not None)
+
+
+def chain_registry_bytes(entries):
+    return canonical({"schemaVersion": CHAIN_REGISTRY_SCHEMA, "records": entries}) + b"\n"
+
+
+def chain_row(path, raw, mode):
+    return {"path": path, "mode": mode, "size": len(raw), "sha256": digest(raw),
+            "kind": "file", "nlink": 1, "linkedAncestry": False}
+
+
+def chain_registry(rows, sources):
+    """The registry as tracked: canonical bytes, mode 100644, entry 0 CONF-CI-002, later entries closed and in order."""
+    current = {row["path"]: row for row in rows}
+    chain_require(CHAIN_REGISTRY_PATH in current and current[CHAIN_REGISTRY_PATH]["mode"] == "100644", "registry tracked")
+    raw = sources[CHAIN_REGISTRY_PATH]
+    registry = parse(raw)
+    chain_require(type(registry) is dict and set(registry) == CHAIN_REGISTRY_FIELDS
+                  and registry["schemaVersion"] == CHAIN_REGISTRY_SCHEMA and type(registry["records"]) is list
+                  and len(registry["records"]) >= 2, "closed registry")
+    entries = registry["records"]
+    chain_require(raw == chain_registry_bytes(entries), "canonical registry bytes")
+    for index, entry in enumerate(entries):
+        chain_require(type(entry) is dict and set(entry) == CHAIN_ENTRY_FIELDS
+                      and all(type(entry[key]) is str for key in CHAIN_ENTRY_FIELDS)
+                      and re.fullmatch("[0-9a-f]{64}", entry["sha256"]), "closed entry %d" % index)
+    chain_require(entries[0]["packetId"] == "CONF-CI-002" and entries[0]["path"] == CI_002_RECORD_PATH, "entry 0 is CONF-CI-002")
+    # Review E1-1: entry 0 is the tracked CONF-CI-002 record's digest; tracked_inventory's CONF-CI-002 layer then checks
+    # those bytes against CI_002_RECORD_SHA256, so the first predecessor pin is anchored by that constant.
+    chain_require(entries[0]["sha256"] == digest(sources.get(CI_002_RECORD_PATH, b"")), "entry 0 digest")
+    for entry in entries[1:]:
+        chain_require(CHAIN_PACKET.fullmatch(entry["packetId"]) is not None
+                      and entry["path"] == "fixtures/ci/" + entry["packetId"].lower() + "-checkpoint.json",
+                      "record path of " + entry["packetId"])
+    chain_require(len({entry["packetId"] for entry in entries}) == len(entries), "each packet registered once")
+    return entries
+
+
+def chain_record(entries, index, sources):
+    """Closed chain record `index` (>= 1) from the view's own bytes, digest and predecessor pinned by the registry."""
+    entry = entries[index]
+    raw = sources.get(entry["path"])
+    chain_require(raw is not None and digest(raw) == entry["sha256"], "record digest: " + entry["packetId"])
+    record = parse(raw)
+    chain_require(type(record) is dict and set(record) == CHAIN_RECORD_FIELDS and record["schemaVersion"] == CHAIN_RECORD_SCHEMA
+                  and record["packetId"] == entry["packetId"] and record["evidenceClass"] == "SOURCE_DELTA_ONLY"
+                  and record["nativeAcceptance"] is False and record["tenantAcceptance"] is False
+                  and type(record["baseCommit"]) is str and re.fullmatch("[0-9a-f]{40}", record["baseCommit"])
+                  and record["predecessor"] == {"packetId": entries[index - 1]["packetId"], "sha256": entries[index - 1]["sha256"]},
+                  "closed record: " + entry["packetId"])
+    chain_require(type(record["ownerDecisions"]) is list and record["ownerDecisions"] and all(
+        type(row) is dict and set(row) == CHAIN_DECISION_FIELDS and all(type(row[key]) is str and row[key] for key in row)
+        for row in record["ownerDecisions"])
+        # Review E2-3: each decision id once.
+        and len({row["id"] for row in record["ownerDecisions"]}) == len(record["ownerDecisions"]), "owner decisions: " + entry["packetId"])
+    chain_require(all(type(record[key]) is dict for key in ("deleted", "changed", "added")), "closed record: " + entry["packetId"])
+    paths = [*record["deleted"], *record["changed"], *record["added"]]
+    reserved = {CHAIN_REGISTRY_PATH} | {row["path"] for row in entries}
+    chain_require(len(paths) == len(set(paths)) and not reserved & set(paths), "each path named once: " + entry["packetId"])
+    for path in paths:
+        canonical_path(path)
+    for path, value in [*record["deleted"].items(), *record["changed"].items()]:
+        chain_require(type(value) is dict and set(value) == ({"before", "beforeSourceBase64"} | ({"after"} if path in record["changed"] else set()))
+                      and type(value["beforeSourceBase64"]) is str, "closed entry: " + path)
+        before = base64.b64decode(value["beforeSourceBase64"], validate=True)
+        chain_require(base64.b64encode(before).decode() == value["beforeSourceBase64"], "canonical before-image: " + path)
+        chain_require(chain_pin_shape(value["before"]) and ci_002_pin(before, value["before"]["mode"]) == value["before"],
+                      "before-image: " + path)
+    for path, pin in [*record["added"].items(), *((path, value["after"]) for path, value in record["changed"].items())]:
+        chain_require(chain_pin_shape(pin), "closed after-pin: " + path)
+    return record
+
+
+def chain_step(entries, index, rows, sources):
+    """Check record `index` against the view and project it away; the registry is cut back to the entries before it."""
+    record = chain_record(entries, index, sources)
+    current = {row["path"]: row for row in rows}
+    chain_require(current.get(entries[index]["path"], {}).get("mode") == "100644", "record tracked: " + entries[index]["packetId"])
+    chain_require(sources[CHAIN_REGISTRY_PATH] == chain_registry_bytes(entries[:index + 1]), "registry at " + entries[index]["packetId"])
+    for path in record["deleted"]:
+        chain_require(path not in current, "deleted path present: " + path)
+    for path, pin in [*record["added"].items(), *((path, value["after"]) for path, value in record["changed"].items())]:
+        chain_require(path in current and ci_002_pin(sources[path], current[path]["mode"]) == pin, "exact after-pin: " + path)
+    restored = {**record["deleted"], **record["changed"]}
+    removed = set(record["added"]) | {entries[index]["path"], CHAIN_REGISTRY_PATH} | set(restored)
+    view_rows = [row for row in rows if row["path"] not in removed]
+    view_sources = {row["path"]: sources[row["path"]] for row in view_rows}
+    for path, value in restored.items():
+        before = base64.b64decode(value["beforeSourceBase64"], validate=True)
+        view_rows.append(chain_row(path, before, value["before"]["mode"]))
+        view_sources[path] = before
+    if index >= 2:
+        registry = chain_registry_bytes(entries[:index])
+        view_rows.append(chain_row(CHAIN_REGISTRY_PATH, registry, "100644"))
+        view_sources[CHAIN_REGISTRY_PATH] = registry
+    view_rows.sort(key=lambda row: row["path"].encode())
+    # Review E2-2: the view must be a tree git can hold; no path is also a directory of another path.
+    paths = set(view_sources)
+    for path in paths:
+        parts = path.split("/")
+        chain_require(not any("/".join(parts[:end]) in paths for end in range(1, len(parts))), "path collision: " + path)
+    return view_rows, view_sources
+
+
+def checkpoint_chain_project(root, rows, sources, keep=1):
+    """The tree checked against every registered record newest first; returns the view with the first `keep` entries."""
+    entries = chain_registry(rows, sources)
+    chain_require(type(keep) is int and 1 <= keep <= len(entries), "stage out of range")
+    for index in range(len(entries) - 1, keep - 1, -1):
+        rows, sources = chain_step(entries, index, rows, sources)
+    return rows, sources

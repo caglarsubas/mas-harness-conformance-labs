@@ -1,0 +1,109 @@
+{
+ "schemaVersion": "planeon.internal.host-interface-amendment-status/v1",
+ "designLabel": "HOST-INTERFACE-DRAFT-002-W02D",
+ "amends": {
+  "path": "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md",
+  "sha256": "8a3a09bb5dbc08804dbea06dd0700a14648a9cdbc8efd62112dc64ba0b6ba1b4",
+  "designLabel": "HOST-INTERFACE-DRAFT-002"
+ },
+ "effective": {
+  "path": "architecture/host-interface-amendment-w02d/HOST_INTERFACE_SPEC.md",
+  "sha256": "2ac2751cbddd7fae20ee92a93a8fc18c7988dd0c96853d1ccb2d08cb3753f83b"
+ },
+ "reviewRounds": [
+  {
+   "round": 1,
+   "record": "architecture/host-interface-amendment-w02d/review-round1.json",
+   "recordSha256": "5f32cb233e2ff865c60a716e918974c8f12bc522dd50e068650080279036f967",
+   "verdict": "CHANGES_REQUIRED",
+   "subjectDirectory": "architecture/host-interface-amendment-w02d/round1/"
+  },
+  {
+   "round": 2,
+   "record": "architecture/host-interface-amendment-w02d/review-round2.json",
+   "recordSha256": "322fd998ca4c359e072ec8ccfc67d332945f8325d4eb68161b1ca34df2508d86",
+   "verdict": "CHANGES_REQUIRED",
+   "subjectDirectory": "architecture/host-interface-amendment-w02d/round2/"
+  },
+  {
+   "round": 3,
+   "record": "architecture/host-interface-amendment-w02d/review-round3.json",
+   "recordSha256": "d8aeecb0e82f4c10ca02debf9ac592e51d9289809cc0f56a84570cc70ce2ff51",
+   "verdict": "PASS_FOR_SOURCE_PUBLICATION",
+   "subjectDirectory": "architecture/host-interface-amendment-w02d/round3/"
+  },
+  {
+   "round": 4,
+   "record": "architecture/host-interface-amendment-w02d/review-round4.json",
+   "recordSha256": "a672b082bfca8ac6017affdaa6052804e1782bde927d6bb0d2b82633dab06618",
+   "verdict": "PASS_FOR_SOURCE_PUBLICATION",
+   "subjectDirectory": "CURRENT"
+  }
+ ],
+ "closedFindings": {
+  "R1-1": "CLOSED in round 2",
+  "R1-2": "CLOSED in round 2",
+  "R1-3": "CLOSED in round 2",
+  "R1-4": "CLOSED in round 2",
+  "R1-5": "CLOSED in round 2",
+  "R1-6": "CLOSED in round 2",
+  "R1-7": "CLOSED in round 2",
+  "R1-8": "CLOSED in round 2",
+  "R1-9": "CLOSED in round 2",
+  "R1-10": "CLOSED in round 2",
+  "R2-1": "CLOSED in round 3",
+  "R2-2": "CLOSED in round 3",
+  "R2-3": "CLOSED in round 3",
+  "R2-4": "CLOSED in round 3",
+  "R2-5": "CLOSED in round 3",
+  "R2-6": "CLOSED in round 3",
+  "R2-7": "CLOSED in round 3",
+  "R2-8": "CLOSED in round 3"
+ },
+ "reopenedBy": "W01-AMEND-QW4 (owner decision after the round-3 pass; reviewed in round 4)",
+ "carriedFindings": {
+  "R3-1": "next revision (NOTE): A2 and O-W03-WORKER-EXEC cite A24-A32 for 'no transition into any declared domain'; the qualk8s domains are closed by the matrix's transition and nnp_transition grant tables, and init_t and planeon_admin_t are left to host policy, so the obligation must name them",
+  "R3-2": "next revision (NOTE): EDITORIAL items may still append any text after the title or the last line, a RESTATED item may change other text if it adds ENOSYS, and a disposition's decisions may be empty",
+  "R3-3": "next revision (NOTE): A3 leaves ', exit' after the SELinux sentence in the SERVER row; the brief's 'items A1-A7' sentence; the README's 'no filter, unit or code exists' beside O-SERVER-MEMFD; kernel/sys.c pinned only by tag",
+  "R4-1": "W03 (NOTE): further Rust/musl paths NATIVE_STATIC does not grant, stated from upstream knowledge and to be settled by W03's start-up and steady-state trace (W02d-Q2): named threads call prctl(PR_SET_NAME); musl's setresuid and setresgid wrappers signal other threads with tkill when threaded (the broker's W4 child should use raw syscalls); available_parallelism opens cgroup and /proc files; a closed fd 0-2 makes Rust std open /dev/null; abort() uses tkill",
+  "R4-2": "next revision (NOTE): the amendment model does not check decision ids named in item text; the musl and Rust evidence files are outside the repository without digests in source-index.json; the v2 README does not say that OBSERVER's x86_64 program also grows under QW4"
+ },
+ "carriedItemsAnswered": {
+  "W02d-Q1 WORKER row text amendment": "ANSWERED",
+  "W02d-QA worker execveat in W5's form": "ANSWERED",
+  "W02d-QC readers' inspection-reads row amendment": "ANSWERED",
+  "W6 pidfd kill needs CAP_KILL the broker lacks; cgroup.kill is the effective path": "ANSWERED",
+  "W4 does not name setgroups": "ANSWERED",
+  "F9 executable memfd": "ANSWERED"
+ },
+ "obligations": {
+  "O-SERVER-MEMFD": "OPEN",
+  "O-W03-WORKER-EXEC": "OPEN",
+  "O-W03-GROUPS": "OPEN",
+  "O-T04-AMEND": "OPEN"
+ },
+ "enforcementObligations": {
+  "E01": "OPEN_UNPROVEN",
+  "E02": "OPEN_UNPROVEN",
+  "E03": "OPEN_UNPROVEN",
+  "E04": "OPEN_UNPROVEN",
+  "E05": "OPEN_UNPROVEN",
+  "E06": "OPEN_UNPROVEN",
+  "E07": "OPEN_UNPROVEN",
+  "E08": "OPEN_UNPROVEN",
+  "E09": "OPEN_UNPROVEN",
+  "E10": "OPEN_UNPROVEN",
+  "E11": "OPEN_UNPROVEN",
+  "E12": "OPEN_UNPROVEN"
+ },
+ "contractState": "ADOPTED_AMENDMENT",
+ "independentReviewer": "SEPARATE_AGENT_NOT_AUTHOR",
+ "implementationReady": false,
+ "filtersInstalled": false,
+ "roleCodeChanged": false,
+ "nativeAcceptance": false,
+ "tenantAcceptance": false,
+ "productExecution": false,
+ "runnerActivated": false,
+ "phaseComplete": false
+}
