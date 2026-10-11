@@ -90,7 +90,9 @@ class RunnerBoundaryTests(unittest.TestCase):
                             mock.patch.object(RUNNER, "extract", return_value={"id": "CONF-FIX-001"}), \
                             mock.patch.object(RUNNER, "validate_packet", return_value=([commands[0]], [commands[1]])), \
                             mock.patch.object(RUNNER, "still_same", side_effect=lambda *args: events.append(("digest", args[-1]))), \
-                            mock.patch.object(RUNNER.subprocess, "run", side_effect=run):
+                            mock.patch.object(RUNNER.subprocess, "run", side_effect=run), \
+                            contextlib.redirect_stdout(io.StringIO()):
+                        # CONF-CI-002: the legacy runner's evidence-format lines stay in the test, never in a verify log.
                         result = RUNNER.main(["/unit/packet.yaml"])
                     count = 3 if failure_at is None else failure_at + 1
                     self.assertEqual(result, 0 if failure_at is None else 19)

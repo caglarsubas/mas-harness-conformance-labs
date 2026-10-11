@@ -588,7 +588,7 @@ def performance_current(root):
 # against the after-pins; older consumers then see the before-images, so their own pins keep proving 3a81c8f. Every
 # path the record does not name passes through unchanged, for the older layers to check.
 CI_002_RECORD_PATH = "fixtures/ci/conf-ci-002-checkpoint.json"
-CI_002_RECORD_SHA256 = "5f706d027eec6638fb74209f43b05a129faa5d9a96f31286d7a619870800a81e"
+CI_002_RECORD_SHA256 = "63b650ede7e820ebcc6ae17b1bb34d965205f120dd561ce675d4138b182ab432"
 CI_002_RECORD_FIELDS = {"schemaVersion", "packetId", "evidenceClass", "nativeAcceptance", "tenantAcceptance",
                         "baseCommit", "bootstrapCommit", "ownerDecisions", "deleted", "changed", "added"}
 # Two after-pins are taken with a digest constant zeroed, so that the record, this helper and the live_backend helper
