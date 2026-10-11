@@ -6,6 +6,7 @@ or a safety certificate for the eventual launcher replacement.
 from __future__ import annotations
 
 import ast
+import base64
 import contextlib
 import hashlib
 import inspect
@@ -239,6 +240,12 @@ def validate_composition(rows, launcher_after, proof=None):
 
 
 def tracked_inventory(root):
+    """CONF-CI-002 (owner decision D1, 2026-10-11): the current tree is checked against the closed CI checkpoint record
+    first; every older consumer then sees the exact 3a81c8f view of the CI-admitted paths (ci_002_project)."""
+    return ci_002_project(root, *current_tracked_inventory(root))
+
+
+def current_tracked_inventory(root):
     root = checked_directory(root)
     env = {"PATH": os.defpath, "LANG": "C", "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1",
            "GIT_NO_REPLACE_OBJECTS": "1", "GIT_TERMINAL_PROMPT": "0"}
@@ -572,3 +579,87 @@ def performance_history(rows, sources):
 def performance_current(root):
     rows, sources = tracked_inventory(root)
     return performance_history(rows, sources)
+
+
+# CONF-CI-002 checkpoint (owner decisions Q-M = M1 and D1-D5, 2026-10-11, via the lane monitor). CONF-CI-001 adopted the
+# owner-operated verifier's launcher contract: it deleted .github/workflows/verify.yml, changed three ci/ files (two of
+# them to mode 100755) and added two files; CONF-CI-002 migrates the suites that pinned the old files. The closed record
+# names every such path exactly: its 3a81c8f before-image and pins, and its exact after-pins. The current tree is checked
+# against the after-pins; older consumers then see the before-images, so their own pins keep proving 3a81c8f. Every
+# path the record does not name passes through unchanged, for the older layers to check.
+CI_002_RECORD_PATH = "fixtures/ci/conf-ci-002-checkpoint.json"
+CI_002_RECORD_SHA256 = "b1e8cd83de775d1fcbdca5117bc417e2c30379fcd7af330819a404d97e47be4b"
+CI_002_RECORD_FIELDS = {"schemaVersion", "packetId", "evidenceClass", "nativeAcceptance", "tenantAcceptance",
+                        "baseCommit", "bootstrapCommit", "ownerDecisions", "deleted", "changed", "added"}
+# Two after-pins are taken with a digest constant zeroed, so that the record, this helper and the live_backend helper
+# pin do not depend on one another in a cycle.
+CI_002_NORMALIZED = {"tests/platform/linux_baseline/_successor_inventory.py": "CI_002_RECORD_SHA256",
+                     "tests/live_backend/_inventory.py": "HELPER_SHA256"}
+CI_002_PIN_FIELDS = {"mode", "size", "sha256"}
+
+
+def ci_002_require(ok, reason):
+    if not ok:
+        raise ValueError("CONF-CI-002 checkpoint: " + reason)
+
+
+def ci_002_normalized(path, raw):
+    name = CI_002_NORMALIZED.get(path)
+    if name is None:
+        return raw
+    pattern = re.compile(rb"^" + name.encode() + rb' = "[0-9a-f]{64}"$', re.M)
+    ci_002_require(len(pattern.findall(raw)) == 1, "one normalized constant in " + path)
+    return pattern.sub(name.encode() + b' = "' + b"0" * 64 + b'"', raw)
+
+
+def ci_002_pin(raw, mode):
+    return {"mode": mode, "size": len(raw), "sha256": digest(raw)}
+
+
+def ci_002_record(root):
+    raw = regular_bytes(root, CI_002_RECORD_PATH)
+    ci_002_require(digest(raw) == CI_002_RECORD_SHA256, "record changed")
+    record = parse(raw)
+    ci_002_require(type(record) is dict and set(record) == CI_002_RECORD_FIELDS
+                   and record["packetId"] == "CONF-CI-002" and record["evidenceClass"] == "SOURCE_DELTA_ONLY"
+                   and record["nativeAcceptance"] is False and record["tenantAcceptance"] is False, "closed record")
+    paths = [*record["deleted"], *record["changed"], *record["added"]]
+    ci_002_require(len(paths) == len(set(paths)) and CI_002_RECORD_PATH not in paths, "each path named once")
+    for path in paths:
+        canonical_path(path)
+    for path, entry in [*record["deleted"].items(), *record["changed"].items()]:
+        ci_002_require(set(entry) == ({"before", "beforeSourceBase64"} | ({"after"} if path in record["changed"] else set())),
+                       "closed entry: " + path)
+        before = base64.b64decode(entry["beforeSourceBase64"], validate=True)
+        ci_002_require(set(entry["before"]) == CI_002_PIN_FIELDS and entry["before"]["mode"] in ("100644", "100755")
+                       and ci_002_pin(before, entry["before"]["mode"]) == entry["before"], "before-image: " + path)
+    for path, pin in [*record["added"].items(), *((path, entry["after"]) for path, entry in record["changed"].items())]:
+        ci_002_require(set(pin) == CI_002_PIN_FIELDS and pin["mode"] in ("100644", "100755"), "closed after-pin: " + path)
+    return record
+
+
+def ci_002_project(root, rows, sources):
+    """The current tree must carry every CI-admitted change exactly; the view returned restores 3a81c8f for them."""
+    record = ci_002_record(root)
+    current = {row["path"]: row for row in rows}
+    ci_002_require(CI_002_RECORD_PATH in current and current[CI_002_RECORD_PATH]["mode"] == "100644", "record tracked")
+    for path in record["deleted"]:
+        ci_002_require(path not in current, "deleted path present: " + path)
+    for path, pin in [*record["added"].items(), *((path, entry["after"]) for path, entry in record["changed"].items())]:
+        ci_002_require(path in current and ci_002_pin(ci_002_normalized(path, sources[path]), current[path]["mode"]) == pin,
+                       "exact after-pin: " + path)
+    view_rows, view_sources = [], {}
+    restored = {**record["deleted"], **record["changed"]}
+    for row in rows:
+        path = row["path"]
+        if path in record["added"] or path == CI_002_RECORD_PATH or path in restored:
+            continue
+        view_rows.append(row)
+        view_sources[path] = sources[path]
+    for path, entry in restored.items():
+        before = base64.b64decode(entry["beforeSourceBase64"], validate=True)
+        view_rows.append({"path": path, "mode": entry["before"]["mode"], "size": len(before), "sha256": digest(before),
+                          "kind": "file", "nlink": 1, "linkedAncestry": False})
+        view_sources[path] = before
+    view_rows.sort(key=lambda row: row["path"].encode())
+    return view_rows, view_sources

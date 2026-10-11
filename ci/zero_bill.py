@@ -21,12 +21,15 @@ def require(condition: bool, message: str) -> None:
 
 
 def validate(root: Path) -> None:
-    workflows = sorted((root / ".github/workflows").glob("*.yml"))
-    require(len(workflows) == 1, "exactly one pinned workflow is permitted")
-    workflow = workflows[0].read_text(encoding="utf-8").lower()
-    for token in WORKFLOW_FORBIDDEN:
-        require(token not in workflow, f"forbidden workflow billing vector: {token}")
-    require("self-hosted" in workflow and "credential-free" in workflow and "persist-credentials: false" in workflow, "self-hosted credential-free workflow boundary is missing")
+    # CONF-CI-002: the owner-operated verifier replaced the pinned workflow (VERIFIER-EXT VX4), so no workflow is the
+    # zero-bill default. A workflow, if one is ever added, must still be the single self-hosted credential-free one.
+    workflows = sorted((root / ".github/workflows").glob("*.y*ml"))
+    require(len(workflows) <= 1, "at most one pinned workflow is permitted")
+    for path in workflows:
+        workflow = path.read_text(encoding="utf-8").lower()
+        for token in WORKFLOW_FORBIDDEN:
+            require(token not in workflow, f"forbidden workflow billing vector: {token}")
+        require("self-hosted" in workflow and "credential-free" in workflow and "persist-credentials: false" in workflow, "self-hosted credential-free workflow boundary is missing")
     project = (root / "pyproject.toml").read_text(encoding="utf-8")
     require("dependencies = []" in project and "https://" not in project, "external package dependency is forbidden")
     lock = json.loads((root / "toolchain.lock").read_text(encoding="utf-8"))

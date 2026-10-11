@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import contextlib
 import importlib.util
+import io
 import json
 import os
 import tempfile
@@ -104,10 +106,12 @@ class PacketRunnerTests(unittest.TestCase):
                 MODULE, "read_once", return_value=(descriptor, info, b"packet")
             ), mock.patch.object(MODULE, "extract", return_value=document), mock.patch.object(
                 MODULE, "still_same"
-            ), mock.patch.object(MODULE.subprocess, "run", side_effect=run):
+            ), mock.patch.object(MODULE.subprocess, "run", side_effect=run), contextlib.redirect_stdout(io.StringIO()) as printed:
+                # CONF-CI-002: the legacy runner's evidence-format lines stay in the test, never in a verify log.
                 self.assertEqual(MODULE.main(["/authority/packet.yaml"]), 0)
         finally:
             Path(temporary_path).unlink(missing_ok=True)
+        self.assertIn("phases=prefetch,offline session=test-session", printed.getvalue())
         self.assertEqual(
             calls,
             [
