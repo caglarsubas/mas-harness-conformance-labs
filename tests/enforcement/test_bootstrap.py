@@ -19,12 +19,18 @@ AREA = ROOT / "tests/enforcement"
 SNAPSHOTS = AREA / "snapshots"
 MANIFEST = SNAPSHOTS / "manifest.json"
 PLAN_PATH = "architecture/enforcement-test-plan/traceability.json"
+# Review E1-4: the source commit and the plan's own digest are pinned here, not only by the manifest.
+SOURCE_COMMIT = "a2eab9365c8663cc1ae23a666e864b821f600fa6"
+PLAN_SHA256 = "762c2dfa4356b5ac59491fc51359dc4e6ef26f6a22f08c7cca6982c0b2979f72"
 MANIFEST_FIELDS = {"schemaVersion", "sourceRepository", "sourceCommit", "root", "rule", "files"}
 FILE_FIELDS = {"contract", "path", "sha256", "size"}
 # Recorded gaps (tests/enforcement/toolchains.json): the only non-stdlib import, and the one sibling model not snapshotted.
 EXTERNAL_IMPORTS = {"scripts/i05_gate_channel_v3.py": {"jsonschema"}, "scripts/native_qualification_v3.py": {"jsonschema"}}
 MISSING_SIBLINGS = {"scripts/i06_backend_profile_v2.py": ("i06_backend_profile",)}
 ALLOWED_TOP = set(sys.stdlib_module_names) | {"__future__"}
+# Review E1-4: path-based loading is reported too, so area code that runs a snapshot model must declare it.
+DYNAMIC_LOADERS = {"import_module", "spec_from_file_location", "exec_module", "run_path", "run_module", "SourceFileLoader"}
+DYNAMIC_BUILTINS = {"__import__", "exec", "eval", "compile"}
 
 
 def strict(raw):
@@ -61,7 +67,8 @@ def imported_tops(raw):
             tops |= {alias.name.split(".")[0] for alias in node.names}
         elif isinstance(node, ast.ImportFrom):
             tops.add("." if node.level else node.module.split(".")[0])
-        elif isinstance(node, ast.Call) and getattr(node.func, "attr", getattr(node.func, "id", None)) in ("import_module", "__import__"):
+        elif isinstance(node, ast.Call) and (getattr(node.func, "attr", None) in DYNAMIC_LOADERS
+                                             or getattr(node.func, "id", None) in DYNAMIC_LOADERS | DYNAMIC_BUILTINS):
             tops.add("<dynamic>")
     return tops
 
@@ -83,7 +90,7 @@ class SnapshotTests(unittest.TestCase):
         self.assertEqual(set(value), MANIFEST_FIELDS)
         self.assertEqual(value["schemaVersion"], "r12.enforcement-snapshot-manifest/v1")
         self.assertEqual(value["sourceRepository"], "harness-onion")
-        self.assertRegex(value["sourceCommit"], "^[0-9a-f]{40}$")
+        self.assertEqual(value["sourceCommit"], SOURCE_COMMIT)
         self.assertEqual(value["root"], "tests/enforcement/snapshots/harness-onion")
         paths = [row["path"] for row in value["files"]]
         self.assertEqual(len(paths), len(set(paths)))
@@ -105,6 +112,7 @@ class SnapshotTests(unittest.TestCase):
         source = plan()
         self.assertEqual(source["schemaVersion"], "planeon.internal.enforcement-test-plan/v1")
         self.assertEqual(source["planLabel"], "W04-0")
+        self.assertEqual(hashlib.sha256(regular(SNAPSHOTS / "harness-onion" / PLAN_PATH)).hexdigest(), PLAN_SHA256)
         expected = [{"contract": "W04-0 enforcement test plan", "path": PLAN_PATH}]
         expected += [{"contract": contract["name"], "path": row["path"], "sha256": row["sha256"]}
                      for contract in source["contracts"] for row in contract["files"]]
@@ -147,7 +155,10 @@ class IndependenceTests(unittest.TestCase):
                 self.assertIs(value["r10SourceRead"], False)
                 self.assertIs(value["w03WorkInProgressRead"], False)
                 self.assertIs(value["implementationReadOrRunForExpectedResults"], False)
-                self.assertTrue(value["inputs"] and value["lane"] and value["reviewer"])
+                # Review E1-4: closed shapes and at least one digest-checked input.
+                self.assertTrue(type(value["inputs"]) is list and value["inputs"] and all(type(row) is str and row for row in value["inputs"]))
+                self.assertTrue(all(type(value[key]) is str and value[key] for key in ("lane", "reviewer")))
+                self.assertTrue(type(value["inputDigests"]) is dict and value["inputDigests"])
                 for relative, sha in value["inputDigests"].items():
                     self.assertEqual(hashlib.sha256(regular(ROOT / relative)).hexdigest(), sha)
 

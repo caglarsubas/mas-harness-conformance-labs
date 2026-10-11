@@ -679,6 +679,9 @@ def ci_002_project(root, rows, sources):
 # is projected away in turn (its additions and itself removed, its deletions and changes restored, the registry cut back
 # to the entries before it), down to the CONF-CI-002 head view that its own layer and tests read. Every path a record
 # does not name passes through unchanged. A record may not name the registry or any registered record.
+# Anchoring (review E1-2): entry 0 is pinned by CI_002_RECORD_SHA256; later records are anchored only by the registry
+# and their predecessor digests. That the registry is append-only and a merged record is never rewritten is enforced
+# by review of each packet's diff, not by this code.
 CHAIN_REGISTRY_PATH = "fixtures/ci/checkpoints.json"
 CHAIN_REGISTRY_FIELDS = {"schemaVersion", "records"}
 CHAIN_REGISTRY_SCHEMA = "r12.ci-checkpoint-registry/v1"
@@ -693,6 +696,13 @@ CHAIN_PACKET = re.compile(r"[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+")
 def chain_require(ok, reason):
     if not ok:
         raise ValueError("checkpoint chain: " + reason)
+
+
+def chain_pin_shape(pin):
+    """Review E1-3: a closed pin of exact types, a git file mode, a plain integer size and a lowercase sha256."""
+    return (type(pin) is dict and set(pin) == CI_002_PIN_FIELDS and pin["mode"] in ("100644", "100755")
+            and type(pin["size"]) is int and pin["size"] >= 0 and type(pin["sha256"]) is str
+            and re.fullmatch("[0-9a-f]{64}", pin["sha256"]) is not None)
 
 
 def chain_registry_bytes(entries):
@@ -720,6 +730,9 @@ def chain_registry(rows, sources):
                       and all(type(entry[key]) is str for key in CHAIN_ENTRY_FIELDS)
                       and re.fullmatch("[0-9a-f]{64}", entry["sha256"]), "closed entry %d" % index)
     chain_require(entries[0]["packetId"] == "CONF-CI-002" and entries[0]["path"] == CI_002_RECORD_PATH, "entry 0 is CONF-CI-002")
+    # Review E1-1: entry 0 is the tracked CONF-CI-002 record's digest; tracked_inventory's CONF-CI-002 layer then checks
+    # those bytes against CI_002_RECORD_SHA256, so the first predecessor pin is anchored by that constant.
+    chain_require(entries[0]["sha256"] == digest(sources.get(CI_002_RECORD_PATH, b"")), "entry 0 digest")
     for entry in entries[1:]:
         chain_require(CHAIN_PACKET.fullmatch(entry["packetId"]) is not None
                       and entry["path"] == "fixtures/ci/" + entry["packetId"].lower() + "-checkpoint.json",
@@ -740,7 +753,7 @@ def chain_record(entries, index, sources):
                   and type(record["baseCommit"]) is str and re.fullmatch("[0-9a-f]{40}", record["baseCommit"])
                   and record["predecessor"] == {"packetId": entries[index - 1]["packetId"], "sha256": entries[index - 1]["sha256"]},
                   "closed record: " + entry["packetId"])
-    chain_require(type(record["ownerDecisions"]) is list and all(
+    chain_require(type(record["ownerDecisions"]) is list and record["ownerDecisions"] and all(
         type(row) is dict and set(row) == CHAIN_DECISION_FIELDS and all(type(row[key]) is str and row[key] for key in row)
         for row in record["ownerDecisions"]), "owner decisions: " + entry["packetId"])
     chain_require(all(type(record[key]) is dict for key in ("deleted", "changed", "added")), "closed record: " + entry["packetId"])
@@ -753,12 +766,11 @@ def chain_record(entries, index, sources):
         chain_require(type(value) is dict and set(value) == ({"before", "beforeSourceBase64"} | ({"after"} if path in record["changed"] else set()))
                       and type(value["beforeSourceBase64"]) is str, "closed entry: " + path)
         before = base64.b64decode(value["beforeSourceBase64"], validate=True)
-        chain_require(type(value["before"]) is dict and set(value["before"]) == CI_002_PIN_FIELDS
-                      and value["before"]["mode"] in ("100644", "100755")
-                      and ci_002_pin(before, value["before"]["mode"]) == value["before"], "before-image: " + path)
+        chain_require(base64.b64encode(before).decode() == value["beforeSourceBase64"], "canonical before-image: " + path)
+        chain_require(chain_pin_shape(value["before"]) and ci_002_pin(before, value["before"]["mode"]) == value["before"],
+                      "before-image: " + path)
     for path, pin in [*record["added"].items(), *((path, value["after"]) for path, value in record["changed"].items())]:
-        chain_require(type(pin) is dict and set(pin) == CI_002_PIN_FIELDS and pin["mode"] in ("100644", "100755"),
-                      "closed after-pin: " + path)
+        chain_require(chain_pin_shape(pin), "closed after-pin: " + path)
     return record
 
 

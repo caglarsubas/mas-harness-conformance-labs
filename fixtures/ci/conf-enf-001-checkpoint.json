@@ -2,18 +2,18 @@
  "added": {
   "task-packets/CONF-ENF-001.yaml": {
    "mode": "100644",
-   "sha256": "280a7c69ce7d68ed1a06e306f98d00250ba10fc3174e2ffbe5d2141a1d489314",
-   "size": 10094
+   "sha256": "898cbec81c9f944d1707f58cb23a97fbacc7dc74a792829ff96b9bb00862efbf",
+   "size": 10430
   },
   "tests/ci_checkpoint/test_checkpoint_chain.py": {
    "mode": "100644",
-   "sha256": "4a82c55f71f6e01b39dd109890f6329053e8429568af22cae1261083834e354d",
-   "size": 9747
+   "sha256": "7ce7eef701ccaad67d22d22edb3123ef5fec6a6e86e81b5eb70db2c0bca10215",
+   "size": 10949
   },
   "tests/enforcement/README.md": {
    "mode": "100644",
-   "sha256": "332f6350b6fda629eb9dd866815c51a39f5529411852fc0d1a936de208a43f4b",
-   "size": 1791
+   "sha256": "c6dd4eee17ad65383fc477e05221d5d0a382694cfac5977bdd871b849b1c91c2",
+   "size": 1936
   },
   "tests/enforcement/attestations/conf-enf-001.json": {
    "mode": "100644",
@@ -212,8 +212,8 @@
   },
   "tests/enforcement/test_bootstrap.py": {
    "mode": "100644",
-   "sha256": "cfeef370d85ad0f561a9faafa89c611875e0d708ce862976bbd3402a31ecf700",
-   "size": 9931
+   "sha256": "c36dcb978005146a0c25a1398585f89e566cebdc95d80cc61d4e8ce8e6b0a018",
+   "size": 10999
   },
   "tests/enforcement/toolchains.json": {
    "mode": "100644",
@@ -226,7 +226,7 @@
   "tests/live_backend/_inventory.py": {
    "after": {
     "mode": "100644",
-    "sha256": "8c5ef5cba1818c8cb0c5ad7dca6a34e129095b5fa29a099ac3737868973189be",
+    "sha256": "0fd8123c9d8fc15778473345f84621c667a6cc49ad3995a5cdc2d690b0c7e18b",
     "size": 4839
    },
    "before": {
@@ -239,8 +239,8 @@
   "tests/platform/linux_baseline/_successor_inventory.py": {
    "after": {
     "mode": "100644",
-    "sha256": "d938453e92365e1e33846192792b8cbb78feed733154cce0a24740f2f4ae5353",
-    "size": 77965
+    "sha256": "2924dcb83bc4f32f559c71333b51782744dff9a8f108a238ec06642a1c30e58c",
+    "size": 78941
    },
    "before": {
     "mode": "100644",

@@ -122,6 +122,16 @@ class ChainRefusalTests(unittest.TestCase):
             sources[HELPER.CHAIN_REGISTRY_PATH] = HELPER.chain_registry_bytes(registry[:1])
         self.assert_refused(dropped, "closed registry")
 
+    def test_entry_0_must_be_the_tracked_conf_ci_002_record(self):
+        # Review E1-1: a zeroed entry 0 (and so a zeroed predecessor pin) is refused before any record is read.
+        def zeroed(rows, sources):
+            registry = json.loads(sources[HELPER.CHAIN_REGISTRY_PATH])["records"]
+            registry[0]["sha256"] = "0" * 64
+            sources[HELPER.CHAIN_REGISTRY_PATH] = HELPER.chain_registry_bytes(registry)
+        self.assert_refused(zeroed, "entry 0 digest")
+        self.assert_refused(lambda rows, sources: sources.__setitem__(HELPER.CI_002_RECORD_PATH, sources[HELPER.CI_002_RECORD_PATH] + b" "),
+                            "entry 0 digest")
+
     def test_a_changed_or_untracked_record_is_refused(self):
         self.assert_refused(lambda rows, sources: sources.__setitem__(ENF_001_RECORD, sources[ENF_001_RECORD] + b" "),
                             "record digest: CONF-ENF-001")
@@ -156,7 +166,12 @@ class ChainRefusalTests(unittest.TestCase):
                                 (lambda value: value["deleted"].update({"a/b": {"before": dict(before, size=2),
                                                                                 "beforeSourceBase64": "eA=="}}), "before-image"),
                                 (lambda value: value["deleted"].update({"README.md": {"before": before, "beforeSourceBase64": "eA=="}}),
-                                 "deleted path present: README.md")):
+                                 "deleted path present: README.md"),
+                                # Review E1-3: an empty decision list, a non-integer size, non-canonical base64.
+                                (lambda value: value.update(ownerDecisions=[]), "owner decisions"),
+                                (lambda value: next(iter(value["added"].values())).update(size=5.0), "closed after-pin"),
+                                (lambda value: value["deleted"].update({"a/b": {"before": before, "beforeSourceBase64": "eB=="}}),
+                                 "canonical before-image: a/b")):
             with self.subTest(message=message):
                 self.forge(change, message)
 

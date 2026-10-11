@@ -17,7 +17,8 @@ W04 test source for the Harness-Onion enforcement work, per the adopted W04-0 pl
   source commit. A snapshot is never edited; a newer contract version comes in as a new snapshot set.
 - History (owner decision Q-T3, 2026-10-11): each R12 packet from CONF-ENF-001 on adds one closed record
   `fixtures/ci/<packet>-checkpoint.json` and one entry in `fixtures/ci/checkpoints.json`, naming every path it deleted,
-  changed or added with exact pins. Later W04 packets are data plus tests only.
+  changed or added with exact pins. Later W04 packets are data plus tests only. That the registry is append-only and a
+  merged record is never rewritten is checked by review of each packet's diff, not by code (review E1-2).
 
 ## Running
 
