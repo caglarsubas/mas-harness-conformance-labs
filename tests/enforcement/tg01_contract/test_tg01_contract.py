@@ -68,8 +68,36 @@ ANCHORS = {
     ("MATRIX:role/version mismatch", "I07 policy write v3", "frames"): {"G38", "G48"},
     ("MATRIX:role/version mismatch", "I07 policy write v3", "transcripts"): {"T23", "T45"},
     ("MATRIX:role/version mismatch", "I06 backend profile v2", "vectors"): {"G03", "G17", "X01", "X02", "X03", "X04"},
-    ("MATRIX:role/version mismatch", "Native qualification profile v3", "vectors"): {"R01", "R07", "C31", "X01", "X14"},
+    ("MATRIX:role/version mismatch", "Native qualification profile v3", "vectors"): {"R01", "R02", "R03", "R07", "R75", "C13", "C31",
+                                                                                     "V29", "X01", "X14"},
     ("CE23", "I07 policy write v3", "transcripts"): {"T08"},
+}
+
+
+# Review R3-4: the vectors mapped to each case and contract, so a narrower CASE_TAGS or rule fails here too, not only
+# through the ledger the same code wrote. A change to the mapping changes this table, in the same reviewed diff.
+CASE_VECTORS = {
+    ("MATRIX:exact fields", "SELinux matrix v4"): 55,
+    ("MATRIX:exact fields", "Seccomp allowlists v2"): 15,
+    ("MATRIX:exact fields", "Admission semantics v3"): 123,
+    ("MATRIX:exact fields", "I05 gate channel v3"): 95,
+    ("MATRIX:exact fields", "I07 policy write v3"): 165,
+    ("MATRIX:exact fields", "Native qualification profile v3"): 248,
+    ("MATRIX:duplicate/unknown keys", "I05 gate channel v3"): 48,
+    ("MATRIX:duplicate/unknown keys", "I07 policy write v3"): 57,
+    ("MATRIX:role/version mismatch", "I05 gate channel v3"): 6,
+    ("MATRIX:role/version mismatch", "I07 policy write v3"): 4,
+    ("MATRIX:role/version mismatch", "I06 backend profile v2"): 8,
+    ("MATRIX:role/version mismatch", "Native qualification profile v3"): 36,
+    ("MATRIX:transcript replay", "I05 gate channel v3"): 120,
+    ("MATRIX:transcript replay", "I07 policy write v3"): 62,
+    ("MATRIX:wrong peer", "I05 gate channel v3"): 7,
+    ("MATRIX:wrong peer", "I07 policy write v3"): 6,
+    ("CE23", "I07 policy write v3"): 80,
+    ("CONTRACT-DATA", "SELinux matrix v4"): 1928,
+    ("CONTRACT-DATA", "Seccomp allowlists v2"): 3195,
+    ("CONTRACT-DATA", "W01 amendment W02D"): 1,
+    ("CONTRACT-DATA", "I06 backend profile v2"): 147,
 }
 
 
@@ -126,6 +154,7 @@ class LedgerTests(unittest.TestCase):
     def test_case_results_follow_from_the_rows_and_selections_and_never_overstate(self):
         value = ledger()
         self.assertEqual(value["caseResults"], derived_case_results(value))
+        self.assertEqual({(row["case"], row["contract"]): row["vectors"] for row in value["caseResults"]}, CASE_VECTORS)
         for row in value["caseResults"]:
             with self.subTest(case=row["case"], contract=row["contract"]):
                 self.assertEqual(set(row), CASE_FIELDS)

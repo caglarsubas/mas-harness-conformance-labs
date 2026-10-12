@@ -555,9 +555,44 @@ def _i06_version(vectors):
     return ids + [row["id"] for row in vectors["crossVersion"]]
 
 
-def _native_version(vectors):
+_MISSING = object()
+
+
+def _at(value, path):
+    for key in path:
+        if type(value) is dict and key in value:
+            value = value[key]
+        elif type(value) is list and type(key) is int and 0 <= key < len(value):
+            value = value[key]
+        else:
+            return _MISSING
+    return value
+
+
+def _native_role(row, roles):
+    """Review R3-1: the plan's G06 and counterexample 14 put the native record's process roles in this case."""
+    if "another role" in row["refusal"]:
+        return True
+    executables = {name: role.get("executable") for name, role in roles.items()}
+    for op in row["ops"]:
+        path, value = op["path"], op.get("value")
+        if row["target"] == "record" and path[:1] == ["roles"]:
+            if len(path) == 2:
+                return True
+            distinctive = (type(value) is str and value != "") or (type(value) is int and type(value) is not bool and value > 1)
+            if op["op"] == "set" and distinctive and any(name != path[1] and _at(role, path[2:]) == value for name, role in roles.items()):
+                return True
+        if row["target"] == "capture":
+            image = value.get("path") if type(value) is dict else value
+            if path == ["role"] or any(name != row.get("role") and image == executable for name, executable in executables.items()):
+                return True
+    return False
+
+
+def _native_role_version(vectors):
     ids = [row["id"] for row in vectors["negative"]
-           if "not a v3 record" in row["refusal"] or re.search(r"\bv[12]\b.*\b(record|reader)\b", row["intent"])]
+           if "not a v3 record" in row["refusal"] or EARLIER_VERSION.search(row["intent"])
+           or _native_role(row, vectors["positive"][row["positive"]]["record"]["roles"])]
     return ids + [row["id"] for row in vectors["crossVersion"]]
 
 
@@ -576,8 +611,10 @@ SELECTORS = [
     ("MATRIX:role/version mismatch", "I06 backend profile v2", "vectors", I06,
      "a negative refused as another version or not a v3 record, and every cross-version case", _i06_version),
     ("MATRIX:role/version mismatch", "Native qualification profile v3", "vectors", NAT,
-     "a negative refused as not a v3 record or whose intent places a v1/v2 item in a later record or reader, and every "
-     "cross-version case", _native_version),
+     "a negative refused as not a v3 record or whose intent names v1 or v2; a negative on the record's process roles (the "
+     "plan's G06 and counterexample 14): a role added or removed, a role given another role's distinctive value (a non-empty "
+     "string or an integer above 1 at the same field), a capture rebound to another role or running another role's "
+     "executable, or a refusal naming another role; and every cross-version case", _native_role_version),
     ("CE23", "I07 policy write v3", "transcripts", I07, "the transcript whose intent is Counterexample 23 (the channel-level refusals)",
      _counterexample_23),
 ]
