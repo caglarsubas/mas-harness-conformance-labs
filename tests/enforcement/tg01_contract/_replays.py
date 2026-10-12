@@ -10,6 +10,7 @@ from __future__ import annotations
 import base64
 import copy
 import hashlib
+import re
 
 import _models
 
@@ -482,3 +483,108 @@ REPLAYS = {
     ("I06 backend profile v2", "vectors"): i06_v2_vectors,
     ("Native qualification profile v3", "vectors"): native_v3_vectors,
 }
+
+
+# Case mapping (reviews R1-1, R2-1..R2-3) ---------------------------------------------------------------------------
+# Whole vector sets carry the TG-01 plan cases they exemplify. Wrong peer, role/version mismatch and part of CE23 are a
+# few vectors of mixed sets: each is selected by a rule over the vectors' own content, so the ledger must equal what
+# these rules give on the pinned vectors and cannot narrow a case by data alone.
+
+CASE_TAGS = {
+    ("SELinux matrix v4", "accessChecks"): ["CONTRACT-DATA"],
+    ("SELinux matrix v4", "mutationChecks"): ["CONTRACT-DATA", "MATRIX:exact fields"],
+    ("Seccomp allowlists v2", "programs"): ["CONTRACT-DATA"],
+    ("Seccomp allowlists v2", "decisionChecks"): ["CONTRACT-DATA"],
+    ("Seccomp allowlists v2", "workerStackChecks"): ["CONTRACT-DATA"],
+    ("Seccomp allowlists v2", "policyMutations"): ["CONTRACT-DATA", "MATRIX:exact fields"],
+    ("Admission semantics v3", "sealed"): ["MATRIX:exact fields"],
+    ("Admission semantics v3", "manifest"): ["MATRIX:exact fields"],
+    ("Admission semantics v3", "endToEnd"): ["MATRIX:exact fields"],
+    ("Admission semantics v3", "finalObject"): ["MATRIX:exact fields"],
+    ("Admission semantics v3", "objects"): ["MATRIX:exact fields"],
+    ("Admission semantics v3", "directoryHash"): ["MATRIX:exact fields"],
+    ("Admission semantics v3", "claims"): ["MATRIX:exact fields"],
+    ("I05 gate channel v3", "agreement"): ["MATRIX:exact fields"],
+    ("I05 gate channel v3", "configRefusals"): ["MATRIX:exact fields"],
+    ("I05 gate channel v3", "frames"): ["MATRIX:exact fields", "MATRIX:duplicate/unknown keys"],
+    ("I05 gate channel v3", "byteFrames"): ["MATRIX:duplicate/unknown keys", "MATRIX:exact fields"],
+    ("I05 gate channel v3", "transcripts"): ["MATRIX:transcript replay"],
+    ("I07 policy write v3", "kindChecks"): ["CE23", "MATRIX:exact fields"],
+    ("I07 policy write v3", "renderChecks"): ["MATRIX:exact fields"],
+    ("I07 policy write v3", "outcomeChecks"): ["MATRIX:exact fields"],
+    ("I07 policy write v3", "frames"): ["MATRIX:exact fields", "MATRIX:duplicate/unknown keys"],
+    ("I07 policy write v3", "byteFrames"): ["MATRIX:duplicate/unknown keys", "MATRIX:exact fields"],
+    ("I07 policy write v3", "transcripts"): ["MATRIX:transcript replay"],
+    ("W01 amendment W02D", "amendment"): ["CONTRACT-DATA"],
+    ("I06 backend profile v2", "vectors"): ["CONTRACT-DATA"],
+    ("Native qualification profile v3", "vectors"): ["MATRIX:exact fields"],
+}
+
+PEER_FATALS = {"PEER_CHANGED", "PEER_LOST", "PEER_QUALIFICATION_MISMATCH"}
+PEER_EVENTS = {"PEER_CHANGED", "W_PEER_CHANGED"}
+EARLIER_VERSION = re.compile(r"\bv[12]\b")
+
+
+def _fatals(row):
+    return {output.get("fatal") for output in row["outputs"] if type(output) is dict}
+
+
+def _wrong_peer(vectors):
+    def peer(row):
+        return bool(_fatals(row) & PEER_FATALS) or any(
+            event.get("type") in PEER_EVENTS or (type(event.get("payload")) is dict and event["payload"].get("reason") == "PEER_FAILURE")
+            for event in row["events"])
+    return [row["id"] for row in vectors["transcripts"] if peer(row)]
+
+
+def _direction(vectors):
+    return [row["id"] for row in vectors["transcripts"] if "DIRECTION" in _fatals(row)]
+
+
+def _earlier_version(key):
+    return lambda vectors: [row["id"] for row in vectors[key] if EARLIER_VERSION.search(row["intent"])]
+
+
+def _counterexample_23(vectors):
+    return [row["id"] for row in vectors["transcripts"] if row["intent"].startswith("Counterexample 23")]
+
+
+def _i06_version(vectors):
+    ids = [row["id"] for key in ("evidenceNegative", "snapshotNegative") for row in vectors[key]
+           if re.search(r"another version|not a v3 record", row["refusal"])]
+    return ids + [row["id"] for row in vectors["crossVersion"]]
+
+
+def _native_version(vectors):
+    ids = [row["id"] for row in vectors["negative"]
+           if "not a v3 record" in row["refusal"] or re.search(r"\bv[12]\b.*\b(record|reader)\b", row["intent"])]
+    return ids + [row["id"] for row in vectors["crossVersion"]]
+
+
+PEER_BASIS = ("a transcript whose output is fatal PEER_CHANGED, PEER_LOST or PEER_QUALIFICATION_MISMATCH, or that carries a "
+              "PEER_CHANGED or W_PEER_CHANGED event or a close with reason PEER_FAILURE")
+ROLE_BASIS = "a transcript whose output is fatal DIRECTION: a frame sent in the other channel role's direction"
+VERSION_BASIS = "a vector whose intent names an earlier contract version (v1 or v2): a frame or configuration of another version"
+SELECTORS = [
+    ("MATRIX:wrong peer", "I05 gate channel v3", "transcripts", I05, PEER_BASIS, _wrong_peer),
+    ("MATRIX:wrong peer", "I07 policy write v3", "transcripts", I07, PEER_BASIS, _wrong_peer),
+    ("MATRIX:role/version mismatch", "I05 gate channel v3", "configRefusals", I05, VERSION_BASIS, _earlier_version("configRefusals")),
+    ("MATRIX:role/version mismatch", "I05 gate channel v3", "frames", I05, VERSION_BASIS, _earlier_version("frames")),
+    ("MATRIX:role/version mismatch", "I05 gate channel v3", "transcripts", I05, ROLE_BASIS, _direction),
+    ("MATRIX:role/version mismatch", "I07 policy write v3", "frames", I07, VERSION_BASIS, _earlier_version("frames")),
+    ("MATRIX:role/version mismatch", "I07 policy write v3", "transcripts", I07, ROLE_BASIS, _direction),
+    ("MATRIX:role/version mismatch", "I06 backend profile v2", "vectors", I06,
+     "a negative refused as another version or not a v3 record, and every cross-version case", _i06_version),
+    ("MATRIX:role/version mismatch", "Native qualification profile v3", "vectors", NAT,
+     "a negative refused as not a v3 record or whose intent places a v1/v2 item in a later record or reader, and every "
+     "cross-version case", _native_version),
+    ("CE23", "I07 policy write v3", "transcripts", I07, "the transcript whose intent is Counterexample 23 (the channel-level refusals)",
+     _counterexample_23),
+]
+
+
+def selections():
+    """The selected vectors of each mixed-set case, by the rules above over the pinned vectors."""
+    return [{"case": case, "contract": contract, "vectorSet": vector_set, "basis": basis,
+             "ids": rule(_models.data(prefix + "vectors.json"))}
+            for case, contract, vector_set, prefix, basis, rule in SELECTORS]

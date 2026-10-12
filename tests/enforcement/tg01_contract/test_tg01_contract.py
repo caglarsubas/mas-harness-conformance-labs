@@ -58,6 +58,21 @@ SET_SIZES = {
 }
 
 
+# Review R2-3: vectors each mixed-set case must keep, whatever its rule becomes (from the vectors' intents and reviews R1/R2).
+ANCHORS = {
+    ("MATRIX:wrong peer", "I05 gate channel v3", "transcripts"): {"T14", "T26", "T41", "T60", "T89", "T93"},
+    ("MATRIX:wrong peer", "I07 policy write v3", "transcripts"): {"T19", "T20", "T42", "T46", "T50", "T57"},
+    ("MATRIX:role/version mismatch", "I05 gate channel v3", "configRefusals"): {"K04"},
+    ("MATRIX:role/version mismatch", "I05 gate channel v3", "frames"): {"G10", "G32", "G34"},
+    ("MATRIX:role/version mismatch", "I05 gate channel v3", "transcripts"): {"T19", "T63"},
+    ("MATRIX:role/version mismatch", "I07 policy write v3", "frames"): {"G38", "G48"},
+    ("MATRIX:role/version mismatch", "I07 policy write v3", "transcripts"): {"T23", "T45"},
+    ("MATRIX:role/version mismatch", "I06 backend profile v2", "vectors"): {"G03", "G17", "X01", "X02", "X03", "X04"},
+    ("MATRIX:role/version mismatch", "Native qualification profile v3", "vectors"): {"R01", "R07", "C31", "X01", "X14"},
+    ("CE23", "I07 policy write v3", "transcripts"): {"T08"},
+}
+
+
 def derived_case_results(value):
     """Review R1-1: a case is PASS for a contract only when every vector mapped to it ran and passed."""
     by_key = {(row["contract"], row["vectorSet"]): row for row in value["rows"]}
@@ -115,6 +130,18 @@ class LedgerTests(unittest.TestCase):
             with self.subTest(case=row["case"], contract=row["contract"]):
                 self.assertEqual(set(row), CASE_FIELDS)
                 self.assertEqual(row["result"] == "PASS", row["results"]["NOT_RUN_ENV_UNAVAILABLE"] == 0)
+
+    def test_the_ledger_records_the_area_codes_case_mapping(self):
+        # Review R2-3: whole-set tags and selections come from _replays (CASE_TAGS, SELECTORS) over the pinned vectors,
+        # so a regenerated ledger cannot narrow a case by data alone.
+        value = ledger()
+        self.assertEqual({(row["contract"], row["vectorSet"]): row["cases"] for row in value["rows"]}, _replays.CASE_TAGS)
+        self.assertEqual(value["selections"], _replays.selections())
+        selected = {(row["case"], row["contract"], row["vectorSet"]): set(row["ids"]) for row in value["selections"]}
+        self.assertEqual(set(selected), set(ANCHORS))
+        for key, anchors in ANCHORS.items():
+            with self.subTest(selection=key):
+                self.assertLessEqual(anchors, selected[key])
 
     def test_every_selection_names_real_vectors_of_its_set(self):
         value = ledger()

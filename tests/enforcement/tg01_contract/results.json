@@ -1066,32 +1066,36 @@
    "case": "MATRIX:wrong peer",
    "contract": "I05 gate channel v3",
    "vectorSet": "transcripts",
-   "basis": "a peer that changes or deviates: a different peer qualification, peer death or failure, a changed broker or writer peer",
+   "basis": "a transcript whose output is fatal PEER_CHANGED, PEER_LOST or PEER_QUALIFICATION_MISMATCH, or that carries a PEER_CHANGED or W_PEER_CHANGED event or a close with reason PEER_FAILURE",
    "ids": [
     "T14",
     "T26",
+    "T38",
     "T41",
-    "T89"
+    "T60",
+    "T89",
+    "T93"
    ]
   },
   {
    "case": "MATRIX:wrong peer",
    "contract": "I07 policy write v3",
    "vectorSet": "transcripts",
-   "basis": "a peer that changes or deviates: a different peer qualification, peer death or failure, a changed broker or writer peer",
+   "basis": "a transcript whose output is fatal PEER_CHANGED, PEER_LOST or PEER_QUALIFICATION_MISMATCH, or that carries a PEER_CHANGED or W_PEER_CHANGED event or a close with reason PEER_FAILURE",
    "ids": [
     "T19",
     "T20",
     "T42",
     "T46",
-    "T50"
+    "T50",
+    "T57"
    ]
   },
   {
    "case": "MATRIX:role/version mismatch",
    "contract": "I05 gate channel v3",
    "vectorSet": "configRefusals",
-   "basis": "a frame, record or configuration of another contract version, or a role the record does not admit",
+   "basis": "a vector whose intent names an earlier contract version (v1 or v2): a frame or configuration of another version",
    "ids": [
     "K04"
    ]
@@ -1100,7 +1104,7 @@
    "case": "MATRIX:role/version mismatch",
    "contract": "I05 gate channel v3",
    "vectorSet": "frames",
-   "basis": "a frame, record or configuration of another contract version, or a role the record does not admit",
+   "basis": "a vector whose intent names an earlier contract version (v1 or v2): a frame or configuration of another version",
    "ids": [
     "G10",
     "G32",
@@ -1109,9 +1113,19 @@
   },
   {
    "case": "MATRIX:role/version mismatch",
+   "contract": "I05 gate channel v3",
+   "vectorSet": "transcripts",
+   "basis": "a transcript whose output is fatal DIRECTION: a frame sent in the other channel role's direction",
+   "ids": [
+    "T19",
+    "T63"
+   ]
+  },
+  {
+   "case": "MATRIX:role/version mismatch",
    "contract": "I07 policy write v3",
    "vectorSet": "frames",
-   "basis": "a frame, record or configuration of another contract version, or a role the record does not admit",
+   "basis": "a vector whose intent names an earlier contract version (v1 or v2): a frame or configuration of another version",
    "ids": [
     "G38",
     "G48"
@@ -1119,28 +1133,38 @@
   },
   {
    "case": "MATRIX:role/version mismatch",
+   "contract": "I07 policy write v3",
+   "vectorSet": "transcripts",
+   "basis": "a transcript whose output is fatal DIRECTION: a frame sent in the other channel role's direction",
+   "ids": [
+    "T23",
+    "T45"
+   ]
+  },
+  {
+   "case": "MATRIX:role/version mismatch",
    "contract": "I06 backend profile v2",
    "vectorSet": "vectors",
-   "basis": "a frame, record or configuration of another contract version, or a role the record does not admit",
+   "basis": "a negative refused as another version or not a v3 record, and every cross-version case",
    "ids": [
+    "G03",
+    "G17",
     "X01",
     "X02",
     "X03",
-    "X04"
+    "X04",
+    "X05",
+    "X06"
    ]
   },
   {
    "case": "MATRIX:role/version mismatch",
    "contract": "Native qualification profile v3",
    "vectorSet": "vectors",
-   "basis": "a frame, record or configuration of another contract version, or a role the record does not admit",
+   "basis": "a negative refused as not a v3 record or whose intent places a v1/v2 item in a later record or reader, and every cross-version case",
    "ids": [
     "R01",
-    "R02",
-    "R03",
     "R07",
-    "C13",
-    "C21",
     "C31",
     "X01",
     "X02",
@@ -1156,6 +1180,15 @@
     "X12",
     "X13",
     "X14"
+   ]
+  },
+  {
+   "case": "CE23",
+   "contract": "I07 policy write v3",
+   "vectorSet": "transcripts",
+   "basis": "the transcript whose intent is Counterexample 23 (the channel-level refusals)",
+   "ids": [
+    "T08"
    ]
   }
  ],
@@ -1243,26 +1276,16 @@
   {
    "case": "MATRIX:role/version mismatch",
    "contract": "I05 gate channel v3",
-   "vectors": 4,
+   "vectors": 6,
    "results": {
     "PASS": 1,
-    "NOT_RUN_ENV_UNAVAILABLE": 3
+    "NOT_RUN_ENV_UNAVAILABLE": 5
    },
    "result": "NOT_RUN_ENV_UNAVAILABLE"
   },
   {
    "case": "MATRIX:role/version mismatch",
    "contract": "I07 policy write v3",
-   "vectors": 2,
-   "results": {
-    "PASS": 0,
-    "NOT_RUN_ENV_UNAVAILABLE": 2
-   },
-   "result": "NOT_RUN_ENV_UNAVAILABLE"
-  },
-  {
-   "case": "MATRIX:role/version mismatch",
-   "contract": "I06 backend profile v2",
    "vectors": 4,
    "results": {
     "PASS": 0,
@@ -1272,11 +1295,21 @@
   },
   {
    "case": "MATRIX:role/version mismatch",
-   "contract": "Native qualification profile v3",
-   "vectors": 21,
+   "contract": "I06 backend profile v2",
+   "vectors": 8,
    "results": {
     "PASS": 0,
-    "NOT_RUN_ENV_UNAVAILABLE": 21
+    "NOT_RUN_ENV_UNAVAILABLE": 8
+   },
+   "result": "NOT_RUN_ENV_UNAVAILABLE"
+  },
+  {
+   "case": "MATRIX:role/version mismatch",
+   "contract": "Native qualification profile v3",
+   "vectors": 17,
+   "results": {
+    "PASS": 0,
+    "NOT_RUN_ENV_UNAVAILABLE": 17
    },
    "result": "NOT_RUN_ENV_UNAVAILABLE"
   },
@@ -1303,32 +1336,32 @@
   {
    "case": "MATRIX:wrong peer",
    "contract": "I05 gate channel v3",
-   "vectors": 4,
+   "vectors": 7,
    "results": {
     "PASS": 0,
-    "NOT_RUN_ENV_UNAVAILABLE": 4
+    "NOT_RUN_ENV_UNAVAILABLE": 7
    },
    "result": "NOT_RUN_ENV_UNAVAILABLE"
   },
   {
    "case": "MATRIX:wrong peer",
    "contract": "I07 policy write v3",
-   "vectors": 5,
+   "vectors": 6,
    "results": {
     "PASS": 0,
-    "NOT_RUN_ENV_UNAVAILABLE": 5
+    "NOT_RUN_ENV_UNAVAILABLE": 6
    },
    "result": "NOT_RUN_ENV_UNAVAILABLE"
   },
   {
    "case": "CE23",
    "contract": "I07 policy write v3",
-   "vectors": 79,
+   "vectors": 80,
    "results": {
     "PASS": 79,
-    "NOT_RUN_ENV_UNAVAILABLE": 0
+    "NOT_RUN_ENV_UNAVAILABLE": 1
    },
-   "result": "PASS"
+   "result": "NOT_RUN_ENV_UNAVAILABLE"
   },
   {
    "case": "CONTRACT-DATA",

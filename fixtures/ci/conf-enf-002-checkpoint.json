@@ -2,8 +2,8 @@
  "added": {
   "task-packets/CONF-ENF-002.yaml": {
    "mode": "100644",
-   "sha256": "e4e276e697552dbf756fe018604ebc37731eaa4eed3db4ffde1f96a3dde8a510",
-   "size": 9612
+   "sha256": "50adfb4617f9523f4aeeb588cd1c9a9d1d3367dbbca3014696dc767df31b1a35",
+   "size": 10542
   },
   "tests/enforcement/_models.py": {
    "mode": "100644",
@@ -37,18 +37,18 @@
   },
   "tests/enforcement/tg01_contract/_replays.py": {
    "mode": "100644",
-   "sha256": "75f45b0833a6839fafe495d798356bace228e0512061fd0ea5bc19de3c3893b3",
-   "size": 21248
+   "sha256": "3364d040f89e1bceb3cb76734e1e344cc8293133618013d3d23bd14b32c5b755",
+   "size": 27490
   },
   "tests/enforcement/tg01_contract/results.json": {
    "mode": "100644",
-   "sha256": "08daf9be3ac3546def4e6b6d7c41e909aa79de5a69acb75dba59d8785c33f872",
-   "size": 22443
+   "sha256": "8a43f5a2431e32122847cc7c3fcd1c50d4e5dcefd4f8c4751c5e6d662c2169eb",
+   "size": 23454
   },
   "tests/enforcement/tg01_contract/test_tg01_contract.py": {
    "mode": "100644",
-   "sha256": "db4bf792cc7499bed428e98df1f71c69505489b144fded9591f3f91791d73c1b",
-   "size": 16411
+   "sha256": "1c3d0a7fce0b530ca676fba0cf5ae1f1670582e4751235b981b4e1fa20ebef75",
+   "size": 18325
   }
  },
  "baseCommit": "83d2c55c4499163ad00113cfe260a2005ccdb7c9",
