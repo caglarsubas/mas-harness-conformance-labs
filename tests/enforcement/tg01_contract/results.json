@@ -3,7 +3,7 @@
  "packet": "CONF-ENF-002",
  "testGroup": "TG-01",
  "profile": "python-conformance-stdlib (Python 3.12, standard library only; jsonschema absent)",
- "rule": "The results every run under the verifier profile must reproduce exactly: each vector PASS, or NOT_RUN_ENV_UNAVAILABLE when its replay needs jsonschema; never PASS for a vector not run (AGENTS rule 14).",
+ "rule": "The results every run under the verifier profile must reproduce exactly: each vector PASS, or NOT_RUN_ENV_UNAVAILABLE when its replay needs jsonschema; never PASS for a vector not run (AGENTS rule 14). A case is PASS for a contract only when every vector mapped to it (its tagged vector sets and its selected vectors) ran and passed; otherwise it is NOT_RUN_ENV_UNAVAILABLE, with its counts.",
  "rows": [
   {
    "contract": "SELinux matrix v4",
@@ -193,7 +193,7 @@
    "contract": "I05 gate channel v3",
    "vectorSet": "agreement",
    "cases": [
-    "MATRIX:transcript replay"
+    "MATRIX:exact fields"
    ],
    "vectors": 42,
    "results": {
@@ -207,7 +207,7 @@
    "contract": "I05 gate channel v3",
    "vectorSet": "configRefusals",
    "cases": [
-    "MATRIX:role/version mismatch"
+    "MATRIX:exact fields"
    ],
    "vectors": 5,
    "results": {
@@ -290,9 +290,7 @@
    "contract": "I05 gate channel v3",
    "vectorSet": "transcripts",
    "cases": [
-    "MATRIX:transcript replay",
-    "MATRIX:wrong peer",
-    "MATRIX:role/version mismatch"
+    "MATRIX:transcript replay"
    ],
    "vectors": 120,
    "results": {
@@ -455,7 +453,7 @@
    "contract": "I07 policy write v3",
    "vectorSet": "outcomeChecks",
    "cases": [
-    "MATRIX:transcript replay"
+    "MATRIX:exact fields"
    ],
    "vectors": 22,
    "results": {
@@ -551,9 +549,7 @@
    "contract": "I07 policy write v3",
    "vectorSet": "transcripts",
    "cases": [
-    "MATRIX:transcript replay",
-    "MATRIX:wrong peer",
-    "MATRIX:role/version mismatch"
+    "MATRIX:transcript replay"
    ],
    "vectors": 62,
    "results": {
@@ -1063,6 +1059,316 @@
     "M14"
    ],
    "reason": "G-JSONSCHEMA: the replay reaches the reference model's jsonschema import (owner decision Q-T4)"
+  }
+ ],
+ "selections": [
+  {
+   "case": "MATRIX:wrong peer",
+   "contract": "I05 gate channel v3",
+   "vectorSet": "transcripts",
+   "basis": "a peer that changes or deviates: a different peer qualification, peer death or failure, a changed broker or writer peer",
+   "ids": [
+    "T14",
+    "T26",
+    "T41",
+    "T89"
+   ]
+  },
+  {
+   "case": "MATRIX:wrong peer",
+   "contract": "I07 policy write v3",
+   "vectorSet": "transcripts",
+   "basis": "a peer that changes or deviates: a different peer qualification, peer death or failure, a changed broker or writer peer",
+   "ids": [
+    "T19",
+    "T20",
+    "T42",
+    "T46",
+    "T50"
+   ]
+  },
+  {
+   "case": "MATRIX:role/version mismatch",
+   "contract": "I05 gate channel v3",
+   "vectorSet": "configRefusals",
+   "basis": "a frame, record or configuration of another contract version, or a role the record does not admit",
+   "ids": [
+    "K04"
+   ]
+  },
+  {
+   "case": "MATRIX:role/version mismatch",
+   "contract": "I05 gate channel v3",
+   "vectorSet": "frames",
+   "basis": "a frame, record or configuration of another contract version, or a role the record does not admit",
+   "ids": [
+    "G10",
+    "G32",
+    "G34"
+   ]
+  },
+  {
+   "case": "MATRIX:role/version mismatch",
+   "contract": "I07 policy write v3",
+   "vectorSet": "frames",
+   "basis": "a frame, record or configuration of another contract version, or a role the record does not admit",
+   "ids": [
+    "G38",
+    "G48"
+   ]
+  },
+  {
+   "case": "MATRIX:role/version mismatch",
+   "contract": "I06 backend profile v2",
+   "vectorSet": "vectors",
+   "basis": "a frame, record or configuration of another contract version, or a role the record does not admit",
+   "ids": [
+    "X01",
+    "X02",
+    "X03",
+    "X04"
+   ]
+  },
+  {
+   "case": "MATRIX:role/version mismatch",
+   "contract": "Native qualification profile v3",
+   "vectorSet": "vectors",
+   "basis": "a frame, record or configuration of another contract version, or a role the record does not admit",
+   "ids": [
+    "R01",
+    "R02",
+    "R03",
+    "R07",
+    "C13",
+    "C21",
+    "C31",
+    "X01",
+    "X02",
+    "X03",
+    "X04",
+    "X05",
+    "X06",
+    "X07",
+    "X08",
+    "X09",
+    "X10",
+    "X11",
+    "X12",
+    "X13",
+    "X14"
+   ]
+  }
+ ],
+ "caseResults": [
+  {
+   "case": "MATRIX:exact fields",
+   "contract": "SELinux matrix v4",
+   "vectors": 55,
+   "results": {
+    "PASS": 55,
+    "NOT_RUN_ENV_UNAVAILABLE": 0
+   },
+   "result": "PASS"
+  },
+  {
+   "case": "MATRIX:exact fields",
+   "contract": "Seccomp allowlists v2",
+   "vectors": 15,
+   "results": {
+    "PASS": 15,
+    "NOT_RUN_ENV_UNAVAILABLE": 0
+   },
+   "result": "PASS"
+  },
+  {
+   "case": "MATRIX:exact fields",
+   "contract": "Admission semantics v3",
+   "vectors": 123,
+   "results": {
+    "PASS": 123,
+    "NOT_RUN_ENV_UNAVAILABLE": 0
+   },
+   "result": "PASS"
+  },
+  {
+   "case": "MATRIX:exact fields",
+   "contract": "I05 gate channel v3",
+   "vectors": 95,
+   "results": {
+    "PASS": 58,
+    "NOT_RUN_ENV_UNAVAILABLE": 37
+   },
+   "result": "NOT_RUN_ENV_UNAVAILABLE"
+  },
+  {
+   "case": "MATRIX:exact fields",
+   "contract": "I07 policy write v3",
+   "vectors": 165,
+   "results": {
+    "PASS": 115,
+    "NOT_RUN_ENV_UNAVAILABLE": 50
+   },
+   "result": "NOT_RUN_ENV_UNAVAILABLE"
+  },
+  {
+   "case": "MATRIX:exact fields",
+   "contract": "Native qualification profile v3",
+   "vectors": 248,
+   "results": {
+    "PASS": 0,
+    "NOT_RUN_ENV_UNAVAILABLE": 248
+   },
+   "result": "NOT_RUN_ENV_UNAVAILABLE"
+  },
+  {
+   "case": "MATRIX:duplicate/unknown keys",
+   "contract": "I05 gate channel v3",
+   "vectors": 48,
+   "results": {
+    "PASS": 11,
+    "NOT_RUN_ENV_UNAVAILABLE": 37
+   },
+   "result": "NOT_RUN_ENV_UNAVAILABLE"
+  },
+  {
+   "case": "MATRIX:duplicate/unknown keys",
+   "contract": "I07 policy write v3",
+   "vectors": 57,
+   "results": {
+    "PASS": 7,
+    "NOT_RUN_ENV_UNAVAILABLE": 50
+   },
+   "result": "NOT_RUN_ENV_UNAVAILABLE"
+  },
+  {
+   "case": "MATRIX:role/version mismatch",
+   "contract": "I05 gate channel v3",
+   "vectors": 4,
+   "results": {
+    "PASS": 1,
+    "NOT_RUN_ENV_UNAVAILABLE": 3
+   },
+   "result": "NOT_RUN_ENV_UNAVAILABLE"
+  },
+  {
+   "case": "MATRIX:role/version mismatch",
+   "contract": "I07 policy write v3",
+   "vectors": 2,
+   "results": {
+    "PASS": 0,
+    "NOT_RUN_ENV_UNAVAILABLE": 2
+   },
+   "result": "NOT_RUN_ENV_UNAVAILABLE"
+  },
+  {
+   "case": "MATRIX:role/version mismatch",
+   "contract": "I06 backend profile v2",
+   "vectors": 4,
+   "results": {
+    "PASS": 0,
+    "NOT_RUN_ENV_UNAVAILABLE": 4
+   },
+   "result": "NOT_RUN_ENV_UNAVAILABLE"
+  },
+  {
+   "case": "MATRIX:role/version mismatch",
+   "contract": "Native qualification profile v3",
+   "vectors": 21,
+   "results": {
+    "PASS": 0,
+    "NOT_RUN_ENV_UNAVAILABLE": 21
+   },
+   "result": "NOT_RUN_ENV_UNAVAILABLE"
+  },
+  {
+   "case": "MATRIX:transcript replay",
+   "contract": "I05 gate channel v3",
+   "vectors": 120,
+   "results": {
+    "PASS": 1,
+    "NOT_RUN_ENV_UNAVAILABLE": 119
+   },
+   "result": "NOT_RUN_ENV_UNAVAILABLE"
+  },
+  {
+   "case": "MATRIX:transcript replay",
+   "contract": "I07 policy write v3",
+   "vectors": 62,
+   "results": {
+    "PASS": 1,
+    "NOT_RUN_ENV_UNAVAILABLE": 61
+   },
+   "result": "NOT_RUN_ENV_UNAVAILABLE"
+  },
+  {
+   "case": "MATRIX:wrong peer",
+   "contract": "I05 gate channel v3",
+   "vectors": 4,
+   "results": {
+    "PASS": 0,
+    "NOT_RUN_ENV_UNAVAILABLE": 4
+   },
+   "result": "NOT_RUN_ENV_UNAVAILABLE"
+  },
+  {
+   "case": "MATRIX:wrong peer",
+   "contract": "I07 policy write v3",
+   "vectors": 5,
+   "results": {
+    "PASS": 0,
+    "NOT_RUN_ENV_UNAVAILABLE": 5
+   },
+   "result": "NOT_RUN_ENV_UNAVAILABLE"
+  },
+  {
+   "case": "CE23",
+   "contract": "I07 policy write v3",
+   "vectors": 79,
+   "results": {
+    "PASS": 79,
+    "NOT_RUN_ENV_UNAVAILABLE": 0
+   },
+   "result": "PASS"
+  },
+  {
+   "case": "CONTRACT-DATA",
+   "contract": "SELinux matrix v4",
+   "vectors": 1928,
+   "results": {
+    "PASS": 1928,
+    "NOT_RUN_ENV_UNAVAILABLE": 0
+   },
+   "result": "PASS"
+  },
+  {
+   "case": "CONTRACT-DATA",
+   "contract": "Seccomp allowlists v2",
+   "vectors": 3195,
+   "results": {
+    "PASS": 3195,
+    "NOT_RUN_ENV_UNAVAILABLE": 0
+   },
+   "result": "PASS"
+  },
+  {
+   "case": "CONTRACT-DATA",
+   "contract": "W01 amendment W02D",
+   "vectors": 1,
+   "results": {
+    "PASS": 1,
+    "NOT_RUN_ENV_UNAVAILABLE": 0
+   },
+   "result": "PASS"
+  },
+  {
+   "case": "CONTRACT-DATA",
+   "contract": "I06 backend profile v2",
+   "vectors": 147,
+   "results": {
+    "PASS": 0,
+    "NOT_RUN_ENV_UNAVAILABLE": 147
+   },
+   "result": "NOT_RUN_ENV_UNAVAILABLE"
   }
  ],
  "deferred": [

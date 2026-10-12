@@ -28,10 +28,14 @@ FILE_FIELDS = {"contract", "path", "sha256", "size"}
 # recorded addition below, so no snapshotted model imports a sibling that is not snapshotted.
 EXTERNAL_IMPORTS = {"scripts/i05_gate_channel_v3.py": {"jsonschema"}, "scripts/native_qualification_v3.py": {"jsonschema"}}
 MISSING_SIBLINGS = {}
-# Owner-decided additions to the plan's contract set, in manifest order after the plan's files.
-ADDITIONS = [("I06 backend profile v1 (recorded addition, owner decision Q-T5)", "scripts/i06_backend_profile.py"),
-             ("W01 amendment W02D input (recorded addition, owner decision Q-T7)", "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md"),
-             ("W01 amendment W02D input (recorded addition, owner decision Q-T7)", "architecture/seccomp-allowlists/status.json")]
+# Owner-decided additions to the plan's contract set, in manifest order after the plan's files. Review R1-3: each is
+# pinned here by sha256 and size (a2eab93's bytes), as the plan pins its own files, not only by the manifest.
+ADDITIONS = [("I06 backend profile v1 (recorded addition, owner decision Q-T5)", "scripts/i06_backend_profile.py",
+              "bea3c953573478be5b03ab81b4ebd859da62d1eaa2a1be8f361b9dd39a98555e", 44806),
+             ("W01 amendment W02D input (recorded addition, owner decision Q-T7)", "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md",
+              "8a3a09bb5dbc08804dbea06dd0700a14648a9cdbc8efd62112dc64ba0b6ba1b4", 41971),
+             ("W01 amendment W02D input (recorded addition, owner decision Q-T7)", "architecture/seccomp-allowlists/status.json",
+              "08a541be25eb126d541a56242091eb953c8c7ec1c7fda8136ec47505fd0a6c0a", 4478)]
 # Area-local modules area code may import (CONF-ENF-002); _models.py is the one module allowed to load code by path.
 AREA_MODULES = {"_models", "tg01_contract", "."}
 PATH_LOADERS = {"tests/enforcement/_models.py"}
@@ -133,8 +137,8 @@ class SnapshotTests(unittest.TestCase):
         expected = [{"contract": "W04-0 enforcement test plan", "path": PLAN_PATH}]
         expected += [{"contract": contract["name"], "path": row["path"], "sha256": row["sha256"]}
                      for contract in source["contracts"] for row in contract["files"]]
-        expected += [{"contract": contract, "path": path} for contract, path in ADDITIONS]
-        observed = [{key: row[key] for key in ("contract", "path", "sha256") if key in expected[index]}
+        expected += [{"contract": contract, "path": path, "sha256": sha, "size": size} for contract, path, sha, size in ADDITIONS]
+        observed = [{key: row[key] for key in ("contract", "path", "sha256", "size") if key in expected[index]}
                     for index, row in enumerate(manifest()["files"])]
         self.assertEqual(observed, expected)
         self.assertEqual(len(expected), 37 + len(ADDITIONS))
@@ -156,7 +160,13 @@ class SnapshotTests(unittest.TestCase):
         self.assertEqual(external, EXTERNAL_IMPORTS)
         self.assertEqual(missing, {path: set(names) for path, names in MISSING_SIBLINGS.items()})
         record = strict(regular(AREA / "toolchains.json"))
-        self.assertEqual({row["id"]: row["snapshots"] for row in record["gaps"]}, {"G-JSONSCHEMA": sorted(EXTERNAL_IMPORTS)})
+        self.assertEqual({row["id"]: row["snapshots"] for row in record["gaps"]},
+                         {"G-JSONSCHEMA": sorted(EXTERNAL_IMPORTS),
+                          "G-REPLAY-INPUTS": ["scripts/i06_backend_profile_v2.py", "scripts/native_qualification_v3.py"]})
+        # Review R1-5: the I06 v2 and native v3 replays also need inputs outside the snapshots; the gap names them all.
+        inputs = next(row for row in record["gaps"] if row["id"] == "G-REPLAY-INPUTS")["missingInputs"]
+        self.assertEqual(len(inputs), 8)
+        self.assertFalse({row["path"] for row in inputs} & {row["path"] for row in value["files"]})
         self.assertEqual([(row["id"], row["closedBy"]) for row in record["closedGaps"]], [("G-I06-V1", "Q-T5")])
 
 

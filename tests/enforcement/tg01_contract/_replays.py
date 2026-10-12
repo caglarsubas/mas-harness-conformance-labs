@@ -430,11 +430,13 @@ def w02d_amendment():
 
 # I06 backend profile v2 and native qualification profile v3 --------------------------------------------------------
 # Both models import jsonschema when they load (I06 v2 through native v3), so no vector can be replayed here. If the
-# environment ever provides jsonschema, the load succeeds and these refuse until real replays are written (Q-T4).
+# environment ever provides jsonschema, the load succeeds and these refuse until real replays are written (Q-T4). The
+# replays also need inputs that are not snapshotted (gap G-REPLAY-INPUTS in toolchains.json, review R1-5).
 
 def _unwritten(name):
     _models.model(name)
-    raise Mismatch(name + " loaded: jsonschema is available, so write its vector replay (owner decision Q-T4)")
+    raise Mismatch(name + " loaded: jsonschema is available, so write its vector replay (owner decision Q-T4) and snapshot"
+                   " its missing inputs first (gap G-REPLAY-INPUTS)")
 
 
 def i06_v2_vectors():

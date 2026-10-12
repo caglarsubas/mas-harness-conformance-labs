@@ -82,6 +82,9 @@ def model(name: str):
         raise ValueError("not a snapshotted model: " + name)
     for sibling in SIBLINGS[name]:
         model(sibling)
+        # Review R1-2: the model's `import <sibling>` reads sys.modules, so the name must still hold the pinned sibling.
+        if sys.modules.get(sibling) is not _LOADED[sibling]:
+            raise ValueError("an outside module holds the sibling name " + sibling)
     raw = snapshot_bytes("scripts/%s.py" % name)
     if name in sys.modules and sys.modules[name] is not _LOADED.get(name):
         raise ValueError("an outside module already holds the name " + name)
@@ -90,7 +93,8 @@ def model(name: str):
     module.__file__ = str(AREA / "snapshots/harness-onion/scripts" / (name + ".py"))
     sys.modules[name] = module
     try:
-        exec(compile(raw, module.__file__, "exec"), module.__dict__)
+        # Review R1-10: the model compiles with its own future imports only, not this loader's.
+        exec(compile(raw, module.__file__, "exec", dont_inherit=True), module.__dict__)
     except BaseException:
         del sys.modules[name]
         raise

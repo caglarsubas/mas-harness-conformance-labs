@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+import sys
+import types
 import unittest
 from pathlib import Path
 
@@ -17,6 +19,8 @@ from tg01_contract import _replays
 HERE = Path(__file__).resolve().parent
 RESULTS = {"PASS", "FAIL", "WARN", "NOT_APPLICABLE", "NOT_RUN_ENV_UNAVAILABLE"}
 ROW_FIELDS = {"contract", "vectorSet", "cases", "vectors", "results", "notRunIds", "reason"}
+SELECTION_FIELDS = {"case", "contract", "vectorSet", "basis", "ids"}
+CASE_FIELDS = {"case", "contract", "vectors", "results", "result"}
 PLAN = "architecture/enforcement-test-plan/traceability.json"
 # The W01 base W02D amends: the plan's own sources pin, restated here so a changed snapshot cannot move it (Q-T7).
 W01_BASE_SHA256 = "8a3a09bb5dbc08804dbea06dd0700a14648a9cdbc8efd62112dc64ba0b6ba1b4"
@@ -34,10 +38,53 @@ def rows_for(contract):
     return [row for row in ledger()["rows"] if row["contract"] == contract]
 
 
+def offline_cases():
+    return [case["tag"] for case in tg01()["cases"] if case["phase"] == "W04_OFFLINE"]
+
+
+# Review R1-7: each vector set's size from the pinned vector data itself, not from the replays that wrote the ledger.
+VECTOR_DATA = {"SELinux matrix v4": _replays.SEL, "Seccomp allowlists v2": _replays.SEC, "Admission semantics v3": _replays.ADM,
+               "I05 gate channel v3": _replays.I05, "I07 policy write v3": _replays.I07, "I06 backend profile v2": _replays.I06,
+               "Native qualification profile v3": _replays.NAT}
+SET_SIZES = {
+    # One check per role and architecture program.
+    ("Seccomp allowlists v2", "programs"): lambda v: sum(len(arches) for arches in v["filterDigests"].values()),
+    # The rendering, the sealed objects and the pinned directory hash, then each positive manifest.
+    ("Admission semantics v3", "sealed"): lambda v: 3 + len(v["positives"]),
+    ("I06 backend profile v2", "vectors"): lambda v: sum(len(v[key]) for key in ("evidenceAccepted", "snapshotAccepted", "evidenceNegative",
+                                                                                   "snapshotNegative", "crossVersion")),
+    ("Native qualification profile v3", "vectors"): lambda v: len(v["positive"]) + sum(len(v[key]) for key in ("negative", "accepted",
+                                                                                                                "crossVersion", "migration")),
+}
+
+
+def derived_case_results(value):
+    """Review R1-1: a case is PASS for a contract only when every vector mapped to it ran and passed."""
+    by_key = {(row["contract"], row["vectorSet"]): row for row in value["rows"]}
+    results = []
+    for case in offline_cases():
+        for contract in dict.fromkeys(row["contract"] for row in value["rows"]):
+            vectors = passed = 0
+            for row in value["rows"]:
+                if row["contract"] == contract and case in row["cases"]:
+                    vectors, passed = vectors + row["vectors"], passed + row["results"]["PASS"]
+            for selection in value["selections"]:
+                if (selection["case"], selection["contract"]) == (case, contract):
+                    not_run = set(by_key[contract, selection["vectorSet"]]["notRunIds"])
+                    vectors += len(selection["ids"])
+                    passed += sum(1 for ident in selection["ids"] if ident not in not_run)
+            if vectors:
+                results.append({"case": case, "contract": contract, "vectors": vectors,
+                                "results": {"PASS": passed, "NOT_RUN_ENV_UNAVAILABLE": vectors - passed},
+                                "result": "PASS" if passed == vectors else "NOT_RUN_ENV_UNAVAILABLE"})
+    return results
+
+
 class LedgerTests(unittest.TestCase):
     def test_the_ledger_is_closed_and_names_every_replay(self):
         value = ledger()
-        self.assertEqual(set(value), {"schemaVersion", "packet", "testGroup", "profile", "rule", "rows", "deferred"})
+        self.assertEqual(set(value), {"schemaVersion", "packet", "testGroup", "profile", "rule", "rows", "selections", "caseResults",
+                                      "deferred"})
         self.assertEqual((value["schemaVersion"], value["packet"], value["testGroup"]),
                          ("r12.enforcement-tg01-results/v1", "CONF-ENF-002", "TG-01"))
         keys = [(row["contract"], row["vectorSet"]) for row in value["rows"]]
@@ -52,13 +99,46 @@ class LedgerTests(unittest.TestCase):
 
     def test_every_offline_tg01_case_and_contract_is_covered_and_codec_is_deferred(self):
         group, value = tg01(), ledger()
-        offline = {case["tag"] for case in group["cases"] if case["phase"] == "W04_OFFLINE"}
-        covered = {case for row in value["rows"] for case in row["cases"]}
+        offline = set(offline_cases())
+        covered = {case for row in value["rows"] for case in row["cases"]} | {row["case"] for row in value["selections"]}
         self.assertEqual(covered, offline)
+        self.assertEqual({row["case"] for row in value["caseResults"]}, offline)
         self.assertEqual({row["contract"] for row in value["rows"]}, set(group["contracts"]))
         later = [case["tag"] for case in group["cases"] if case["phase"] != "W04_OFFLINE"]
         self.assertEqual([row["case"] for row in value["deferred"]], later)
         self.assertTrue(all(row["result"] == "NOT_RUN_ENV_UNAVAILABLE" for row in value["deferred"]))
+
+    def test_case_results_follow_from_the_rows_and_selections_and_never_overstate(self):
+        value = ledger()
+        self.assertEqual(value["caseResults"], derived_case_results(value))
+        for row in value["caseResults"]:
+            with self.subTest(case=row["case"], contract=row["contract"]):
+                self.assertEqual(set(row), CASE_FIELDS)
+                self.assertEqual(row["result"] == "PASS", row["results"]["NOT_RUN_ENV_UNAVAILABLE"] == 0)
+
+    def test_every_selection_names_real_vectors_of_its_set(self):
+        value = ledger()
+        by_key = {(row["contract"], row["vectorSet"]): row for row in value["rows"]}
+        for selection in value["selections"]:
+            key = (selection["contract"], selection["vectorSet"])
+            with self.subTest(case=selection["case"], set=key):
+                self.assertEqual(set(selection), SELECTION_FIELDS)
+                self.assertIn(selection["case"], offline_cases())
+                self.assertNotIn(selection["case"], by_key[key]["cases"])
+                self.assertTrue(type(selection["basis"]) is str and selection["basis"])
+                self.assertTrue(selection["ids"] and len(set(selection["ids"])) == len(selection["ids"]))
+                tally = _replays.REPLAYS[key]()
+                self.assertLessEqual(set(selection["ids"]), set(tally.ids["PASS"]) | set(tally.ids["NOT_RUN_ENV_UNAVAILABLE"]))
+
+    def test_each_vector_count_is_the_pinned_vector_sets_size(self):
+        for row in ledger()["rows"]:
+            key = (row["contract"], row["vectorSet"])
+            with self.subTest(set=key):
+                if row["contract"] == "W01 amendment W02D":
+                    self.assertEqual(row["vectors"], 1)
+                    continue
+                vectors = _models.data(VECTOR_DATA[row["contract"]] + "vectors.json")
+                self.assertEqual(row["vectors"], SET_SIZES[key](vectors) if key in SET_SIZES else len(vectors[row["vectorSet"]]))
 
     def test_the_jsonschema_gap_is_real_in_this_environment(self):
         # Q-T4: a NOT_RUN_ENV_UNAVAILABLE row is only true while the profile lacks jsonschema.
@@ -130,6 +210,44 @@ class ReplayTests(unittest.TestCase):
 
 class FidelityTests(unittest.TestCase):
     """A replay that cannot tell a wrong expectation from a right one proves nothing."""
+
+    def test_only_a_missing_jsonschema_is_not_run(self):
+        # Review R1-6: Q-T4's guard. Any other import failure or any mismatch propagates and is never counted.
+        def failing(exc):
+            def check():
+                raise exc
+            return check
+        for exc in (ModuleNotFoundError("other", name="other"), ModuleNotFoundError("sub", name="jsonschema.validators"),
+                    ImportError("unnamed"), _replays.Mismatch("wrong")):
+            with self.subTest(exc=repr(exc)):
+                tally = _replays.Tally()
+                with self.assertRaises(type(exc)):
+                    tally.run("x", failing(exc))
+                with self.assertRaises(type(exc)):
+                    tally.whole(["y", "z"], failing(exc))
+                self.assertEqual(tally.ids, {"PASS": [], "NOT_RUN_ENV_UNAVAILABLE": []})
+        tally = _replays.Tally()
+        tally.run("x", failing(ModuleNotFoundError("jsonschema", name="jsonschema")))
+        tally.whole(["y", "z"], failing(ModuleNotFoundError("jsonschema", name="jsonschema")))
+        tally.run("p", lambda: None)
+        self.assertEqual(tally.ids, {"PASS": ["p"], "NOT_RUN_ENV_UNAVAILABLE": ["x", "y", "z"]})
+
+    def test_a_sibling_name_held_by_an_outside_module_is_refused(self):
+        # Review R1-2: I07 v3 imports I05 v3 by name; a replaced sys.modules entry must not reach it.
+        pinned = _models.model("i05_gate_channel_v3")
+        loaded = _models._LOADED.pop("i07_policy_write_v3", None)
+        held = sys.modules.pop("i07_policy_write_v3", None)
+        sys.modules["i05_gate_channel_v3"] = types.ModuleType("i05_gate_channel_v3")
+        try:
+            with self.assertRaisesRegex(ValueError, "outside module holds the sibling name i05_gate_channel_v3"):
+                _models.model("i07_policy_write_v3")
+            self.assertNotIn("i07_policy_write_v3", _models._LOADED)
+        finally:
+            sys.modules["i05_gate_channel_v3"] = pinned
+            if loaded is not None:
+                _models._LOADED["i07_policy_write_v3"] = loaded
+            if held is not None:
+                sys.modules["i07_policy_write_v3"] = held
 
     def test_a_flipped_expectation_is_caught(self):
         original = _models.data
