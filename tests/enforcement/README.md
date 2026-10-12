@@ -25,7 +25,8 @@ W04 test source for the Harness-Onion enforcement work, per the adopted W04-0 pl
 - `tg01_contract/` (TG-01, CONF-ENF-002): every adopted contract's vectors replayed through its snapshotted reference
   model, loaded only through `_models.py`. `tg01_contract/results.json` is the ledger each run must reproduce exactly:
   every vector PASS, or NOT_RUN_ENV_UNAVAILABLE where its replay needs jsonschema (owner decision Q-T4); CODEC waits
-  for W05's release. The I05 v3 supplement comes in a later W04 packet (owner decision Q-T6).
+  for W05's release. W02D's reference check also reads the W01 base and `seccomp-allowlists/status.json`, snapshotted
+  as recorded additions (owner decision Q-T7). The I05 v3 supplement comes in a later W04 packet (owner decision Q-T6).
 
 ## Running
 

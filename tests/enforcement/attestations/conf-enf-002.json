@@ -2,7 +2,9 @@
  "schemaVersion": "r12.enforcement-independence-attestation/v1",
  "packet": "CONF-ENF-002",
  "lane": "parallel development lane (W04)",
- "inputs": ["the snapshotted adopted contract data and reference models in tests/enforcement/snapshots/ (harness-onion a2eab9365c8663cc1ae23a666e864b821f600fa6), including the Q-T5 recorded addition scripts/i06_backend_profile.py; expected results are the vectors' own"],
+ "inputs": [
+  "the snapshotted adopted contract data and reference models in tests/enforcement/snapshots/ (harness-onion a2eab9365c8663cc1ae23a666e864b821f600fa6), including the recorded additions scripts/i06_backend_profile.py (Q-T5), architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md and architecture/seccomp-allowlists/status.json (Q-T7); expected results are the vectors' own"
+ ],
  "inputDigests": {},
  "r10SourceRead": false,
  "w03WorkInProgressRead": false,

@@ -29,7 +29,9 @@ FILE_FIELDS = {"contract", "path", "sha256", "size"}
 EXTERNAL_IMPORTS = {"scripts/i05_gate_channel_v3.py": {"jsonschema"}, "scripts/native_qualification_v3.py": {"jsonschema"}}
 MISSING_SIBLINGS = {}
 # Owner-decided additions to the plan's contract set, in manifest order after the plan's files.
-ADDITIONS = [("I06 backend profile v1 (recorded addition, owner decision Q-T5)", "scripts/i06_backend_profile.py")]
+ADDITIONS = [("I06 backend profile v1 (recorded addition, owner decision Q-T5)", "scripts/i06_backend_profile.py"),
+             ("W01 amendment W02D input (recorded addition, owner decision Q-T7)", "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md"),
+             ("W01 amendment W02D input (recorded addition, owner decision Q-T7)", "architecture/seccomp-allowlists/status.json")]
 # Area-local modules area code may import (CONF-ENF-002); _models.py is the one module allowed to load code by path.
 AREA_MODULES = {"_models", "tg01_contract", "."}
 PATH_LOADERS = {"tests/enforcement/_models.py"}

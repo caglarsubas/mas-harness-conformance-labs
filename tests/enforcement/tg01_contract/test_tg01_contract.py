@@ -6,6 +6,7 @@ disagrees fails here; an environment that gains jsonschema also fails here, so t
 """
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import unittest
 from pathlib import Path
@@ -17,6 +18,8 @@ HERE = Path(__file__).resolve().parent
 RESULTS = {"PASS", "FAIL", "WARN", "NOT_APPLICABLE", "NOT_RUN_ENV_UNAVAILABLE"}
 ROW_FIELDS = {"contract", "vectorSet", "cases", "vectors", "results", "notRunIds", "reason"}
 PLAN = "architecture/enforcement-test-plan/traceability.json"
+# The W01 base W02D amends: the plan's own sources pin, restated here so a changed snapshot cannot move it (Q-T7).
+W01_BASE_SHA256 = "8a3a09bb5dbc08804dbea06dd0700a14648a9cdbc8efd62112dc64ba0b6ba1b4"
 
 
 def ledger():
@@ -52,7 +55,7 @@ class LedgerTests(unittest.TestCase):
         offline = {case["tag"] for case in group["cases"] if case["phase"] == "W04_OFFLINE"}
         covered = {case for row in value["rows"] for case in row["cases"]}
         self.assertEqual(covered, offline)
-        self.assertLessEqual({row["contract"] for row in value["rows"]}, set(group["contracts"]))
+        self.assertEqual({row["contract"] for row in value["rows"]}, set(group["contracts"]))
         later = [case["tag"] for case in group["cases"] if case["phase"] != "W04_OFFLINE"]
         self.assertEqual([row["case"] for row in value["deferred"]], later)
         self.assertTrue(all(row["result"] == "NOT_RUN_ENV_UNAVAILABLE" for row in value["deferred"]))
@@ -103,6 +106,19 @@ class ReplayTests(unittest.TestCase):
             with self.subTest(ce23=row["id"]):
                 self.assertEqual(model.check_write(kinds, _replays.I07_NAMESPACE, row["payload"]), row["expect"])
 
+    def test_w01_amendment_w02d(self):
+        self.replay("W01 amendment W02D")
+
+    def test_the_w02d_base_is_the_plans_sources_pin(self):
+        # Q-T7: the snapshotted W01 base is the plan's sources pin, the model's BASE_SHA256 and the amendment's own pin.
+        model = _models.model("host_interface_amendment")
+        pins = [row["sha256"] for row in _models.data(PLAN)["sources"] if row["path"] == model.BASE_PATH]
+        self.assertEqual(pins, [W01_BASE_SHA256])
+        self.assertEqual(hashlib.sha256(_models.snapshot_bytes(model.BASE_PATH)).hexdigest(), W01_BASE_SHA256)
+        self.assertEqual(model.BASE_SHA256, W01_BASE_SHA256)
+        self.assertEqual(_models.data(model.RECORD_PATH)["base"], {"path": model.BASE_PATH, "sha256": W01_BASE_SHA256})
+        self.assertEqual(model.CARRIED_PATH, "architecture/seccomp-allowlists/status.json")
+
     def test_i06_backend_profile_v2(self):
         self.replay("I06 backend profile v2")
 
@@ -135,6 +151,26 @@ class FidelityTests(unittest.TestCase):
                 finally:
                     _models.data = original
                     _replays._SECCOMP.clear()
+
+    def test_a_changed_w02d_input_is_caught(self):
+        model, original = _models.model("host_interface_amendment"), _models.snapshot_bytes
+        changes = {model.BASE_PATH: (b"seccomp", b"seccomP"), model.EFFECTIVE_PATH: (b"seccomp", b"seccomP"),
+                   model.CARRIED_PATH: (b"W4 does not name setgroups", b"W4 does not name setgroupz"),
+                   model.RECORD_PATH: (b"2ac2751cbddd", b"2ac2751cbdde")}
+        for path, (old, new) in changes.items():
+            def forged(relative, path=path, old=old, new=new):
+                raw = original(relative)
+                if relative != path:
+                    return raw
+                assert old in raw, old
+                return raw.replace(old, new, 1)
+            with self.subTest(path=path):
+                _models.snapshot_bytes = forged
+                try:
+                    with self.assertRaises(_replays.Mismatch):
+                        _replays.w02d_amendment()
+                finally:
+                    _models.snapshot_bytes = original
 
 
 if __name__ == "__main__":

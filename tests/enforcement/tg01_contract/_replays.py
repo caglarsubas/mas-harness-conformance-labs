@@ -403,6 +403,31 @@ def i07_transcripts():
     return tally
 
 
+# W01 amendment W02D ------------------------------------------------------------------------------------------------
+# The model's check(read) validates the amendment record against W02d's carried items and rebuilds the published
+# effective specification from the pinned W01 base. Its two inputs outside the plan's contract set (the W01 base and
+# seccomp-allowlists/status.json) are snapshotted as recorded additions (owner decision Q-T7, 2026-10-11).
+
+def w02d_amendment():
+    model = _models.model("host_interface_amendment")
+    inputs = (model.RECORD_PATH, model.BASE_PATH, model.EFFECTIVE_PATH, model.CARRIED_PATH)
+    read = set()
+    def reader(path):
+        require(path in inputs, "the W02D check reads only its four snapshotted inputs, not " + path)
+        read.add(path)
+        return _models.snapshot_bytes(path)
+    def check():
+        try:
+            record = model.check(reader)
+        except ValueError as exc:
+            raise Mismatch("W01 amendment W02D check: %s" % exc)
+        require(read == set(inputs), "the W02D check read all four inputs")
+        require(record == _models.data(model.RECORD_PATH), "the W02D check returns the snapshotted record")
+    tally = Tally()
+    tally.run("amendment", check)
+    return tally
+
+
 # I06 backend profile v2 and native qualification profile v3 --------------------------------------------------------
 # Both models import jsonschema when they load (I06 v2 through native v3), so no vector can be replayed here. If the
 # environment ever provides jsonschema, the load succeeds and these refuse until real replays are written (Q-T4).
@@ -451,6 +476,7 @@ REPLAYS = {
     ("I07 policy write v3", "frames"): i07_frames,
     ("I07 policy write v3", "byteFrames"): i07_byte_frames,
     ("I07 policy write v3", "transcripts"): i07_transcripts,
+    ("W01 amendment W02D", "amendment"): w02d_amendment,
     ("I06 backend profile v2", "vectors"): i06_v2_vectors,
     ("Native qualification profile v3", "vectors"): native_v3_vectors,
 }
