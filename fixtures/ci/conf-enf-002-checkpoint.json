@@ -2,8 +2,8 @@
  "added": {
   "task-packets/CONF-ENF-002.yaml": {
    "mode": "100644",
-   "sha256": "f5f56f2eb37f4cbf1bd04497dff9cf63aac8b995511252e9cd5512ef70c416b9",
-   "size": 7960
+   "sha256": "e46769a147a2f5bc53b93bc9b61a5a9a90ebfeedbf0731d4bf83320a53956aa7",
+   "size": 8322
   },
   "tests/enforcement/_models.py": {
    "mode": "100644",
