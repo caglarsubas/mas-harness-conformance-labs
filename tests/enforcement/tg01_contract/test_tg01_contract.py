@@ -98,7 +98,9 @@ class ReplayTests(unittest.TestCase):
         model = _models.model("i07_policy_write_v3")
         vectors = _models.data(_replays.I07 + "vectors.json")
         # CE23: a WRITE_OBJECT carrying a Pod, or a kind outside the table, is refused.
-        pods = [row for row in vectors["kindChecks"] if row["payload"].get("object", {}).get("kind") == "Pod"]
+        # Some kind checks carry "object": null; only an object that is a mapping can name a kind.
+        pods = [row for row in vectors["kindChecks"]
+                if type(row["payload"].get("object")) is dict and row["payload"]["object"].get("kind") == "Pod"]
         unknown = [row for row in vectors["kindChecks"] if row["expect"] == "KIND_OUTSIDE_TABLE"]
         self.assertTrue(pods and unknown)
         self.assertEqual({row["expect"] for row in pods}, {"EFFECT_KIND"})
