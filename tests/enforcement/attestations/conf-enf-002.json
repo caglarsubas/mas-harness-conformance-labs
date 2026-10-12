@@ -5,7 +5,9 @@
  "inputs": [
   "the snapshotted adopted contract data and reference models in tests/enforcement/snapshots/ (harness-onion a2eab9365c8663cc1ae23a666e864b821f600fa6), including the recorded additions scripts/i06_backend_profile.py (Q-T5), architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md and architecture/seccomp-allowlists/status.json (Q-T7); expected results are the vectors' own"
  ],
- "inputDigests": {},
+ "inputDigests": {
+  "tests/enforcement/snapshots/manifest.json": "5aeedf25a759f103adc72d8138cabda9b52111f59f240f7d6400020bdc2b658a"
+ },
  "r10SourceRead": false,
  "w03WorkInProgressRead": false,
  "implementationReadOrRunForExpectedResults": false,
