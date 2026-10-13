@@ -1,0 +1,27 @@
+{
+ "schemaVersion": "planeon.internal.effect-gate-supplement-status/v1",
+ "workItem": "W03-AMEND",
+ "status": "ADOPTED_FOR_SOURCE_PUBLICATION",
+ "contract": "architecture/i05-gate-channel-v3/",
+ "closes": {
+  "finding": "AF2-I05-1",
+  "source": "architecture/i05-gate-channel-v3/status.json:58",
+  "planObligation": "I05-4",
+  "transcripts": [
+   "S01",
+   "S02",
+   "S03",
+   "S04"
+  ]
+ },
+ "alsoPinned": {
+  "accumulation": "S05",
+  "queueOrder": "S06"
+ },
+ "contractBytes": "unchanged: the v3 vectors, schema, mapping, model and status record stay byte-identical",
+ "adoptionRecord": "architecture/w03-plan-v2/status.json",
+ "reviewedSubject": {
+  "commit": "a83bb56428e305942f76813dae9c5f96f975cf52",
+  "tree": "49ffcbbe13c944d218085284ed2067040b45adb2"
+ }
+}
