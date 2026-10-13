@@ -1,0 +1,19 @@
+{
+ "schemaVersion": "r12.enforcement-independence-attestation/v1",
+ "packet": "CONF-ENF-004",
+ "lane": "parallel development lane (W04)",
+ "inputs": [
+  "the snapshotted adopted contract data and reference models in tests/enforcement/snapshots/ (manifest v2): harness-onion a2eab9365c8663cc1ae23a666e864b821f600fa6 for the plan's contract set and its recorded additions, now including docs/alpha-2/ENFORCEMENT_FEASIBILITY.md (owner decision Q-T13), and harness-onion 93d32e1cc5125b5878f51de31c61ada29e1fa6da for the I05 v3 supplement; the TG-04/TG-05 catalogs' expected results are those contracts' own vectors, model rules, spec steps and obligation rows",
+  "TG-05's verdict rules come only from the pinned obligation rows E07, E08 and E11 (docs/alpha-2/ENFORCEMENT_FEASIBILITY.md, recorded addition, owner decision Q-T13), the owner-confirmed reading of E08 (the deadline is the signed UTC instant expiresAt, measured on BOOTTIME, which counts suspended time; a wall-clock step neither renews nor shortens it) and the I05 v3 transcripts and reference model's own refusal order; the role cgroup paths and interpreters come from native qualification v3 schema constants and the syscall numbers from seccomp v2's Linux v6.12 table; the design was reviewed in six independent design rounds before the build (owner decisions Q-T15, Q-T16)",
+  "tool input (owner decision Q-T2-TOOL): the installed Rust 1.99.0 tree, inventory /etc/planeon/rust-1.99.0.inventory.json sha256 97ebc29febe842f316f0d569cd777a43067b9f326f7683779ee0647a39ec372f, used only as a compiler for the author's local musl builds (probes/enforcement/BUILD_EVIDENCE.json, author evidence, not CI evidence); no R10 file was read",
+  "no R10 source, W03 work in progress, W05 build or R12 reader source was read or run for expected results; the probes and the evaluator were written from the contracts above"
+ ],
+ "inputDigests": {
+  "tests/enforcement/snapshots/manifest.json": "4bc27cb11d8b36374283322aa9417de9d7f0966ed7733d4f41fda5797fedb95d",
+  "tests/enforcement/snapshots/harness-onion/docs/alpha-2/ENFORCEMENT_FEASIBILITY.md": "9fac4492e1b5f6255993374a6642072855a5855a40bcc68706a25b78fd822965"
+ },
+ "r10SourceRead": false,
+ "w03WorkInProgressRead": false,
+ "implementationReadOrRunForExpectedResults": false,
+ "reviewer": "a separate agent, never the author, checks this attestation in the packet's independent review"
+}

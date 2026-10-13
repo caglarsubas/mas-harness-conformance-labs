@@ -1,0 +1,8 @@
+[package]
+name = "tg04_host"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+common = { path = "../common" }

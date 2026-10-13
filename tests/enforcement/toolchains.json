@@ -30,6 +30,18 @@
    "selected": "accept",
    "date": "2026-10-11",
    "decision": "in W04-2, snapshot scripts/i06_backend_profile.py from the same harness-onion commit, pinned by sha256, as a recorded addition to the plan's contract set."
+  },
+  {
+   "id": "Q-T2-B",
+   "selected": "b",
+   "date": "2026-10-13",
+   "decision": "\"Source + offline gates now\": no root change now; CI runs the stdlib gates (ledgers, catalogs and pins, probe map, crate hygiene, expected.rs regeneration, probe-tree digest pin). Before each push the author compiles both musl targets locally and records rustc -V, the commands and the binary sha256s in the PR and attestation as author evidence, not CI evidence. The R12 Rust profile comes later, in one root bundle with Q-T4's jsonschema profile, before W06 needs binaries."
+  },
+  {
+   "id": "Q-T2-TOOL",
+   "selected": "allowed",
+   "date": "2026-10-13",
+   "decision": "the installed Rust 1.99.0 tree, by its inventory sha256 97ebc29f…, is an allowed W04 tool input, recorded in each packet's attestation. It is a compiler, not W03 source; read no R10 file."
   }
  ],
  "toolchains": [
@@ -53,8 +65,11 @@
   {
    "id": "rust-musl-static-probes",
    "groups": "native TG-04/TG-05 probes",
-   "state": "DEFERRED",
-   "decideIn": "the first W04 packet that needs native probe source (W04-4/5)",
+   "state": "SOURCE_ONLY",
+   "decidedBy": "Q-T2-B",
+   "source": "probes/enforcement/ (Rust, standard library only, no crates)",
+   "ciGate": "tests/enforcement/test_probes.py (standard library): file set, manifests, unsafe and foreign code, generated files, tree digest, probe map; the compile gate comes with the R12 Rust profile root bundle (with Q-T4's jsonschema profile), before W06 needs binaries",
+   "authorEvidence": "probes/enforcement/BUILD_EVIDENCE.json: both musl targets built locally with the installed Rust 1.99.0 tree (Q-T2-TOOL), tied to the probe-tree digest; author evidence, not CI evidence",
    "installed": false
   }
  ],
