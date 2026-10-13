@@ -266,9 +266,9 @@ REASONS = {"AFTER_W05_RELEASE_SET": "AFTER_W05_RELEASE_SET: the subject is W05's
            "W06_NATIVE_ONLY": "W06_NATIVE_ONLY: native evidence on the enrolled hosts in W06; the catalog fixes the contract "
                               "vectors and expected results now (owner decision Q-T8)"}
 RULE = ("Each plan case of the group, in plan order. A W04_OFFLINE case lists its properties (the obligation's and acceptance "
-        "row's parts) with the tests that show each one in this run; it is PASS only when every property is PASS, and a "
-        "property that needs an environment this run lacks is NOT_RUN_ENV_UNAVAILABLE and names the plan cases that carry "
-        "it. A case that waits for W05's release set "
+        "row's parts) with the tests that show each one in this run. A property that needs an environment this run lacks is "
+        "NOT_RUN_ENV_UNAVAILABLE and names the plan's native cases that carry it; it is outside the case's own scope (owner "
+        "decision Q-T11), so the case is PASS only when every property within its own scope is PASS. A case that waits for W05's release set "
         "or for W06's native hosts is NOT_RUN_ENV_UNAVAILABLE, never PASS (AGENTS rule 14), and its catalog names the contract "
         "vectors whose own outputs and final snapshots are its expected results.")
 PROPERTY_FIELDS = ("property", "source", "result", "reason", "tests", "carriedBy")
@@ -286,7 +286,9 @@ def ledger(group, offline):
         mine = [{key: row[key] for key in ("contract", "vectorSet", "basis", "ids")} for row in selections if row["case"] == case["tag"]]
         properties = [{key: row[key] for key in PROPERTY_FIELDS} for row in offline.get(case["tag"], [])]
         if case["phase"] == "W04_OFFLINE":
-            gaps = [row for row in properties if row["result"] != "PASS"]
+            # Owner decision Q-T11 (2026-10-13): a property carried by named native cases of the plan is outside this
+            # case's own scope; it stays NOT_RUN here and in the cases that carry it.
+            gaps = [row for row in properties if row["result"] != "PASS" and not row["carriedBy"]]
             result = "PASS" if properties and not gaps else "NOT_RUN_ENV_UNAVAILABLE"
             reason = None if result == "PASS" else "partly not run: " + "; ".join(
                 "%s (%s; carried by %s)" % (row["property"], row["reason"], ", ".join(row["carriedBy"])) for row in gaps)

@@ -10,7 +10,8 @@ sticky failure, original deadlines, partial acquisition and original-resource-on
 guards carry. A refusal is the reader's own ConformanceError (a view that never passed its constructor may instead fail on
 a missing field). Where two guards in a row would both refuse, RoleTests reads a refusal's reason only to show which of
 them refused; the expected outcome is still the refusal. PROPERTIES maps each property to the tests that show it, or to
-the reason it is not run here and the plan case that carries it; the TG-02 ledger reads it.
+the reason it is not run here and the plan cases that carry it; the TG-02 ledger reads it (owner decision Q-T11: a carried
+property is outside this case's own scope and stays NOT_RUN in the cases that carry it).
 
 Trusted-code boundary (declared): the guards check state the reader keeps in ordinary Python objects. A process that
 rewrites a guard's code, or every guarded field consistently, is outside what in-process checks can detect (E09: no

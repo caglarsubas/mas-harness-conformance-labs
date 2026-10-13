@@ -1,7 +1,8 @@
 """TG-02 lifecycle (W04-3, CONF-ENF-003): the case ledger, the catalog of the gated cases and LEDGER-E09's properties.
 
 tg02_lifecycle/results.json must equal what _catalog.ledger gives: the plan's TG-02 cases in order; LEDGER-E09 with the
-property table of its reader guard tests (owner decision Q-T9), PASS only when every property ran; every other case
+property table of its reader guard tests (owner decision Q-T9), PASS when every property within its own scope ran, the
+Linux-only properties being carried by named W06 native cases (owner decision Q-T11); every other case
 NOT_RUN_ENV_UNAVAILABLE with the contract vectors that specify it (owner decision Q-T8, 2026-10-13). The anchors and the
 exact selection pins (size and digest of the id list) are a second pin, so neither a regenerated ledger nor a changed
 rule can narrow, widen or swap a case's vectors unseen; a deliberate change updates them in the same reviewed diff.
@@ -107,15 +108,18 @@ class LedgerTests(unittest.TestCase):
     def test_the_ledger_is_the_plans_cases_with_their_catalog_and_properties(self):
         self.assertEqual(ledger(), _catalog.ledger(GROUP, {"LEDGER-E09": test_reader_guards.PROPERTIES}))
 
-    def test_no_case_is_pass_while_any_part_of_it_was_not_run(self):
+    def test_no_case_is_pass_while_any_part_of_its_own_scope_was_not_run(self):
+        # Owner decision Q-T11: a property carried by named native cases is outside the case's own scope; every other
+        # property must be PASS for the case to be PASS, and a gated case is never PASS.
         for row in ledger()["cases"]:
             with self.subTest(case=row["tag"]):
-                self.assertEqual(row["result"] == "PASS",
-                                 bool(row["properties"]) and all(item["result"] == "PASS" for item in row["properties"]))
+                self.assertEqual(row["result"] == "PASS", bool(row["properties"]) and all(
+                    item["result"] == "PASS" or item["carriedBy"] for item in row["properties"]))
                 self.assertEqual(row["reason"] is None, row["result"] == "PASS")
                 self.assertEqual(bool(row["catalog"]), row["phase"] != "W04_OFFLINE")
         e09 = next(row for row in ledger()["cases"] if row["tag"] == "LEDGER-E09")
-        self.assertEqual(e09["result"], "NOT_RUN_ENV_UNAVAILABLE")  # two properties need the enrolled Linux host
+        self.assertEqual(e09["result"], "PASS")
+        self.assertEqual([item["result"] for item in e09["properties"] if item["carriedBy"]], ["NOT_RUN_ENV_UNAVAILABLE"] * 2)
 
     def test_every_e09_property_maps_to_tests_that_exist_and_every_test_to_a_property(self):
         names = set(guard_tests())

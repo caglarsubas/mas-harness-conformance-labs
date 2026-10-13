@@ -2,13 +2,13 @@
  "added": {
   "task-packets/CONF-ENF-003.yaml": {
    "mode": "100644",
-   "sha256": "41e4fc352faed817a4477a2547e6a05e622c6cc31aa0512ab9b350bd01be2a27",
-   "size": 12182
+   "sha256": "dae3e2e0c53d0e4300b2f14711466e0105e1e62058e4c59c2d45b9ad5ec01351",
+   "size": 12635
   },
   "tests/enforcement/_catalog.py": {
    "mode": "100644",
-   "sha256": "637ce9a5a8b486bf999d6e1120f9d67e316b33fd5197cb37732f49fca06c5d9e",
-   "size": 19190
+   "sha256": "8f0528b606ba04126dee825d9a9bb015d73312a2ebd0159d2902db644b24ec2d",
+   "size": 19513
   },
   "tests/enforcement/attestations/conf-enf-003.json": {
    "mode": "100644",
@@ -32,18 +32,18 @@
   },
   "tests/enforcement/tg02_lifecycle/results.json": {
    "mode": "100644",
-   "sha256": "f195bb0338c83152141a9db9f87d273b4345e3cd8750bb60791abb2a33b09265",
-   "size": 27733
+   "sha256": "b1722342e9fa15c231a986ec7ba32905f8dbbf9d00f44ac223293adc8819df67",
+   "size": 27346
   },
   "tests/enforcement/tg02_lifecycle/test_reader_guards.py": {
    "mode": "100644",
-   "sha256": "1f3eb9f40fc89b91b5f8e5ee021d6c152dc0b4e2d105af5f4a0f747b55e45666",
-   "size": 49537
+   "sha256": "2d7a8b454fa75f5afab66a01361050304956a7f6183bb1167cdc2e6ba0ea8ea7",
+   "size": 49657
   },
   "tests/enforcement/tg02_lifecycle/test_tg02_lifecycle.py": {
    "mode": "100644",
-   "sha256": "0d5cf0f20a4b375d0b0ab7160bc81102ea9bf9cf04bce61e5071bf250857a663",
-   "size": 9821
+   "sha256": "d0f4464cb85d86ba0f12712d8a9ebe85dcadd49c295fbf36eab4d902537e0e70",
+   "size": 10215
   },
   "tests/enforcement/tg03_persistence/__init__.py": {
    "mode": "100644",
@@ -52,8 +52,8 @@
   },
   "tests/enforcement/tg03_persistence/results.json": {
    "mode": "100644",
-   "sha256": "77369e1852f6e3f478bdccb40eb001d9bf3c1bc34a8d141be90b03a1ace05767",
-   "size": 11043
+   "sha256": "fa8e489ee35340c941dd08a7ddfbd048c7fd51592408beb97aa8b2ee6fec5013",
+   "size": 11137
   },
   "tests/enforcement/tg03_persistence/test_tg03_persistence.py": {
    "mode": "100644",
@@ -66,8 +66,8 @@
   "tests/ci_checkpoint/test_checkpoint_chain.py": {
    "after": {
     "mode": "100644",
-    "sha256": "9cebf6f2a142c5dc52b1833edb89e4aca7d5708268072cda920ac270c66e0013",
-    "size": 16328
+    "sha256": "290ff499de8f8a12eb4432aca1143379314c84aaf4bb79f82a9b191ec95796bf",
+    "size": 16337
    },
    "before": {
     "mode": "100644",
@@ -79,8 +79,8 @@
   "tests/enforcement/README.md": {
    "after": {
     "mode": "100644",
-    "sha256": "dbcb99992e5e39fb7b94d1896f30723c7dc0d94b3e8fa5a613ac86e19424dda5",
-    "size": 3749
+    "sha256": "0a40aa75af7d89c63c7f4bdc66c9c74122fb5c873e0dfee2af16d8327f2bbd2b",
+    "size": 3857
    },
    "before": {
     "mode": "100644",
@@ -175,6 +175,12 @@
    "date": "2026-10-13",
    "decision": "fold the I05 v3 supplement into W04-3: manifest schema v2 with a per-file sourceCommit (93d32e1 for the supplement, a2eab93 for the rest); S01-S06 replayed into TG-01's ledger (NOT_RUN under the profile) and mapped to TG-03's storage-failure cases.",
    "id": "Q-T10",
+   "selected": "a"
+  },
+  {
+   "date": "2026-10-13",
+   "decision": "Scope as the plan does: the Linux-only properties stay listed, marked as carried by the named TG-04/TG-05 W06 native cases; LEDGER-E09 is PASS when every property within its own scope ran; the carried parts stay NOT_RUN in the cases that own them.",
+   "id": "Q-T11",
    "selected": "a"
   }
  ],

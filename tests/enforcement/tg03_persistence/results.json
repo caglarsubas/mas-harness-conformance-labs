@@ -3,7 +3,7 @@
  "packet": "CONF-ENF-003",
  "testGroup": "TG-03",
  "evidenceClass": "SOURCE_MULTIPROCESS_FAULT",
- "rule": "Each plan case of the group, in plan order. A W04_OFFLINE case lists its properties (the obligation's and acceptance row's parts) with the tests that show each one in this run; it is PASS only when every property is PASS, and a property that needs an environment this run lacks is NOT_RUN_ENV_UNAVAILABLE and names the plan cases that carry it. A case that waits for W05's release set or for W06's native hosts is NOT_RUN_ENV_UNAVAILABLE, never PASS (AGENTS rule 14), and its catalog names the contract vectors whose own outputs and final snapshots are its expected results.",
+ "rule": "Each plan case of the group, in plan order. A W04_OFFLINE case lists its properties (the obligation's and acceptance row's parts) with the tests that show each one in this run. A property that needs an environment this run lacks is NOT_RUN_ENV_UNAVAILABLE and names the plan's native cases that carry it; it is outside the case's own scope (owner decision Q-T11), so the case is PASS only when every property within its own scope is PASS. A case that waits for W05's release set or for W06's native hosts is NOT_RUN_ENV_UNAVAILABLE, never PASS (AGENTS rule 14), and its catalog names the contract vectors whose own outputs and final snapshots are its expected results.",
  "cases": [
   {
    "tag": "MATRIX:kill at each fsync/send/result boundary",

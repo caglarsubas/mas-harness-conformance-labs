@@ -37,7 +37,7 @@ ENF_003_CHANGED = {"tests/enforcement/README.md", "tests/enforcement/snapshots/m
                    "tests/enforcement/tg01_contract/_replays.py", "tests/enforcement/tg01_contract/results.json",
                    "tests/enforcement/tg01_contract/test_tg01_contract.py", "tests/ci_checkpoint/test_checkpoint_chain.py"}
 ENF_003_ADDED_OUTSIDE_AREA = {"task-packets/CONF-ENF-003.yaml"}
-ENF_003_DECISIONS = ["Q-T8", "Q-T9", "Q-T10"]
+ENF_003_DECISIONS = ["Q-T8", "Q-T9", "Q-T10", "Q-T11"]
 
 
 def head():
