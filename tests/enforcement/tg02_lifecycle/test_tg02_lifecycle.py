@@ -29,7 +29,7 @@ ANCHORS = {
     ("MATRIX:queued action", "I07 policy write v3", "transcripts"): {"T29"},
     ("MATRIX:conflicting gate/server result", "I05 gate channel v3", "agreement"): {"A02", "A20", "A37"},
     ("MATRIX:conflicting gate/server result", "I05 gate channel v3", "transcripts"): {"T31", "T68", "T83", "T100", "T114"},
-    ("MATRIX:conflicting gate/server result", "I07 policy write v3", "transcripts"): {"T03", "T30", "T51", "T59"},
+    ("MATRIX:conflicting gate/server result", "I07 policy write v3", "transcripts"): {"T03", "T30", "T50", "T51", "T53", "T59"},
     ("MATRIX:same-generation delayed-identical-request across two armed actions", "I05 gate channel v3", "transcripts"): {"T02", "T03"},
     ("S63-SOURCE", "I05 gate channel v3", "agreement"): {"A20"},
     ("S63-SOURCE", "I05 gate channel v3", "transcripts"): {"T83", "T100"},
@@ -54,8 +54,8 @@ SELECTION_PINS = {
     ("MATRIX:queued action", "I05 gate channel v3", "transcripts"): (6, "f4a655e956d7114d"),
     ("MATRIX:queued action", "I07 policy write v3", "transcripts"): (1, "1fa54d688b787409"),
     ("MATRIX:conflicting gate/server result", "I05 gate channel v3", "agreement"): (27, "52e2499b8be18870"),
-    ("MATRIX:conflicting gate/server result", "I05 gate channel v3", "transcripts"): (18, "0810dc5fc2103445"),
-    ("MATRIX:conflicting gate/server result", "I07 policy write v3", "transcripts"): (11, "68cd054946a16296"),
+    ("MATRIX:conflicting gate/server result", "I05 gate channel v3", "transcripts"): (21, "b128ced9610dfbda"),
+    ("MATRIX:conflicting gate/server result", "I07 policy write v3", "transcripts"): (16, "b87764f1b453b0f2"),
     ("MATRIX:same-generation delayed-identical-request across two armed actions", "I05 gate channel v3", "transcripts"): (2, "3d59080c84d17170"),
     ("S63-SOURCE", "I05 gate channel v3", "agreement"): (1, "084835c6a489af31"),
     ("S63-SOURCE", "I05 gate channel v3", "transcripts"): (7, "0525e43ac6eba28e"),
@@ -84,6 +84,11 @@ def pin(ids):
 def set_ids(contract, vector_set):
     prefix = _catalog.SUPPLEMENT if vector_set == "supplement" else PREFIXES[contract]
     return [row["id"] for row in _models.data(prefix + "vectors.json")["transcripts" if vector_set == "supplement" else vector_set]]
+
+
+def native_cases(group):
+    plan_group = next(row for row in _models.data(_catalog.PLAN)["testGroups"] if row["id"] == group)
+    return {(case["tag"], case["phase"]) for case in plan_group["cases"]}
 
 
 def guard_tests():
@@ -122,6 +127,11 @@ class LedgerTests(unittest.TestCase):
                 self.assertEqual(bool(row["tests"]), row["result"] == "PASS")
                 self.assertEqual(row["reason"] is None, row["result"] == "PASS")
                 self.assertLessEqual(set(row["tests"]), names)
+                # Review R2-3: a property not run here names the plan's native cases that carry it.
+                self.assertEqual(bool(row["carriedBy"]), row["result"] != "PASS")
+                for carrier in row["carriedBy"]:
+                    group, tag = carrier.split(" ", 1)
+                    self.assertIn((tag, "W06_NATIVE_ONLY"), native_cases(group))
                 mapped |= set(row["tests"])
         self.assertEqual(mapped, names)
 

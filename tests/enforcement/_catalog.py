@@ -85,8 +85,17 @@ def _queued(row):
             or _refused(row, "BIND_EXECUTION", {"ACTION_OUTSTANDING"}))
 
 
+def _mentions(value, text):
+    """Whether `value` (a final snapshot) holds the string `text` anywhere."""
+    if type(value) is dict:
+        return any(_mentions(item, text) for item in value.values())
+    if type(value) is list:
+        return any(_mentions(item, text) for item in value)
+    return value == text
+
+
 def _ambiguous(row):
-    return _closes_for_reconciliation(row) or any(
+    return _closes_for_reconciliation(row) or _mentions(row["final"], "IO_AMBIGUOUS") or any(
         output.get("classification") == "IO_AMBIGUOUS" or _response(output).get("classification") == "IO_AMBIGUOUS"
         or "lateUpstream" in output for output in row["outputs"])
 
@@ -129,6 +138,7 @@ def _writer_lost_mid_session(row):
 def _lost_acknowledgement(row):
     return _writer_lost_mid_session(row) or any(
         event["type"] in ("UPSTREAM_LOST", "UPSTREAM_TIMEOUT") or "lateUpstream" in output
+        or (event["type"] == "W_UPSTREAM" and event.get("upstream") in ("LOST", "TIMEOUT"))
         or (event["type"] == "CHANNEL_LOST" and "fatal" in output) for event, output in _steps(row))
 
 
@@ -166,7 +176,8 @@ OLD_SOCKET = ("a request on a connection closed because it was flushed or stampe
 QUEUED = ("an ARM that flushes backlogged connections (C2), or an ARM or BIND refused while another action is outstanding, or an "
           "ARM refused while a drain is pending")
 CONFLICT = ("an agreement check in which the server's resource result disagrees with the gate's outcome, or a transcript "
-            "whose result is IO_AMBIGUOUS or arrives late, or whose generation the broker closes as RECONCILIATION_REQUIRED")
+            "whose result is IO_AMBIGUOUS (in an output or the final snapshot) or arrives late, or whose generation the "
+            "broker closes as RECONCILIATION_REQUIRED")
 CONFLICT_AGREEMENT = "an agreement check in which the server's resource result disagrees with the gate's outcome"
 CE17 = "the transcripts whose intent is Counterexample 17"
 S63 = ("the GET agreement checks that refuse a result attributed to another action (M01 action identifiers, M06 object "
@@ -184,8 +195,8 @@ KILL = "a transcript in which the gate is restarted (GATE_RESTART), whatever bou
 ENOSPC = "a transcript with an injected storage failure (STORAGE_FAIL_NEXT or STORAGE_FAIL_AFTER)"
 PARTIAL = ("a transcript with a torn storage write (STORAGE_FAIL_NEXT with torn) or a failure part way through a transition's "
            "records (STORAGE_FAIL_AFTER)")
-LOST = ("an upstream answer lost, timed out or late; the broker channel lost with a fatal answer from the gate; or the "
-        "writer's channel lost before its session ended with WRITE_END")
+LOST = ("an upstream answer lost, timed out or late (the gate's or the writer's upstream); the broker channel lost with a "
+        "fatal answer from the gate; or the writer's channel lost before its session ended with WRITE_END")
 ROLLBACK = ("a gate restart, a failed restart marker (MARKER_FAIL_NEXT), or a BIND refused as a replayed execution or a "
             "reused manifest")
 
@@ -256,10 +267,11 @@ REASONS = {"AFTER_W05_RELEASE_SET": "AFTER_W05_RELEASE_SET: the subject is W05's
                               "vectors and expected results now (owner decision Q-T8)"}
 RULE = ("Each plan case of the group, in plan order. A W04_OFFLINE case lists its properties (the obligation's and acceptance "
         "row's parts) with the tests that show each one in this run; it is PASS only when every property is PASS, and a "
-        "property that needs an environment this run lacks is NOT_RUN_ENV_UNAVAILABLE. A case that waits for W05's release set "
+        "property that needs an environment this run lacks is NOT_RUN_ENV_UNAVAILABLE and names the plan cases that carry "
+        "it. A case that waits for W05's release set "
         "or for W06's native hosts is NOT_RUN_ENV_UNAVAILABLE, never PASS (AGENTS rule 14), and its catalog names the contract "
         "vectors whose own outputs and final snapshots are its expected results.")
-PROPERTY_FIELDS = ("property", "source", "result", "reason", "tests")
+PROPERTY_FIELDS = ("property", "source", "result", "reason", "tests", "carriedBy")
 
 
 def ledger(group, offline):
@@ -277,7 +289,7 @@ def ledger(group, offline):
             gaps = [row for row in properties if row["result"] != "PASS"]
             result = "PASS" if properties and not gaps else "NOT_RUN_ENV_UNAVAILABLE"
             reason = None if result == "PASS" else "partly not run: " + "; ".join(
-                "%s (%s)" % (row["property"], row["reason"]) for row in gaps)
+                "%s (%s; carried by %s)" % (row["property"], row["reason"], ", ".join(row["carriedBy"])) for row in gaps)
         else:
             result = "NOT_RUN_ENV_UNAVAILABLE"
             reason = REASONS[case["phase"]] + "".join("; blocked by " + blocker for blocker in case["blockedBy"])

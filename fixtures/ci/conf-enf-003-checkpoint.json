@@ -2,13 +2,13 @@
  "added": {
   "task-packets/CONF-ENF-003.yaml": {
    "mode": "100644",
-   "sha256": "95dccf01cb12a3704b444743148c2c11cab8dcef1d832730bacdf1801db58a69",
-   "size": 11235
+   "sha256": "41e4fc352faed817a4477a2547e6a05e622c6cc31aa0512ab9b350bd01be2a27",
+   "size": 12182
   },
   "tests/enforcement/_catalog.py": {
    "mode": "100644",
-   "sha256": "33673a4abebdd9fbca50fc6498b82e3110890150e0d292c240a5d2bdebbb1935",
-   "size": 18539
+   "sha256": "637ce9a5a8b486bf999d6e1120f9d67e316b33fd5197cb37732f49fca06c5d9e",
+   "size": 19190
   },
   "tests/enforcement/attestations/conf-enf-003.json": {
    "mode": "100644",
@@ -32,18 +32,18 @@
   },
   "tests/enforcement/tg02_lifecycle/results.json": {
    "mode": "100644",
-   "sha256": "4b126ae1b649e89a23a07a57b1a1b26dc5c0ff301c42e50ae083beaa4736a94e",
-   "size": 24502
+   "sha256": "f195bb0338c83152141a9db9f87d273b4345e3cd8750bb60791abb2a33b09265",
+   "size": 27733
   },
   "tests/enforcement/tg02_lifecycle/test_reader_guards.py": {
    "mode": "100644",
-   "sha256": "6dff3b0cba8643d73bf43f971ef17fd0c8a4524b1170794a569ac7f7c5347016",
-   "size": 30797
+   "sha256": "1f3eb9f40fc89b91b5f8e5ee021d6c152dc0b4e2d105af5f4a0f747b55e45666",
+   "size": 49537
   },
   "tests/enforcement/tg02_lifecycle/test_tg02_lifecycle.py": {
    "mode": "100644",
-   "sha256": "46f48c464f3cb69a804af32558523e55a6a30f8af74958ce3d6a48a018dea9e7",
-   "size": 9237
+   "sha256": "0d5cf0f20a4b375d0b0ab7160bc81102ea9bf9cf04bce61e5071bf250857a663",
+   "size": 9821
   },
   "tests/enforcement/tg03_persistence/__init__.py": {
    "mode": "100644",
@@ -52,13 +52,13 @@
   },
   "tests/enforcement/tg03_persistence/results.json": {
    "mode": "100644",
-   "sha256": "57b19ef3fa611ebc3db1035d1e01ee82de3abd26bf7bb3649a85e3208d00dd80",
-   "size": 10902
+   "sha256": "77369e1852f6e3f478bdccb40eb001d9bf3c1bc34a8d141be90b03a1ace05767",
+   "size": 11043
   },
   "tests/enforcement/tg03_persistence/test_tg03_persistence.py": {
    "mode": "100644",
-   "sha256": "7a35492518c08a978cc88f8bc7502e0d61d8173351931d30823bbfded9c2e03c",
-   "size": 5889
+   "sha256": "1cddd96e2e259c1ad0b0286ce2d1aee6639249fda18b6210b54256e165e516d4",
+   "size": 5903
   }
  },
  "baseCommit": "21ae371291b20056094cedfff11a31415c947495",

@@ -3,7 +3,7 @@
  "packet": "CONF-ENF-003",
  "testGroup": "TG-02",
  "evidenceClass": "SOURCE_OWNER_IMPLEMENTATION",
- "rule": "Each plan case of the group, in plan order. A W04_OFFLINE case lists its properties (the obligation's and acceptance row's parts) with the tests that show each one in this run; it is PASS only when every property is PASS, and a property that needs an environment this run lacks is NOT_RUN_ENV_UNAVAILABLE. A case that waits for W05's release set or for W06's native hosts is NOT_RUN_ENV_UNAVAILABLE, never PASS (AGENTS rule 14), and its catalog names the contract vectors whose own outputs and final snapshots are its expected results.",
+ "rule": "Each plan case of the group, in plan order. A W04_OFFLINE case lists its properties (the obligation's and acceptance row's parts) with the tests that show each one in this run; it is PASS only when every property is PASS, and a property that needs an environment this run lacks is NOT_RUN_ENV_UNAVAILABLE and names the plan cases that carry it. A case that waits for W05's release set or for W06's native hosts is NOT_RUN_ENV_UNAVAILABLE, never PASS (AGENTS rule 14), and its catalog names the contract vectors whose own outputs and final snapshots are its expected results.",
  "cases": [
   {
    "tag": "MATRIX:unarmed/duplicate/cross-case action",
@@ -228,8 +228,9 @@
     {
      "contract": "I05 gate channel v3",
      "vectorSet": "transcripts",
-     "basis": "an agreement check in which the server's resource result disagrees with the gate's outcome, or a transcript whose result is IO_AMBIGUOUS or arrives late, or whose generation the broker closes as RECONCILIATION_REQUIRED",
+     "basis": "an agreement check in which the server's resource result disagrees with the gate's outcome, or a transcript whose result is IO_AMBIGUOUS (in an output or the final snapshot) or arrives late, or whose generation the broker closes as RECONCILIATION_REQUIRED",
      "ids": [
+      "T25",
       "T31",
       "T33",
       "T46",
@@ -239,10 +240,12 @@
       "T69",
       "T70",
       "T83",
+      "T91",
       "T92",
       "T100",
       "T102",
       "T103",
+      "T107",
       "T114",
       "T115",
       "T116",
@@ -253,23 +256,28 @@
     {
      "contract": "I07 policy write v3",
      "vectorSet": "transcripts",
-     "basis": "an agreement check in which the server's resource result disagrees with the gate's outcome, or a transcript whose result is IO_AMBIGUOUS or arrives late, or whose generation the broker closes as RECONCILIATION_REQUIRED",
+     "basis": "an agreement check in which the server's resource result disagrees with the gate's outcome, or a transcript whose result is IO_AMBIGUOUS (in an output or the final snapshot) or arrives late, or whose generation the broker closes as RECONCILIATION_REQUIRED",
      "ids": [
       "T03",
+      "T06",
       "T09",
       "T10",
       "T13",
+      "T14",
       "T28",
       "T30",
+      "T38",
       "T41",
       "T49",
+      "T50",
       "T51",
+      "T53",
       "T58",
       "T59"
      ]
     }
    ],
-   "vectors": 56
+   "vectors": 64
   },
   {
    "tag": "MATRIX:same-generation delayed-identical-request across two armed actions",
@@ -526,7 +534,7 @@
    "blockedBy": [],
    "subject": "R12's reader, src/harness_conformance/live_proxy_server.py (owner decision Q-T9)",
    "result": "NOT_RUN_ENV_UNAVAILABLE",
-   "reason": "partly not run: fixed factories on an enrolled Linux host: construction and original deadlines over real kernel I/O (needs the enrolled Linux host and its kernel views; W06's native run); dynamic peer overrides: per-tick peer substitution of the observer and broker inspections (needs a constructed server with live peer sockets and pidfds (Linux only); W06's native run)",
+   "reason": "partly not run: fixed factories on an enrolled Linux host: construction and original deadlines over real kernel I/O (needs the enrolled Linux host and its kernel views; carried by TG-05 MATRIX:original deadlines); the peer's kernel rechecks on every inspection tick: SO_PEERCRED credentials, pidfd liveness and the socket path (needs live peer sockets and pidfds on the enrolled Linux host; carried by TG-04 MATRIX:parent/FD spoof, TG-05 MATRIX:peer death/restart)",
    "properties": [
     {
      "property": "reentrancy fails sticky",
@@ -535,8 +543,10 @@
      "reason": null,
      "tests": [
       "StickyPhaseTests.test_a_busy_view_refuses_a_second_phase",
-      "StickyPhaseTests.test_reentrancy_is_refused_and_sticky"
-     ]
+      "StickyPhaseTests.test_reentrancy_is_refused_and_sticky",
+      "InspectionPhaseTests.test_a_reentrant_inspection_phase_is_refused_and_sticky"
+     ],
+     "carriedBy": []
     },
     {
      "property": "wrong owner, process or thread is refused",
@@ -553,8 +563,12 @@
       "OwnerTests.test_a_closed_server_another_process_or_thread_or_an_imitation_is_refused",
       "OwnerTests.test_no_caller_constructs_a_qualification_binding",
       "OwnerTests.test_the_self_inspection_takes_its_binding_only_from_the_installed_server",
-      "OwnerTests.test_inspections_refuse_a_wrong_owner_or_peer"
-     ]
+      "OwnerTests.test_child_views_are_built_only_on_their_own_idle_parent",
+      "OwnerTests.test_inspections_refuse_a_wrong_owner_or_peer",
+      "InspectionPhaseTests.test_an_inspection_whose_server_or_binding_changed_is_refused",
+      "InspectionPhaseTests.test_an_inspection_refuses_a_reader_it_does_not_own"
+     ],
+     "carriedBy": []
     },
     {
      "property": "partial construction never grants custody and fails sticky",
@@ -563,8 +577,10 @@
      "reason": null,
      "tests": [
       "PartialConstructionTests.test_a_view_built_without_its_constructor_is_never_usable",
-      "PartialConstructionTests.test_a_binding_whose_load_fails_is_poisoned_for_good"
-     ]
+      "PartialConstructionTests.test_a_binding_whose_load_fails_is_poisoned_for_good",
+      "CleanupTests.test_an_inspection_closes_a_half_built_root_views_native_reads"
+     ],
+     "carriedBy": []
     },
     {
      "property": "state corruption fails sticky",
@@ -577,8 +593,12 @@
       "StickyPhaseTests.test_an_idle_view_runs_a_phase",
       "StickyPhaseTests.test_a_closed_or_failed_view_refuses_a_phase",
       "StickyPhaseTests.test_a_failure_inside_a_phase_is_sticky",
-      "StickyPhaseTests.test_a_parent_view_failure_is_sticky"
-     ]
+      "StickyPhaseTests.test_a_parent_view_failure_is_sticky",
+      "InspectionPhaseTests.test_an_inspection_in_custody_runs_its_phases",
+      "InspectionPhaseTests.test_a_failure_inside_an_inspection_phase_is_sticky",
+      "InspectionPhaseTests.test_a_replaced_owned_view_fails_the_inspection_for_good"
+     ],
+     "carriedBy": []
     },
     {
      "property": "an explicit trusted-code boundary",
@@ -587,7 +607,8 @@
      "reason": null,
      "tests": [
       "BoundaryTests.test_the_trusted_code_boundary_and_the_gaps_are_declared"
-     ]
+     ],
+     "carriedBy": []
     },
     {
      "property": "fixed factories fail closed outside their fixed host ABI",
@@ -596,14 +617,18 @@
      "reason": null,
      "tests": [
       "PartialConstructionTests.test_the_fixed_factories_refuse_a_host_outside_their_abi"
-     ]
+     ],
+     "carriedBy": []
     },
     {
      "property": "fixed factories on an enrolled Linux host: construction and original deadlines over real kernel I/O",
      "source": "A02 real fixed factories",
      "result": "NOT_RUN_ENV_UNAVAILABLE",
-     "reason": "needs the enrolled Linux host and its kernel views; W06's native run",
-     "tests": []
+     "reason": "needs the enrolled Linux host and its kernel views",
+     "tests": [],
+     "carriedBy": [
+      "TG-05 MATRIX:original deadlines"
+     ]
     },
     {
      "property": "wrong roles are refused",
@@ -611,25 +636,43 @@
      "result": "PASS",
      "reason": null,
      "tests": [
-      "RoleTests.test_a_process_view_refuses_a_role_outside_the_fixed_set"
-     ]
+      "RoleTests.test_a_process_view_refuses_a_role_outside_the_fixed_set",
+      "RoleTests.test_code_and_cgroup_views_hold_only_their_process_views_role"
+     ],
+     "carriedBy": []
     },
     {
      "property": "dynamic peer overrides at inspection construction",
-     "source": "A02 dynamic peer overrides",
+     "source": "A02 dynamic peer overrides; E07 no rebinding",
      "result": "PASS",
      "reason": null,
      "tests": [
-      "OwnerTests.test_an_inspection_refuses_a_peer_that_is_not_bound_to_it",
+      "OwnerTests.test_an_inspection_refuses_a_peer_or_server_that_is_not_bound_to_it",
       "OwnerTests.test_inspections_refuse_a_wrong_owner_or_peer"
-     ]
+     ],
+     "carriedBy": []
     },
     {
-     "property": "dynamic peer overrides: per-tick peer substitution of the observer and broker inspections",
-     "source": "A02 dynamic peer overrides",
+     "property": "dynamic peer overrides on every inspection tick: the in-process peer, server and pin checks",
+     "source": "A02 dynamic peer overrides; E07 replacement, no rebinding",
+     "result": "PASS",
+     "reason": null,
+     "tests": [
+      "PeerTickTests.test_the_bound_peer_passes_its_tick_checks",
+      "PeerTickTests.test_a_substituted_peer_or_pin_is_refused"
+     ],
+     "carriedBy": []
+    },
+    {
+     "property": "the peer's kernel rechecks on every inspection tick: SO_PEERCRED credentials, pidfd liveness and the socket path",
+     "source": "E07 exact peer credentials, broker parentage and channel loss; A02 dynamic peer overrides",
      "result": "NOT_RUN_ENV_UNAVAILABLE",
-     "reason": "needs a constructed server with live peer sockets and pidfds (Linux only); W06's native run",
-     "tests": []
+     "reason": "needs live peer sockets and pidfds on the enrolled Linux host",
+     "tests": [],
+     "carriedBy": [
+      "TG-04 MATRIX:parent/FD spoof",
+      "TG-05 MATRIX:peer death/restart"
+     ]
     },
     {
      "property": "original deadlines and fresh clocks",
@@ -638,17 +681,21 @@
      "reason": null,
      "tests": [
       "CustodyTickTests.test_each_inconsistent_state_field_is_refused",
-      "StickyPhaseTests.test_an_overrun_deadline_fails_the_phase_and_sticks"
-     ]
+      "StickyPhaseTests.test_an_overrun_deadline_fails_the_phase_and_sticks",
+      "InspectionPhaseTests.test_an_inspection_whose_server_or_binding_changed_is_refused",
+      "InspectionPhaseTests.test_an_inspection_phase_ends_at_the_servers_deadline"
+     ],
+     "carriedBy": []
     },
     {
      "property": "a retained original resource that is replaced or ends is refused",
-     "source": "A02 original resources",
+     "source": "A02 original resources; E07 PID reuse, crash and replacement",
      "result": "PASS",
      "reason": null,
      "tests": [
       "RetainedResourceTests.test_the_retained_pidfd_must_stay_the_original_and_alive"
-     ]
+     ],
+     "carriedBy": []
     },
     {
      "property": "partial acquisition",
@@ -657,8 +704,10 @@
      "reason": null,
      "tests": [
       "CleanupTests.test_cleanup_of_only_original_resources_succeeds",
-      "CleanupTests.test_cleanup_closes_only_original_resources_and_the_failure_sticks"
-     ]
+      "CleanupTests.test_cleanup_closes_only_original_resources_and_the_failure_sticks",
+      "CleanupTests.test_an_inspection_closes_a_half_built_root_views_native_reads"
+     ],
+     "carriedBy": []
     },
     {
      "property": "original-resource-only cleanup under substitution",
@@ -671,12 +720,14 @@
       "CleanupTests.test_the_server_files_close_only_their_original_descriptors",
       "CleanupTests.test_an_inspection_closes_its_retained_resources_not_substitutes",
       "CleanupTests.test_the_server_closes_its_original_broker_not_a_substitute"
-     ]
+     ],
+     "carriedBy": []
     }
    ],
    "evidence": [
     "BoundaryTests.test_the_trusted_code_boundary_and_the_gaps_are_declared",
     "CleanupTests.test_a_process_view_closes_its_original_pidfd_only",
+    "CleanupTests.test_an_inspection_closes_a_half_built_root_views_native_reads",
     "CleanupTests.test_an_inspection_closes_its_retained_resources_not_substitutes",
     "CleanupTests.test_cleanup_closes_only_original_resources_and_the_failure_sticks",
     "CleanupTests.test_cleanup_of_only_original_resources_succeeds",
@@ -688,9 +739,17 @@
     "CustodyTickTests.test_another_thread_is_refused",
     "CustodyTickTests.test_each_inconsistent_state_field_is_refused",
     "CustodyTickTests.test_the_custody_state_itself_is_accepted",
+    "InspectionPhaseTests.test_a_failure_inside_an_inspection_phase_is_sticky",
+    "InspectionPhaseTests.test_a_reentrant_inspection_phase_is_refused_and_sticky",
+    "InspectionPhaseTests.test_a_replaced_owned_view_fails_the_inspection_for_good",
+    "InspectionPhaseTests.test_an_inspection_in_custody_runs_its_phases",
+    "InspectionPhaseTests.test_an_inspection_phase_ends_at_the_servers_deadline",
+    "InspectionPhaseTests.test_an_inspection_refuses_a_reader_it_does_not_own",
+    "InspectionPhaseTests.test_an_inspection_whose_server_or_binding_changed_is_refused",
     "OwnerTests.test_a_closed_server_another_process_or_thread_or_an_imitation_is_refused",
     "OwnerTests.test_a_server_that_is_not_the_installed_one_is_refused",
-    "OwnerTests.test_an_inspection_refuses_a_peer_that_is_not_bound_to_it",
+    "OwnerTests.test_an_inspection_refuses_a_peer_or_server_that_is_not_bound_to_it",
+    "OwnerTests.test_child_views_are_built_only_on_their_own_idle_parent",
     "OwnerTests.test_inspections_refuse_a_wrong_owner_or_peer",
     "OwnerTests.test_no_caller_constructs_a_qualification_binding",
     "OwnerTests.test_the_installed_server_passes_its_owner_check",
@@ -698,8 +757,11 @@
     "PartialConstructionTests.test_a_binding_whose_load_fails_is_poisoned_for_good",
     "PartialConstructionTests.test_a_view_built_without_its_constructor_is_never_usable",
     "PartialConstructionTests.test_the_fixed_factories_refuse_a_host_outside_their_abi",
+    "PeerTickTests.test_a_substituted_peer_or_pin_is_refused",
+    "PeerTickTests.test_the_bound_peer_passes_its_tick_checks",
     "RetainedResourceTests.test_the_retained_pidfd_must_stay_the_original_and_alive",
     "RoleTests.test_a_process_view_refuses_a_role_outside_the_fixed_set",
+    "RoleTests.test_code_and_cgroup_views_hold_only_their_process_views_role",
     "StickyPhaseTests.test_a_busy_view_refuses_a_second_phase",
     "StickyPhaseTests.test_a_closed_or_failed_view_refuses_a_phase",
     "StickyPhaseTests.test_a_failure_inside_a_phase_is_sticky",
