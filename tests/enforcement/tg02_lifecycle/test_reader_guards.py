@@ -19,10 +19,16 @@ assumption that a kernel policy prevents Python attribute corruption); external 
 tests show that each single inconsistent field, owner, role, thread, process, resource or deadline is refused, and that
 failure, reentrancy and cleanup are sticky.
 
-Not run here (both need the enrolled Linux host, and both are carried by W06 native cases of the plan): fixed factories on
-an enrolled Linux host (TG-05 MATRIX:original deadlines), and the peer's kernel rechecks on each inspection tick
-(SO_PEERCRED credentials, pidfd liveness and the socket path; TG-04 MATRIX:parent/FD spoof, TG-05 MATRIX:peer
-death/restart).
+Not run here (each needs the enrolled Linux host and is carried by W06 native cases of the plan; owner decision Q-T11):
+fixed factories on an enrolled Linux host (TG-05 MATRIX:original deadlines); the peer's kernel rechecks on each inspection
+tick (SO_PEERCRED credentials, pidfd liveness and the socket path; TG-04 MATRIX:parent/FD spoof, TG-05 MATRIX:peer
+death/restart); and the inspections' construction past their first native read (kernel views, policy epoch retention,
+page size and the peer's role pins) with the BPF view's program ID recheck on cleanup (TG-04 MATRIX:parent/FD spoof,
+TG-04 MATRIX:effective BPF ancestors, TG-04 S8-KERNEL-FACTS, TG-05 MATRIX:peer death/restart).
+
+Stand-ins: where a guard sits behind a Linux-only or cryptographic step, a stand-in reduces that step to what the guard
+sees (the binding's load and signature verification, a parent view's tick, the server's file owner on the per-tick peer
+path, the wall clock in two clock tests); every guard under test is the reader's own code.
 """
 from __future__ import annotations
 
@@ -62,7 +68,9 @@ OWNING_VIEWS = (
 PROPERTIES = [
     {"property": "reentrancy fails sticky", "source": "E09", "result": "PASS", "reason": None, "carriedBy": [],
      "tests": ["StickyPhaseTests.test_a_busy_view_refuses_a_second_phase", "StickyPhaseTests.test_reentrancy_is_refused_and_sticky",
-               "InspectionPhaseTests.test_a_reentrant_inspection_phase_is_refused_and_sticky"]},
+               "InspectionPhaseTests.test_a_reentrant_inspection_phase_is_refused_and_sticky",
+               "InspectionPhaseTests.test_a_busy_inspection_refuses_a_phase",
+               "InspectionPhaseTests.test_epoch_sampling_rechecks_mounts_and_epoch_and_refuses_recursion"]},
     {"property": "wrong owner, process or thread is refused", "source": "E09; A02 wrong owners", "result": "PASS", "reason": None,
      "carriedBy": [],
      "tests": ["CustodyTickTests.test_another_thread_is_refused", "CustodyTickTests.test_a_subclass_instance_is_refused",
@@ -76,12 +84,20 @@ PROPERTIES = [
                "OwnerTests.test_child_views_are_built_only_on_their_own_idle_parent",
                "OwnerTests.test_inspections_refuse_a_wrong_owner_or_peer",
                "InspectionPhaseTests.test_an_inspection_whose_server_or_binding_changed_is_refused",
-               "InspectionPhaseTests.test_an_inspection_refuses_a_reader_it_does_not_own"]},
+               "InspectionPhaseTests.test_an_inspection_refuses_a_reader_it_does_not_own",
+               "InspectionPhaseTests.test_each_inconsistent_inspection_state_is_refused",
+               "OwnerTests.test_the_self_inspection_checks_its_binding_and_lifetime_before_its_first_phase",
+               "OwnerTests.test_peer_inspections_check_the_servers_binding_inspection_and_lifetime",
+               "OwnerTests.test_an_imitation_inspection_is_refused_before_it_takes_its_peer",
+               "FilesCheckTests.test_each_change_to_a_retained_file_is_refused",
+               "BindingCheckTests.test_each_change_is_refused_and_poisons_the_binding",
+               "BindingCheckTests.test_construction_checks_the_server_files_its_load_window_and_itself"]},
     {"property": "partial construction never grants custody and fails sticky", "source": "E09", "result": "PASS", "reason": None,
      "carriedBy": [],
      "tests": ["PartialConstructionTests.test_a_view_built_without_its_constructor_is_never_usable",
                "PartialConstructionTests.test_a_binding_whose_load_fails_is_poisoned_for_good",
-               "CleanupTests.test_an_inspection_closes_a_half_built_root_views_native_reads"]},
+               "CleanupTests.test_an_inspection_closes_a_half_built_root_views_native_reads",
+               "BindingCheckTests.test_construction_checks_the_server_files_its_load_window_and_itself"]},
     {"property": "state corruption fails sticky", "source": "E09; A02 sticky failure", "result": "PASS", "reason": None,
      "carriedBy": [],
      "tests": ["CustodyTickTests.test_the_custody_state_itself_is_accepted", "CustodyTickTests.test_each_inconsistent_state_field_is_refused",
@@ -89,7 +105,13 @@ PROPERTIES = [
                "StickyPhaseTests.test_a_failure_inside_a_phase_is_sticky", "StickyPhaseTests.test_a_parent_view_failure_is_sticky",
                "InspectionPhaseTests.test_an_inspection_in_custody_runs_its_phases",
                "InspectionPhaseTests.test_a_failure_inside_an_inspection_phase_is_sticky",
-               "InspectionPhaseTests.test_a_replaced_owned_view_fails_the_inspection_for_good"]},
+               "InspectionPhaseTests.test_a_replaced_owned_view_fails_the_inspection_for_good",
+               "InspectionPhaseTests.test_each_inconsistent_inspection_state_is_refused",
+               "InspectionPhaseTests.test_a_refusing_binding_check_fails_the_phase_for_good",
+               "InspectionPhaseTests.test_a_reader_tick_needs_the_original_authority_session_and_window",
+               "InspectionPhaseTests.test_epoch_sampling_rechecks_mounts_and_epoch_and_refuses_recursion",
+               "BindingCheckTests.test_a_loaded_binding_passes_its_check",
+               "BindingCheckTests.test_each_change_is_refused_and_poisons_the_binding"]},
     {"property": "an explicit trusted-code boundary", "source": "E09", "result": "PASS", "reason": None, "carriedBy": [],
      "tests": ["BoundaryTests.test_the_trusted_code_boundary_and_the_gaps_are_declared"]},
     {"property": "fixed factories fail closed outside their fixed host ABI", "source": "A02 real fixed factories", "result": "PASS",
@@ -103,7 +125,8 @@ PROPERTIES = [
     {"property": "dynamic peer overrides at inspection construction", "source": "A02 dynamic peer overrides; E07 no rebinding",
      "result": "PASS", "reason": None, "carriedBy": [],
      "tests": ["OwnerTests.test_an_inspection_refuses_a_peer_or_server_that_is_not_bound_to_it",
-               "OwnerTests.test_inspections_refuse_a_wrong_owner_or_peer"]},
+               "OwnerTests.test_inspections_refuse_a_wrong_owner_or_peer",
+               "OwnerTests.test_peer_inspections_check_the_servers_binding_inspection_and_lifetime"]},
     {"property": "dynamic peer overrides on every inspection tick: the in-process peer, server and pin checks",
      "source": "A02 dynamic peer overrides; E07 replacement, no rebinding", "result": "PASS", "reason": None, "carriedBy": [],
      "tests": ["PeerTickTests.test_the_bound_peer_passes_its_tick_checks", "PeerTickTests.test_a_substituted_peer_or_pin_is_refused"]},
@@ -111,15 +134,34 @@ PROPERTIES = [
      "source": "E07 exact peer credentials, broker parentage and channel loss; A02 dynamic peer overrides",
      "result": "NOT_RUN_ENV_UNAVAILABLE", "tests": [], "reason": "needs live peer sockets and pidfds on the enrolled Linux host",
      "carriedBy": ["TG-04 MATRIX:parent/FD spoof", "TG-05 MATRIX:peer death/restart"]},
+    {"property": "the inspections' construction past their first native read (kernel views, policy epoch retention, page size and "
+                 "the peer's role pins) and the BPF view's program ID recheck on cleanup",
+     "source": "E09 partial construction; A02 real fixed factories, wrong roles, original-resource-only cleanup; E07 broker parentage",
+     "result": "NOT_RUN_ENV_UNAVAILABLE", "tests": [],
+     "reason": "construction continues only after the enrolled Linux host's kernel views and the peer's kernel rechecks succeed, "
+               "and the program ID recheck is a bpf system call",
+     "carriedBy": ["TG-04 MATRIX:parent/FD spoof", "TG-04 MATRIX:effective BPF ancestors", "TG-04 S8-KERNEL-FACTS",
+                   "TG-05 MATRIX:peer death/restart"]},
     {"property": "original deadlines and fresh clocks", "source": "A02 original deadlines", "result": "PASS", "reason": None,
      "carriedBy": [],
      "tests": ["CustodyTickTests.test_each_inconsistent_state_field_is_refused",
                "StickyPhaseTests.test_an_overrun_deadline_fails_the_phase_and_sticks",
                "InspectionPhaseTests.test_an_inspection_whose_server_or_binding_changed_is_refused",
-               "InspectionPhaseTests.test_an_inspection_phase_ends_at_the_servers_deadline"]},
+               "InspectionPhaseTests.test_an_inspection_phase_ends_at_the_servers_deadline",
+               "InspectionPhaseTests.test_each_inconsistent_inspection_state_is_refused",
+               "InspectionPhaseTests.test_a_reader_tick_needs_the_original_authority_session_and_window",
+               "OwnerTests.test_the_self_inspection_checks_its_binding_and_lifetime_before_its_first_phase",
+               "OwnerTests.test_peer_inspections_check_the_servers_binding_inspection_and_lifetime",
+               "CustodyTickTests.test_a_child_view_checks_its_deadline_before_and_after_its_parent_view_ticks",
+               "BindingCheckTests.test_each_change_is_refused_and_poisons_the_binding",
+               "BindingCheckTests.test_a_check_that_outlasts_its_window_or_sees_the_files_change_is_refused",
+               "BindingCheckTests.test_construction_checks_the_server_files_its_load_window_and_itself"]},
     {"property": "a retained original resource that is replaced or ends is refused",
      "source": "A02 original resources; E07 PID reuse, crash and replacement", "result": "PASS", "reason": None, "carriedBy": [],
-     "tests": ["RetainedResourceTests.test_the_retained_pidfd_must_stay_the_original_and_alive"]},
+     "tests": ["RetainedResourceTests.test_the_retained_pidfd_must_stay_the_original_and_alive",
+               "InspectionPhaseTests.test_a_retained_server_file_replaced_on_disk_is_refused",
+               "FilesCheckTests.test_each_change_to_a_retained_file_is_refused",
+               "BindingCheckTests.test_a_check_that_outlasts_its_window_or_sees_the_files_change_is_refused"]},
     {"property": "partial acquisition", "source": "A02 partial acquisition", "result": "PASS", "reason": None, "carriedBy": [],
      "tests": ["CleanupTests.test_cleanup_of_only_original_resources_succeeds",
                "CleanupTests.test_cleanup_closes_only_original_resources_and_the_failure_sticks",
@@ -132,6 +174,18 @@ PROPERTIES = [
                "CleanupTests.test_an_inspection_closes_its_retained_resources_not_substitutes",
                "CleanupTests.test_the_server_closes_its_original_broker_not_a_substitute"]},
 ]
+
+
+# The properties carried by the plan's W06 native cases (owner decision Q-T11), pinned by name and carrier (review R3-5).
+CARRIED = {
+    "fixed factories on an enrolled Linux host: construction and original deadlines over real kernel I/O":
+        ["TG-05 MATRIX:original deadlines"],
+    "the peer's kernel rechecks on every inspection tick: SO_PEERCRED credentials, pidfd liveness and the socket path":
+        ["TG-04 MATRIX:parent/FD spoof", "TG-05 MATRIX:peer death/restart"],
+    "the inspections' construction past their first native read (kernel views, policy epoch retention, page size and the "
+    "peer's role pins) and the BPF view's program ID recheck on cleanup":
+        ["TG-04 MATRIX:parent/FD spoof", "TG-04 MATRIX:effective BPF ancestors", "TG-04 S8-KERNEL-FACTS", "TG-05 MATRIX:peer death/restart"],
+}
 
 
 class Reached(Exception):
@@ -263,6 +317,28 @@ class CustodyTickTests(unittest.TestCase):
         for cls in VIEWS:
             with self.subTest(view=cls.__name__), self.assertRaises(ConformanceError):
                 in_custody(cls, _inspection_owner=object())._tick()
+
+    def test_a_child_view_checks_its_deadline_before_and_after_its_parent_view_ticks(self):
+        # Before: a passed deadline or a clock behind the last tick is refused before the parent view is asked (the
+        # signalling parent would show it was). After: a parent tick that outlasts the view's deadline is refused too.
+        class Signalling(Parent):
+            def _tick(self):
+                raise Reached()
+
+        class Slow(Parent):
+            def _tick(self):
+                time.sleep(0.05)
+        for cls, parent in VIEWS.items():
+            if parent is None or cls is reader._KernelProcessView or VIEWS[cls] == "roots":
+                continue
+            now = time.monotonic()
+            for name, fields in (("deadline passed", {"last": now - 10, "end": now - 5}), ("clock before the last tick", {"last": now + 60})):
+                with self.subTest(view=cls.__name__, before=name), self.assertRaises(ConformanceError):
+                    in_custody(cls, parent=Signalling(), **fields)._tick()
+            with self.subTest(view=cls.__name__, after="parent tick outlasts the deadline"), self.assertRaises(ConformanceError):
+                view = in_custody(cls, parent=Slow())
+                view.end = time.monotonic() + 0.02
+                view._tick()
 
     def test_an_unbound_view_is_refused_while_a_server_is_installed(self):
         for cls in VIEWS:
@@ -427,6 +503,73 @@ class OwnerTests(unittest.TestCase):
                     inspection.__init__(owner)
                 self.assertEqual(getattr(inspection, "binding", None) is binding, change is None)
 
+    def test_the_self_inspection_checks_its_binding_and_lifetime_before_its_first_phase(self):
+        # Review R3-4: the binding must be the server's real one and its own, and the server's deadline within 900 s;
+        # reaching the first phase (it records phase_wall) shows every one of these checks passed.
+        changes = {None: None,
+                   "binding is not the server's binding type": lambda owner: setattr(owner, "qualification_binding",
+                                                                                     StandInBinding(owner, None)),
+                   "binding owned by another server": lambda owner: setattr(owner.qualification_binding, "owner", server()),
+                   "deadline beyond 900 s": lambda owner: setattr(owner, "deadline", time.monotonic() + 1000),
+                   "deadline already passed": lambda owner: setattr(owner, "deadline", time.monotonic() - 1)}
+        for name, change in changes.items():
+            with self.subTest(change=name):
+                owner = server(deadline=time.monotonic() + 100)
+                binding = object.__new__(reader._ServerQualificationBinding)
+                binding.owner = owner
+                inspection_view = object.__new__(reader._KernelSelfInspection)
+                owner.qualification_binding, owner.self_inspection = binding, inspection_view
+                if change is not None:
+                    change(owner)
+                with active(owner), self.assertRaises(Exception):
+                    inspection_view.__init__(owner)
+                self.assertEqual(hasattr(inspection_view, "phase_wall"), name is None)
+
+    def test_peer_inspections_check_the_servers_binding_inspection_and_lifetime(self):
+        def imitation_inspection(owner):
+            value = object.__new__(type("Imitation", (reader._KernelSelfInspection,), {}))
+            value.owner = owner  # owned by the server, so only its type differs
+            return value
+        # Review R3-4: for the observer and broker inspections the server's binding and its own inspection must be the
+        # real types and its own, and the deadline within 900 s; taking the peer's socket shows every check passed.
+        changes = {None: None,
+                   "binding is not the server's binding type": lambda owner: setattr(owner, "qualification_binding",
+                                                                                     StandInBinding(owner, None)),
+                   "binding owned by another server": lambda owner: setattr(owner.qualification_binding, "owner", server()),
+                   "server inspection is not an inspection": lambda owner: setattr(owner, "self_inspection", imitation_inspection(owner)),
+                   "server inspection owned by another server": lambda owner: setattr(owner.self_inspection, "owner", server()),
+                   "deadline beyond 900 s": lambda owner: setattr(owner, "deadline", time.monotonic() + 1000),
+                   "deadline already passed": lambda owner: setattr(owner, "deadline", time.monotonic() - 1)}
+        for cls, kind, slots in ((reader._KernelObserverInspection, reader._Observer, ("observer",)),
+                                 (reader._KernelBrokerInspection, reader._Broker, ("broker", "_broker_original"))):
+            for name, change in changes.items():
+                with self.subTest(inspection=cls.__name__, change=name):
+                    owner = server(deadline=time.monotonic() + 100)
+                    binding = object.__new__(reader._ServerQualificationBinding)
+                    own_inspection = object.__new__(reader._KernelSelfInspection)
+                    binding.owner = own_inspection.owner = owner
+                    owner.qualification_binding, owner.self_inspection = binding, own_inspection
+                    peer, view = object.__new__(kind), object.__new__(cls)
+                    peer.owner, peer.inspection, peer._socket_original = owner, view, object()
+                    for slot in slots:
+                        setattr(owner, slot, peer)
+                    if change is not None:
+                        change(owner)
+                    with active(owner), self.assertRaises(Exception):
+                        view.__init__(peer)
+                    self.assertEqual(hasattr(view, "socket"), name is None)
+
+    def test_an_imitation_inspection_is_refused_before_it_takes_its_peer(self):
+        for cls, kind in ((reader._KernelObserverInspection, reader._Observer), (reader._KernelBrokerInspection, reader._Broker)):
+            for imitation in (False, True):
+                with self.subTest(inspection=cls.__name__, imitation=imitation):
+                    view = object.__new__(type("Imitation", (cls,), {}) if imitation else cls)
+                    peer = object.__new__(kind)
+                    peer.owner = server()
+                    with self.assertRaises(Exception):
+                        view.__init__(peer)
+                    self.assertEqual(hasattr(view, "peer"), not imitation)
+
     def test_an_inspection_refuses_a_peer_or_server_that_is_not_bound_to_it(self):
         # The peer must name this inspection, and the installed server must name this peer in every peer slot; only then
         # is the server's binding taken (the observable). Each change below is the only difference from the control.
@@ -491,25 +634,60 @@ class OwnerTests(unittest.TestCase):
 
 
 class StandInBinding:
-    """A stand-in for the server's qualification binding: the fields the inspection's guards compare, and a check()."""
+    """A stand-in for the server's qualification binding: the fields the inspection's guards compare, and a check()
+    that refuses on demand as the real binding's does."""
 
     def __init__(self, owner, files):
         self.owner, self.files, self.closed, self.poisoned = owner, files, False, False
-        self.authority = ("authority",)
+        self.authority, self._record_raw, self.refusing = ("authority",), b"record", False
 
     def check(self):
-        pass
+        if self.refusing:
+            raise ConformanceError("STAND_IN_BINDING", "the stand-in binding refuses")
 
 
 class StandInFiles:
-    """The server's file owner as the per-tick peer checks see it; reaching its check() shows the peer checks passed."""
+    """The server's file owner as the per-tick peer checks see it: each check() is counted and signals that the
+    in-process peer checks before it passed."""
+
+    def __init__(self):
+        self.calls = 0
 
     def check(self):
+        self.calls += 1
         raise Reached()
+
+
+class StandInRoots(Closable):
+    """A root view for the inspection's epoch sampling: its native reads and its mount recheck, which can report a change."""
+
+    def __init__(self):
+        super().__init__()
+        self.native, self.mounts = Closable(), [None, None]
+
+    def _reader_mounts(self):
+        return self.mounts.pop(0) if self.mounts else None
+
+
+class StandInPolicy(Closable):
+    def __init__(self):
+        super().__init__()
+        self.epoch = None
+
+    def _reader_epoch(self):
+        return self.epoch
 
 
 def now_wall():
     return reader.require_time(reader.utc_now(), "now")
+
+
+def stamp(moment):
+    return moment.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def valid_scope(wall):
+    return {"validFrom": stamp(wall - timedelta(hours=1)), "expiresAt": stamp(wall + timedelta(hours=1))}
 
 
 def inspection(busy=False):
@@ -520,8 +698,8 @@ def inspection(busy=False):
     view = object.__new__(reader._KernelSelfInspection)
     view.owner, view.binding, view.deadline = owner, binding, owner.deadline
     owner.self_inspection, owner.qualification_binding = view, binding
-    view.roots, view.policy = Closable(), Closable()
-    view.owned = [("roots", view.roots), ("policy", view.policy)]
+    view.roots, view.policy, view.code = StandInRoots(), StandInPolicy(), Closable()
+    view.owned = [("roots", view.roots), ("policy", view.policy), ("code", view.code)]
     view.closed = view.failed = False
     view.busy, view.cleanup_failure = busy, None
     view.last = time.monotonic()
@@ -529,6 +707,7 @@ def inspection(busy=False):
     view.wall = view.phase_wall = now_wall()
     view.authority, view.session_raw = ("authority",), reader.canonical_bytes(owner.binding)
     view.authority_window = (view.wall - timedelta(hours=1), view.wall + timedelta(hours=1))
+    view.record_raw, view.scope = b"record", valid_scope(view.wall)  # a constructed inspection always holds both
     view.epoch_ready = view.epoch_sampling = False
     return view
 
@@ -551,13 +730,84 @@ class InspectionPhaseTests(unittest.TestCase):
                     view._tick()
 
     def test_a_reentrant_inspection_phase_is_refused_and_sticky(self):
-        view = inspection()
+        # Review R3-2: the nested phase is refused at its entry, so its body never runs.
+        view, ran = inspection(), []
         with active(view.owner):
             with self.assertRaises(ConformanceError):
                 with view._phase():
                     with view._phase():
-                        pass
+                        ran.append(True)
+            self.assertEqual(ran, [])
             self.assert_unusable(view)
+
+    def test_a_busy_inspection_refuses_a_phase(self):
+        view, ran = inspection(busy=True), []
+        with active(view.owner), self.assertRaises(ConformanceError):
+            with view._phase():
+                ran.append(True)
+        self.assertEqual(ran, [])
+
+    def test_each_inconsistent_inspection_state_is_refused(self):
+        # Review R3-1: one change at a time against the tick's control state (test_an_inspection_in_custody_runs_its_phases).
+        def imitation(view):
+            view.__class__ = type("Imitation", (reader._KernelSelfInspection,), {})
+        later = lambda: now_wall() + timedelta(hours=1)
+        changes = {"imitation": imitation, "closed": lambda view: setattr(view, "closed", True),
+                   "failed": lambda view: setattr(view, "failed", True), "outside a phase": lambda view: setattr(view, "busy", False),
+                   "binding owned by another server": lambda view: setattr(view.binding, "owner", server()),
+                   "clock before the last tick": lambda view: setattr(view, "last", time.monotonic() + 60),
+                   "deadline passed": lambda view: setattr(view, "end", time.monotonic() - 1),
+                   "wall clock before the last tick": lambda view: setattr(view, "wall", later()),
+                   "phase started long ago": lambda view: setattr(view, "phase_wall", now_wall() - timedelta(seconds=10)),
+                   "record changed": lambda view: setattr(view.binding, "_record_raw", b"other record"),
+                   "scope expired": lambda view: view.scope.update(expiresAt=stamp(now_wall() - timedelta(minutes=1))),
+                   "scope not yet valid": lambda view: view.scope.update(validFrom=stamp(later()))}
+        for name, change in changes.items():
+            with self.subTest(change=name):
+                view = inspection(busy=True)
+                change(view)
+                with active(view.owner), self.assertRaises(ConformanceError):
+                    view._tick()
+
+    def test_a_refusing_binding_check_fails_the_phase_for_good(self):
+        # The phase rechecks the server's binding on entry and on exit; a refusal at either fails the inspection for good.
+        for at_exit in (False, True):
+            with self.subTest(at_exit=at_exit):
+                view, ran = inspection(), []
+                with active(view.owner):
+                    with self.assertRaises(ConformanceError):
+                        view.binding.refusing = not at_exit
+                        with view._phase():
+                            ran.append(True)
+                            view.binding.refusing = True
+                    self.assertEqual(ran, [True] if at_exit else [])  # refused at entry: the body never runs
+                    view.binding.refusing = False
+                    self.assert_unusable(view)
+
+    def test_a_retained_server_file_replaced_on_disk_is_refused(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            path = os.path.join(scratch, "kit")
+            with open(path, "w") as handle:
+                handle.write("kit")
+            directory, fd = os.open(scratch, os.O_RDONLY), os.open(path, os.O_RDONLY)
+            try:
+                for replaced in (False, True):
+                    with self.subTest(replaced=replaced):
+                        view = inspection(busy=True)
+                        view.owner.files.rows = {path: (fd, directory, "kit", reader._custody_identity(os.fstat(fd)))}
+                        if replaced:
+                            with open(path + ".new", "w") as handle:
+                                handle.write("kit")
+                            os.replace(path + ".new", path)
+                        with active(view.owner):
+                            if replaced:
+                                with self.assertRaises(ConformanceError):
+                                    view._tick()
+                            else:
+                                view._tick()  # control
+            finally:
+                os.close(fd)
+                os.close(directory)
 
     def test_a_failure_inside_an_inspection_phase_is_sticky(self):
         view = inspection()
@@ -603,21 +853,69 @@ class InspectionPhaseTests(unittest.TestCase):
                     time.sleep(0.1)
             self.assert_unusable(view)
 
+    def assert_reader_tick(self, view, reader_view, refused, direct=False):
+        call = (lambda: view._reader_tick(reader_view)) if direct else (lambda: reader._kernel_inspection_tick(reader_view))
+        with active(view.owner):
+            if not refused:
+                with view._phase():
+                    call()  # control
+                return
+            with self.assertRaises(ConformanceError):
+                with view._phase():
+                    call()
+            self.assert_unusable(view)
+
     def test_an_inspection_refuses_a_reader_it_does_not_own(self):
-        for change in (None, "unowned", "foreign owner"):
+        for change in (None, "unowned", "foreign owner", "owned but naming a foreign owner"):
             with self.subTest(change=change):
                 view = inspection()
-                reader_view = view.roots if change is None else Closable()
-                reader_view._inspection_owner = object() if change == "foreign owner" else view
-                with active(view.owner):
-                    if change is None:
-                        with view._phase():
-                            reader._kernel_inspection_tick(reader_view)  # control
-                    else:
-                        with self.assertRaises(ConformanceError):
-                            with view._phase():
-                                reader._kernel_inspection_tick(reader_view)
-                        self.assert_unusable(view)
+                reader_view = view.code if change in (None, "owned but naming a foreign owner") else Closable()
+                reader_view._inspection_owner = object() if "foreign owner" in (change or "") else view
+                # The last case calls the inspection directly: dispatch by the reader's own owner field would not reach it.
+                self.assert_reader_tick(view, reader_view, change is not None, direct=change == "owned but naming a foreign owner")
+
+    def test_a_reader_tick_needs_the_original_authority_session_and_window(self):
+        changes = {None: None,
+                   "server authority changed": lambda view: setattr(view.owner, "authority", ("other",)),
+                   "binding authority changed": lambda view: setattr(view.binding, "authority", ("other",)),
+                   "session changed": lambda view: setattr(view.owner, "binding", {"session": 2}),
+                   "authority expired": lambda view: setattr(view, "authority_window", (view.wall - timedelta(hours=2), view.wall - timedelta(hours=1))),
+                   "authority not yet valid": lambda view: setattr(view, "authority_window", (view.wall + timedelta(hours=1), view.wall + timedelta(hours=2)))}
+        for name, change in changes.items():
+            with self.subTest(change=name):
+                view = inspection()
+                if change is not None:
+                    change(view)
+                view.code._inspection_owner = view
+                self.assert_reader_tick(view, view.code, name is not None)
+
+    def test_epoch_sampling_rechecks_mounts_and_epoch_and_refuses_recursion(self):
+        # Once the epoch is retained, a reader tick samples the mounts, the policy epoch and the mounts again; a change
+        # at any of them is refused, and so is any other reader that ticks while the sample runs.
+        changes = {None: None, "mounts changed first": lambda view: view.roots.mounts.__setitem__(0, "changed"),
+                   "mounts changed after the epoch": lambda view: view.roots.mounts.__setitem__(1, "changed"),
+                   "policy epoch changed": lambda view: setattr(view.policy, "epoch", "changed")}
+        for name, change in changes.items():
+            with self.subTest(change=name):
+                view = inspection()
+                view.epoch_ready = True
+                if change is not None:
+                    change(view)
+                view.code._inspection_owner = view
+                self.assert_reader_tick(view, view.code, name is not None)
+        for name, reader_of in (("roots", lambda view: view.roots), ("policy", lambda view: view.policy),
+                                ("the roots' native reads", lambda view: view.roots.native), ("code", lambda view: view.code)):
+            with self.subTest(sampling=name):
+                view = inspection()
+                view.epoch_ready = view.epoch_sampling = True
+                if name == "the roots' native reads":
+                    # The root view's own native reads are served only when they are its original ones.
+                    roots, native = object.__new__(reader._KernelRootViews), object.__new__(reader._KernelNativeReads)
+                    roots.native = roots._native_original = native
+                    view.roots, view.owned[0] = roots, ("roots", roots)
+                reader_view = reader_of(view)
+                reader_view._inspection_owner = view
+                self.assert_reader_tick(view, reader_view, name == "code", direct=True)
 
 
 def peer_inspection(cls, kind, slots):
@@ -644,10 +942,12 @@ def peer_inspection(cls, kind, slots):
     peer._process_original = kind._process_pin(identity)
     view.owner, view.peer, view.binding, view.server_inspection, view.deadline = owner, peer, binding, server_inspection, owner.deadline
     view.closed = view.failed = False
-    view.busy, view.owned, view.socket = True, [], sock
+    view.busy, view.socket, view.roots = True, sock, Closable()
+    view.owned = [("roots", view.roots)]
     view.last = time.monotonic()
     view.end = view.last + 2
     view.wall = view.phase_wall = now_wall()
+    view.record_raw, view.scope = b"record", valid_scope(view.wall)  # a constructed inspection always holds both
     view.peer_pins = (5, "socket-pin", 7, "pidfd-pin", (4100, 0, 0), kind._process_pin(identity), 9, "path-pin")
     return view
 
@@ -659,12 +959,14 @@ class PeerTickTests(unittest.TestCase):
              (reader._KernelBrokerInspection, reader._Broker, ("broker", "_broker_original")))
 
     def test_the_bound_peer_passes_its_tick_checks(self):
-        # Control: the tick gets past every in-process check to the server's file check (the stand-in signals there).
+        # Control: the tick gets past every in-process check to the server's file check, both before its kernel rechecks
+        # and again on its way out (the stand-in counts and signals there).
         for cls, kind, slots in self.PEERS:
             with self.subTest(inspection=cls.__name__):
                 view = peer_inspection(cls, kind, slots)
                 with active(view.owner), self.assertRaises(Reached):
                     view._tick()
+                self.assertEqual(view.owner.files.calls, 2)
 
     def test_a_substituted_peer_or_pin_is_refused(self):
         changes = {"socket": lambda view: setattr(view.peer, "sock", object()),
@@ -676,16 +978,267 @@ class PeerTickTests(unittest.TestCase):
                    "process identity": lambda view: view.peer.identity.update(pid=4101),
                    "peer names another inspection": lambda view: setattr(view.peer, "inspection", object()),
                    "peer closed": lambda view: setattr(view.peer, "closed", True),
-                   "server inspection failed": lambda view: setattr(view.server_inspection, "failed", True)}
+                   "server inspection failed": lambda view: setattr(view.server_inspection, "failed", True),
+                   # Review R3-3: the peer, server and clock checks that come before the pins.
+                   "socket and its original both replaced": lambda view: [setattr(view.peer, name, replacement)
+                                                                          for replacement in (object(),)
+                                                                          for name in ("sock", "_socket_original")],
+                   "peer owned by another server": lambda view: setattr(view.peer, "owner", server()),
+                   "peer failed": lambda view: setattr(view.peer, "failed", True),
+                   "peer idle": lambda view: setattr(view.peer, "busy", False),
+                   "peer deadline moved": lambda view: setattr(view.peer, "deadline", view.deadline + 10),
+                   "peer phase ended": lambda view: setattr(view.peer, "end", time.monotonic() - 1),
+                   "server names another binding": lambda view: setattr(view.owner, "qualification_binding", object()),
+                   "binding owned by another server": lambda view: setattr(view.binding, "owner", server()),
+                   "binding closed": lambda view: setattr(view.binding, "closed", True),
+                   "binding poisoned": lambda view: setattr(view.binding, "poisoned", True),
+                   "server files replaced": lambda view: setattr(view.owner, "files", StandInFiles()),
+                   "server deadline moved": lambda view: setattr(view.owner, "deadline", view.deadline + 10),
+                   "server names another inspection": lambda view: setattr(view.owner, "self_inspection", object()),
+                   "server inspection closed": lambda view: setattr(view.server_inspection, "closed", True),
+                   "owned view replaced": lambda view: setattr(view, "roots", Closable()),
+                   "closed": lambda view: setattr(view, "closed", True), "failed": lambda view: setattr(view, "failed", True),
+                   "outside a phase": lambda view: setattr(view, "busy", False),
+                   "imitation": lambda view: setattr(view, "__class__", type("Imitation", (type(view),), {})),
+                   "deadline passed": lambda view: setattr(view, "end", time.monotonic() - 1),
+                   "clock before the last tick": lambda view: setattr(view, "last", time.monotonic() + 60),
+                   "wall clock before the last tick": lambda view: setattr(view, "wall", now_wall() + timedelta(hours=1)),
+                   "phase started long ago": lambda view: setattr(view, "phase_wall", now_wall() - timedelta(seconds=10)),
+                   "phase starts in the future": lambda view: setattr(view, "phase_wall", now_wall() + timedelta(seconds=10)),
+                   "record changed": lambda view: setattr(view.binding, "_record_raw", b"other record"),
+                   "scope expired": lambda view: view.scope.update(expiresAt=stamp(now_wall() - timedelta(minutes=1))),
+                   "scope not yet valid": lambda view: view.scope.update(validFrom=stamp(now_wall() + timedelta(hours=1)))}
         for cls, kind, slots in self.PEERS:
             slot_changes = {"%s names another peer" % slot: (lambda slot: lambda view: setattr(view.owner, slot, object()))(slot)
                             for slot in slots}
-            for name, change in {**changes, **slot_changes}.items():
+            for name, change in {**changes, **slot_changes, "server not installed": None}.items():
                 with self.subTest(inspection=cls.__name__, change=name):
                     view = peer_inspection(cls, kind, slots)
-                    change(view)
-                    with active(view.owner), self.assertRaises(ConformanceError):
+                    if change is not None:
+                        change(view)
+                    with active(None if change is None else view.owner), self.assertRaises(ConformanceError):
                         view._tick()
+
+
+class FilesCheckTests(unittest.TestCase):
+    """The server's retained files (A02 original resources): each row must still be its original file, by descriptor and
+    by name, never inheritable, held by the installed server."""
+
+    def setUp(self):
+        self.scratch = tempfile.TemporaryDirectory()
+        self.fds = []
+
+    def tearDown(self):
+        for fd in self.fds:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+        self.scratch.cleanup()
+
+    def file(self, name):
+        path = os.path.join(self.scratch.name, name)
+        with open(path, "w") as handle:
+            handle.write(name)
+        fd = os.open(path, os.O_RDONLY)
+        self.fds.append(fd)
+        return fd
+
+    def files(self):
+        owner = server()
+        files = reader._Files(owner)
+        directory = os.open(self.scratch.name, os.O_RDONLY)
+        self.fds.append(directory)
+        fd = self.file("kit")
+        files.rows = {"/kit": (fd, directory, "kit", reader._custody_identity(os.fstat(fd)))}
+        return owner, files, fd
+
+    def test_each_change_to_a_retained_file_is_refused(self):
+        def substitute(owner, files, fd):
+            os.dup2(self.file("other"), fd, inheritable=False)  # the descriptor now names another file
+
+        def swap_descriptor_and_pin(owner, files, fd):
+            other = self.file("other")  # descriptor and pin both name another file, while the name still holds the original
+            files.rows["/kit"] = (other, files.rows["/kit"][1], "kit", reader._custody_identity(os.fstat(other)))
+        changes = {None: None, "closed": lambda owner, files, fd: setattr(files, "closed", True),
+                   "server not installed": "not installed", "descriptor substituted": substitute,
+                   "descriptor and pin swapped": swap_descriptor_and_pin,
+                   "descriptor inheritable": lambda owner, files, fd: os.set_inheritable(fd, True)}
+        for name, change in changes.items():
+            with self.subTest(change=name):
+                owner, files, fd = self.files()
+                if callable(change):
+                    change(owner, files, fd)
+                with active(None if change == "not installed" else owner):
+                    if change is None:
+                        files.check()  # control
+                    else:
+                        with self.assertRaises(ConformanceError):
+                            files.check()
+
+
+def loaded_binding(deadline=100):
+    """The server's qualification binding as its constructor leaves it, with every input the reader would load."""
+    owner = server(deadline=time.monotonic() + deadline, envelope_path="/envelope", authority=(b"envelope",), envelope={},
+                   capacity={}, plan={}, binding={}, profile={}, observation_binding={}, endpoint={}, ca=b"ca", manifest={},
+                   artifact_digest="sha256:" + "0" * 64, snapshot=b"snapshot", kit={"kit/file": b"kit"})
+    owner.files = reader._Files(owner)
+    binding = object.__new__(reader._ServerQualificationBinding)
+    owner.qualification_binding = binding
+    binding.owner, binding.files, binding.deadline, binding.closed, binding.poisoned = owner, owner.files, owner.deadline, False, False
+    binding.last_wall, binding.last_mono = now_wall(), time.monotonic()
+    binding.authority = owner.authority
+    binding._record_raw = reader.canonical_bytes({"scope": valid_scope(now_wall())})
+    binding._broker_raw = b"broker"
+    binding._original = binding._inputs()
+    binding._record_digests = (reader.byte_digest(binding._record_raw), reader.byte_digest(binding._broker_raw))
+    return owner, binding
+
+
+class BindingCheckTests(unittest.TestCase):
+    """The server's qualification binding (E09, A02): its recheck refuses each changed owner, file, clock, authority,
+    input or scope and is poisoned for good; its construction fails closed. The signature verification of the
+    authority (verify_backend_authority) and the Linux-only load are stand-ins here; everything around them is real."""
+
+    def verified(self, effect=None):
+        def verify(*authority, now):
+            if effect is not None:
+                effect()
+        return patched(reader, "verify_backend_authority", verify)
+
+    def test_a_loaded_binding_passes_its_check(self):
+        owner, binding = loaded_binding()
+        with active(owner), self.verified():
+            binding.check()
+            binding.check()
+
+    def test_each_change_is_refused_and_poisons_the_binding(self):
+        def refuse():
+            raise ConformanceError("STAND_IN_AUTHORITY", "the stand-in signature check refuses")
+        later = lambda: now_wall() + timedelta(hours=1)
+        changes = {"closed": lambda owner, binding: setattr(binding, "closed", True),
+                   "poisoned": lambda owner, binding: setattr(binding, "poisoned", True),
+                   "server not installed": None,
+                   "server names another binding": lambda owner, binding: setattr(owner, "qualification_binding", object()),
+                   "server files replaced": lambda owner, binding: setattr(owner, "files", reader._Files(owner)),
+                   "files held by another server": lambda owner, binding: [setattr(holder, "files", files)
+                                                                           for files in (reader._Files(server()),)
+                                                                           for holder in (owner, binding)],
+                   "server deadline moved": lambda owner, binding: setattr(owner, "deadline", binding.deadline + 10),
+                   "files closed": lambda owner, binding: setattr(binding.files, "closed", True),
+                   "wall clock before the last check": lambda owner, binding: setattr(binding, "last_wall", later()),
+                   "clock before the last check": lambda owner, binding: setattr(binding, "last_mono", time.monotonic() + 60),
+                   "deadline passed": lambda owner, binding: [setattr(holder, "deadline", time.monotonic() - 1) for holder in (owner, binding)],
+                   "inputs substituted": lambda owner, binding: setattr(owner, "envelope", {"substituted": True}),
+                   "record bytes changed": lambda owner, binding: setattr(binding, "_broker_raw", b"other broker"),
+                   "scope expired": lambda owner, binding: setattr(binding, "_record_raw", reader.canonical_bytes(
+                       {"scope": {"validFrom": stamp(now_wall() - timedelta(hours=2)), "expiresAt": stamp(now_wall() - timedelta(minutes=1))}})),
+                   "scope not yet valid": lambda owner, binding: setattr(binding, "_record_raw", reader.canonical_bytes(
+                       {"scope": {"validFrom": stamp(later()), "expiresAt": stamp(later() + timedelta(hours=1))}}))}
+        for name, change in changes.items():
+            with self.subTest(change=name):
+                owner, binding = loaded_binding()
+                if name in ("scope expired", "scope not yet valid", "record bytes changed"):
+                    change(owner, binding)
+                    if name != "record bytes changed":
+                        binding._record_digests = (reader.byte_digest(binding._record_raw), reader.byte_digest(binding._broker_raw))
+                elif change is not None:
+                    change(owner, binding)
+                with active(None if change is None else owner), self.verified():
+                    with self.assertRaises(ConformanceError):
+                        binding.check()
+                    self.assertIs(binding.poisoned, True)
+                with active(owner), self.verified(), self.assertRaises(ConformanceError):
+                    binding.check()  # sticky
+        with self.subTest(change="authority refused"):
+            owner, binding = loaded_binding()
+            with active(owner), self.verified(refuse), self.assertRaises(ConformanceError):
+                binding.check()
+            self.assertIs(binding.poisoned, True)
+
+    def test_a_check_that_outlasts_its_window_or_sees_the_files_change_is_refused(self):
+        # The recheck ends with the files rechecked and the clocks inside the deadline and the scope.
+        cases = {"files closed during the check": lambda owner, binding: lambda: setattr(binding.files, "closed", True),
+                 "the check outlasts the deadline": lambda owner, binding: lambda: time.sleep(0.1)}
+        for name, effect_of in cases.items():
+            with self.subTest(case=name):
+                owner, binding = loaded_binding(deadline=0.05 if "deadline" in name else 100)
+                if "deadline" in name:
+                    binding.deadline = owner.deadline
+                with active(owner), self.verified(effect_of(owner, binding)), self.assertRaises(ConformanceError):
+                    binding.check()
+                self.assertIs(binding.poisoned, True)
+        with self.subTest(case="files closed before the check and reopened during it"):
+            # The first files recheck runs before the authority is verified, not only the last one.
+            owner, binding = loaded_binding()
+            binding.files.closed = True
+            with active(owner), self.verified(lambda: setattr(binding.files, "closed", False)), self.assertRaises(ConformanceError):
+                binding.check()
+        for name, offset in (("the wall clock goes back during the check", timedelta(seconds=-10)),
+                             ("the wall clock jumps ahead during the check", timedelta(seconds=3))):
+            with self.subTest(case=name):
+                owner, binding = loaded_binding()
+                readings = []
+                def clock(real=reader.utc_now, offset=offset, readings=readings):
+                    # A stand-in wall clock: the first reading is real, later ones are moved by the offset.
+                    readings.append(reader.require_time(real(), "now"))
+                    moment = readings[0] + (offset if len(readings) > 1 else timedelta(0))
+                    return moment.isoformat(timespec="microseconds").replace("+00:00", "Z")
+                with active(owner), self.verified(), patched(reader, "utc_now", clock), self.assertRaises(ConformanceError):
+                    binding.check()
+        with self.subTest(case="the scope expires during the check"):
+            owner, binding = loaded_binding()
+            binding._record_raw = reader.canonical_bytes({"scope": {"validFrom": stamp(now_wall() - timedelta(hours=1)),
+                                                                    "expiresAt": stamp(now_wall() + timedelta(seconds=1))}})
+            binding._record_digests = (reader.byte_digest(binding._record_raw), reader.byte_digest(binding._broker_raw))
+            with active(owner), self.verified(lambda: time.sleep(1.2)), self.assertRaises(ConformanceError):
+                binding.check()
+
+    def test_construction_checks_the_server_files_its_load_window_and_itself(self):
+        # Refused before loading (not poisoned) when the server's files are not its own open file owner; poisoned when
+        # the load outlasts its window, the wall clock goes back during it, or the first recheck refuses; constructed,
+        # unpoisoned, only when everything holds.
+        def attempt(owner, files_change, load, scope):
+            binding = object.__new__(reader._ServerQualificationBinding)
+            owner.qualification_binding, owner.files = binding, reader._Files(owner)
+            if files_change is not None:
+                files_change(owner)
+            def stand_in_load():
+                binding.authority = owner.authority
+                binding._record_raw = reader.canonical_bytes({"scope": scope or valid_scope(now_wall())})
+                binding._broker_raw = b"broker"
+                if load is not None:
+                    load(binding)
+            binding._load = stand_in_load  # the Linux-only load, reduced to the inputs it leaves behind
+            try:
+                binding.__init__(owner)
+            except Exception:
+                return binding, True
+            return binding, False
+        def imitation_files(owner):
+            files = object.__new__(type("Imitation", (reader._Files,), {}))
+            files.owner, files.sealed, files.closed, files.rows = owner, False, False, {}  # only its type differs
+            return files
+        expired = {"validFrom": stamp(now_wall() - timedelta(hours=2)), "expiresAt": stamp(now_wall() - timedelta(minutes=1))}
+        cases = {None: (None, None, None, False),
+                 "files are an imitation": (lambda owner: setattr(owner, "files", imitation_files(owner)), None, None, False),
+                 "files held by another server": (lambda owner: setattr(owner.files, "owner", server()), None, None, False),
+                 "files already sealed": (lambda owner: setattr(owner.files, "sealed", True), None, None, False),
+                 "load outlasts its window": (None, lambda binding: time.sleep(0.1), None, True),
+                 # The load's own 2 s window, by each clock (a stand-in for the time the Linux-only load took).
+                 "load took over 2 s": (None, lambda binding: setattr(binding, "last_mono", time.monotonic() - 3), None, True),
+                 "load took over 2 s by the wall clock": (None, lambda binding: setattr(binding, "last_wall", now_wall() - timedelta(seconds=3)),
+                                                          None, True),
+                 "wall clock goes back during the load": (None, lambda binding: setattr(binding, "last_wall", now_wall() + timedelta(hours=1)),
+                                                          None, True),
+                 "first recheck refuses": (None, None, expired, True)}
+        for name, (files_change, load, scope, poisoned) in cases.items():
+            with self.subTest(case=name):
+                owner, _ = loaded_binding(deadline=0.05 if name == "load outlasts its window" else 100)
+                with active(owner), self.verified():
+                    binding, refused = attempt(owner, files_change, load, scope)
+                self.assertEqual(refused, name is not None)
+                self.assertIs(binding.poisoned, poisoned)
 
 
 class RoleTests(unittest.TestCase):
@@ -893,12 +1446,13 @@ class BoundaryTests(unittest.TestCase):
         text = " ".join((__doc__ or "").split())
         self.assertIn("Trusted-code boundary (declared)", text)
         self.assertIn("external enforcement owns that boundary", text)
-        gaps = [row for row in PROPERTIES if row["result"] != "PASS"]
-        self.assertEqual(len(gaps), 2)
+        # Review R3-5: exactly these Linux-only properties are carried, by exactly these cases (owner decision Q-T11).
+        self.assertEqual({row["property"]: row["carriedBy"] for row in PROPERTIES if row["result"] != "PASS"}, CARRIED)
         self.assertIn("fixed factories on an enrolled Linux host", text)
         self.assertIn("the peer's kernel rechecks on each inspection tick", text)
-        for row in gaps:
-            for case in row["carriedBy"]:
+        self.assertIn("the inspections' construction past their first native read", text)
+        for cases in CARRIED.values():
+            for case in cases:
                 self.assertIn(case, text)
 
 

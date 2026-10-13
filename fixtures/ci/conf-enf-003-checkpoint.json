@@ -2,8 +2,8 @@
  "added": {
   "task-packets/CONF-ENF-003.yaml": {
    "mode": "100644",
-   "sha256": "dae3e2e0c53d0e4300b2f14711466e0105e1e62058e4c59c2d45b9ad5ec01351",
-   "size": 12635
+   "sha256": "85f8096d775b3b34a9cdef9007ff5337931fabe513bf8bcdf008cda4c413caa0",
+   "size": 13784
   },
   "tests/enforcement/_catalog.py": {
    "mode": "100644",
@@ -12,8 +12,8 @@
   },
   "tests/enforcement/attestations/conf-enf-003.json": {
    "mode": "100644",
-   "sha256": "edad1d9b740f8078de48ef9e0cccd1686205e2f6bbcdfdadb9da4072ae2e4a67",
-   "size": 1704
+   "sha256": "74df12012b6822aa6e57f34cceec10a42779a09e7b93b160e51175b621ba1f27",
+   "size": 1855
   },
   "tests/enforcement/snapshots/harness-onion/architecture/i05-gate-channel-v3-supplement/status.json": {
    "mode": "100644",
@@ -32,18 +32,18 @@
   },
   "tests/enforcement/tg02_lifecycle/results.json": {
    "mode": "100644",
-   "sha256": "b1722342e9fa15c231a986ec7ba32905f8dbbf9d00f44ac223293adc8819df67",
-   "size": 27346
+   "sha256": "e15df2ebb9275db41ece4c9541cbbee024114c7e043ffbb8978f84b00eb289b0",
+   "size": 31873
   },
   "tests/enforcement/tg02_lifecycle/test_reader_guards.py": {
    "mode": "100644",
-   "sha256": "2d7a8b454fa75f5afab66a01361050304956a7f6183bb1167cdc2e6ba0ea8ea7",
-   "size": 49657
+   "sha256": "fb5bf4ae5beae42dfac9a6fab45a9c6d569225b4dcc9d6c2889817b69c841837",
+   "size": 87814
   },
   "tests/enforcement/tg02_lifecycle/test_tg02_lifecycle.py": {
    "mode": "100644",
-   "sha256": "d0f4464cb85d86ba0f12712d8a9ebe85dcadd49c295fbf36eab4d902537e0e70",
-   "size": 10215
+   "sha256": "33b01ad91938153eb30b86a03a4daa5e0be48ea627131b56dc04949769a73682",
+   "size": 10344
   },
   "tests/enforcement/tg03_persistence/__init__.py": {
    "mode": "100644",

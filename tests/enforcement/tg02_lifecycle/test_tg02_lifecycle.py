@@ -119,7 +119,8 @@ class LedgerTests(unittest.TestCase):
                 self.assertEqual(bool(row["catalog"]), row["phase"] != "W04_OFFLINE")
         e09 = next(row for row in ledger()["cases"] if row["tag"] == "LEDGER-E09")
         self.assertEqual(e09["result"], "PASS")
-        self.assertEqual([item["result"] for item in e09["properties"] if item["carriedBy"]], ["NOT_RUN_ENV_UNAVAILABLE"] * 2)
+        self.assertEqual({item["property"]: (item["result"], item["carriedBy"]) for item in e09["properties"] if item["carriedBy"]},
+                         {name: ("NOT_RUN_ENV_UNAVAILABLE", cases) for name, cases in test_reader_guards.CARRIED.items()})
 
     def test_every_e09_property_maps_to_tests_that_exist_and_every_test_to_a_property(self):
         names = set(guard_tests())
