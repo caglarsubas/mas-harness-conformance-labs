@@ -209,12 +209,22 @@ fn expiry_with_stalled_python(binding: &Binding) -> Result<(), String> {
             break;
         }
         for pid in fresh {
+            // Pin the process and check it is the one listed (a reused PID shows other start ticks: review R2-4).
+            let before = proc::stat(pid).map_err(|error| format!("{} stat: {}", pid, describe(&error)))?;
             let pidfd = PidFd::open(pid).map_err(|error| format!("{} pidfd_open: {}", pid, describe(&error)))?;
+            let after = proc::stat(pid).map_err(|error| format!("{} stat: {}", pid, describe(&error)))?;
+            if before.start_ticks != after.start_ticks {
+                return Err(format!("process {} changed while its pidfd was opened", pid));
+            }
             held.0.push((pid, pidfd));
         }
     }
-    let listed: Vec<i32> = expected::ROLES.iter().filter(|row| row.2.is_some())
-        .flat_map(|row| cgroup::procs(Path::new(row.1)).unwrap_or_default()).collect();
+    let mut listed: Vec<i32> = Vec::new();
+    for (name, path, interpreter) in expected::ROLES.iter() {
+        if interpreter.is_some() {
+            listed.extend(cgroup::procs(Path::new(path)).map_err(|error| format!("{} cgroup.procs: {}", name, describe(&error)))?);
+        }
+    }
     let all = applied && listed.iter().all(|pid| held.0.iter().any(|(known, _)| known == pid))
         && held.0.iter().all(|(pid, pidfd)| pidfd.exited_within(0).unwrap_or(false) || stopped(*pid, pidfd));
     let pids = Json(format!("[{}]", held.0.iter().map(|(pid, _)| pid.to_string()).collect::<Vec<_>>().join(",")));

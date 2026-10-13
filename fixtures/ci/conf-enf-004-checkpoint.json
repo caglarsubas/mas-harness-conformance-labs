@@ -2,7 +2,7 @@
  "added": {
   "probes/enforcement/BUILD_EVIDENCE.json": {
    "mode": "100644",
-   "sha256": "1ce4b6c908398b71bccf7734208425a0966e170b43d19d6d8d1aeb9209766aee",
+   "sha256": "e215bf83a1bdbf12842438d4fa81b050f9731a9331e45090089f7653b9b4a029",
    "size": 2697
   },
   "probes/enforcement/Cargo.lock": {
@@ -72,7 +72,7 @@
   },
   "probes/enforcement/common/src/tree.rs": {
    "mode": "100644",
-   "sha256": "7b817974dfbd936da99683f54c2c0bfd6c02df264751fb09920692707ad515af",
+   "sha256": "997d7a914bf3c8ca1079c98b4d930324ab55d9d7d1102ef7c4d88adbd72afcbb",
    "size": 318
   },
   "probes/enforcement/tg04_host/Cargo.toml": {
@@ -97,8 +97,8 @@
   },
   "probes/enforcement/tg05_clocks/src/main.rs": {
    "mode": "100644",
-   "sha256": "8e06deb396308a141a80de8a52ea44fea506c5944e1874c69bcc961bcb759572",
-   "size": 18086
+   "sha256": "57e28b7e23f1adfc141f2eabeb04ee91a085b18b97adbcc5775b9e10a1326055",
+   "size": 18694
   },
   "task-packets/CONF-ENF-004.yaml": {
    "mode": "100644",
@@ -122,7 +122,7 @@
   },
   "tests/enforcement/test_probes.py": {
    "mode": "100644",
-   "sha256": "e4008e59b52234a0c6236326b4bc51c41d0d430ba26243f73de19e80074838ba",
+   "sha256": "e3f48bb2631b4cdf34ec22a086583dad8c32b98a2c682ce5e6633e5f9548c008",
    "size": 13788
   },
   "tests/enforcement/tg04_host/__init__.py": {
@@ -147,8 +147,8 @@
   },
   "tests/enforcement/tg05_clocks/_verdicts.py": {
    "mode": "100644",
-   "sha256": "aa02e3dbf19c80574fa02efab277605fdbf1e70369df11d3378c2984d38ed8b4",
-   "size": 36901
+   "sha256": "008c7e9e5ab17b17bd6c9a74edc5092bce3da14591b983bc8a35d4a67adc36d3",
+   "size": 37760
   },
   "tests/enforcement/tg05_clocks/results.json": {
    "mode": "100644",
@@ -162,8 +162,8 @@
   },
   "tests/enforcement/tg05_clocks/test_verdicts.py": {
    "mode": "100644",
-   "sha256": "36e8dc010459ccb60d39da10012e9c4b4f3ff5803c19f22816f363def6a32aec",
-   "size": 33716
+   "sha256": "f32849125a1cf45d4c1e84949f1f35b8bedd75e3d6e6fc9b454193a8f930f70b",
+   "size": 35494
   }
  },
  "baseCommit": "25f38a51144e1b6a9042b52a75cca5b3c3bc13d6",
@@ -184,8 +184,8 @@
   "tests/enforcement/README.md": {
    "after": {
     "mode": "100644",
-    "sha256": "2f01a375070fb32f620d05af03a6abdb5aeaa5bbac0962b1495788de266d7f17",
-    "size": 8942
+    "sha256": "bd975ba5c1b25253769212e3985208edb07f587639dbb2731efcce9bf031bd92",
+    "size": 9307
    },
    "before": {
     "mode": "100644",

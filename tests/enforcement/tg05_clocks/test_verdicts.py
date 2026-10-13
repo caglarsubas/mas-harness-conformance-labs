@@ -54,13 +54,14 @@ def answer(sent, party, value, execution="E1", reason=None, generation="G1", ans
                        "request": "%s:%s:%s@%d" % (party, operation, execution, sent), "answer": value, "reason": reason})
 
 
-def live(at):
-    """The tested execution allowed by the gate and served by the reader shortly before a fault."""
-    return [answer(at * S, "GATE", "ALLOWED"), answer(at * S, "SERVER", "SERVED")]
-
-
 def bind(sent, execution, generation, value="ALLOWED", reason=None):
     return answer(sent, "GATE", value, execution=execution, generation=generation, operation="BIND_EXECUTION", reason=reason)
+
+
+def live(at):
+    """The tested execution bound in G1, allowed by the gate and served by the reader shortly before a fault (the
+    driver logs the bind: review R2-1)."""
+    return [bind((at - 5) * S, "E1", "G1"), answer(at * S, "GATE", "ALLOWED"), answer(at * S, "SERVER", "SERVED")]
 
 
 def channel(sent, generation, value="ALLOWED", reason=None):
@@ -174,7 +175,7 @@ class Suspend(unittest.TestCase):
     case = "MATRIX:suspend"
 
     def judge(self, answers, records=SUSPEND):
-        return case_result(self.case, [(timeline(self.case, records), live(490)[:1] + answers)])
+        return case_result(self.case, [(timeline(self.case, records), live(490)[:2] + answers)])
 
     def test_suspended_time_counts(self):
         self.assertEqual(results(self.judge([answer(1_102 * S, "GATE", "REFUSED")])), ([("E08-SUSPEND", "PASS")], "PASS"))
@@ -202,7 +203,7 @@ class WallClockRollback(unittest.TestCase):
     case = "MATRIX:wall-clock rollback"
 
     def judge(self, answers, records=ROLLBACK):
-        return case_result(self.case, [(timeline(self.case, records), live(590)[:1] + answers)])
+        return case_result(self.case, [(timeline(self.case, records), live(590)[:2] + answers)])
 
     def test_a_wall_clock_step_does_not_extend_the_deadline(self):
         self.assertEqual(results(self.judge([answer(1_010 * S, "GATE", "REFUSED")])), ([("E08-ROLLBACK", "PASS")], "PASS"))
@@ -287,6 +288,23 @@ class PeerDeathRestart(unittest.TestCase):
         reconnect = broker_answers(extra=[channel(550 * S, "G1")])
         self.assertEqual(self.judge(broker=reconnect)["checks"][0]["result"], "FAIL")
 
+    def test_the_dead_generation_comes_from_the_bind_whatever_word_the_rows_carry(self):
+        # Review R2-1: with placeholder words on the tested execution's rows a reconnect into G1 must not PASS, and a
+        # conforming gate must not FAIL; rows that disagree with the bind, or a missing bind, leave E07-GATE NOT_RUN.
+        for word in ("None", "null", "unknown", "NA", "0"):
+            with self.subTest(word=word):
+                rows = [row.replace('"operation": "HTTP_REQUEST", "execution": "E1", "generation": "G1"',
+                                    '"operation": "HTTP_REQUEST", "execution": "E1", "generation": "%s"' % word)
+                        for row in broker_answers(extra=[channel(550 * S, "G1")])]
+                self.assertNotEqual(self.judge(broker=rows)["checks"][0]["result"], "PASS")
+                conforming = [row.replace('"operation": "HTTP_REQUEST", "execution": "E1", "generation": "G1"',
+                                          '"operation": "HTTP_REQUEST", "execution": "E1", "generation": "%s"' % word)
+                              for row in broker_answers()]
+                self.assertEqual(self.judge(broker=conforming)["checks"][0]["result"], "NOT_RUN_ENV_UNAVAILABLE")
+        no_bind = [row for row in broker_answers(extra=[channel(550 * S, "G1")])
+                   if '"operation": "BIND_EXECUTION", "execution": "E1", "generation": "G1"' not in row]
+        self.assertEqual(self.judge(broker=no_bind)["checks"][0]["result"], "NOT_RUN_ENV_UNAVAILABLE")
+
     def test_anything_allowed_in_the_dead_generation_after_the_kill_fails(self):
         # Review R1-2: the held generation allows nothing after the broker's death, whatever the operation or execution.
         for extra in ([bind(550 * S, "E5", "G1")],
@@ -296,16 +314,17 @@ class PeerDeathRestart(unittest.TestCase):
                 self.assertEqual(self.judge(broker=broker_answers(extra=extra))["checks"][0]["result"], "FAIL")
 
     def test_without_a_logged_channel_attempt_of_the_restarted_broker_the_gate_part_is_not_run(self):
-        # Review R1-2: a reconnect shows only in that attempt.
+        # Review R1-2: a reconnect shows only in that attempt; review R2-2: a visible use of the dead generation still FAILs.
         rows = [row for row in broker_answers() if '"operation": "CHANNEL_OPEN"' not in row]
         self.assertEqual(self.judge(broker=rows)["checks"][0]["result"], "NOT_RUN_ENV_UNAVAILABLE")
+        self.assertEqual(self.judge(broker=rows + [bind(550 * S, "E5", "G1")])["checks"][0]["result"], "FAIL")
 
     def test_violations_after_the_window_still_fail(self):
         # Review R1-3: an allowance after the broker's death, a reconnect after the deadline, the reader serving the
         # tested execution after its deadline; no conforming implementation answers so.
         self.assertEqual(self.judge(broker=broker_answers(extra=[answer(1_200 * S, "GATE", "ALLOWED", generation="G2")]))["checks"][0]["result"], "FAIL")
         self.assertEqual(self.judge(broker=broker_answers(extra=[channel(1_200 * S, "G1")]))["checks"][0]["result"], "FAIL")
-        self.assertEqual(self.judge(observer=observer_answers(fresh=observer_answers()[3:] + [answer(1_200 * S, "SERVER", "SERVED")]))["checks"][3]["result"], "FAIL")
+        self.assertEqual(self.judge(observer=observer_answers(fresh=observer_answers()[4:] + [answer(1_200 * S, "SERVER", "SERVED")]))["checks"][3]["result"], "FAIL")
 
     def test_a_gate_that_rebinds_the_execution_fails(self):
         self.assertEqual(self.judge(broker=broker_answers(extra=[bind(550 * S, "E1", "G2")]))["checks"][0]["result"], "FAIL")
@@ -372,7 +391,7 @@ class PeerDeathRestart(unittest.TestCase):
         self.assertEqual([check["rule"] for check in verdict["checks"][:3]], [v.PEER_GATE, v.PEER_READER, v.PEER_INSPECTION])
 
     def test_an_execution_not_bound_or_served_at_the_kill_is_not_the_case(self):
-        verdict = self.judge(broker=broker_answers()[2:])
+        verdict = self.judge(broker=broker_answers()[3:])
         self.assertEqual([check["result"] for check in verdict["checks"][:2]], ["NOT_RUN_ENV_UNAVAILABLE"] * 2)
 
     def test_the_killed_role_must_be_the_bindings_peer(self):
@@ -398,20 +417,20 @@ class OriginalDeadlines(unittest.TestCase):
                                                  "PASS"))
 
     def test_a_deadline_renewed_by_the_restart_fails(self):
-        renewed = live(490) + [GOOD_ORIGINAL[2], answer(1_005 * S, "GATE", "ALLOWED")] + GOOD_ORIGINAL[4:]
+        renewed = live(490) + [GOOD_ORIGINAL[3], answer(1_005 * S, "GATE", "ALLOWED")] + GOOD_ORIGINAL[5:]
         self.assertEqual(self.judge(renewed)["checks"][0]["result"], "FAIL")
 
     def test_a_reader_that_resumes_its_old_execution_fails(self):
-        resumed = live(490) + [answer(520 * S, "SERVER", "SERVED")] + GOOD_ORIGINAL[3:]
+        resumed = live(490) + [answer(520 * S, "SERVER", "SERVED")] + GOOD_ORIGINAL[4:]
         self.assertEqual(self.judge(resumed)["checks"][1]["result"], "FAIL")
 
     def test_stale_answers_after_the_deadline_are_not_judged(self):
         # Review D3-3: the carried property is tested only before the tested execution's own deadline.
-        late = live(490) + [answer(1_100 * S, "SERVER", "FAILED")] + GOOD_ORIGINAL[3:]
+        late = live(490) + [answer(1_100 * S, "SERVER", "FAILED")] + GOOD_ORIGINAL[4:]
         self.assertEqual(self.judge(late)["checks"][1]["result"], "NOT_RUN_ENV_UNAVAILABLE")
 
     def test_a_reader_that_cannot_construct_after_the_restart_fails(self):
-        broken = GOOD_ORIGINAL[:5] + [answer(1_030 * S, "SERVER", "FAILED", execution="E2")]
+        broken = GOOD_ORIGINAL[:6] + [answer(1_030 * S, "SERVER", "FAILED", execution="E2")]
         self.assertEqual(self.judge(broken)["checks"][2]["result"], "FAIL")
 
     def test_the_killed_role_must_be_the_server(self):
@@ -422,8 +441,8 @@ class OriginalDeadlines(unittest.TestCase):
 
 GOOD_RUNS = {
     "MATRIX:expiry with stalled Python": (STALL, live(890) + [answer(1_065 * S, "GATE", "REFUSED")]),
-    "MATRIX:suspend": (SUSPEND, live(490)[:1] + [answer(1_102 * S, "GATE", "REFUSED")]),
-    "MATRIX:wall-clock rollback": (ROLLBACK, live(590)[:1] + [answer(1_010 * S, "GATE", "REFUSED")]),
+    "MATRIX:suspend": (SUSPEND, live(490)[:2] + [answer(1_102 * S, "GATE", "REFUSED")]),
+    "MATRIX:wall-clock rollback": (ROLLBACK, live(590)[:2] + [answer(1_010 * S, "GATE", "REFUSED")]),
     "MATRIX:original deadlines": (ORIGINAL, GOOD_ORIGINAL),
 }
 
