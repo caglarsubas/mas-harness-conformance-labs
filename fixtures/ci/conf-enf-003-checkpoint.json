@@ -32,13 +32,13 @@
   },
   "tests/enforcement/tg02_lifecycle/results.json": {
    "mode": "100644",
-   "sha256": "c0ee73a1bf54ff3f3f9e0451e836101f90ec188631a1f43cd8686c32958cec18",
-   "size": 32280
+   "sha256": "69fe62f5c01908d230ca8df0d2443da5336b276cb8996a3150c51559d20b4f4c",
+   "size": 32472
   },
   "tests/enforcement/tg02_lifecycle/test_reader_guards.py": {
    "mode": "100644",
-   "sha256": "3f2a5cfdff71dda4dcaec0d2a0655d8bf70e84b957e0d64183cf182c89faa6f4",
-   "size": 91471
+   "sha256": "d8157ee2d50a97dcb73228dd32034f86de81a486968827fefa0da287ff16912e",
+   "size": 93173
   },
   "tests/enforcement/tg02_lifecycle/test_tg02_lifecycle.py": {
    "mode": "100644",

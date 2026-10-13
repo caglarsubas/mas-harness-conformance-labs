@@ -612,6 +612,7 @@
       "InspectionPhaseTests.test_a_refusing_binding_check_fails_the_phase_for_good",
       "InspectionPhaseTests.test_a_reader_tick_needs_the_original_authority_session_and_window",
       "InspectionPhaseTests.test_epoch_sampling_rechecks_mounts_and_epoch_and_refuses_recursion",
+      "InspectionPhaseTests.test_a_reader_tick_outside_the_inspections_phase_fails_it_for_good",
       "BindingCheckTests.test_a_loaded_binding_passes_its_check",
       "BindingCheckTests.test_each_change_is_refused_and_poisons_the_binding"
      ],
@@ -792,6 +793,7 @@
     "InspectionPhaseTests.test_a_busy_inspection_refuses_a_phase",
     "InspectionPhaseTests.test_a_failure_inside_an_inspection_phase_is_sticky",
     "InspectionPhaseTests.test_a_reader_tick_needs_the_original_authority_session_and_window",
+    "InspectionPhaseTests.test_a_reader_tick_outside_the_inspections_phase_fails_it_for_good",
     "InspectionPhaseTests.test_a_reentrant_inspection_phase_is_refused_and_sticky",
     "InspectionPhaseTests.test_a_refusing_binding_check_fails_the_phase_for_good",
     "InspectionPhaseTests.test_a_replaced_owned_view_fails_the_inspection_for_good",

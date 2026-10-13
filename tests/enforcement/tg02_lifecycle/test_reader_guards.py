@@ -27,8 +27,9 @@ page size and the peer's role pins) with the BPF view's program ID recheck on cl
 TG-04 MATRIX:effective BPF ancestors, TG-04 S8-KERNEL-FACTS, TG-05 MATRIX:peer death/restart).
 
 Stand-ins: where a guard sits behind a Linux-only or cryptographic step, a stand-in reduces that step to what the guard
-sees (the binding's load and signature verification, a parent view's tick, the server's file owner on the per-tick peer
-path, the wall clock in two clock tests); every guard under test is the reader's own code.
+sees (the binding's load and signature verification, a parent view's tick, the owning inspection's reader tick, the
+server's file owner on the per-tick peer path, the wall clock in two clock tests); every guard under test is the reader's
+own code.
 """
 from __future__ import annotations
 
@@ -111,6 +112,7 @@ PROPERTIES = [
                "InspectionPhaseTests.test_a_refusing_binding_check_fails_the_phase_for_good",
                "InspectionPhaseTests.test_a_reader_tick_needs_the_original_authority_session_and_window",
                "InspectionPhaseTests.test_epoch_sampling_rechecks_mounts_and_epoch_and_refuses_recursion",
+               "InspectionPhaseTests.test_a_reader_tick_outside_the_inspections_phase_fails_it_for_good",
                "BindingCheckTests.test_a_loaded_binding_passes_its_check",
                "BindingCheckTests.test_each_change_is_refused_and_poisons_the_binding"]},
     {"property": "an explicit trusted-code boundary", "source": "E09", "result": "PASS", "reason": None, "carriedBy": [],
@@ -369,8 +371,8 @@ class CustodyTickTests(unittest.TestCase):
                 with self.assertRaises(ConformanceError):
                     view._tick()
         with self.subTest(after="inspection tick outlasts the deadline"):
-            view, calls = owned_view(lambda: time.sleep(0.15))
-            view.end = time.monotonic() + 0.1
+            view, calls = owned_view(lambda: time.sleep(0.6))
+            view.end = time.monotonic() + 0.5
             with self.assertRaises(ConformanceError):
                 view._tick()
             self.assertEqual(len(calls), 2)
@@ -933,6 +935,33 @@ class InspectionPhaseTests(unittest.TestCase):
                 reader_view._inspection_owner = object() if "foreign owner" in (change or "") else view
                 # The last case calls the inspection directly: dispatch by the reader's own owner field would not reach it.
                 self.assert_reader_tick(view, reader_view, change is not None, direct=change == "owned but naming a foreign owner")
+
+    def test_a_reader_tick_outside_the_inspections_phase_fails_it_for_good(self):
+        # Review R5-1: with no inspection phase on the stack, the reader tick itself must record the failure.
+        for name in ("owned reader called directly", "unowned native reads in their own phase"):
+            with self.subTest(case=name):
+                view = inspection()
+                with active(view.owner):
+                    with self.assertRaises(ConformanceError):
+                        if name == "owned reader called directly":
+                            view.code._inspection_owner = view
+                            view._reader_tick(view.code)
+                        else:
+                            with in_custody(reader._KernelNativeReads, busy=False, _inspection_owner=view)._phase():
+                                pass
+                    self.assert_unusable(view)
+        for cls, kind, slots in PeerTickTests.PEERS:
+            with self.subTest(case="peer inspection", inspection=cls.__name__):
+                view = peer_inspection(cls, kind, slots)
+                view.busy = False
+                stranger = Closable()
+                stranger._inspection_owner = view
+                with active(view.owner):
+                    with self.assertRaises(ConformanceError):
+                        view._reader_tick(stranger)
+                    view.busy = True  # the control state of PeerTickTests, which reaches the file check
+                    with self.assertRaises(ConformanceError):
+                        view._tick()
 
     def test_a_reader_tick_needs_the_original_authority_session_and_window(self):
         changes = {None: None,
