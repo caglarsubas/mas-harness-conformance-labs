@@ -1,12 +1,14 @@
-"""TG-02 lifecycle (W04-3, CONF-ENF-003): the case ledger, the catalog of the gated cases and LEDGER-E09's evidence.
+"""TG-02 lifecycle (W04-3, CONF-ENF-003): the case ledger, the catalog of the gated cases and LEDGER-E09's properties.
 
-tg02_lifecycle/results.json must equal what _catalog.ledger gives: the plan's TG-02 cases in order; LEDGER-E09 PASS only
-through the reader guard tests of this run (owner decision Q-T9); every other case NOT_RUN_ENV_UNAVAILABLE with the
-contract vectors that specify it (owner decision Q-T8, 2026-10-13). The anchors and per-selection counts below are a
-second pin, so neither a regenerated ledger nor a narrower rule can drop a case's vectors unseen.
+tg02_lifecycle/results.json must equal what _catalog.ledger gives: the plan's TG-02 cases in order; LEDGER-E09 with the
+property table of its reader guard tests (owner decision Q-T9), PASS only when every property ran; every other case
+NOT_RUN_ENV_UNAVAILABLE with the contract vectors that specify it (owner decision Q-T8, 2026-10-13). The anchors and the
+exact selection pins (size and digest of the id list) are a second pin, so neither a regenerated ledger nor a changed
+rule can narrow, widen or swap a case's vectors unseen; a deliberate change updates them in the same reviewed diff.
 """
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 import unittest
 
@@ -16,46 +18,72 @@ from tg02_lifecycle import test_reader_guards
 
 HERE = Path(__file__).resolve().parent
 GROUP = "TG-02"
-# Vectors each selection must keep (from the vectors' own intents and refusals).
+# Vectors each selection must keep (from the vectors' own intents, refusals and reviews R1).
 ANCHORS = {
-    ("MATRIX:unarmed/duplicate/cross-case action", "I05 gate channel v3", "transcripts"): {"T12", "T48", "T76"},
-    ("MATRIX:unarmed/duplicate/cross-case action", "I07 policy write v3", "transcripts"): {"T20", "T32"},
+    ("MATRIX:unarmed/duplicate/cross-case action", "I05 gate channel v3", "transcripts"): {"T07", "T12", "T48", "T76"},
+    ("MATRIX:unarmed/duplicate/cross-case action", "I07 policy write v3", "transcripts"): {"T20", "T26", "T32"},
+    ("MATRIX:unarmed/duplicate/cross-case action", "Admission semantics v3", "claims"): {"Q21"},
     ("MATRIX:old socket", "I05 gate channel v3", "transcripts"): {"T02", "T38", "T64"},
     ("MATRIX:old socket", "I07 policy write v3", "transcripts"): {"T16", "T44"},
-    ("MATRIX:queued action", "I05 gate channel v3", "transcripts"): {"T02", "T03", "T39"},
+    ("MATRIX:queued action", "I05 gate channel v3", "transcripts"): {"T02", "T03", "T39", "T42"},
+    ("MATRIX:queued action", "I07 policy write v3", "transcripts"): {"T29"},
     ("MATRIX:conflicting gate/server result", "I05 gate channel v3", "agreement"): {"A02", "A20", "A37"},
-    ("MATRIX:conflicting gate/server result", "I05 gate channel v3", "transcripts"): {"T31", "T68", "T114"},
-    ("MATRIX:conflicting gate/server result", "I07 policy write v3", "transcripts"): {"T03", "T59"},
+    ("MATRIX:conflicting gate/server result", "I05 gate channel v3", "transcripts"): {"T31", "T68", "T83", "T100", "T114"},
+    ("MATRIX:conflicting gate/server result", "I07 policy write v3", "transcripts"): {"T03", "T30", "T51", "T59"},
     ("MATRIX:same-generation delayed-identical-request across two armed actions", "I05 gate channel v3", "transcripts"): {"T02", "T03"},
-    ("S63-SOURCE", "I05 gate channel v3", "agreement"): {"A02", "A20"},
-    ("S63-NATIVE", "I05 gate channel v3", "agreement"): {"A02", "A20"},
-    ("CE18", "I05 gate channel v3", "transcripts"): {"T30", "T27"},
-    ("CE18", "I07 policy write v3", "transcripts"): {"T02"},
+    ("S63-SOURCE", "I05 gate channel v3", "agreement"): {"A20"},
+    ("S63-SOURCE", "I05 gate channel v3", "transcripts"): {"T83", "T100"},
+    ("S63-SOURCE", "I07 policy write v3", "transcripts"): {"T30", "T51"},
+    ("S63-NATIVE", "I05 gate channel v3", "agreement"): {"A20"},
+    ("S63-NATIVE", "I05 gate channel v3", "transcripts"): {"T83", "T100"},
+    ("S63-NATIVE", "I07 policy write v3", "transcripts"): {"T30", "T51"},
+    ("CE18", "I05 gate channel v3", "transcripts"): {"T27", "T30", "T87", "T88", "T89", "T90"},
+    ("CE18", "I07 policy write v3", "transcripts"): {"T02", "T05"},
+    ("CE18", "Admission semantics v3", "claims"): {"Q12", "Q13", "Q14", "Q15"},
     ("CE22", "I05 gate channel v3", "transcripts"): {"T64"},
     ("S8-C2C3", "I05 gate channel v3", "transcripts"): {"T02", "T03"},
     ("S8-C2C3", "I07 policy write v3", "transcripts"): {"T20"},
 }
-# The number of vectors each selection holds on the pinned vectors.
-SELECTION_SIZES = {
-    ("MATRIX:unarmed/duplicate/cross-case action", "I05 gate channel v3", "transcripts"): 26,
-    ("MATRIX:unarmed/duplicate/cross-case action", "I07 policy write v3", "transcripts"): 8,
-    ("MATRIX:old socket", "I05 gate channel v3", "transcripts"): 16,
-    ("MATRIX:old socket", "I07 policy write v3", "transcripts"): 7,
-    ("MATRIX:queued action", "I05 gate channel v3", "transcripts"): 4,
-    ("MATRIX:conflicting gate/server result", "I05 gate channel v3", "agreement"): 27,
-    ("MATRIX:conflicting gate/server result", "I05 gate channel v3", "transcripts"): 11,
-    ("MATRIX:conflicting gate/server result", "I07 policy write v3", "transcripts"): 9,
-    ("MATRIX:same-generation delayed-identical-request across two armed actions", "I05 gate channel v3", "transcripts"): 2,
-    ("S63-SOURCE", "I05 gate channel v3", "agreement"): 8,
-    ("S63-NATIVE", "I05 gate channel v3", "agreement"): 8,
-    ("CE18", "I05 gate channel v3", "transcripts"): 5,
-    ("CE18", "I07 policy write v3", "transcripts"): 2,
-    ("CE22", "I05 gate channel v3", "transcripts"): 1,
-    ("S8-C2C3", "I05 gate channel v3", "transcripts"): 9,
-    ("S8-C2C3", "I07 policy write v3", "transcripts"): 1,
+# Each selection exactly: (size, the first 16 hex of sha256 over its ids joined by newlines).
+SELECTION_PINS = {
+    ("MATRIX:unarmed/duplicate/cross-case action", "I05 gate channel v3", "transcripts"): (28, "bee753c45fcfb0ac"),
+    ("MATRIX:unarmed/duplicate/cross-case action", "I07 policy write v3", "transcripts"): (16, "d5c86168a40a8e70"),
+    ("MATRIX:unarmed/duplicate/cross-case action", "Admission semantics v3", "claims"): (1, "f3344439866ac3a1"),
+    ("MATRIX:old socket", "I05 gate channel v3", "transcripts"): (16, "9b94e663e52c660a"),
+    ("MATRIX:old socket", "I07 policy write v3", "transcripts"): (7, "9d012a50265e6612"),
+    ("MATRIX:queued action", "I05 gate channel v3", "transcripts"): (6, "f4a655e956d7114d"),
+    ("MATRIX:queued action", "I07 policy write v3", "transcripts"): (1, "1fa54d688b787409"),
+    ("MATRIX:conflicting gate/server result", "I05 gate channel v3", "agreement"): (27, "52e2499b8be18870"),
+    ("MATRIX:conflicting gate/server result", "I05 gate channel v3", "transcripts"): (18, "0810dc5fc2103445"),
+    ("MATRIX:conflicting gate/server result", "I07 policy write v3", "transcripts"): (11, "68cd054946a16296"),
+    ("MATRIX:same-generation delayed-identical-request across two armed actions", "I05 gate channel v3", "transcripts"): (2, "3d59080c84d17170"),
+    ("S63-SOURCE", "I05 gate channel v3", "agreement"): (1, "084835c6a489af31"),
+    ("S63-SOURCE", "I05 gate channel v3", "transcripts"): (7, "0525e43ac6eba28e"),
+    ("S63-SOURCE", "I07 policy write v3", "transcripts"): (2, "4097937de58623cf"),
+    ("S63-NATIVE", "I05 gate channel v3", "agreement"): (1, "084835c6a489af31"),
+    ("S63-NATIVE", "I05 gate channel v3", "transcripts"): (7, "0525e43ac6eba28e"),
+    ("S63-NATIVE", "I07 policy write v3", "transcripts"): (2, "4097937de58623cf"),
+    ("CE18", "I05 gate channel v3", "transcripts"): (13, "3e88eec61cbcbadf"),
+    ("CE18", "I07 policy write v3", "transcripts"): (4, "a2359be804e8c9c4"),
+    ("CE18", "Admission semantics v3", "claims"): (4, "f612245f134e75b0"),
+    ("CE22", "I05 gate channel v3", "transcripts"): (1, "cb29d4d1bbbdb53e"),
+    ("S8-C2C3", "I05 gate channel v3", "transcripts"): (9, "4b9e10fd83ffe638"),
+    ("S8-C2C3", "I07 policy write v3", "transcripts"): (1, "aa6fa6f11e1c0f05"),
 }
-# LEDGER-E09's properties (E09, A02), one test class each.
-GUARD_CLASSES = {"CustodyTickTests", "StickyPhaseTests", "PartialConstructionTests", "OwnerTests", "CleanupTests"}
+PREFIXES = {"I05 gate channel v3": _catalog.I05, "I07 policy write v3": _catalog.I07, "Admission semantics v3": _catalog.ADMISSION}
+
+
+def ledger():
+    return _models._strict(_models._regular(HERE / "results.json"))
+
+
+def pin(ids):
+    return len(ids), hashlib.sha256("\n".join(ids).encode()).hexdigest()[:16]
+
+
+def set_ids(contract, vector_set):
+    prefix = _catalog.SUPPLEMENT if vector_set == "supplement" else PREFIXES[contract]
+    return [row["id"] for row in _models.data(prefix + "vectors.json")["transcripts" if vector_set == "supplement" else vector_set]]
 
 
 def guard_tests():
@@ -67,38 +95,49 @@ def guard_tests():
             else:
                 names.append("%s.%s" % (type(test).__name__, test._testMethodName))
     walk(unittest.defaultTestLoader.loadTestsFromModule(test_reader_guards))
-    return sorted(names)
-
-
-def ledger():
-    return _models._strict(_models._regular(HERE / "results.json"))
-
-
-def set_ids(contract, vector_set):
-    prefix = {"I05 gate channel v3": _catalog.I05, "I07 policy write v3": _catalog.I07}[contract]
-    if vector_set == "supplement":
-        prefix = _catalog.SUPPLEMENT
-    return [row["id"] for row in _models.data(prefix + "vectors.json")["agreement" if vector_set == "agreement" else "transcripts"]]
+    return names
 
 
 class LedgerTests(unittest.TestCase):
-    def test_the_ledger_is_the_plans_cases_with_their_catalog_and_evidence(self):
-        self.assertEqual(ledger(), _catalog.ledger(GROUP, {"LEDGER-E09": guard_tests()}))
+    def test_the_ledger_is_the_plans_cases_with_their_catalog_and_properties(self):
+        self.assertEqual(ledger(), _catalog.ledger(GROUP, {"LEDGER-E09": test_reader_guards.PROPERTIES}))
 
-    def test_only_the_offline_case_passes_and_only_through_its_tests(self):
+    def test_no_case_is_pass_while_any_part_of_it_was_not_run(self):
         for row in ledger()["cases"]:
             with self.subTest(case=row["tag"]):
-                offline = row["phase"] == "W04_OFFLINE"
-                self.assertEqual(row["result"], "PASS" if offline else "NOT_RUN_ENV_UNAVAILABLE")
-                self.assertEqual(bool(row["evidence"]), offline)
-                self.assertEqual(bool(row["catalog"]), not offline)
+                self.assertEqual(row["result"] == "PASS",
+                                 bool(row["properties"]) and all(item["result"] == "PASS" for item in row["properties"]))
+                self.assertEqual(row["reason"] is None, row["result"] == "PASS")
+                self.assertEqual(bool(row["catalog"]), row["phase"] != "W04_OFFLINE")
         e09 = next(row for row in ledger()["cases"] if row["tag"] == "LEDGER-E09")
-        self.assertEqual({name.split(".")[0] for name in e09["evidence"]}, GUARD_CLASSES)
+        self.assertEqual(e09["result"], "NOT_RUN_ENV_UNAVAILABLE")  # two properties need the enrolled Linux host
+
+    def test_every_e09_property_maps_to_tests_that_exist_and_every_test_to_a_property(self):
+        names = set(guard_tests())
+        mapped = set()
+        for row in test_reader_guards.PROPERTIES:
+            with self.subTest(property=row["property"]):
+                self.assertEqual(set(row), set(_catalog.PROPERTY_FIELDS))
+                self.assertIn(row["result"], ("PASS", "NOT_RUN_ENV_UNAVAILABLE"))
+                self.assertEqual(bool(row["tests"]), row["result"] == "PASS")
+                self.assertEqual(row["reason"] is None, row["result"] == "PASS")
+                self.assertLessEqual(set(row["tests"]), names)
+                mapped |= set(row["tests"])
+        self.assertEqual(mapped, names)
+
+    def test_the_e09_evidence_ran_and_passed_with_nothing_skipped(self):
+        # Review R1-2: evidence is what ran in this command, not the names of tests that might be skipped.
+        evidence = next(row for row in ledger()["cases"] if row["tag"] == "LEDGER-E09")["evidence"]
+        suite = unittest.TestSuite(unittest.defaultTestLoader.loadTestsFromName(name, test_reader_guards) for name in evidence)
+        result = unittest.TestResult()
+        suite.run(result)
+        self.assertEqual((result.testsRun, result.failures, result.errors, result.skipped, result.expectedFailures),
+                         (len(evidence), [], [], [], []))
 
     def test_every_selection_is_pinned_and_names_real_vectors(self):
         selections = {(row["case"], row["contract"], row["vectorSet"]): row["ids"] for row in _catalog.catalog(GROUP)}
         self.assertEqual(set(selections), set(ANCHORS))
-        self.assertEqual({key: len(ids) for key, ids in selections.items()}, SELECTION_SIZES)
+        self.assertEqual({key: pin(ids) for key, ids in selections.items()}, SELECTION_PINS)
         for key, ids in selections.items():
             with self.subTest(selection=key):
                 self.assertLessEqual(ANCHORS[key], set(ids))

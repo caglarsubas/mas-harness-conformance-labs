@@ -3,7 +3,7 @@
  "packet": "CONF-ENF-003",
  "testGroup": "TG-02",
  "evidenceClass": "SOURCE_OWNER_IMPLEMENTATION",
- "rule": "Each plan case of the group, in plan order. A W04_OFFLINE case is PASS only through its named tests in this run; a case that waits for W05's release set or for W06's native hosts is NOT_RUN_ENV_UNAVAILABLE, never PASS (AGENTS rule 14), and its catalog names the contract vectors whose own outputs and final snapshots are its expected results.",
+ "rule": "Each plan case of the group, in plan order. A W04_OFFLINE case lists its properties (the obligation's and acceptance row's parts) with the tests that show each one in this run; it is PASS only when every property is PASS, and a property that needs an environment this run lacks is NOT_RUN_ENV_UNAVAILABLE. A case that waits for W05's release set or for W06's native hosts is NOT_RUN_ENV_UNAVAILABLE, never PASS (AGENTS rule 14), and its catalog names the contract vectors whose own outputs and final snapshots are its expected results.",
  "cases": [
   {
    "tag": "MATRIX:unarmed/duplicate/cross-case action",
@@ -15,15 +15,17 @@
    "subject": "W05's released build, through a wire-level adapter (owner decision Q-T8)",
    "result": "NOT_RUN_ENV_UNAVAILABLE",
    "reason": "AFTER_W05_RELEASE_SET: the subject is W05's released build, which does not exist yet; the catalog fixes the contract vectors and expected results now, and the executable source and the wire-level adapter come with W05's release set (owner decision Q-T8)",
+   "properties": [],
    "evidence": [],
    "catalog": [
     {
      "contract": "I05 gate channel v3",
      "vectorSet": "transcripts",
-     "basis": "a request closed as not matching the armed action, without a stamp or while the generation is not active; an ARM refused as out of order, outstanding, outside the case manifest set, a reused mutation key or a template mismatch; an outcome refused for an unknown action; or a write refused with no open maintenance, out of order or outside its scope",
+     "basis": "a request closed as not matching the armed action, without a stamp, while the generation is not active or as a protocol violation (a second request on one connection); an ARM refused as out of order, outstanding, outside the case manifest set, a reused mutation key, a template mismatch or with no bound execution; an outcome refused for an unknown action; or a write refused with no open maintenance, out of order, or outside its scope or generation",
      "ids": [
       "T04",
       "T06",
+      "T07",
       "T09",
       "T10",
       "T11",
@@ -47,26 +49,43 @@
       "T79",
       "T80",
       "T81",
+      "T85",
       "T106"
      ]
     },
     {
      "contract": "I07 policy write v3",
      "vectorSet": "transcripts",
-     "basis": "a request closed as not matching the armed action, without a stamp or while the generation is not active; an ARM refused as out of order, outstanding, outside the case manifest set, a reused mutation key or a template mismatch; an outcome refused for an unknown action; or a write refused with no open maintenance, out of order or outside its scope",
+     "basis": "a request closed as not matching the armed action, without a stamp, while the generation is not active or as a protocol violation (a second request on one connection); an ARM refused as out of order, outstanding, outside the case manifest set, a reused mutation key, a template mismatch or with no bound execution; an outcome refused for an unknown action; or a write refused with no open maintenance, out of order, or outside its scope or generation",
      "ids": [
       "T02",
+      "T03",
       "T04",
+      "T06",
+      "T09",
       "T18",
       "T20",
+      "T26",
       "T27",
+      "T28",
+      "T30",
       "T32",
       "T33",
-      "T34"
+      "T34",
+      "T42",
+      "T51"
+     ]
+    },
+    {
+     "contract": "Admission semantics v3",
+     "vectorSet": "claims",
+     "basis": "an A1 admission claim whose stamp is not the armed action's",
+     "ids": [
+      "Q21"
      ]
     }
    ],
-   "vectors": 34
+   "vectors": 45
   },
   {
    "tag": "MATRIX:old socket",
@@ -79,6 +98,7 @@
    "subject": "W05's released build, through a wire-level adapter (owner decision Q-T8)",
    "result": "NOT_RUN_ENV_UNAVAILABLE",
    "reason": "AFTER_W05_RELEASE_SET: the subject is W05's released build, which does not exist yet; the catalog fixes the contract vectors and expected results now, and the executable source and the wire-level adapter come with W05's release set (owner decision Q-T8)",
+   "properties": [],
    "evidence": [],
    "catalog": [
     {
@@ -131,21 +151,32 @@
    "subject": "W05's released build, through a wire-level adapter (owner decision Q-T8)",
    "result": "NOT_RUN_ENV_UNAVAILABLE",
    "reason": "AFTER_W05_RELEASE_SET: the subject is W05's released build, which does not exist yet; the catalog fixes the contract vectors and expected results now, and the executable source and the wire-level adapter come with W05's release set (owner decision Q-T8)",
+   "properties": [],
    "evidence": [],
    "catalog": [
     {
      "contract": "I05 gate channel v3",
      "vectorSet": "transcripts",
-     "basis": "an ARM that flushes backlogged connections (C2), or an ARM refused while another action is outstanding",
+     "basis": "an ARM that flushes backlogged connections (C2), or an ARM or BIND refused while another action is outstanding, or an ARM refused while a drain is pending",
      "ids": [
       "T02",
       "T03",
       "T11",
-      "T39"
+      "T30",
+      "T39",
+      "T42"
+     ]
+    },
+    {
+     "contract": "I07 policy write v3",
+     "vectorSet": "transcripts",
+     "basis": "an ARM that flushes backlogged connections (C2), or an ARM or BIND refused while another action is outstanding, or an ARM refused while a drain is pending",
+     "ids": [
+      "T29"
      ]
     }
    ],
-   "vectors": 4
+   "vectors": 7
   },
   {
    "tag": "MATRIX:conflicting gate/server result",
@@ -157,6 +188,7 @@
    "subject": "W05's released build, through a wire-level adapter (owner decision Q-T8)",
    "result": "NOT_RUN_ENV_UNAVAILABLE",
    "reason": "AFTER_W05_RELEASE_SET: the subject is W05's released build, which does not exist yet; the catalog fixes the contract vectors and expected results now, and the executable source and the wire-level adapter come with W05's release set (owner decision Q-T8)",
+   "properties": [],
    "evidence": [],
    "catalog": [
     {
@@ -196,7 +228,7 @@
     {
      "contract": "I05 gate channel v3",
      "vectorSet": "transcripts",
-     "basis": "an agreement check in which the server's resource result disagrees with the gate's outcome, or a transcript whose result is IO_AMBIGUOUS or arrives late",
+     "basis": "an agreement check in which the server's resource result disagrees with the gate's outcome, or a transcript whose result is IO_AMBIGUOUS or arrives late, or whose generation the broker closes as RECONCILIATION_REQUIRED",
      "ids": [
       "T31",
       "T33",
@@ -206,29 +238,38 @@
       "T68",
       "T69",
       "T70",
+      "T83",
+      "T92",
+      "T100",
+      "T102",
+      "T103",
       "T114",
       "T115",
+      "T116",
+      "T118",
       "T119"
      ]
     },
     {
      "contract": "I07 policy write v3",
      "vectorSet": "transcripts",
-     "basis": "an agreement check in which the server's resource result disagrees with the gate's outcome, or a transcript whose result is IO_AMBIGUOUS or arrives late",
+     "basis": "an agreement check in which the server's resource result disagrees with the gate's outcome, or a transcript whose result is IO_AMBIGUOUS or arrives late, or whose generation the broker closes as RECONCILIATION_REQUIRED",
      "ids": [
       "T03",
       "T09",
       "T10",
       "T13",
       "T28",
+      "T30",
       "T41",
       "T49",
+      "T51",
       "T58",
       "T59"
      ]
     }
    ],
-   "vectors": 47
+   "vectors": 56
   },
   {
    "tag": "MATRIX:same-generation delayed-identical-request across two armed actions",
@@ -240,6 +281,7 @@
    "subject": "W05's released build, through a wire-level adapter (owner decision Q-T8)",
    "result": "NOT_RUN_ENV_UNAVAILABLE",
    "reason": "AFTER_W05_RELEASE_SET: the subject is W05's released build, which does not exist yet; the catalog fixes the contract vectors and expected results now, and the executable source and the wire-level adapter come with W05's release set (owner decision Q-T8)",
+   "properties": [],
    "evidence": [],
    "catalog": [
     {
@@ -264,25 +306,42 @@
    "subject": "W05's released build, through a wire-level adapter (owner decision Q-T8)",
    "result": "NOT_RUN_ENV_UNAVAILABLE",
    "reason": "AFTER_W05_RELEASE_SET: the subject is W05's released build, which does not exist yet; the catalog fixes the contract vectors and expected results now, and the executable source and the wire-level adapter come with W05's release set (owner decision Q-T8)",
+   "properties": [],
    "evidence": [],
    "catalog": [
     {
      "contract": "I05 gate channel v3",
      "vectorSet": "agreement",
-     "basis": "the agreement checks that refuse a result attributed to another action (M01 action identifiers, M06 object identity, M07 UID or resourceVersion differ): HOST_INTERFACE_SPEC section 6.3 says a misattribution appears there and is HELD",
+     "basis": "the GET agreement checks that refuse a result attributed to another action (M01 action identifiers, M06 object identity, M07 UID or resourceVersion differ): HOST_INTERFACE_SPEC sections 6.2-6.3 say only a GET can be resent with identical bytes and that the misattribution appears in this check",
      "ids": [
-      "A02",
-      "A20",
-      "A28",
-      "A29",
-      "A30",
-      "A31",
-      "A35",
-      "A37"
+      "A20"
+     ]
+    },
+    {
+     "contract": "I05 gate channel v3",
+     "vectorSet": "transcripts",
+     "basis": "the transcripts whose generation the broker closes as RECONCILIATION_REQUIRED: section 6.3's disagreement that becomes HELD",
+     "ids": [
+      "T83",
+      "T92",
+      "T100",
+      "T102",
+      "T103",
+      "T116",
+      "T118"
+     ]
+    },
+    {
+     "contract": "I07 policy write v3",
+     "vectorSet": "transcripts",
+     "basis": "the transcripts whose generation the broker closes as RECONCILIATION_REQUIRED: section 6.3's disagreement that becomes HELD",
+     "ids": [
+      "T30",
+      "T51"
      ]
     }
    ],
-   "vectors": 8
+   "vectors": 10
   },
   {
    "tag": "S63-NATIVE",
@@ -296,25 +355,42 @@
    "subject": "W05's released build on the enrolled AMD64 and ARM64 hosts in W06",
    "result": "NOT_RUN_ENV_UNAVAILABLE",
    "reason": "W06_NATIVE_ONLY: native evidence on the enrolled hosts in W06; the catalog fixes the contract vectors and expected results now (owner decision Q-T8); blocked by D-W02A-F2",
+   "properties": [],
    "evidence": [],
    "catalog": [
     {
      "contract": "I05 gate channel v3",
      "vectorSet": "agreement",
-     "basis": "the agreement checks that refuse a result attributed to another action (M01 action identifiers, M06 object identity, M07 UID or resourceVersion differ): HOST_INTERFACE_SPEC section 6.3 says a misattribution appears there and is HELD",
+     "basis": "the GET agreement checks that refuse a result attributed to another action (M01 action identifiers, M06 object identity, M07 UID or resourceVersion differ): HOST_INTERFACE_SPEC sections 6.2-6.3 say only a GET can be resent with identical bytes and that the misattribution appears in this check",
      "ids": [
-      "A02",
-      "A20",
-      "A28",
-      "A29",
-      "A30",
-      "A31",
-      "A35",
-      "A37"
+      "A20"
+     ]
+    },
+    {
+     "contract": "I05 gate channel v3",
+     "vectorSet": "transcripts",
+     "basis": "the transcripts whose generation the broker closes as RECONCILIATION_REQUIRED: section 6.3's disagreement that becomes HELD",
+     "ids": [
+      "T83",
+      "T92",
+      "T100",
+      "T102",
+      "T103",
+      "T116",
+      "T118"
+     ]
+    },
+    {
+     "contract": "I07 policy write v3",
+     "vectorSet": "transcripts",
+     "basis": "the transcripts whose generation the broker closes as RECONCILIATION_REQUIRED: section 6.3's disagreement that becomes HELD",
+     "ids": [
+      "T30",
+      "T51"
      ]
     }
    ],
-   "vectors": 8
+   "vectors": 10
   },
   {
    "tag": "CE18",
@@ -326,31 +402,53 @@
    "subject": "W05's released build, through a wire-level adapter (owner decision Q-T8)",
    "result": "NOT_RUN_ENV_UNAVAILABLE",
    "reason": "AFTER_W05_RELEASE_SET: the subject is W05's released build, which does not exist yet; the catalog fixes the contract vectors and expected results now, and the executable source and the wire-level adapter come with W05's release set (owner decision Q-T8)",
+   "properties": [],
    "evidence": [],
    "catalog": [
     {
      "contract": "I05 gate channel v3",
      "vectorSet": "transcripts",
-     "basis": "the transcripts whose intent is Counterexample 18, and every outcome reported ADMITTED_BEFORE_INVALIDATION",
+     "basis": "the transcripts whose intent is Counterexample 18, every outcome reported ADMITTED_BEFORE_INVALIDATION and every final snapshot that records it",
      "ids": [
+      "T25",
       "T27",
       "T30",
       "T61",
       "T71",
-      "T87"
+      "T87",
+      "T88",
+      "T89",
+      "T90",
+      "T93",
+      "T94",
+      "T107",
+      "T119"
      ]
     },
     {
      "contract": "I07 policy write v3",
      "vectorSet": "transcripts",
-     "basis": "the transcripts whose intent is Counterexample 18, and every outcome reported ADMITTED_BEFORE_INVALIDATION",
+     "basis": "the transcripts whose intent is Counterexample 18, every outcome reported ADMITTED_BEFORE_INVALIDATION and every final snapshot that records it",
      "ids": [
       "T02",
-      "T04"
+      "T04",
+      "T05",
+      "T38"
+     ]
+    },
+    {
+     "contract": "Admission semantics v3",
+     "vectorSet": "claims",
+     "basis": "the A3 (policy write waits for the drain) and A4 (admitted before invalidation) admission claims",
+     "ids": [
+      "Q12",
+      "Q13",
+      "Q14",
+      "Q15"
      ]
     }
    ],
-   "vectors": 7
+   "vectors": 21
   },
   {
    "tag": "CE22",
@@ -362,6 +460,7 @@
    "subject": "W05's released build, through a wire-level adapter (owner decision Q-T8)",
    "result": "NOT_RUN_ENV_UNAVAILABLE",
    "reason": "AFTER_W05_RELEASE_SET: the subject is W05's released build, which does not exist yet; the catalog fixes the contract vectors and expected results now, and the executable source and the wire-level adapter come with W05's release set (owner decision Q-T8)",
+   "properties": [],
    "evidence": [],
    "catalog": [
     {
@@ -387,6 +486,7 @@
    "subject": "W05's released build on the enrolled AMD64 and ARM64 hosts in W06",
    "result": "NOT_RUN_ENV_UNAVAILABLE",
    "reason": "W06_NATIVE_ONLY: native evidence on the enrolled hosts in W06; the catalog fixes the contract vectors and expected results now (owner decision Q-T8); blocked by D-W02A-F2",
+   "properties": [],
    "evidence": [],
    "catalog": [
     {
@@ -425,26 +525,185 @@
    ],
    "blockedBy": [],
    "subject": "R12's reader, src/harness_conformance/live_proxy_server.py (owner decision Q-T9)",
-   "result": "PASS",
-   "reason": null,
+   "result": "NOT_RUN_ENV_UNAVAILABLE",
+   "reason": "partly not run: fixed factories on an enrolled Linux host: construction and original deadlines over real kernel I/O (needs the enrolled Linux host and its kernel views; W06's native run); dynamic peer overrides: per-tick peer substitution of the observer and broker inspections (needs a constructed server with live peer sockets and pidfds (Linux only); W06's native run)",
+   "properties": [
+    {
+     "property": "reentrancy fails sticky",
+     "source": "E09",
+     "result": "PASS",
+     "reason": null,
+     "tests": [
+      "StickyPhaseTests.test_a_busy_view_refuses_a_second_phase",
+      "StickyPhaseTests.test_reentrancy_is_refused_and_sticky"
+     ]
+    },
+    {
+     "property": "wrong owner, process or thread is refused",
+     "source": "E09; A02 wrong owners",
+     "result": "PASS",
+     "reason": null,
+     "tests": [
+      "CustodyTickTests.test_another_thread_is_refused",
+      "CustodyTickTests.test_a_subclass_instance_is_refused",
+      "CustodyTickTests.test_a_foreign_inspection_owner_is_refused",
+      "CustodyTickTests.test_an_unbound_view_is_refused_while_a_server_is_installed",
+      "OwnerTests.test_the_installed_server_passes_its_owner_check",
+      "OwnerTests.test_a_server_that_is_not_the_installed_one_is_refused",
+      "OwnerTests.test_a_closed_server_another_process_or_thread_or_an_imitation_is_refused",
+      "OwnerTests.test_no_caller_constructs_a_qualification_binding",
+      "OwnerTests.test_the_self_inspection_takes_its_binding_only_from_the_installed_server",
+      "OwnerTests.test_inspections_refuse_a_wrong_owner_or_peer"
+     ]
+    },
+    {
+     "property": "partial construction never grants custody and fails sticky",
+     "source": "E09",
+     "result": "PASS",
+     "reason": null,
+     "tests": [
+      "PartialConstructionTests.test_a_view_built_without_its_constructor_is_never_usable",
+      "PartialConstructionTests.test_a_binding_whose_load_fails_is_poisoned_for_good"
+     ]
+    },
+    {
+     "property": "state corruption fails sticky",
+     "source": "E09; A02 sticky failure",
+     "result": "PASS",
+     "reason": null,
+     "tests": [
+      "CustodyTickTests.test_the_custody_state_itself_is_accepted",
+      "CustodyTickTests.test_each_inconsistent_state_field_is_refused",
+      "StickyPhaseTests.test_an_idle_view_runs_a_phase",
+      "StickyPhaseTests.test_a_closed_or_failed_view_refuses_a_phase",
+      "StickyPhaseTests.test_a_failure_inside_a_phase_is_sticky",
+      "StickyPhaseTests.test_a_parent_view_failure_is_sticky"
+     ]
+    },
+    {
+     "property": "an explicit trusted-code boundary",
+     "source": "E09",
+     "result": "PASS",
+     "reason": null,
+     "tests": [
+      "BoundaryTests.test_the_trusted_code_boundary_and_the_gaps_are_declared"
+     ]
+    },
+    {
+     "property": "fixed factories fail closed outside their fixed host ABI",
+     "source": "A02 real fixed factories",
+     "result": "PASS",
+     "reason": null,
+     "tests": [
+      "PartialConstructionTests.test_the_fixed_factories_refuse_a_host_outside_their_abi"
+     ]
+    },
+    {
+     "property": "fixed factories on an enrolled Linux host: construction and original deadlines over real kernel I/O",
+     "source": "A02 real fixed factories",
+     "result": "NOT_RUN_ENV_UNAVAILABLE",
+     "reason": "needs the enrolled Linux host and its kernel views; W06's native run",
+     "tests": []
+    },
+    {
+     "property": "wrong roles are refused",
+     "source": "A02 wrong roles",
+     "result": "PASS",
+     "reason": null,
+     "tests": [
+      "RoleTests.test_a_process_view_refuses_a_role_outside_the_fixed_set"
+     ]
+    },
+    {
+     "property": "dynamic peer overrides at inspection construction",
+     "source": "A02 dynamic peer overrides",
+     "result": "PASS",
+     "reason": null,
+     "tests": [
+      "OwnerTests.test_an_inspection_refuses_a_peer_that_is_not_bound_to_it",
+      "OwnerTests.test_inspections_refuse_a_wrong_owner_or_peer"
+     ]
+    },
+    {
+     "property": "dynamic peer overrides: per-tick peer substitution of the observer and broker inspections",
+     "source": "A02 dynamic peer overrides",
+     "result": "NOT_RUN_ENV_UNAVAILABLE",
+     "reason": "needs a constructed server with live peer sockets and pidfds (Linux only); W06's native run",
+     "tests": []
+    },
+    {
+     "property": "original deadlines and fresh clocks",
+     "source": "A02 original deadlines",
+     "result": "PASS",
+     "reason": null,
+     "tests": [
+      "CustodyTickTests.test_each_inconsistent_state_field_is_refused",
+      "StickyPhaseTests.test_an_overrun_deadline_fails_the_phase_and_sticks"
+     ]
+    },
+    {
+     "property": "a retained original resource that is replaced or ends is refused",
+     "source": "A02 original resources",
+     "result": "PASS",
+     "reason": null,
+     "tests": [
+      "RetainedResourceTests.test_the_retained_pidfd_must_stay_the_original_and_alive"
+     ]
+    },
+    {
+     "property": "partial acquisition",
+     "source": "A02 partial acquisition",
+     "result": "PASS",
+     "reason": null,
+     "tests": [
+      "CleanupTests.test_cleanup_of_only_original_resources_succeeds",
+      "CleanupTests.test_cleanup_closes_only_original_resources_and_the_failure_sticks"
+     ]
+    },
+    {
+     "property": "original-resource-only cleanup under substitution",
+     "source": "A02 original-resource-only cleanup",
+     "result": "PASS",
+     "reason": null,
+     "tests": [
+      "CleanupTests.test_cleanup_closes_only_original_resources_and_the_failure_sticks",
+      "CleanupTests.test_a_process_view_closes_its_original_pidfd_only",
+      "CleanupTests.test_the_server_files_close_only_their_original_descriptors",
+      "CleanupTests.test_an_inspection_closes_its_retained_resources_not_substitutes",
+      "CleanupTests.test_the_server_closes_its_original_broker_not_a_substitute"
+     ]
+    }
+   ],
    "evidence": [
+    "BoundaryTests.test_the_trusted_code_boundary_and_the_gaps_are_declared",
+    "CleanupTests.test_a_process_view_closes_its_original_pidfd_only",
+    "CleanupTests.test_an_inspection_closes_its_retained_resources_not_substitutes",
     "CleanupTests.test_cleanup_closes_only_original_resources_and_the_failure_sticks",
     "CleanupTests.test_cleanup_of_only_original_resources_succeeds",
+    "CleanupTests.test_the_server_closes_its_original_broker_not_a_substitute",
+    "CleanupTests.test_the_server_files_close_only_their_original_descriptors",
     "CustodyTickTests.test_a_foreign_inspection_owner_is_refused",
     "CustodyTickTests.test_a_subclass_instance_is_refused",
     "CustodyTickTests.test_an_unbound_view_is_refused_while_a_server_is_installed",
     "CustodyTickTests.test_another_thread_is_refused",
     "CustodyTickTests.test_each_inconsistent_state_field_is_refused",
     "CustodyTickTests.test_the_custody_state_itself_is_accepted",
-    "OwnerTests.test_a_closed_server_another_thread_or_an_imitation_is_refused",
+    "OwnerTests.test_a_closed_server_another_process_or_thread_or_an_imitation_is_refused",
     "OwnerTests.test_a_server_that_is_not_the_installed_one_is_refused",
+    "OwnerTests.test_an_inspection_refuses_a_peer_that_is_not_bound_to_it",
     "OwnerTests.test_inspections_refuse_a_wrong_owner_or_peer",
     "OwnerTests.test_no_caller_constructs_a_qualification_binding",
     "OwnerTests.test_the_installed_server_passes_its_owner_check",
+    "OwnerTests.test_the_self_inspection_takes_its_binding_only_from_the_installed_server",
+    "PartialConstructionTests.test_a_binding_whose_load_fails_is_poisoned_for_good",
     "PartialConstructionTests.test_a_view_built_without_its_constructor_is_never_usable",
-    "PartialConstructionTests.test_the_fixed_factories_refuse_an_unsupported_host",
-    "StickyPhaseTests.test_a_closed_view_refuses_a_phase",
+    "PartialConstructionTests.test_the_fixed_factories_refuse_a_host_outside_their_abi",
+    "RetainedResourceTests.test_the_retained_pidfd_must_stay_the_original_and_alive",
+    "RoleTests.test_a_process_view_refuses_a_role_outside_the_fixed_set",
+    "StickyPhaseTests.test_a_busy_view_refuses_a_second_phase",
+    "StickyPhaseTests.test_a_closed_or_failed_view_refuses_a_phase",
     "StickyPhaseTests.test_a_failure_inside_a_phase_is_sticky",
+    "StickyPhaseTests.test_a_parent_view_failure_is_sticky",
     "StickyPhaseTests.test_an_idle_view_runs_a_phase",
     "StickyPhaseTests.test_an_overrun_deadline_fails_the_phase_and_sticks",
     "StickyPhaseTests.test_reentrancy_is_refused_and_sticky"

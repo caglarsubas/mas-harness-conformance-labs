@@ -317,7 +317,10 @@ class FidelityTests(unittest.TestCase):
                  ("I05 gate channel v3", "agreement", _replays.I05, lambda v: v["agreement"][0].update(expect="X")),
                  ("I07 policy write v3", "kindChecks", _replays.I07, lambda v: v["kindChecks"][0].update(expect="OBJECT_RULE")),
                  # Q-T10: S01 must equal S02 outside the injections; the check runs before the model needs jsonschema.
-                 ("I05 gate channel v3", "supplement", _replays.I05_SUPPLEMENT, lambda v: v["transcripts"][0]["final"].update(state="X")))
+                 ("I05 gate channel v3", "supplement", _replays.I05_SUPPLEMENT, lambda v: v["transcripts"][0]["final"].update(state="X")),
+                 # Review R1-10: the supplement must name the pinned v3 vectors and model, and reference the v3 configuration.
+                 ("I05 gate channel v3", "supplement", _replays.I05_SUPPLEMENT, lambda v: v["contract"]["model"].update(sha256="0" * 64)),
+                 ("I05 gate channel v3", "supplement", _replays.I05_SUPPLEMENT, lambda v: v["configs"]["ACTIVE"].update(key=["configs", "LATER"])))
         for contract, vector_set, prefix, change in cases:
             def forged(path, prefix=prefix, change=change):
                 value = original(path)

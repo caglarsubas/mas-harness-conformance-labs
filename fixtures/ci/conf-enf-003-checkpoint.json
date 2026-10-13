@@ -2,13 +2,13 @@
  "added": {
   "task-packets/CONF-ENF-003.yaml": {
    "mode": "100644",
-   "sha256": "28694d66a7812363fd45cd13592dd4a694b1ced809948a69631516b3b9c5b053",
-   "size": 10222
+   "sha256": "95dccf01cb12a3704b444743148c2c11cab8dcef1d832730bacdf1801db58a69",
+   "size": 11235
   },
   "tests/enforcement/_catalog.py": {
    "mode": "100644",
-   "sha256": "a72ae10794cdd7166840972cd1316bd7b360713095e8fd5c7f52c8e47ff17c0c",
-   "size": 13937
+   "sha256": "33673a4abebdd9fbca50fc6498b82e3110890150e0d292c240a5d2bdebbb1935",
+   "size": 18539
   },
   "tests/enforcement/attestations/conf-enf-003.json": {
    "mode": "100644",
@@ -32,18 +32,18 @@
   },
   "tests/enforcement/tg02_lifecycle/results.json": {
    "mode": "100644",
-   "sha256": "2ee8db5a89660a630738d2bdddee31f47a57a78afbb5e52cc10763a0fefa03a6",
-   "size": 14492
+   "sha256": "4b126ae1b649e89a23a07a57b1a1b26dc5c0ff301c42e50ae083beaa4736a94e",
+   "size": 24502
   },
   "tests/enforcement/tg02_lifecycle/test_reader_guards.py": {
    "mode": "100644",
-   "sha256": "54bdd3d17683a70f8ec9117bafc26eb967c02e741dbdb7aa3313f2b4a936414a",
-   "size": 15107
+   "sha256": "6dff3b0cba8643d73bf43f971ef17fd0c8a4524b1170794a569ac7f7c5347016",
+   "size": 30797
   },
   "tests/enforcement/tg02_lifecycle/test_tg02_lifecycle.py": {
    "mode": "100644",
-   "sha256": "23e661146b7888eccb47dbdf37f319a89392fd57ac89d75f5b162bb4bf4e21b4",
-   "size": 6028
+   "sha256": "46f48c464f3cb69a804af32558523e55a6a30f8af74958ce3d6a48a018dea9e7",
+   "size": 9237
   },
   "tests/enforcement/tg03_persistence/__init__.py": {
    "mode": "100644",
@@ -52,13 +52,13 @@
   },
   "tests/enforcement/tg03_persistence/results.json": {
    "mode": "100644",
-   "sha256": "d08448f24e97c0fe8c121811f7b827979ec72473e138262d0c9367cc61cdc57c",
-   "size": 9859
+   "sha256": "57b19ef3fa611ebc3db1035d1e01ee82de3abd26bf7bb3649a85e3208d00dd80",
+   "size": 10902
   },
   "tests/enforcement/tg03_persistence/test_tg03_persistence.py": {
    "mode": "100644",
-   "sha256": "8679b6971836c9d33b3ccb41212daeedb2cb48db605f1632974ae1a2c04ff300",
-   "size": 5081
+   "sha256": "7a35492518c08a978cc88f8bc7502e0d61d8173351931d30823bbfded9c2e03c",
+   "size": 5889
   }
  },
  "baseCommit": "21ae371291b20056094cedfff11a31415c947495",
@@ -79,8 +79,8 @@
   "tests/enforcement/README.md": {
    "after": {
     "mode": "100644",
-    "sha256": "3a21d2d0984b136fb57bbdf0247c4eaa5b17a05b1e9ae16d444d10e76d8069f7",
-    "size": 3620
+    "sha256": "dbcb99992e5e39fb7b94d1896f30723c7dc0d94b3e8fa5a613ac86e19424dda5",
+    "size": 3749
    },
    "before": {
     "mode": "100644",
@@ -144,8 +144,8 @@
   "tests/enforcement/tg01_contract/test_tg01_contract.py": {
    "after": {
     "mode": "100644",
-    "sha256": "f180395bf84da7ab99a5675a11d6a2165bae40dd43f6cbd7167ff81b9fdb612c",
-    "size": 20541
+    "sha256": "9499a415689f75ad6d2977c2a0da24a1c97b085cbe3e4014847d6a0d79e8e523",
+    "size": 20955
    },
    "before": {
     "mode": "100644",
