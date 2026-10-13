@@ -102,8 +102,8 @@
   },
   "task-packets/CONF-ENF-004.yaml": {
    "mode": "100644",
-   "sha256": "38ec19a12b5c9a638ac7fb8270ffbd9c6dadf49102e57c891c4109d9b55312bb",
-   "size": 11526
+   "sha256": "b746927239d71d709fd8b8ddc57c83b49469998e94b2aac2f5481e01b11b889f",
+   "size": 11893
   },
   "tests/enforcement/_probes.py": {
    "mode": "100644",
