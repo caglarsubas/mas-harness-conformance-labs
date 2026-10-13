@@ -34,8 +34,8 @@ W04 test source for the Harness-Onion enforcement work, per the adopted W04-0 pl
   its own vector set (owner decisions Q-T6, Q-T10).
 - `tg02_lifecycle/` and `tg03_persistence/` (TG-02, TG-03, CONF-ENF-003): each group's `results.json` lists the plan's
   cases. LEDGER-E09, the only case runnable now, is tested by `test_reader_guards.py`: the R12 reader's private factory
-  and dynamic guards, with expected outcomes from E09 and A02 only (owner decision Q-T9). Its ledger row lists each
-  property with its tests. Two properties need the enrolled Linux host and are carried by named W06 native cases of the
+  and dynamic guards, with expected outcomes from E09, E07 and A02 only (owner decision Q-T9). Its ledger row lists each
+  property with its tests. Three properties need the enrolled Linux host and are carried by named W06 native cases of the
   plan; the case is PASS when every property within its own scope ran (owner decision Q-T11). Every other case
   waits for W05's release set or for W06's native hosts and is NOT_RUN_ENV_UNAVAILABLE; `_catalog.py` fixes now, by
   rules over the vectors' own content, which contract vectors (and so which expected results) each one means (owner

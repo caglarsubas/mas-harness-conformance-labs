@@ -21,7 +21,7 @@ failure, reentrancy and cleanup are sticky.
 
 Not run here (each needs the enrolled Linux host and is carried by W06 native cases of the plan; owner decision Q-T11):
 fixed factories on an enrolled Linux host (TG-05 MATRIX:original deadlines); the peer's kernel rechecks on each inspection
-tick (SO_PEERCRED credentials, pidfd liveness and the socket path; TG-04 MATRIX:parent/FD spoof, TG-05 MATRIX:peer
+tick (its descriptors, SO_PEERCRED credentials, pidfd liveness and the socket path; TG-04 MATRIX:parent/FD spoof, TG-05 MATRIX:peer
 death/restart); and the inspections' construction past their first native read (kernel views, policy epoch retention,
 page size and the peer's role pins) with the BPF view's program ID recheck on cleanup (TG-04 MATRIX:parent/FD spoof,
 TG-04 MATRIX:effective BPF ancestors, TG-04 S8-KERNEL-FACTS, TG-05 MATRIX:peer death/restart).
@@ -103,6 +103,7 @@ PROPERTIES = [
      "tests": ["CustodyTickTests.test_the_custody_state_itself_is_accepted", "CustodyTickTests.test_each_inconsistent_state_field_is_refused",
                "StickyPhaseTests.test_an_idle_view_runs_a_phase", "StickyPhaseTests.test_a_closed_or_failed_view_refuses_a_phase",
                "StickyPhaseTests.test_a_failure_inside_a_phase_is_sticky", "StickyPhaseTests.test_a_parent_view_failure_is_sticky",
+               "StickyPhaseTests.test_a_closed_or_failed_child_view_never_enters_its_parent_views_phase",
                "InspectionPhaseTests.test_an_inspection_in_custody_runs_its_phases",
                "InspectionPhaseTests.test_a_failure_inside_an_inspection_phase_is_sticky",
                "InspectionPhaseTests.test_a_replaced_owned_view_fails_the_inspection_for_good",
@@ -130,7 +131,7 @@ PROPERTIES = [
     {"property": "dynamic peer overrides on every inspection tick: the in-process peer, server and pin checks",
      "source": "A02 dynamic peer overrides; E07 replacement, no rebinding", "result": "PASS", "reason": None, "carriedBy": [],
      "tests": ["PeerTickTests.test_the_bound_peer_passes_its_tick_checks", "PeerTickTests.test_a_substituted_peer_or_pin_is_refused"]},
-    {"property": "the peer's kernel rechecks on every inspection tick: SO_PEERCRED credentials, pidfd liveness and the socket path",
+    {"property": "the peer's kernel rechecks on every inspection tick: its descriptors, SO_PEERCRED credentials, pidfd liveness and the socket path",
      "source": "E07 exact peer credentials, broker parentage and channel loss; A02 dynamic peer overrides",
      "result": "NOT_RUN_ENV_UNAVAILABLE", "tests": [], "reason": "needs live peer sockets and pidfds on the enrolled Linux host",
      "carriedBy": ["TG-04 MATRIX:parent/FD spoof", "TG-05 MATRIX:peer death/restart"]},
@@ -153,6 +154,7 @@ PROPERTIES = [
                "OwnerTests.test_the_self_inspection_checks_its_binding_and_lifetime_before_its_first_phase",
                "OwnerTests.test_peer_inspections_check_the_servers_binding_inspection_and_lifetime",
                "CustodyTickTests.test_a_child_view_checks_its_deadline_before_and_after_its_parent_view_ticks",
+               "CustodyTickTests.test_a_process_view_checks_its_deadline_around_its_owners_inspection_tick",
                "BindingCheckTests.test_each_change_is_refused_and_poisons_the_binding",
                "BindingCheckTests.test_a_check_that_outlasts_its_window_or_sees_the_files_change_is_refused",
                "BindingCheckTests.test_construction_checks_the_server_files_its_load_window_and_itself"]},
@@ -180,7 +182,7 @@ PROPERTIES = [
 CARRIED = {
     "fixed factories on an enrolled Linux host: construction and original deadlines over real kernel I/O":
         ["TG-05 MATRIX:original deadlines"],
-    "the peer's kernel rechecks on every inspection tick: SO_PEERCRED credentials, pidfd liveness and the socket path":
+    "the peer's kernel rechecks on every inspection tick: its descriptors, SO_PEERCRED credentials, pidfd liveness and the socket path":
         ["TG-04 MATRIX:parent/FD spoof", "TG-05 MATRIX:peer death/restart"],
     "the inspections' construction past their first native read (kernel views, policy epoch retention, page size and the "
     "peer's role pins) and the BPF view's program ID recheck on cleanup":
@@ -340,6 +342,39 @@ class CustodyTickTests(unittest.TestCase):
                 view.end = time.monotonic() + 0.02
                 view._tick()
 
+    def test_a_process_view_checks_its_deadline_around_its_owners_inspection_tick(self):
+        # Review R4-1: the process view ticks its owning inspection twice (before and after its pidfd recheck). A passed
+        # deadline is refused before the second inspection tick, and a second inspection tick that outlasts the view's
+        # deadline is refused after it. The owning inspection's reader tick is a stand-in that counts its calls.
+        def owned_view(second_call):
+            owner = object.__new__(reader._KernelSelfInspection)
+            calls = []
+            def reader_tick(view):
+                calls.append(view)
+                if len(calls) == 2:
+                    second_call()
+            owner._reader_tick = reader_tick
+            return in_custody(reader._KernelProcessView, _inspection_owner=owner), calls
+        def signal():
+            raise Reached()
+        view, calls = owned_view(signal)
+        with self.assertRaises(Reached):
+            view._tick()  # control: both inspection ticks are reached
+        now = time.monotonic()
+        for name, fields in (("deadline passed", {"last": now - 10, "end": now - 5}), ("clock before the last tick", {"last": now + 60})):
+            with self.subTest(before=name):
+                view, calls = owned_view(signal)
+                for field, value in fields.items():
+                    setattr(view, field, value)
+                with self.assertRaises(ConformanceError):
+                    view._tick()
+        with self.subTest(after="inspection tick outlasts the deadline"):
+            view, calls = owned_view(lambda: time.sleep(0.15))
+            view.end = time.monotonic() + 0.1
+            with self.assertRaises(ConformanceError):
+                view._tick()
+            self.assertEqual(len(calls), 2)
+
     def test_an_unbound_view_is_refused_while_a_server_is_installed(self):
         for cls in VIEWS:
             with self.subTest(view=cls.__name__), active(object()), self.assertRaises(ConformanceError):
@@ -369,6 +404,29 @@ class StickyPhaseTests(unittest.TestCase):
             for name in ("closed", "failed"):
                 with self.subTest(view=cls.__name__, state=name):
                     self.assert_unusable(in_custody(cls, busy=False, **{name: True}))
+
+    def test_a_closed_or_failed_child_view_never_enters_its_parent_views_phase(self):
+        # Review R4-3: the refusal comes before the parent view's phase, so a dead child never touches its parent.
+        class Recording(Parent):
+            def __init__(self):
+                super().__init__()
+                self.entered = 0
+
+            @contextmanager
+            def _phase(self):
+                self.entered += 1
+                yield
+        for cls, parent in VIEWS.items():
+            if parent not in ("process", "cgroup"):
+                continue
+            for name in ("closed", "failed"):
+                with self.subTest(view=cls.__name__, state=name):
+                    recording = Recording()
+                    view = in_custody(cls, busy=False, parent=recording, **{name: True})
+                    with self.assertRaises(ConformanceError):
+                        with view._phase():
+                            pass
+                    self.assertEqual(recording.entered, 0)
 
     def test_a_busy_view_refuses_a_second_phase(self):
         for cls in VIEWS:
@@ -540,11 +598,13 @@ class OwnerTests(unittest.TestCase):
                    "server inspection owned by another server": lambda owner: setattr(owner.self_inspection, "owner", server()),
                    "deadline beyond 900 s": lambda owner: setattr(owner, "deadline", time.monotonic() + 1000),
                    "deadline already passed": lambda owner: setattr(owner, "deadline", time.monotonic() - 1)}
+        lenient = type("Lenient", (reader.NativeProxyServer,), {"_owner_check": lambda self: None})
+        changes["server is an imitation whose own owner check passes"] = "lenient"  # review R4-2
         for cls, kind, slots in ((reader._KernelObserverInspection, reader._Observer, ("observer",)),
                                  (reader._KernelBrokerInspection, reader._Broker, ("broker", "_broker_original"))):
             for name, change in changes.items():
                 with self.subTest(inspection=cls.__name__, change=name):
-                    owner = server(deadline=time.monotonic() + 100)
+                    owner = server(lenient if change == "lenient" else None, deadline=time.monotonic() + 100)
                     binding = object.__new__(reader._ServerQualificationBinding)
                     own_inspection = object.__new__(reader._KernelSelfInspection)
                     binding.owner = own_inspection.owner = owner
@@ -553,7 +613,7 @@ class OwnerTests(unittest.TestCase):
                     peer.owner, peer.inspection, peer._socket_original = owner, view, object()
                     for slot in slots:
                         setattr(owner, slot, peer)
-                    if change is not None:
+                    if callable(change):
                         change(owner)
                     with active(owner), self.assertRaises(Exception):
                         view.__init__(peer)
@@ -1126,6 +1186,9 @@ class BindingCheckTests(unittest.TestCase):
                                                                            for holder in (owner, binding)],
                    "server deadline moved": lambda owner, binding: setattr(owner, "deadline", binding.deadline + 10),
                    "files closed": lambda owner, binding: setattr(binding.files, "closed", True),
+                   # Review R4-2: files held by an imitation server whose own owner check passes.
+                   "files held by a lenient imitation server": lambda owner, binding: setattr(
+                       binding.files, "owner", server(type("Lenient", (reader.NativeProxyServer,), {"_owner_check": lambda self: None}))),
                    "wall clock before the last check": lambda owner, binding: setattr(binding, "last_wall", later()),
                    "clock before the last check": lambda owner, binding: setattr(binding, "last_mono", time.monotonic() + 60),
                    "deadline passed": lambda owner, binding: [setattr(holder, "deadline", time.monotonic() - 1) for holder in (owner, binding)],

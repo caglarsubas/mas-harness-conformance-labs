@@ -2,8 +2,8 @@
  "added": {
   "task-packets/CONF-ENF-003.yaml": {
    "mode": "100644",
-   "sha256": "85f8096d775b3b34a9cdef9007ff5337931fabe513bf8bcdf008cda4c413caa0",
-   "size": 13784
+   "sha256": "ba85b7c7a0f87dab1f1e1b0dd4fe416a1531995cfda2b711305cefdea34f8843",
+   "size": 14093
   },
   "tests/enforcement/_catalog.py": {
    "mode": "100644",
@@ -32,13 +32,13 @@
   },
   "tests/enforcement/tg02_lifecycle/results.json": {
    "mode": "100644",
-   "sha256": "e15df2ebb9275db41ece4c9541cbbee024114c7e043ffbb8978f84b00eb289b0",
-   "size": 31873
+   "sha256": "c0ee73a1bf54ff3f3f9e0451e836101f90ec188631a1f43cd8686c32958cec18",
+   "size": 32280
   },
   "tests/enforcement/tg02_lifecycle/test_reader_guards.py": {
    "mode": "100644",
-   "sha256": "fb5bf4ae5beae42dfac9a6fab45a9c6d569225b4dcc9d6c2889817b69c841837",
-   "size": 87814
+   "sha256": "3f2a5cfdff71dda4dcaec0d2a0655d8bf70e84b957e0d64183cf182c89faa6f4",
+   "size": 91471
   },
   "tests/enforcement/tg02_lifecycle/test_tg02_lifecycle.py": {
    "mode": "100644",
@@ -79,8 +79,8 @@
   "tests/enforcement/README.md": {
    "after": {
     "mode": "100644",
-    "sha256": "0a40aa75af7d89c63c7f4bdc66c9c74122fb5c873e0dfee2af16d8327f2bbd2b",
-    "size": 3857
+    "sha256": "ea2afc7018f6de9f61334e746385635082f790f845f21877ce4de471edc2e582",
+    "size": 3864
    },
    "before": {
     "mode": "100644",

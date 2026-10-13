@@ -604,6 +604,7 @@
       "StickyPhaseTests.test_a_closed_or_failed_view_refuses_a_phase",
       "StickyPhaseTests.test_a_failure_inside_a_phase_is_sticky",
       "StickyPhaseTests.test_a_parent_view_failure_is_sticky",
+      "StickyPhaseTests.test_a_closed_or_failed_child_view_never_enters_its_parent_views_phase",
       "InspectionPhaseTests.test_an_inspection_in_custody_runs_its_phases",
       "InspectionPhaseTests.test_a_failure_inside_an_inspection_phase_is_sticky",
       "InspectionPhaseTests.test_a_replaced_owned_view_fails_the_inspection_for_good",
@@ -681,7 +682,7 @@
      "carriedBy": []
     },
     {
-     "property": "the peer's kernel rechecks on every inspection tick: SO_PEERCRED credentials, pidfd liveness and the socket path",
+     "property": "the peer's kernel rechecks on every inspection tick: its descriptors, SO_PEERCRED credentials, pidfd liveness and the socket path",
      "source": "E07 exact peer credentials, broker parentage and channel loss; A02 dynamic peer overrides",
      "result": "NOT_RUN_ENV_UNAVAILABLE",
      "reason": "needs live peer sockets and pidfds on the enrolled Linux host",
@@ -719,6 +720,7 @@
       "OwnerTests.test_the_self_inspection_checks_its_binding_and_lifetime_before_its_first_phase",
       "OwnerTests.test_peer_inspections_check_the_servers_binding_inspection_and_lifetime",
       "CustodyTickTests.test_a_child_view_checks_its_deadline_before_and_after_its_parent_view_ticks",
+      "CustodyTickTests.test_a_process_view_checks_its_deadline_around_its_owners_inspection_tick",
       "BindingCheckTests.test_each_change_is_refused_and_poisons_the_binding",
       "BindingCheckTests.test_a_check_that_outlasts_its_window_or_sees_the_files_change_is_refused",
       "BindingCheckTests.test_construction_checks_the_server_files_its_load_window_and_itself"
@@ -780,6 +782,7 @@
     "CleanupTests.test_the_server_files_close_only_their_original_descriptors",
     "CustodyTickTests.test_a_child_view_checks_its_deadline_before_and_after_its_parent_view_ticks",
     "CustodyTickTests.test_a_foreign_inspection_owner_is_refused",
+    "CustodyTickTests.test_a_process_view_checks_its_deadline_around_its_owners_inspection_tick",
     "CustodyTickTests.test_a_subclass_instance_is_refused",
     "CustodyTickTests.test_an_unbound_view_is_refused_while_a_server_is_installed",
     "CustodyTickTests.test_another_thread_is_refused",
@@ -819,6 +822,7 @@
     "RoleTests.test_a_process_view_refuses_a_role_outside_the_fixed_set",
     "RoleTests.test_code_and_cgroup_views_hold_only_their_process_views_role",
     "StickyPhaseTests.test_a_busy_view_refuses_a_second_phase",
+    "StickyPhaseTests.test_a_closed_or_failed_child_view_never_enters_its_parent_views_phase",
     "StickyPhaseTests.test_a_closed_or_failed_view_refuses_a_phase",
     "StickyPhaseTests.test_a_failure_inside_a_phase_is_sticky",
     "StickyPhaseTests.test_a_parent_view_failure_is_sticky",
