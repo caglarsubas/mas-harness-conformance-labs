@@ -3,7 +3,7 @@
  "packet": "CONF-ENF-004",
  "kind": "AUTHOR_EVIDENCE_NOT_CI",
  "decision": "Q-T2-B",
- "probeTree": "f35ca15d515ef8ede493c82507a19ab14049c90482cfc88c25ee5c03bd1a73b1",
+ "probeTree": "46887c7a8978e64c5c72dc95e2548ed898f566c308624590541ae53938c24e8b",
  "toolchain": {
   "rustc": "rustc 1.99.0 (b940084d7 2026-09-28)",
   "cargo": "cargo 1.99.0 (5f94df478 2026-08-27)",
@@ -26,29 +26,29 @@
   {
    "target": "x86_64-unknown-linux-musl",
    "crate": "tg04_host",
-   "sha256": "b57d5e92c29b33e9f36edf31d67a198230548c271e452a5a7055975fb915722e",
+   "sha256": "f911524b88b0ea0535fdba543751b0539cb5afef114936a7bec56f57ada83ca7",
    "size": 444400,
    "file": "ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), static-pie linked, stripped"
   },
   {
    "target": "x86_64-unknown-linux-musl",
    "crate": "tg05_clocks",
-   "sha256": "b7849973dfaabd59223447774054fa8235e7aa2ba3380a726d150e8f96720de4",
-   "size": 523568,
+   "sha256": "42289c94afff92aaeb208faedc924abbf0d9aad84265a8279aa3dcc883a7c429",
+   "size": 527376,
    "file": "ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), static-pie linked, stripped"
   },
   {
    "target": "aarch64-unknown-linux-musl",
    "crate": "tg04_host",
-   "sha256": "f7ec43f4f61aaadb033a5ee18328ae5c275e96a610f5411f1a7381d3288b86f9",
+   "sha256": "e8834dd64e65cedb58e390f613f53c1cff3f639d420f2cde71fd4e1620706198",
    "size": 402888,
    "file": "ELF 64-bit LSB executable, ARM aarch64, version 1 (SYSV), statically linked, stripped"
   },
   {
    "target": "aarch64-unknown-linux-musl",
    "crate": "tg05_clocks",
-   "sha256": "eb8eafe5673980bfd47d3d79d65d927454337ae7210825020d6240f613bb854b",
-   "size": 466848,
+   "sha256": "95879bf66cf5eee5f98bfc82a99f7b098aecabb059cf7638c29396e693edd1f1",
+   "size": 470400,
    "file": "ELF 64-bit LSB executable, ARM aarch64, version 1 (SYSV), statically linked, stripped"
   }
  ]

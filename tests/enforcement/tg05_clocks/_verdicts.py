@@ -192,8 +192,9 @@ def read_answers(lines, boot_id):
                 raise Malformed(name + " is a string or null")
         if (row["answer"] in ("REFUSED", "CLOSED")) != (row["reason"] is not None):
             raise Malformed("a refusal or close carries its reason, and nothing else does")
-        if row["party"] == "GATE" and row["generation"] is None:
-            # Review D6-1: every gate exchange names the generation it was sent in (a channel opening, the one it opens).
+        if row["party"] == "GATE" and not (type(row["generation"]) is str and TOKEN.match(row["generation"])):
+            # Reviews D6-1, R1-1: every gate exchange names the generation it was sent in (a channel opening, the one it
+            # opens), as a token: no null, empty or placeholder generation.
             raise Malformed("a gate exchange names its generation")
         answers.append(row)
     return answers
@@ -237,18 +238,18 @@ def _gate(answers):
 
 
 def _generation_at(answers, execution, instant):
-    """The generation the tested execution was bound in at the fault: that of its last allowed exchange before it that
-    names one (review D6-1), or None."""
+    """The generation the tested execution was bound in at the fault: that of its last allowed exchange before it (every
+    gate row names its generation: reviews D6-1, R1-1), or None when it was never allowed."""
     allowed = [row for row in _gate(answers) if row["execution"] == execution and row["answer"] == "ALLOWED"
-               and row["sentBoottime"] < instant and row["generation"] is not None]
+               and row["sentBoottime"] < instant]
     return allowed[-1]["generation"] if allowed else None
 
 
-def _reconnects(answers, generation, since, until):
-    """Channels allowed into the tested execution's generation after the fault (I05 v3: one channel per generation, T38;
-    review D5-2): always broken."""
+def _reconnects(answers, generation, since):
+    """Channels allowed into the tested execution's generation after the fault, at any later time (I05 v3: one channel per
+    generation, T38; reviews D5-2, R1-3): always broken."""
     return [row for row in answers if row["party"] == "GATE" and row["operation"] == "CHANNEL_OPEN" and row["answer"] == "ALLOWED"
-            and generation is not None and row["generation"] == generation and since < row["sentBoottime"] < until]
+            and generation is not None and row["generation"] == generation and row["sentBoottime"] > since]
 
 
 def _bound_at(answers, execution, instant):
@@ -281,35 +282,38 @@ def _within(rows, since, until):
     return [row for row in rows if row["sentBoottime"] > since + MARGIN_NS and row["answeredBoottime"] < until - MARGIN_NS]
 
 
-def _gate_check(check_id, rule, answers, execution, fault, since, until, reasons, empty_reason, judged_after=None,
-                need_generation=False):
-    """The tested execution's gate exchanges in the window: never ALLOWED, and no channel allowed into its generation after
-    the fault. Until the gate binds another execution after the fault, each is refused for a reason `reasons` gives its
-    operation; after that the execution is no longer bound and any refusal stands (I05 v3 binds a new execution after
-    expiry, T36). PASS needs a judged authority exchange (sent after `judged_after` when given: review D5-1)."""
+def _gate_check(check_id, rule, answers, execution, fault, since, until, reasons, empty_reason, forbidden_from,
+                judged_after=None):
+    """The tested execution's gate exchanges in the window are judged. Until the gate binds another execution after the
+    fault, each is refused for a reason `reasons` gives its operation; after that the execution is no longer bound and any
+    refusal stands (I05 v3 binds a new execution after expiry, T36). Broken at any time, inside the window or not (review
+    R1-3): an ALLOWED exchange of the tested execution sent after `forbidden_from` (the deadline, or the broker's death),
+    and a channel allowed into its generation after the fault. PASS needs a judged authority exchange (sent after
+    `judged_after` when given: review D5-1)."""
     generation = _generation_at(answers, execution, fault)
-    if need_generation and generation is None:
-        # Review D6-1: without the tested execution's generation a reconnect into it cannot be judged.
-        return _not_run(check_id, rule, "the tested execution's generation at the fault is unknown: a reconnect cannot be judged")
-    window = _within([row for row in _gate(answers) if row["execution"] == execution], since, until)
+    mine = [row for row in _gate(answers) if row["execution"] == execution]
+    window = _within(mine, since, until)
     replaced = _replaced(answers, execution, fault)
     before = [row for row in window if row["answeredBoottime"] < replaced]
-    broken = [row for row in window if row["answer"] == "ALLOWED"
-              or (row in before and row["reason"] not in reasons.get(row["operation"], ()))]
-    broken += _reconnects(answers, generation, fault, until)
+    broken = [row for row in mine if row["answer"] == "ALLOWED" and row["sentBoottime"] > forbidden_from + MARGIN_NS]
+    broken += [row for row in before if row["answer"] != "ALLOWED" and row["reason"] not in reasons.get(row["operation"], ())]
+    broken += _reconnects(answers, generation, fault)
     judged = [row for row in before if row["operation"] in AUTHORITY
               and (judged_after is None or row["sentBoottime"] > judged_after + MARGIN_NS)]
     return _check(check_id, rule, judged, broken, empty_reason)
 
 
 def _reader_check(check_id, rule, answers, execution, fault, since, deadline, empty_reason, judged_after=None):
-    """The tested execution's reader answers in the window: every one FAILED. The window ends at the execution's own
-    deadline, or when the gate binds another execution (reviews D3-3, D4-4): after either, even a reader the check is
-    meant to catch fails the old execution. PASS needs a judged answer sent after `judged_after` when given (D5-1)."""
+    """The tested execution's reader answers in the window are judged: every one FAILED. The window ends at the
+    execution's own deadline, or when the gate binds another execution (reviews D3-3, D4-4): after either, even a reader
+    the check is meant to catch fails the old execution. A SERVED answer sent after `since` is broken at any time, inside
+    the window or not (review R1-3). PASS needs a judged answer sent after `judged_after` when given (D5-1)."""
     until = min(deadline, _replaced(answers, execution, fault))
-    window = _within([row for row in answers if row["party"] == "SERVER" and row["execution"] == execution], since, until)
+    mine = [row for row in answers if row["party"] == "SERVER" and row["execution"] == execution]
+    window = _within(mine, since, until)
     judged = [row for row in window if judged_after is None or row["sentBoottime"] > judged_after + MARGIN_NS]
-    return _check(check_id, rule, judged, [row for row in window if row["answer"] == "SERVED"], empty_reason)
+    broken = [row for row in mine if row["answer"] == "SERVED" and row["sentBoottime"] > since + MARGIN_NS]
+    return _check(check_id, rule, judged, broken, empty_reason)
 
 
 def _fresh_check(check_id, rule, answers, restarted):
@@ -351,7 +355,8 @@ def expiry_with_stalled_python(start, records, answers):
     if not _bound_at(answers, execution, stop):
         return [_not_run("E08-STALLED", NO_AUTHORITY, "the tested execution was not bound and live at the stall")]
     return [_gate_check("E08-STALLED", NO_AUTHORITY, answers, execution, stop, resume, resume + (deadline - stop),
-                        EXPIRY_REASONS, "no gate exchange for the tested execution while a paused timer would still allow")]
+                        EXPIRY_REASONS, "no gate exchange for the tested execution while a paused timer would still allow",
+                        forbidden_from=deadline)]
 
 
 def suspend(start, records, answers):
@@ -371,7 +376,8 @@ def suspend(start, records, answers):
         return [_not_run("E08-SUSPEND", NO_AUTHORITY, "the tested execution was not bound and live at the suspend")]
     return [_gate_check("E08-SUSPEND", NO_AUTHORITY, answers, execution, before["boottime"], after["boottime"],
                         after["boottime"] + (deadline - before["boottime"]) - awake, EXPIRY_REASONS,
-                        "no gate exchange for the tested execution while a timer stopped in suspend would still allow")]
+                        "no gate exchange for the tested execution while a timer stopped in suspend would still allow",
+                        forbidden_from=deadline)]
 
 
 def wall_clock_rollback(start, records, answers):
@@ -392,7 +398,8 @@ def wall_clock_rollback(start, records, answers):
     # The window ends at the last reading taken while the clock was still behind, before the restore (review D3-4).
     return [_gate_check("E08-ROLLBACK", NO_AUTHORITY, answers, execution, _at(fault), deadline,
                         min(_at(held_record), deadline + back), EXPIRY_REASONS,
-                        "no gate exchange for the tested execution after the deadline while the wall clock was behind")]
+                        "no gate exchange for the tested execution after the deadline while the wall clock was behind",
+                        forbidden_from=deadline)]
 
 
 PEER_GATE = ("E07: after the broker's death every gate exchange for the tested execution is refused for the peer's loss "
@@ -429,12 +436,25 @@ def peer_death_restart(start, records, answers):
     restarted = _at(restarts[0])
     checks = []
     if peer == "BROKER":
-        if _bound_at(answers, execution, killed):
-            checks.append(_gate_check("E07-GATE", PEER_GATE, answers, execution, killed, killed, deadline, PEER_REASONS,
-                                      "no gate exchange for the tested execution after the restart and before its deadline",
-                                      judged_after=restarted, need_generation=True))
-        else:
+        attempts = [row for row in answers if row["party"] == "GATE" and row["operation"] == "CHANNEL_OPEN"
+                    and row["sentBoottime"] > restarted]
+        if not _bound_at(answers, execution, killed):
             checks.append(_not_run("E07-GATE", PEER_GATE, "the tested execution was not bound and live at the kill"))
+        elif not attempts:
+            # Review R1-2: a reconnect shows only in the restarted broker's channel attempt, which the driver must log.
+            checks.append(_not_run("E07-GATE", PEER_GATE, "no channel attempt of the restarted broker is logged"))
+        else:
+            check = _gate_check("E07-GATE", PEER_GATE, answers, execution, killed, killed, deadline, PEER_REASONS,
+                                "no gate exchange for the tested execution after the restart and before its deadline",
+                                forbidden_from=killed, judged_after=restarted)
+            # The dead broker's generation is held (T26): nothing at all is allowed in it after the kill, whatever the
+            # operation or execution (a reconnect, a status frame, a bind of another execution: review R1-2).
+            dead = _generation_at(answers, execution, killed)
+            used = [row for row in answers if row["party"] == "GATE" and row["answer"] == "ALLOWED" and row["generation"] == dead
+                    and row["sentBoottime"] > killed + MARGIN_NS]
+            if used and check["result"] != FAIL:
+                check = _check("E07-GATE", PEER_GATE, [], used, "")
+            checks.append(check)
     if _served_at(answers, execution, killed):
         checks.append(_reader_check("E07-READER-" + peer, PEER_READER, answers, execution, killed, killed, deadline,
                                     "no reader answer for the tested execution after the restart and before its deadline",
@@ -472,7 +492,7 @@ def original_deadlines(start, records, answers):
         checks.append(_gate_check("E08-ORIGINAL", ORIGINAL_GATE, answers, execution, killed, deadline,
                                   restarted + (deadline - killed), EXPIRY_REASONS,
                                   "no gate exchange for the tested execution after the original deadline while a restarted "
-                                  "one would allow"))
+                                  "one would allow", forbidden_from=deadline))
     else:
         checks.append(_not_run("E08-ORIGINAL", ORIGINAL_GATE, "the tested execution was not bound and live at the kill"))
     if _served_at(answers, execution, killed):

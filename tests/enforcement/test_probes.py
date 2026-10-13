@@ -20,7 +20,7 @@ from tg05_clocks import _verdicts
 PROBES = _probes.PROBES
 CRATES = ("common", "tg04_host", "tg05_clocks")
 # The tree reviewed in CONF-ENF-004; a change to any probe file changes it and needs fresh compile evidence.
-PROBE_TREE = "f35ca15d515ef8ede493c82507a19ab14049c90482cfc88c25ee5c03bd1a73b1"
+PROBE_TREE = "46887c7a8978e64c5c72dc95e2548ed898f566c308624590541ae53938c24e8b"
 SOURCES = {
     "common": {"binding.rs", "cgroup.rs", "lib.rs", "nr.rs", "proc.rs", "read.rs", "role.rs", "sys.rs", "time.rs", "timeline.rs",
                "tree.rs"},

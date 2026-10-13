@@ -52,6 +52,7 @@ const ROLLBACK_BEYOND_DEADLINE_NS: i128 = 3_600 * NS_PER_S;
 const WAKE_AFTER_DEADLINE_S: i128 = 60;
 const RESTART_WAIT_NS: i128 = 300 * NS_PER_S;
 const EXIT_WAIT_MS: i32 = 2_000;
+const STOP_ROUNDS: usize = 5;
 const POLL: Duration = Duration::from_millis(100);
 
 /// Set by a restore guard that could not restore: the run is then NOT_RUN and W06's harness restore must run (review D3-6).
@@ -182,15 +183,40 @@ fn expiry_with_stalled_python(binding: &Binding) -> Result<(), String> {
     let mut held = Continue(vec![(server.pid, server.pidfd)]);
     held.0.extend(workers.into_iter().map(|(pid, _, pidfd)| (pid, pidfd)));
     let mut applied = true;
-    for (pid, pidfd) in &held.0 {
-        if let Err(error) = pidfd.signal(sys::SIGSTOP) {
-            applied = false;
-            record("observation", &[("name", string("signalRefused")), ("value", string(&format!("{}: {}", pid, describe(&error)))),
-                                    ("clocks", clocks(&now()?))]);
+    // Stop every process of the CPython roles, then list them again until no unstopped process remains (a worker may
+    // fork between the listing and the signal: review R1-6).
+    for _ in 0..STOP_ROUNDS {
+        for (pid, pidfd) in &held.0 {
+            if let Err(error) = pidfd.signal(sys::SIGSTOP) {
+                applied = false;
+                record("observation", &[("name", string("signalRefused")), ("value", string(&format!("{}: {}", pid, describe(&error)))),
+                                        ("clocks", clocks(&now()?))]);
+            }
+        }
+        sleep(POLL);
+        let mut fresh = Vec::new();
+        for (name, path, interpreter) in expected::ROLES.iter() {
+            if interpreter.is_none() {
+                continue;
+            }
+            for pid in cgroup::procs(Path::new(path)).map_err(|error| format!("{} cgroup.procs: {}", name, describe(&error)))? {
+                if !held.0.iter().any(|(known, _)| *known == pid) {
+                    fresh.push(pid);
+                }
+            }
+        }
+        if fresh.is_empty() {
+            break;
+        }
+        for pid in fresh {
+            let pidfd = PidFd::open(pid).map_err(|error| format!("{} pidfd_open: {}", pid, describe(&error)))?;
+            held.0.push((pid, pidfd));
         }
     }
-    sleep(POLL);
-    let all = applied && held.0.iter().all(|(pid, pidfd)| stopped(*pid, pidfd));
+    let listed: Vec<i32> = expected::ROLES.iter().filter(|row| row.2.is_some())
+        .flat_map(|row| cgroup::procs(Path::new(row.1)).unwrap_or_default()).collect();
+    let all = applied && listed.iter().all(|pid| held.0.iter().any(|(known, _)| known == pid))
+        && held.0.iter().all(|(pid, pidfd)| pidfd.exited_within(0).unwrap_or(false) || stopped(*pid, pidfd));
     let pids = Json(format!("[{}]", held.0.iter().map(|(pid, _)| pid.to_string()).collect::<Vec<_>>().join(",")));
     record("fault", &[("fault", string("SIGSTOP")), ("pids", pids), ("applied", boolean(all)), ("clocks", clocks(&now()?))]);
     if !all {

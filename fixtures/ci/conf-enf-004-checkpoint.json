@@ -2,7 +2,7 @@
  "added": {
   "probes/enforcement/BUILD_EVIDENCE.json": {
    "mode": "100644",
-   "sha256": "27f9dfa12dc1d3473c325aee181cbd2de05e1ba796f946c32295e1575273eea2",
+   "sha256": "1ce4b6c908398b71bccf7734208425a0966e170b43d19d6d8d1aeb9209766aee",
    "size": 2697
   },
   "probes/enforcement/Cargo.lock": {
@@ -72,7 +72,7 @@
   },
   "probes/enforcement/common/src/tree.rs": {
    "mode": "100644",
-   "sha256": "19091b6b6938adcad000815f6d090b8ffe3d99253e1c4f6f5e8782c44f3e46ba",
+   "sha256": "7b817974dfbd936da99683f54c2c0bfd6c02df264751fb09920692707ad515af",
    "size": 318
   },
   "probes/enforcement/tg04_host/Cargo.toml": {
@@ -97,8 +97,8 @@
   },
   "probes/enforcement/tg05_clocks/src/main.rs": {
    "mode": "100644",
-   "sha256": "4fa614b2b46d63e7f692c4f48a44bdaebffca7cb93ad85f411973abccbdb7c07",
-   "size": 16812
+   "sha256": "8e06deb396308a141a80de8a52ea44fea506c5944e1874c69bcc961bcb759572",
+   "size": 18086
   },
   "task-packets/CONF-ENF-004.yaml": {
    "mode": "100644",
@@ -122,7 +122,7 @@
   },
   "tests/enforcement/test_probes.py": {
    "mode": "100644",
-   "sha256": "360cdeb0b5a64fdd3a984356b784c037394f420361a240a9fc4834c85a3bbf1f",
+   "sha256": "e4008e59b52234a0c6236326b4bc51c41d0d430ba26243f73de19e80074838ba",
    "size": 13788
   },
   "tests/enforcement/tg04_host/__init__.py": {
@@ -147,13 +147,13 @@
   },
   "tests/enforcement/tg05_clocks/_verdicts.py": {
    "mode": "100644",
-   "sha256": "13d2631912cd07882d36fc9714f644524a8990bc2496ec2fe5ffca3ad10c75d7",
-   "size": 35354
+   "sha256": "aa02e3dbf19c80574fa02efab277605fdbf1e70369df11d3378c2984d38ed8b4",
+   "size": 36901
   },
   "tests/enforcement/tg05_clocks/results.json": {
    "mode": "100644",
-   "sha256": "910cf2a0311de09031fea4490027f02ca134efb6d7c68a8a9db87e2774d5df8b",
-   "size": 34332
+   "sha256": "c6767fe59eb52fa6f7baedb7d197f888b736bf549bcba5d83dfd6e41da64d10a",
+   "size": 34856
   },
   "tests/enforcement/tg05_clocks/test_tg05_clocks.py": {
    "mode": "100644",
@@ -162,8 +162,8 @@
   },
   "tests/enforcement/tg05_clocks/test_verdicts.py": {
    "mode": "100644",
-   "sha256": "cf291836b06a8e1bb9cc260a3fbcf7280a0364ff04b1e1879e535a0c9ff41835",
-   "size": 31068
+   "sha256": "36e8dc010459ccb60d39da10012e9c4b4f3ff5803c19f22816f363def6a32aec",
+   "size": 33716
   }
  },
  "baseCommit": "25f38a51144e1b6a9042b52a75cca5b3c3bc13d6",
@@ -184,8 +184,8 @@
   "tests/enforcement/README.md": {
    "after": {
     "mode": "100644",
-    "sha256": "408f0ecd6b2afca614acab32d84e948d4f873d475804ac287e7d71ffe9138bde",
-    "size": 8318
+    "sha256": "2f01a375070fb32f620d05af03a6abdb5aeaa5bbac0962b1495788de266d7f17",
+    "size": 8942
    },
    "before": {
     "mode": "100644",
@@ -197,8 +197,8 @@
   "tests/enforcement/_catalog.py": {
    "after": {
     "mode": "100644",
-    "sha256": "de524ed0f4803d89bb1de5baea0f0a40387462e592dd1a584ecd04c6745ba753",
-    "size": 60346
+    "sha256": "0f9f36282a56a609460764582b09e9763bfb160081130a37a6799dc9028a14c7",
+    "size": 60654
    },
    "before": {
     "mode": "100644",

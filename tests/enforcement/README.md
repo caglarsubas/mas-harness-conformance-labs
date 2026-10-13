@@ -73,10 +73,16 @@ W04 test source for the Harness-Onion enforcement work, per the adopted W04-0 pl
   60 s before the fault; do not close or drain its generation before the judged requests (a close by the system itself
   is part of the subject: D6-6); send its requests during the case's window: after the resume (stalled Python, suspend),
   after the deadline (rollback; in original deadlines its gate requests after the deadline and its reader requests
-  between the restart and the deadline: D6-2), and for peer death/restart after the peer's restart, once the restarted
-  broker's new channel is open, repeatedly until the fresh bind (they may also go between the kill and the restart:
-  D6-3); only then bind a fresh execution (after the tested execution's deadline when it must stay bound, as in original
-  deadlines; in a new generation after a broker restart) and send its reader requests.
+  between the restart and the deadline: D6-2), and for peer death/restart after the peer's restart (they may also go
+  between the kill and the restart), repeatedly until the fresh bind: in the BROKER run once the restarted broker has
+  attempted its channel, in the OBSERVER run once the observer is back (D6-3, R1-8); only then bind a fresh execution
+  (after the tested execution's deadline when it must stay bound, as in original deadlines; in a new generation after a
+  broker restart) and send its reader requests.
+- In the BROKER run the restarted broker's channel attempts are logged as CHANNEL_OPEN rows, including any into the dead
+  generation (the gate must refuse it, T38); without a logged attempt E07-GATE stays NOT_RUN (R1-2, R1-9).
+- Carried for W06: the original-deadlines window lasts as long as the reader is down (a restart faster than about 2 s
+  leaves E08-ORIGINAL NOT_RUN: D6-4); a reader answer SERVED from 1 s after its peer's death counts as broken, which W06
+  confirms against E09's per-tick rechecks before the first native run (R1-7).
 - Before each run W06 compares each probe binary's sha256 with the build it reviewed, passes that build's probe-tree
   digest to the verdicts (`verdict(case, runs, probe_tree)`), and checks the binding's policy digest against the enrolled
   record; after each run its harness performs the case's `harnessRestore`, whether or not the probe ended. A case whose

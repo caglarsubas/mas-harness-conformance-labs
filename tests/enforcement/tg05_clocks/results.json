@@ -511,6 +511,32 @@
      ]
     },
     {
+     "class": "dir",
+     "perms": [
+      "search"
+     ],
+     "targets": [
+      "HOST_POLICY:/sys",
+      "HOST_POLICY:/sys/power",
+      "HOST_POLICY:/sys/class",
+      "HOST_POLICY:/sys/class/rtc",
+      "HOST_POLICY:the rtc0 device directory under /sys/devices"
+     ],
+     "assertions": [],
+     "grantedTo": null
+    },
+    {
+     "class": "lnk_file",
+     "perms": [
+      "read"
+     ],
+     "targets": [
+      "HOST_POLICY:/sys/class/rtc/rtc0"
+     ],
+     "assertions": [],
+     "grantedTo": null
+    },
+    {
      "class": "file",
      "perms": [
       "open",

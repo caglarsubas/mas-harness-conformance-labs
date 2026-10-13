@@ -136,11 +136,15 @@ class StalledPython(unittest.TestCase):
     def test_answers_for_another_execution_are_not_judged(self):
         self.assertEqual(self.judge([answer(1_065 * S, "GATE", "REFUSED", execution="E9")])["result"], "NOT_RUN_ENV_UNAVAILABLE")
 
-    def test_answers_outside_the_paused_timers_window_are_not_judged(self):
-        # Review D3-4: an exchange must lie wholly inside the window, a margin inside each end.
-        late = [answer(1_060 * S + S // 2, "GATE", "ALLOWED"), answer(1_200 * S, "GATE", "ALLOWED"),
-                answer(1_158 * S + S // 2, "GATE", "ALLOWED", answered=1_160 * S)]
+    def test_answers_outside_the_paused_timers_window_are_not_judged_but_an_allowance_after_the_deadline_fails(self):
+        # Review D3-4: only an exchange wholly inside the window, a margin inside each end, can carry a PASS.
+        late = [answer(1_060 * S + S // 2, "GATE", "REFUSED", reason="STAMP_NONE"), answer(1_200 * S, "GATE", "REFUSED"),
+                answer(1_158 * S + S // 2, "GATE", "REFUSED", answered=1_160 * S)]
         self.assertEqual(self.judge(late)["result"], "NOT_RUN_ENV_UNAVAILABLE")
+        # Review R1-3: no conforming gate allows the tested execution after its deadline, inside the window or not.
+        for sent in (1_030 * S, 1_200 * S, 5_000 * S):
+            with self.subTest(sent=sent):
+                self.assertEqual(self.judge([answer(1_065 * S, "GATE", "REFUSED"), answer(sent, "GATE", "ALLOWED")])["result"], "FAIL")
 
     def test_an_execution_not_bound_and_live_at_the_stall_is_not_the_case(self):
         # Reviews D3-2, D4-5: never allowed by the gate, refused or replaced before the stall, or allowed too long before it.
@@ -267,14 +271,41 @@ class PeerDeathRestart(unittest.TestCase):
         reconnect = broker_answers(extra=[channel(550 * S, "G1")])
         self.assertEqual(self.judge(broker=reconnect)["checks"][0]["result"], "FAIL")
 
-    def test_a_reconnect_into_the_dead_generation_fails_however_the_driver_names_the_rows(self):
-        # Review D6-1 (runs A, A2): the dead generation comes from the tested execution's own allowed rows, and a gate row
-        # without a generation is refused as malformed, so a reconnect is never passed unjudged.
-        nameless = [row.replace('"generation": "G1"', '"generation": null') for row in broker_answers(extra=[channel(550 * S, "G1")])]
-        recorded = v.verdict(self.case, [peer_run("BROKER", nameless), peer_run("OBSERVER", observer_answers(), killed=600)], TREE)
-        self.assertEqual(recorded["result"], "NOT_RUN_ENV_UNAVAILABLE")
-        reconnect = broker_answers(extra=[bind(450 * S, "E1", "G1"), channel(550 * S, "G1")])
+    def test_rows_without_a_real_generation_are_refused_so_a_reconnect_is_never_passed_unjudged(self):
+        # Reviews D6-1 (runs A, A2) and R1-1: the restarted broker reconnects into the dead G1. Before the fix these PASSed:
+        # run A labels the tested execution's rows with no generation, run A2 names G1 only on its bind, and the R1-1
+        # variants use an empty, blank or placeholder generation. Each is now malformed and recorded NOT_RUN.
+        for label in ("null", '""', '" "', '"-"'):
+            with self.subTest(label=label):
+                rows = [row.replace('"execution": "E1", "generation": "G1"', '"execution": "E1", "generation": %s' % label)
+                        for row in broker_answers(extra=[channel(550 * S, "G1")])]
+                if label == "null":
+                    rows.insert(0, bind(440 * S, "E1", "G1"))                         # run A2 keeps G1 on the bind
+                recorded = v.verdict(self.case, [peer_run("BROKER", rows), peer_run("OBSERVER", observer_answers(), killed=600)], TREE)
+                self.assertEqual(recorded["result"], "NOT_RUN_ENV_UNAVAILABLE")
+                self.assertIn("generation", recorded["reason"])
+        reconnect = broker_answers(extra=[channel(550 * S, "G1")])
         self.assertEqual(self.judge(broker=reconnect)["checks"][0]["result"], "FAIL")
+
+    def test_anything_allowed_in_the_dead_generation_after_the_kill_fails(self):
+        # Review R1-2: the held generation allows nothing after the broker's death, whatever the operation or execution.
+        for extra in ([bind(550 * S, "E5", "G1")],
+                      [answer(550 * S, "GATE", "ALLOWED", execution="-", operation="GENERATION_STATUS")],
+                      [answer(550 * S, "GATE", "ALLOWED", execution="E5", operation="ARM_ACTION")]):
+            with self.subTest(extra=json.loads(extra[0])["operation"]):
+                self.assertEqual(self.judge(broker=broker_answers(extra=extra))["checks"][0]["result"], "FAIL")
+
+    def test_without_a_logged_channel_attempt_of_the_restarted_broker_the_gate_part_is_not_run(self):
+        # Review R1-2: a reconnect shows only in that attempt.
+        rows = [row for row in broker_answers() if '"operation": "CHANNEL_OPEN"' not in row]
+        self.assertEqual(self.judge(broker=rows)["checks"][0]["result"], "NOT_RUN_ENV_UNAVAILABLE")
+
+    def test_violations_after_the_window_still_fail(self):
+        # Review R1-3: an allowance after the broker's death, a reconnect after the deadline, the reader serving the
+        # tested execution after its deadline; no conforming implementation answers so.
+        self.assertEqual(self.judge(broker=broker_answers(extra=[answer(1_200 * S, "GATE", "ALLOWED", generation="G2")]))["checks"][0]["result"], "FAIL")
+        self.assertEqual(self.judge(broker=broker_answers(extra=[channel(1_200 * S, "G1")]))["checks"][0]["result"], "FAIL")
+        self.assertEqual(self.judge(observer=observer_answers(fresh=observer_answers()[3:] + [answer(1_200 * S, "SERVER", "SERVED")]))["checks"][3]["result"], "FAIL")
 
     def test_a_gate_that_rebinds_the_execution_fails(self):
         self.assertEqual(self.judge(broker=broker_answers(extra=[bind(550 * S, "E1", "G2")]))["checks"][0]["result"], "FAIL")

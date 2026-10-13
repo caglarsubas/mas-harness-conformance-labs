@@ -744,7 +744,10 @@ PERMISSIONS = {
            ("process", ["sigstop", "signal"], ["planeon_worker_t"], []),
            ("capability", ["kill"], [], [])],
     "MATRIX:suspend": _reads(["planeon_cgroup_delegate_t", "planeon_cgroup_worker_t"], ["planeon_worker_t"])
-        + [("file", ["open", "write"], ["HOST_POLICY:/sys/power/state", "HOST_POLICY:/sys/class/rtc/rtc0/wakealarm"], [])],
+        + [("dir", ["search"], ["HOST_POLICY:/sys", "HOST_POLICY:/sys/power", "HOST_POLICY:/sys/class", "HOST_POLICY:/sys/class/rtc",
+                                "HOST_POLICY:the rtc0 device directory under /sys/devices"], []),
+           ("lnk_file", ["read"], ["HOST_POLICY:/sys/class/rtc/rtc0"], []),
+           ("file", ["open", "write"], ["HOST_POLICY:/sys/power/state", "HOST_POLICY:/sys/class/rtc/rtc0/wakealarm"], [])],
     "MATRIX:wall-clock rollback": _reads(["planeon_cgroup_delegate_t", "planeon_cgroup_worker_t"], ["planeon_worker_t"])
         + [("capability", ["sys_time"], [], [])],
     "MATRIX:peer death/restart": _reads(["planeon_cgroup_observer_t", "planeon_cgroup_delegate_t", "planeon_cgroup_broker_t",
