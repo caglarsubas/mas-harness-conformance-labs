@@ -79,6 +79,8 @@ CLOCK_FIELDS = {"realtime", "monotonic", "boottime"}
 DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 TOKEN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 BOOT_ID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+# I05 v3 channel.schema.json: every frame's generation is 64 lowercase hex characters (review R4-2).
+GENERATION = re.compile(r"^[0-9a-f]{64}$")
 BINDING_KEYS = {"MATRIX:expiry with stalled Python": {"route", "policyDigest", "expiresAt", "execution"},
                 "MATRIX:suspend": {"route", "policyDigest", "expiresAt", "execution"},
                 "MATRIX:wall-clock rollback": {"route", "policyDigest", "expiresAt", "execution"},
@@ -192,10 +194,10 @@ def read_answers(lines, boot_id):
                 raise Malformed(name + " is a string or null")
         if (row["answer"] in ("REFUSED", "CLOSED")) != (row["reason"] is not None):
             raise Malformed("a refusal or close carries its reason, and nothing else does")
-        if row["party"] == "GATE" and not (type(row["generation"]) is str and TOKEN.match(row["generation"])):
-            # Reviews D6-1, R1-1: every gate exchange names the generation it was sent in (a channel opening, the one it
-            # opens), as a token: no null, empty or placeholder generation.
-            raise Malformed("a gate exchange names its generation")
+        if row["party"] == "GATE" and not (type(row["generation"]) is str and GENERATION.match(row["generation"])):
+            # Reviews D6-1, R1-1, R4-2: every gate exchange names the generation it was sent in (a channel opening, the one
+            # it opens) in the I05 v3 form, 64 lowercase hex characters: no null, empty or placeholder generation.
+            raise Malformed("a gate exchange names its generation in the I05 v3 form")
         answers.append(row)
     return answers
 
@@ -466,9 +468,11 @@ def peer_death_restart(start, records, answers):
         if not _bound_at(answers, execution, killed):
             checks.append(_not_run("E07-GATE", PEER_GATE, "the tested execution was not bound and live at the kill"))
         else:
+            # Review R4-4: the judged requests come after the restarted broker's first channel attempt (the schedule).
+            first_attempt = min((row["sentBoottime"] for row in attempts), default=restarted)
             check = _gate_check("E07-GATE", PEER_GATE, answers, execution, killed, killed, deadline, PEER_REASONS,
-                                "no gate exchange for the tested execution after the restart and before its deadline",
-                                forbidden_from=killed, judged_after=restarted)
+                                "no gate exchange for the tested execution after the restarted broker's channel attempt and "
+                                "before its deadline", forbidden_from=killed, judged_after=max(restarted, first_attempt))
             # A violation that needs no generation FAILs first (review R3-2); then the reconnect part must be judgeable.
             if check["result"] == FAIL:
                 checks.append(check)

@@ -200,7 +200,8 @@ fn expiry_with_stalled_python(binding: &Binding) -> Result<(), String> {
                 continue;
             }
             for pid in cgroup::procs(Path::new(path)).map_err(|error| format!("{} cgroup.procs: {}", name, describe(&error)))? {
-                if !held.0.iter().any(|(known, _)| *known == pid) {
+                // A PID counts as held only while its held process lives (review R4-5: a reused PID is a new process).
+                if !held.0.iter().any(|(known, pidfd)| *known == pid && !pidfd.exited_within(0).unwrap_or(true)) {
                     fresh.push((pid, *name, *path));
                 }
             }
@@ -225,7 +226,7 @@ fn expiry_with_stalled_python(binding: &Binding) -> Result<(), String> {
             listed.extend(cgroup::procs(Path::new(path)).map_err(|error| format!("{} cgroup.procs: {}", name, describe(&error)))?);
         }
     }
-    let all = applied && listed.iter().all(|pid| held.0.iter().any(|(known, _)| known == pid))
+    let all = applied && listed.iter().all(|pid| held.0.iter().any(|(known, pidfd)| known == pid && !pidfd.exited_within(0).unwrap_or(true)))
         && held.0.iter().all(|(pid, pidfd)| pidfd.exited_within(0).unwrap_or(false) || stopped(*pid, pidfd));
     let pids = Json(format!("[{}]", held.0.iter().map(|(pid, _)| pid.to_string()).collect::<Vec<_>>().join(",")));
     record("fault", &[("fault", string("SIGSTOP")), ("pids", pids), ("applied", boolean(all)), ("clocks", clocks(&now()?))]);
