@@ -1,6 +1,6 @@
 {
  "schemaVersion": "r12.enforcement-tg01-results/v1",
- "packet": "CONF-ENF-002",
+ "packet": "CONF-ENF-003",
  "testGroup": "TG-01",
  "profile": "python-conformance-stdlib (Python 3.12, standard library only; jsonschema absent)",
  "rule": "The results every run under the verifier profile must reproduce exactly: each vector PASS, or NOT_RUN_ENV_UNAVAILABLE when its replay needs jsonschema; never PASS for a vector not run (AGENTS rule 14). A case is PASS for a contract only when every vector mapped to it (its tagged vector sets and its selected vectors) ran and passed; otherwise it is NOT_RUN_ENV_UNAVAILABLE, with its counts.",
@@ -417,6 +417,27 @@
     "T118",
     "T119",
     "T120"
+   ],
+   "reason": "G-JSONSCHEMA: the replay reaches the reference model's jsonschema import (owner decision Q-T4)"
+  },
+  {
+   "contract": "I05 gate channel v3",
+   "vectorSet": "supplement",
+   "cases": [
+    "MATRIX:transcript replay"
+   ],
+   "vectors": 6,
+   "results": {
+    "PASS": 0,
+    "NOT_RUN_ENV_UNAVAILABLE": 6
+   },
+   "notRunIds": [
+    "S01",
+    "S02",
+    "S03",
+    "S04",
+    "S05",
+    "S06"
    ],
    "reason": "G-JSONSCHEMA: the replay reaches the reference model's jsonschema import (owner decision Q-T4)"
   },
@@ -1335,10 +1356,10 @@
   {
    "case": "MATRIX:transcript replay",
    "contract": "I05 gate channel v3",
-   "vectors": 120,
+   "vectors": 126,
    "results": {
     "PASS": 1,
-    "NOT_RUN_ENV_UNAVAILABLE": 119
+    "NOT_RUN_ENV_UNAVAILABLE": 125
    },
    "result": "NOT_RUN_ENV_UNAVAILABLE"
   },

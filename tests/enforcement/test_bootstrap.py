@@ -21,9 +21,12 @@ MANIFEST = SNAPSHOTS / "manifest.json"
 PLAN_PATH = "architecture/enforcement-test-plan/traceability.json"
 # Review E1-4: the source commit and the plan's own digest are pinned here, not only by the manifest.
 SOURCE_COMMIT = "a2eab9365c8663cc1ae23a666e864b821f600fa6"
+# Owner decision Q-T10 (2026-10-13): manifest v2 pins each file's own source commit; the I05 v3 supplement comes from
+# harness-onion 93d32e1 (packet 227), everything else from SOURCE_COMMIT.
+SUPPLEMENT_COMMIT = "93d32e1cc5125b5878f51de31c61ada29e1fa6da"
 PLAN_SHA256 = "762c2dfa4356b5ac59491fc51359dc4e6ef26f6a22f08c7cca6982c0b2979f72"
-MANIFEST_FIELDS = {"schemaVersion", "sourceRepository", "sourceCommit", "root", "rule", "files"}
-FILE_FIELDS = {"contract", "path", "sha256", "size"}
+MANIFEST_FIELDS = {"schemaVersion", "sourceRepository", "root", "rule", "files"}
+FILE_FIELDS = {"contract", "path", "sha256", "size", "sourceCommit"}
 # Recorded gap (tests/enforcement/toolchains.json): the only non-stdlib import. CONF-ENF-002 closed G-I06-V1 by the
 # recorded addition below, so no snapshotted model imports a sibling that is not snapshotted.
 EXTERNAL_IMPORTS = {"scripts/i05_gate_channel_v3.py": {"jsonschema"}, "scripts/native_qualification_v3.py": {"jsonschema"}}
@@ -36,8 +39,15 @@ ADDITIONS = [("I06 backend profile v1 (recorded addition, owner decision Q-T5)",
               "8a3a09bb5dbc08804dbea06dd0700a14648a9cdbc8efd62112dc64ba0b6ba1b4", 41971),
              ("W01 amendment W02D input (recorded addition, owner decision Q-T7)", "architecture/seccomp-allowlists/status.json",
               "08a541be25eb126d541a56242091eb953c8c7ec1c7fda8136ec47505fd0a6c0a", 4478)]
+# Owner decision Q-T10: the I05 v3 supplement, pinned the same way, from its own source commit.
+SUPPLEMENT = [("I05 gate channel v3 supplement (recorded addition, owner decision Q-T10)", "architecture/i05-gate-channel-v3-supplement/vectors.json",
+               "1c00bdb3ea112af6098a09158cce3e4a7a6098c9670f490ead4ca65d8bdbb5ac", 29077),
+              ("I05 gate channel v3 supplement (recorded addition, owner decision Q-T10)", "architecture/i05-gate-channel-v3-supplement/status.json",
+               "59c582724ad6621b8961f26b250c4badda440d0552703f138a20175472d8f35b", 763)]
 # Area-local modules area code may import (CONF-ENF-002); _models.py is the one module allowed to load code by path.
-AREA_MODULES = {"_models", "tg01_contract", "."}
+AREA_MODULES = {"_models", "_catalog", "tg01_contract", "tg02_lifecycle", "tg03_persistence", "."}
+# Owner decision Q-T9 (2026-10-13): LEDGER-E09's subject is R12's own reader, imported by this one test module only.
+SUBJECT_IMPORTS = {"tests/enforcement/tg02_lifecycle/test_reader_guards.py": {"harness_conformance"}}
 PATH_LOADERS = {"tests/enforcement/_models.py"}
 ALLOWED_TOP = set(sys.stdlib_module_names) | {"__future__"}
 # Review E1-4/E2-1/E3-1: dynamic and path-based loading is reported too, called by name, as an attribute, through getattr
@@ -109,9 +119,8 @@ class SnapshotTests(unittest.TestCase):
     def test_manifest_is_closed_and_pins_every_snapshot_byte_exactly(self):
         value = manifest()
         self.assertEqual(set(value), MANIFEST_FIELDS)
-        self.assertEqual(value["schemaVersion"], "r12.enforcement-snapshot-manifest/v1")
+        self.assertEqual(value["schemaVersion"], "r12.enforcement-snapshot-manifest/v2")
         self.assertEqual(value["sourceRepository"], "harness-onion")
-        self.assertEqual(value["sourceCommit"], SOURCE_COMMIT)
         self.assertEqual(value["root"], "tests/enforcement/snapshots/harness-onion")
         paths = [row["path"] for row in value["files"]]
         self.assertEqual(len(paths), len(set(paths)))
@@ -138,10 +147,13 @@ class SnapshotTests(unittest.TestCase):
         expected += [{"contract": contract["name"], "path": row["path"], "sha256": row["sha256"]}
                      for contract in source["contracts"] for row in contract["files"]]
         expected += [{"contract": contract, "path": path, "sha256": sha, "size": size} for contract, path, sha, size in ADDITIONS]
-        observed = [{key: row[key] for key in ("contract", "path", "sha256", "size") if key in expected[index]}
+        expected = [dict(row, sourceCommit=SOURCE_COMMIT) for row in expected]
+        expected += [{"contract": contract, "path": path, "sha256": sha, "size": size, "sourceCommit": SUPPLEMENT_COMMIT}
+                     for contract, path, sha, size in SUPPLEMENT]
+        observed = [{key: row[key] for key in ("contract", "path", "sha256", "size", "sourceCommit") if key in expected[index]}
                     for index, row in enumerate(manifest()["files"])]
         self.assertEqual(observed, expected)
-        self.assertEqual(len(expected), 37 + len(ADDITIONS))
+        self.assertEqual(len(expected), 37 + len(ADDITIONS) + len(SUPPLEMENT))
 
     def test_reference_model_imports_are_exactly_the_recorded_gaps(self):
         value = manifest()
@@ -211,7 +223,7 @@ class IndependenceTests(unittest.TestCase):
                 continue
             relative = path.relative_to(ROOT).as_posix()
             with self.subTest(path=relative):
-                tops = imported_tops(regular(path)) - AREA_MODULES
+                tops = imported_tops(regular(path)) - AREA_MODULES - SUBJECT_IMPORTS.get(relative, set())
                 if relative in PATH_LOADERS:
                     tops.discard("<dynamic>")
                 self.assertLessEqual(tops, ALLOWED_TOP)

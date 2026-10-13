@@ -1,0 +1,362 @@
+{
+ "schemaVersion": "r12.enforcement-tg-case-ledger/v1",
+ "packet": "CONF-ENF-003",
+ "testGroup": "TG-03",
+ "evidenceClass": "SOURCE_MULTIPROCESS_FAULT",
+ "rule": "Each plan case of the group, in plan order. A W04_OFFLINE case is PASS only through its named tests in this run; a case that waits for W05's release set or for W06's native hosts is NOT_RUN_ENV_UNAVAILABLE, never PASS (AGENTS rule 14), and its catalog names the contract vectors whose own outputs and final snapshots are its expected results.",
+ "cases": [
+  {
+   "tag": "MATRIX:kill at each fsync/send/result boundary",
+   "phase": "AFTER_W05_RELEASE_SET",
+   "obligations": [
+    "E11"
+   ],
+   "blockedBy": [],
+   "subject": "W05's released build, through a wire-level adapter (owner decision Q-T8)",
+   "result": "NOT_RUN_ENV_UNAVAILABLE",
+   "reason": "AFTER_W05_RELEASE_SET: the subject is W05's released build, which does not exist yet; the catalog fixes the contract vectors and expected results now, and the executable source and the wire-level adapter come with W05's release set (owner decision Q-T8)",
+   "evidence": [],
+   "catalog": [
+    {
+     "contract": "I05 gate channel v3",
+     "vectorSet": "transcripts",
+     "basis": "a transcript in which the gate is restarted (GATE_RESTART), whatever boundary it stopped at",
+     "ids": [
+      "T25",
+      "T27",
+      "T72",
+      "T73",
+      "T74",
+      "T100",
+      "T101",
+      "T102",
+      "T103",
+      "T104",
+      "T105",
+      "T107",
+      "T110",
+      "T111",
+      "T116",
+      "T117",
+      "T118",
+      "T120"
+     ]
+    },
+    {
+     "contract": "I05 gate channel v3",
+     "vectorSet": "supplement",
+     "basis": "a transcript in which the gate is restarted (GATE_RESTART), whatever boundary it stopped at",
+     "ids": [
+      "S01",
+      "S02",
+      "S03",
+      "S04",
+      "S05",
+      "S06"
+     ]
+    },
+    {
+     "contract": "I07 policy write v3",
+     "vectorSet": "transcripts",
+     "basis": "a transcript in which the gate is restarted (GATE_RESTART), whatever boundary it stopped at",
+     "ids": [
+      "T09",
+      "T14",
+      "T15",
+      "T38",
+      "T46",
+      "T47",
+      "T61",
+      "T62"
+     ]
+    }
+   ],
+   "vectors": 32
+  },
+  {
+   "tag": "MATRIX:ENOSPC",
+   "phase": "AFTER_W05_RELEASE_SET",
+   "obligations": [
+    "E11"
+   ],
+   "blockedBy": [],
+   "subject": "W05's released build, through a wire-level adapter (owner decision Q-T8)",
+   "result": "NOT_RUN_ENV_UNAVAILABLE",
+   "reason": "AFTER_W05_RELEASE_SET: the subject is W05's released build, which does not exist yet; the catalog fixes the contract vectors and expected results now, and the executable source and the wire-level adapter come with W05's release set (owner decision Q-T8)",
+   "evidence": [],
+   "catalog": [
+    {
+     "contract": "I05 gate channel v3",
+     "vectorSet": "transcripts",
+     "basis": "a transcript with an injected storage failure (STORAGE_FAIL_NEXT or STORAGE_FAIL_AFTER)",
+     "ids": [
+      "T34",
+      "T35",
+      "T57",
+      "T58",
+      "T70",
+      "T71",
+      "T84",
+      "T91",
+      "T97",
+      "T98",
+      "T99",
+      "T100",
+      "T101",
+      "T102",
+      "T103",
+      "T104",
+      "T110",
+      "T111",
+      "T112",
+      "T113",
+      "T116",
+      "T117",
+      "T118",
+      "T120"
+     ]
+    },
+    {
+     "contract": "I05 gate channel v3",
+     "vectorSet": "supplement",
+     "basis": "a transcript with an injected storage failure (STORAGE_FAIL_NEXT or STORAGE_FAIL_AFTER)",
+     "ids": [
+      "S01",
+      "S02",
+      "S03",
+      "S04",
+      "S05",
+      "S06"
+     ]
+    },
+    {
+     "contract": "I07 policy write v3",
+     "vectorSet": "transcripts",
+     "basis": "a transcript with an injected storage failure (STORAGE_FAIL_NEXT or STORAGE_FAIL_AFTER)",
+     "ids": [
+      "T06",
+      "T12",
+      "T13",
+      "T35",
+      "T46",
+      "T52",
+      "T56",
+      "T60"
+     ]
+    }
+   ],
+   "vectors": 38
+  },
+  {
+   "tag": "MATRIX:partial records",
+   "phase": "AFTER_W05_RELEASE_SET",
+   "obligations": [
+    "E11"
+   ],
+   "blockedBy": [],
+   "subject": "W05's released build, through a wire-level adapter (owner decision Q-T8)",
+   "result": "NOT_RUN_ENV_UNAVAILABLE",
+   "reason": "AFTER_W05_RELEASE_SET: the subject is W05's released build, which does not exist yet; the catalog fixes the contract vectors and expected results now, and the executable source and the wire-level adapter come with W05's release set (owner decision Q-T8)",
+   "evidence": [],
+   "catalog": [
+    {
+     "contract": "I05 gate channel v3",
+     "vectorSet": "transcripts",
+     "basis": "a transcript with a torn storage write (STORAGE_FAIL_NEXT with torn)",
+     "ids": [
+      "T102"
+     ]
+    },
+    {
+     "contract": "I05 gate channel v3",
+     "vectorSet": "supplement",
+     "basis": "a transcript with a torn storage write (STORAGE_FAIL_NEXT with torn)",
+     "ids": [
+      "S06"
+     ]
+    }
+   ],
+   "vectors": 2
+  },
+  {
+   "tag": "MATRIX:lost acknowledgements",
+   "phase": "AFTER_W05_RELEASE_SET",
+   "obligations": [
+    "E11",
+    "E12"
+   ],
+   "blockedBy": [],
+   "subject": "W05's released build, through a wire-level adapter (owner decision Q-T8)",
+   "result": "NOT_RUN_ENV_UNAVAILABLE",
+   "reason": "AFTER_W05_RELEASE_SET: the subject is W05's released build, which does not exist yet; the catalog fixes the contract vectors and expected results now, and the executable source and the wire-level adapter come with W05's release set (owner decision Q-T8)",
+   "evidence": [],
+   "catalog": [
+    {
+     "contract": "I05 gate channel v3",
+     "vectorSet": "transcripts",
+     "basis": "an upstream answer lost, timed out or late, or the broker or writer channel lost with a fatal answer from the gate",
+     "ids": [
+      "T26",
+      "T31",
+      "T33",
+      "T38",
+      "T46",
+      "T60",
+      "T70",
+      "T114",
+      "T115",
+      "T119"
+     ]
+    },
+    {
+     "contract": "I07 policy write v3",
+     "vectorSet": "transcripts",
+     "basis": "an upstream answer lost, timed out or late, or the broker or writer channel lost with a fatal answer from the gate",
+     "ids": [
+      "T42",
+      "T49",
+      "T57",
+      "T59"
+     ]
+    }
+   ],
+   "vectors": 14
+  },
+  {
+   "tag": "MATRIX:restart/rollback",
+   "phase": "AFTER_W05_RELEASE_SET",
+   "obligations": [
+    "E11"
+   ],
+   "blockedBy": [],
+   "subject": "W05's released build, through a wire-level adapter (owner decision Q-T8)",
+   "result": "NOT_RUN_ENV_UNAVAILABLE",
+   "reason": "AFTER_W05_RELEASE_SET: the subject is W05's released build, which does not exist yet; the catalog fixes the contract vectors and expected results now, and the executable source and the wire-level adapter come with W05's release set (owner decision Q-T8)",
+   "evidence": [],
+   "catalog": [
+    {
+     "contract": "I05 gate channel v3",
+     "vectorSet": "transcripts",
+     "basis": "a gate restart, a failed restart marker (MARKER_FAIL_NEXT), or a BIND refused as a replayed execution or a reused manifest",
+     "ids": [
+      "T13",
+      "T25",
+      "T27",
+      "T72",
+      "T73",
+      "T74",
+      "T75",
+      "T95",
+      "T100",
+      "T101",
+      "T102",
+      "T103",
+      "T104",
+      "T105",
+      "T107",
+      "T110",
+      "T111",
+      "T116",
+      "T117",
+      "T118",
+      "T120"
+     ]
+    },
+    {
+     "contract": "I05 gate channel v3",
+     "vectorSet": "supplement",
+     "basis": "a gate restart, a failed restart marker (MARKER_FAIL_NEXT), or a BIND refused as a replayed execution or a reused manifest",
+     "ids": [
+      "S01",
+      "S02",
+      "S03",
+      "S04",
+      "S05",
+      "S06"
+     ]
+    },
+    {
+     "contract": "I07 policy write v3",
+     "vectorSet": "transcripts",
+     "basis": "a gate restart, a failed restart marker (MARKER_FAIL_NEXT), or a BIND refused as a replayed execution or a reused manifest",
+     "ids": [
+      "T09",
+      "T14",
+      "T15",
+      "T38",
+      "T46",
+      "T47",
+      "T61",
+      "T62"
+     ]
+    }
+   ],
+   "vectors": 35
+  },
+  {
+   "tag": "CE21",
+   "phase": "AFTER_W05_RELEASE_SET",
+   "obligations": [
+    "E10",
+    "E11"
+   ],
+   "blockedBy": [],
+   "subject": "W05's released build, through a wire-level adapter (owner decision Q-T8)",
+   "result": "NOT_RUN_ENV_UNAVAILABLE",
+   "reason": "AFTER_W05_RELEASE_SET: the subject is W05's released build, which does not exist yet; the catalog fixes the contract vectors and expected results now, and the executable source and the wire-level adapter come with W05's release set (owner decision Q-T8)",
+   "evidence": [],
+   "catalog": [
+    {
+     "contract": "I05 gate channel v3",
+     "vectorSet": "transcripts",
+     "basis": "the transcripts whose intent is Counterexample 21",
+     "ids": [
+      "T25"
+     ]
+    }
+   ],
+   "vectors": 1
+  },
+  {
+   "tag": "S8-C2C3",
+   "phase": "W06_NATIVE_ONLY",
+   "obligations": [
+    "E11"
+   ],
+   "blockedBy": [
+    "D-W02A-F2"
+   ],
+   "subject": "W05's released build on the enrolled AMD64 and ARM64 hosts in W06",
+   "result": "NOT_RUN_ENV_UNAVAILABLE",
+   "reason": "W06_NATIVE_ONLY: native evidence on the enrolled hosts in W06; the catalog fixes the contract vectors and expected results now (owner decision Q-T8); blocked by D-W02A-F2",
+   "evidence": [],
+   "catalog": [
+    {
+     "contract": "I05 gate channel v3",
+     "vectorSet": "transcripts",
+     "basis": "an ARM that flushes backlogged connections (C2), or a connection accepted with no stamp (C3)",
+     "ids": [
+      "T02",
+      "T03",
+      "T04",
+      "T25",
+      "T27",
+      "T39",
+      "T58",
+      "T62",
+      "T70"
+     ]
+    },
+    {
+     "contract": "I07 policy write v3",
+     "vectorSet": "transcripts",
+     "basis": "an ARM that flushes backlogged connections (C2), or a connection accepted with no stamp (C3)",
+     "ids": [
+      "T20"
+     ]
+    }
+   ],
+   "vectors": 10
+  }
+ ]
+}

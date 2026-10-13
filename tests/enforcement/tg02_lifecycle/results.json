@@ -1,0 +1,456 @@
+{
+ "schemaVersion": "r12.enforcement-tg-case-ledger/v1",
+ "packet": "CONF-ENF-003",
+ "testGroup": "TG-02",
+ "evidenceClass": "SOURCE_OWNER_IMPLEMENTATION",
+ "rule": "Each plan case of the group, in plan order. A W04_OFFLINE case is PASS only through its named tests in this run; a case that waits for W05's release set or for W06's native hosts is NOT_RUN_ENV_UNAVAILABLE, never PASS (AGENTS rule 14), and its catalog names the contract vectors whose own outputs and final snapshots are its expected results.",
+ "cases": [
+  {
+   "tag": "MATRIX:unarmed/duplicate/cross-case action",
+   "phase": "AFTER_W05_RELEASE_SET",
+   "obligations": [
+    "E10"
+   ],
+   "blockedBy": [],
+   "subject": "W05's released build, through a wire-level adapter (owner decision Q-T8)",
+   "result": "NOT_RUN_ENV_UNAVAILABLE",
+   "reason": "AFTER_W05_RELEASE_SET: the subject is W05's released build, which does not exist yet; the catalog fixes the contract vectors and expected results now, and the executable source and the wire-level adapter come with W05's release set (owner decision Q-T8)",
+   "evidence": [],
+   "catalog": [
+    {
+     "contract": "I05 gate channel v3",
+     "vectorSet": "transcripts",
+     "basis": "a request closed as not matching the armed action, without a stamp or while the generation is not active; an ARM refused as out of order, outstanding, outside the case manifest set, a reused mutation key or a template mismatch; an outcome refused for an unknown action; or a write refused with no open maintenance, out of order or outside its scope",
+     "ids": [
+      "T04",
+      "T06",
+      "T09",
+      "T10",
+      "T11",
+      "T12",
+      "T25",
+      "T27",
+      "T40",
+      "T48",
+      "T49",
+      "T50",
+      "T51",
+      "T52",
+      "T53",
+      "T54",
+      "T55",
+      "T56",
+      "T58",
+      "T76",
+      "T77",
+      "T78",
+      "T79",
+      "T80",
+      "T81",
+      "T106"
+     ]
+    },
+    {
+     "contract": "I07 policy write v3",
+     "vectorSet": "transcripts",
+     "basis": "a request closed as not matching the armed action, without a stamp or while the generation is not active; an ARM refused as out of order, outstanding, outside the case manifest set, a reused mutation key or a template mismatch; an outcome refused for an unknown action; or a write refused with no open maintenance, out of order or outside its scope",
+     "ids": [
+      "T02",
+      "T04",
+      "T18",
+      "T20",
+      "T27",
+      "T32",
+      "T33",
+      "T34"
+     ]
+    }
+   ],
+   "vectors": 34
+  },
+  {
+   "tag": "MATRIX:old socket",
+   "phase": "AFTER_W05_RELEASE_SET",
+   "obligations": [
+    "E07",
+    "E10"
+   ],
+   "blockedBy": [],
+   "subject": "W05's released build, through a wire-level adapter (owner decision Q-T8)",
+   "result": "NOT_RUN_ENV_UNAVAILABLE",
+   "reason": "AFTER_W05_RELEASE_SET: the subject is W05's released build, which does not exist yet; the catalog fixes the contract vectors and expected results now, and the executable source and the wire-level adapter come with W05's release set (owner decision Q-T8)",
+   "evidence": [],
+   "catalog": [
+    {
+     "contract": "I05 gate channel v3",
+     "vectorSet": "transcripts",
+     "basis": "a request on a connection closed because it was flushed or stamped for an earlier action; a gate channel or writer session refused as already used or existing; or a write refused because its maintenance session ended",
+     "ids": [
+      "T02",
+      "T03",
+      "T08",
+      "T14",
+      "T25",
+      "T26",
+      "T29",
+      "T32",
+      "T36",
+      "T38",
+      "T39",
+      "T41",
+      "T57",
+      "T64",
+      "T86",
+      "T93"
+     ]
+    },
+    {
+     "contract": "I07 policy write v3",
+     "vectorSet": "transcripts",
+     "basis": "a request on a connection closed because it was flushed or stamped for an earlier action; a gate channel or writer session refused as already used or existing; or a write refused because its maintenance session ended",
+     "ids": [
+      "T14",
+      "T16",
+      "T17",
+      "T33",
+      "T44",
+      "T46",
+      "T47"
+     ]
+    }
+   ],
+   "vectors": 23
+  },
+  {
+   "tag": "MATRIX:queued action",
+   "phase": "AFTER_W05_RELEASE_SET",
+   "obligations": [
+    "E10"
+   ],
+   "blockedBy": [],
+   "subject": "W05's released build, through a wire-level adapter (owner decision Q-T8)",
+   "result": "NOT_RUN_ENV_UNAVAILABLE",
+   "reason": "AFTER_W05_RELEASE_SET: the subject is W05's released build, which does not exist yet; the catalog fixes the contract vectors and expected results now, and the executable source and the wire-level adapter come with W05's release set (owner decision Q-T8)",
+   "evidence": [],
+   "catalog": [
+    {
+     "contract": "I05 gate channel v3",
+     "vectorSet": "transcripts",
+     "basis": "an ARM that flushes backlogged connections (C2), or an ARM refused while another action is outstanding",
+     "ids": [
+      "T02",
+      "T03",
+      "T11",
+      "T39"
+     ]
+    }
+   ],
+   "vectors": 4
+  },
+  {
+   "tag": "MATRIX:conflicting gate/server result",
+   "phase": "AFTER_W05_RELEASE_SET",
+   "obligations": [
+    "E10"
+   ],
+   "blockedBy": [],
+   "subject": "W05's released build, through a wire-level adapter (owner decision Q-T8)",
+   "result": "NOT_RUN_ENV_UNAVAILABLE",
+   "reason": "AFTER_W05_RELEASE_SET: the subject is W05's released build, which does not exist yet; the catalog fixes the contract vectors and expected results now, and the executable source and the wire-level adapter come with W05's release set (owner decision Q-T8)",
+   "evidence": [],
+   "catalog": [
+    {
+     "contract": "I05 gate channel v3",
+     "vectorSet": "agreement",
+     "basis": "an agreement check in which the server's resource result disagrees with the gate's outcome",
+     "ids": [
+      "A02",
+      "A03",
+      "A06",
+      "A09",
+      "A10",
+      "A12",
+      "A18",
+      "A19",
+      "A20",
+      "A21",
+      "A23",
+      "A24",
+      "A25",
+      "A26",
+      "A27",
+      "A28",
+      "A29",
+      "A30",
+      "A31",
+      "A32",
+      "A33",
+      "A35",
+      "A36",
+      "A37",
+      "A39",
+      "A40",
+      "A41"
+     ]
+    },
+    {
+     "contract": "I05 gate channel v3",
+     "vectorSet": "transcripts",
+     "basis": "an agreement check in which the server's resource result disagrees with the gate's outcome, or a transcript whose result is IO_AMBIGUOUS or arrives late",
+     "ids": [
+      "T31",
+      "T33",
+      "T46",
+      "T66",
+      "T67",
+      "T68",
+      "T69",
+      "T70",
+      "T114",
+      "T115",
+      "T119"
+     ]
+    },
+    {
+     "contract": "I07 policy write v3",
+     "vectorSet": "transcripts",
+     "basis": "an agreement check in which the server's resource result disagrees with the gate's outcome, or a transcript whose result is IO_AMBIGUOUS or arrives late",
+     "ids": [
+      "T03",
+      "T09",
+      "T10",
+      "T13",
+      "T28",
+      "T41",
+      "T49",
+      "T58",
+      "T59"
+     ]
+    }
+   ],
+   "vectors": 47
+  },
+  {
+   "tag": "MATRIX:same-generation delayed-identical-request across two armed actions",
+   "phase": "AFTER_W05_RELEASE_SET",
+   "obligations": [
+    "E10"
+   ],
+   "blockedBy": [],
+   "subject": "W05's released build, through a wire-level adapter (owner decision Q-T8)",
+   "result": "NOT_RUN_ENV_UNAVAILABLE",
+   "reason": "AFTER_W05_RELEASE_SET: the subject is W05's released build, which does not exist yet; the catalog fixes the contract vectors and expected results now, and the executable source and the wire-level adapter come with W05's release set (owner decision Q-T8)",
+   "evidence": [],
+   "catalog": [
+    {
+     "contract": "I05 gate channel v3",
+     "vectorSet": "transcripts",
+     "basis": "the transcripts whose intent is Counterexample 17",
+     "ids": [
+      "T02",
+      "T03"
+     ]
+    }
+   ],
+   "vectors": 2
+  },
+  {
+   "tag": "S63-SOURCE",
+   "phase": "AFTER_W05_RELEASE_SET",
+   "obligations": [
+    "E10"
+   ],
+   "blockedBy": [],
+   "subject": "W05's released build, through a wire-level adapter (owner decision Q-T8)",
+   "result": "NOT_RUN_ENV_UNAVAILABLE",
+   "reason": "AFTER_W05_RELEASE_SET: the subject is W05's released build, which does not exist yet; the catalog fixes the contract vectors and expected results now, and the executable source and the wire-level adapter come with W05's release set (owner decision Q-T8)",
+   "evidence": [],
+   "catalog": [
+    {
+     "contract": "I05 gate channel v3",
+     "vectorSet": "agreement",
+     "basis": "the agreement checks that refuse a result attributed to another action (M01 action identifiers, M06 object identity, M07 UID or resourceVersion differ): HOST_INTERFACE_SPEC section 6.3 says a misattribution appears there and is HELD",
+     "ids": [
+      "A02",
+      "A20",
+      "A28",
+      "A29",
+      "A30",
+      "A31",
+      "A35",
+      "A37"
+     ]
+    }
+   ],
+   "vectors": 8
+  },
+  {
+   "tag": "S63-NATIVE",
+   "phase": "W06_NATIVE_ONLY",
+   "obligations": [
+    "E10"
+   ],
+   "blockedBy": [
+    "D-W02A-F2"
+   ],
+   "subject": "W05's released build on the enrolled AMD64 and ARM64 hosts in W06",
+   "result": "NOT_RUN_ENV_UNAVAILABLE",
+   "reason": "W06_NATIVE_ONLY: native evidence on the enrolled hosts in W06; the catalog fixes the contract vectors and expected results now (owner decision Q-T8); blocked by D-W02A-F2",
+   "evidence": [],
+   "catalog": [
+    {
+     "contract": "I05 gate channel v3",
+     "vectorSet": "agreement",
+     "basis": "the agreement checks that refuse a result attributed to another action (M01 action identifiers, M06 object identity, M07 UID or resourceVersion differ): HOST_INTERFACE_SPEC section 6.3 says a misattribution appears there and is HELD",
+     "ids": [
+      "A02",
+      "A20",
+      "A28",
+      "A29",
+      "A30",
+      "A31",
+      "A35",
+      "A37"
+     ]
+    }
+   ],
+   "vectors": 8
+  },
+  {
+   "tag": "CE18",
+   "phase": "AFTER_W05_RELEASE_SET",
+   "obligations": [
+    "E10"
+   ],
+   "blockedBy": [],
+   "subject": "W05's released build, through a wire-level adapter (owner decision Q-T8)",
+   "result": "NOT_RUN_ENV_UNAVAILABLE",
+   "reason": "AFTER_W05_RELEASE_SET: the subject is W05's released build, which does not exist yet; the catalog fixes the contract vectors and expected results now, and the executable source and the wire-level adapter come with W05's release set (owner decision Q-T8)",
+   "evidence": [],
+   "catalog": [
+    {
+     "contract": "I05 gate channel v3",
+     "vectorSet": "transcripts",
+     "basis": "the transcripts whose intent is Counterexample 18, and every outcome reported ADMITTED_BEFORE_INVALIDATION",
+     "ids": [
+      "T27",
+      "T30",
+      "T61",
+      "T71",
+      "T87"
+     ]
+    },
+    {
+     "contract": "I07 policy write v3",
+     "vectorSet": "transcripts",
+     "basis": "the transcripts whose intent is Counterexample 18, and every outcome reported ADMITTED_BEFORE_INVALIDATION",
+     "ids": [
+      "T02",
+      "T04"
+     ]
+    }
+   ],
+   "vectors": 7
+  },
+  {
+   "tag": "CE22",
+   "phase": "AFTER_W05_RELEASE_SET",
+   "obligations": [
+    "E10"
+   ],
+   "blockedBy": [],
+   "subject": "W05's released build, through a wire-level adapter (owner decision Q-T8)",
+   "result": "NOT_RUN_ENV_UNAVAILABLE",
+   "reason": "AFTER_W05_RELEASE_SET: the subject is W05's released build, which does not exist yet; the catalog fixes the contract vectors and expected results now, and the executable source and the wire-level adapter come with W05's release set (owner decision Q-T8)",
+   "evidence": [],
+   "catalog": [
+    {
+     "contract": "I05 gate channel v3",
+     "vectorSet": "transcripts",
+     "basis": "the transcripts whose intent is Counterexample 22",
+     "ids": [
+      "T64"
+     ]
+    }
+   ],
+   "vectors": 1
+  },
+  {
+   "tag": "S8-C2C3",
+   "phase": "W06_NATIVE_ONLY",
+   "obligations": [
+    "E10"
+   ],
+   "blockedBy": [
+    "D-W02A-F2"
+   ],
+   "subject": "W05's released build on the enrolled AMD64 and ARM64 hosts in W06",
+   "result": "NOT_RUN_ENV_UNAVAILABLE",
+   "reason": "W06_NATIVE_ONLY: native evidence on the enrolled hosts in W06; the catalog fixes the contract vectors and expected results now (owner decision Q-T8); blocked by D-W02A-F2",
+   "evidence": [],
+   "catalog": [
+    {
+     "contract": "I05 gate channel v3",
+     "vectorSet": "transcripts",
+     "basis": "an ARM that flushes backlogged connections (C2), or a connection accepted with no stamp (C3)",
+     "ids": [
+      "T02",
+      "T03",
+      "T04",
+      "T25",
+      "T27",
+      "T39",
+      "T58",
+      "T62",
+      "T70"
+     ]
+    },
+    {
+     "contract": "I07 policy write v3",
+     "vectorSet": "transcripts",
+     "basis": "an ARM that flushes backlogged connections (C2), or a connection accepted with no stamp (C3)",
+     "ids": [
+      "T20"
+     ]
+    }
+   ],
+   "vectors": 10
+  },
+  {
+   "tag": "LEDGER-E09",
+   "phase": "W04_OFFLINE",
+   "obligations": [
+    "E07",
+    "E09"
+   ],
+   "blockedBy": [],
+   "subject": "R12's reader, src/harness_conformance/live_proxy_server.py (owner decision Q-T9)",
+   "result": "PASS",
+   "reason": null,
+   "evidence": [
+    "CleanupTests.test_cleanup_closes_only_original_resources_and_the_failure_sticks",
+    "CleanupTests.test_cleanup_of_only_original_resources_succeeds",
+    "CustodyTickTests.test_a_foreign_inspection_owner_is_refused",
+    "CustodyTickTests.test_a_subclass_instance_is_refused",
+    "CustodyTickTests.test_an_unbound_view_is_refused_while_a_server_is_installed",
+    "CustodyTickTests.test_another_thread_is_refused",
+    "CustodyTickTests.test_each_inconsistent_state_field_is_refused",
+    "CustodyTickTests.test_the_custody_state_itself_is_accepted",
+    "OwnerTests.test_a_closed_server_another_thread_or_an_imitation_is_refused",
+    "OwnerTests.test_a_server_that_is_not_the_installed_one_is_refused",
+    "OwnerTests.test_inspections_refuse_a_wrong_owner_or_peer",
+    "OwnerTests.test_no_caller_constructs_a_qualification_binding",
+    "OwnerTests.test_the_installed_server_passes_its_owner_check",
+    "PartialConstructionTests.test_a_view_built_without_its_constructor_is_never_usable",
+    "PartialConstructionTests.test_the_fixed_factories_refuse_an_unsupported_host",
+    "StickyPhaseTests.test_a_closed_view_refuses_a_phase",
+    "StickyPhaseTests.test_a_failure_inside_a_phase_is_sticky",
+    "StickyPhaseTests.test_an_idle_view_runs_a_phase",
+    "StickyPhaseTests.test_an_overrun_deadline_fails_the_phase_and_sticks",
+    "StickyPhaseTests.test_reentrancy_is_refused_and_sticky"
+   ],
+   "catalog": [],
+   "vectors": 0
+  }
+ ]
+}

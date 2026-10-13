@@ -58,7 +58,8 @@ SET_SIZES = {
 }
 
 
-# Review R2-3: vectors each mixed-set case must keep, whatever its rule becomes (from the vectors' intents and reviews R1/R2).
+# Reviews R2-3/R3-1: vectors each mixed-set case must keep, whatever its rule becomes (from the vectors' intents and
+# reviews R1-R3).
 ANCHORS = {
     ("MATRIX:wrong peer", "I05 gate channel v3", "transcripts"): {"T14", "T26", "T41", "T60", "T89", "T93"},
     ("MATRIX:wrong peer", "I07 policy write v3", "transcripts"): {"T19", "T20", "T42", "T46", "T50", "T57"},
@@ -89,7 +90,7 @@ CASE_VECTORS = {
     ("MATRIX:role/version mismatch", "I07 policy write v3"): 4,
     ("MATRIX:role/version mismatch", "I06 backend profile v2"): 8,
     ("MATRIX:role/version mismatch", "Native qualification profile v3"): 36,
-    ("MATRIX:transcript replay", "I05 gate channel v3"): 120,
+    ("MATRIX:transcript replay", "I05 gate channel v3"): 126,
     ("MATRIX:transcript replay", "I07 policy write v3"): 62,
     ("MATRIX:wrong peer", "I05 gate channel v3"): 7,
     ("MATRIX:wrong peer", "I07 policy write v3"): 6,
@@ -129,7 +130,7 @@ class LedgerTests(unittest.TestCase):
         self.assertEqual(set(value), {"schemaVersion", "packet", "testGroup", "profile", "rule", "rows", "selections", "caseResults",
                                       "deferred"})
         self.assertEqual((value["schemaVersion"], value["packet"], value["testGroup"]),
-                         ("r12.enforcement-tg01-results/v1", "CONF-ENF-002", "TG-01"))
+                         ("r12.enforcement-tg01-results/v1", "CONF-ENF-003", "TG-01"))
         keys = [(row["contract"], row["vectorSet"]) for row in value["rows"]]
         self.assertEqual(keys, list(_replays.REPLAYS))
         for row in value["rows"]:
@@ -192,6 +193,9 @@ class LedgerTests(unittest.TestCase):
             with self.subTest(set=key):
                 if row["contract"] == "W01 amendment W02D":
                     self.assertEqual(row["vectors"], 1)
+                    continue
+                if key == ("I05 gate channel v3", "supplement"):
+                    self.assertEqual(row["vectors"], len(_models.data(_replays.I05_SUPPLEMENT + "vectors.json")["transcripts"]))
                     continue
                 vectors = _models.data(VECTOR_DATA[row["contract"]] + "vectors.json")
                 self.assertEqual(row["vectors"], SET_SIZES[key](vectors) if key in SET_SIZES else len(vectors[row["vectorSet"]]))
@@ -311,7 +315,9 @@ class FidelityTests(unittest.TestCase):
                  ("Seccomp allowlists v2", "policyMutations", _replays.SEC, lambda v: v["policyMutations"][0].update(expect="accepted")),
                  ("Admission semantics v3", "claims", _replays.ADM, lambda v: v["claims"][0].update(expect="X")),
                  ("I05 gate channel v3", "agreement", _replays.I05, lambda v: v["agreement"][0].update(expect="X")),
-                 ("I07 policy write v3", "kindChecks", _replays.I07, lambda v: v["kindChecks"][0].update(expect="OBJECT_RULE")))
+                 ("I07 policy write v3", "kindChecks", _replays.I07, lambda v: v["kindChecks"][0].update(expect="OBJECT_RULE")),
+                 # Q-T10: S01 must equal S02 outside the injections; the check runs before the model needs jsonschema.
+                 ("I05 gate channel v3", "supplement", _replays.I05_SUPPLEMENT, lambda v: v["transcripts"][0]["final"].update(state="X")))
         for contract, vector_set, prefix, change in cases:
             def forged(path, prefix=prefix, change=change):
                 value = original(path)

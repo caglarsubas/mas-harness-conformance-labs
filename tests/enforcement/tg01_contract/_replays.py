@@ -15,6 +15,7 @@ import re
 import _models
 
 I05 = "architecture/i05-gate-channel-v3/"
+I05_SUPPLEMENT = "architecture/i05-gate-channel-v3-supplement/"
 I07 = "architecture/i07-policy-write-v3/"
 ADM = "architecture/admission-semantics-v3/"
 SEL = "architecture/selinux-matrix-v2/"
@@ -334,6 +335,44 @@ def i05_transcripts():
     return tally
 
 
+# I05 v3 supplement (owner decision Q-T10, 2026-10-13) ---------------------------------------------------------------
+# Six transcripts in the v3 transcript format from harness-onion 93d32e1, replayed by the pinned v3 model with the v3
+# configuration they name by reference. A transcript with `equals` must also give, for every event that is not a
+# storage or marker failure injection, the same output as the named transcript, and the same final snapshot.
+
+INJECTIONS = {"STORAGE_FAIL_NEXT", "STORAGE_FAIL_AFTER", "MARKER_FAIL_NEXT"}
+
+
+def _plain(row):
+    return [output for event, output in zip(row["events"], row["outputs"]) if event["type"] not in INJECTIONS]
+
+
+def i05_supplement():
+    supplement, (model, schema, vectors) = _models.data(I05_SUPPLEMENT + "vectors.json"), _i05()
+    manifest = {row["path"]: row["sha256"] for row in _models._manifest()["files"]}
+    require(supplement["contract"] == {"path": I05 + "vectors.json", "sha256": manifest[I05 + "vectors.json"],
+                                       "model": {"path": "scripts/i05_gate_channel_v3.py",
+                                                 "sha256": manifest["scripts/i05_gate_channel_v3.py"]}},
+            "the supplement names the pinned v3 vectors and model")
+    by_id = {row["id"]: row for row in supplement["transcripts"]}
+    tally = Tally()
+    for row in supplement["transcripts"]:
+        def check(row=row):
+            reference = supplement["configs"][row["config"]]
+            require(set(reference) == {"vectorsPath", "key"} and reference["vectorsPath"] == I05 + "vectors.json"
+                    and reference["key"] == ["configs", row["config"]], "I05 supplement configuration " + row["id"])
+            require(set(row) <= {"id", "intent", "config", "events", "outputs", "final", "equals"}
+                    and len(row["outputs"]) == len(row["events"]), "I05 supplement transcript shape " + row["id"])
+            if "equals" in row:  # optional in the supplement format
+                require(row["equals"] in by_id and row["equals"] != row["id"], "I05 supplement equals target " + row["id"])
+                other = by_id[row["equals"]]
+                require(_plain(row) == _plain(other) and row["final"] == other["final"], "I05 supplement equals " + row["id"])
+            outputs, final = model.replay(vectors["configs"][row["config"]], row["events"], schema)
+            require(outputs == row["outputs"] and final == row["final"], "I05 supplement transcript " + row["id"])
+        tally.run(row["id"], check)
+    return tally
+
+
 # I07 policy write v3 -----------------------------------------------------------------------------------------------
 
 def _i07():
@@ -473,6 +512,7 @@ REPLAYS = {
     ("I05 gate channel v3", "frames"): i05_frames,
     ("I05 gate channel v3", "byteFrames"): i05_byte_frames,
     ("I05 gate channel v3", "transcripts"): i05_transcripts,
+    ("I05 gate channel v3", "supplement"): i05_supplement,
     ("I07 policy write v3", "kindChecks"): i07_kind_checks,
     ("I07 policy write v3", "renderChecks"): i07_render_checks,
     ("I07 policy write v3", "outcomeChecks"): i07_outcome_checks,
@@ -509,6 +549,7 @@ CASE_TAGS = {
     ("I05 gate channel v3", "frames"): ["MATRIX:exact fields", "MATRIX:duplicate/unknown keys"],
     ("I05 gate channel v3", "byteFrames"): ["MATRIX:duplicate/unknown keys", "MATRIX:exact fields"],
     ("I05 gate channel v3", "transcripts"): ["MATRIX:transcript replay"],
+    ("I05 gate channel v3", "supplement"): ["MATRIX:transcript replay"],
     ("I07 policy write v3", "kindChecks"): ["CE23", "MATRIX:exact fields"],
     ("I07 policy write v3", "renderChecks"): ["MATRIX:exact fields"],
     ("I07 policy write v3", "outcomeChecks"): ["MATRIX:exact fields"],
