@@ -77,7 +77,7 @@ W04 test source for the Harness-Onion enforcement work, per the adopted W04-0 pl
   between the kill and the restart), repeatedly until the fresh bind: in the BROKER run once the restarted broker has
   attempted its channel, in the OBSERVER run once the observer is back (D6-3, R1-8); only then bind a fresh execution
   (after the tested execution's deadline when it must stay bound, as in original deadlines; in a new generation after a
-  broker restart) and send its reader requests.
+  broker restart, at least 2 s after the judged requests, which the 1 s margin needs: R5-3) and send its reader requests.
 - In the BROKER run the restarted broker's channel attempts are logged as CHANNEL_OPEN rows, including any into the dead
   generation (the gate must refuse it, T38); without a logged attempt E07-GATE stays NOT_RUN (R1-2, R1-9). The tested
   execution's BIND_EXECUTION is logged too: the dead generation is the one that bind names. E07-GATE stays NOT_RUN unless

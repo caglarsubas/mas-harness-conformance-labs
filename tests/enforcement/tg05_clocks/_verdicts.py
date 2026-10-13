@@ -462,9 +462,11 @@ def peer_death_restart(start, records, answers):
         created = dead is not None and binds and any(
             row["party"] == "GATE" and row["operation"] == "CHANNEL_OPEN" and row["answer"] == "ALLOWED"
             and row["generation"] == dead and row["sentBoottime"] < binds[-1]["sentBoottime"] for row in answers)
-        # Review R2-3: only attempts before the tested execution's deadline count (the schedule puts them first).
+        # Review R2-3: only attempts before the tested execution's deadline count (the schedule puts them first). Review
+        # R5-1: they count from the kill (recorded once the old broker exited, so any later attempt is the new broker's),
+        # not from the restart record, which the probe's polling may write after the new broker has already connected.
         attempts = [row for row in answers if row["party"] == "GATE" and row["operation"] == "CHANNEL_OPEN"
-                    and restarted < row["sentBoottime"] < deadline - MARGIN_NS]
+                    and killed < row["sentBoottime"] < deadline - MARGIN_NS]
         if not _bound_at(answers, execution, killed):
             checks.append(_not_run("E07-GATE", PEER_GATE, "the tested execution was not bound and live at the kill"))
         else:
@@ -472,7 +474,7 @@ def peer_death_restart(start, records, answers):
             first_attempt = min((row["sentBoottime"] for row in attempts), default=restarted)
             check = _gate_check("E07-GATE", PEER_GATE, answers, execution, killed, killed, deadline, PEER_REASONS,
                                 "no gate exchange for the tested execution after the restarted broker's channel attempt and "
-                                "before its deadline", forbidden_from=killed, judged_after=max(restarted, first_attempt))
+                                "before its deadline", forbidden_from=killed, judged_after=first_attempt)
             # A violation that needs no generation FAILs first (review R3-2); then the reconnect part must be judgeable.
             if check["result"] == FAIL:
                 checks.append(check)

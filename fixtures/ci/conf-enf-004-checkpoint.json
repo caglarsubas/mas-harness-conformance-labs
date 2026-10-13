@@ -147,8 +147,8 @@
   },
   "tests/enforcement/tg05_clocks/_verdicts.py": {
    "mode": "100644",
-   "sha256": "47774fe9fb6a4f65b10cde52368e39e87a627651c70acbedbb402ba1b4f81cf9",
-   "size": 39772
+   "sha256": "88b19ea60c6edd8ffa1cce628f64d779ebf15d2b1947f726388a5a6efacbe499",
+   "size": 40001
   },
   "tests/enforcement/tg05_clocks/results.json": {
    "mode": "100644",
@@ -162,8 +162,8 @@
   },
   "tests/enforcement/tg05_clocks/test_verdicts.py": {
    "mode": "100644",
-   "sha256": "456b3bf0fce66d3c83f42643a10b8d2d6a7a1816ec348f53f2b95b11f0e60b72",
-   "size": 37396
+   "sha256": "491b7b2e4aa950ee402963284383d0274f209bfa29e7bf21b9f27d8e48ff4f23",
+   "size": 39208
   }
  },
  "baseCommit": "25f38a51144e1b6a9042b52a75cca5b3c3bc13d6",
@@ -184,8 +184,8 @@
   "tests/enforcement/README.md": {
    "after": {
     "mode": "100644",
-    "sha256": "57355dbc62028de8170acc03d794a928816c670bad3bc76e3d2c5219ec03247f",
-    "size": 9651
+    "sha256": "50675cc504053427858d5d3ccc0230af95408d760f14493eb5b4175e351c0b68",
+    "size": 9725
    },
    "before": {
     "mode": "100644",

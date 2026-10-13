@@ -286,13 +286,15 @@ class PeerDeathRestart(unittest.TestCase):
         # G1 while the driver labels the tested execution's rows, its bind too, or every execution's rows with no
         # generation, an empty or blank one, or a placeholder word. I05 v3 generation ids are 64 lowercase hex, so each
         # of these logs is malformed and recorded NOT_RUN: a reconnect is never passed and a conforming gate never failed.
-        g1 = '"generation": "%s"' % gen("G1")
+        labels = ['"generation": "%s"' % gen(name) for name in ("G1", "G2")]
         for label in ("null", '""', '" "', '"-"', '"None"', '"null"', '"unknown"', '"NA"', '"0"', '"G1"'):
             for scope in ("rows", "rows and bind", "every row"):
                 with self.subTest(label=label, scope=scope):
                     def relabel(row):
+                        # Review R5-2: "every row" relabels every generation of every execution, E2's G2 rows included.
                         if scope == "every row" or ('"execution": "E1"' in row and (scope == "rows and bind" or '"BIND_EXECUTION"' not in row)):
-                            return row.replace(g1, '"generation": %s' % label)
+                            for old in labels:
+                                row = row.replace(old, '"generation": %s' % label)
                         return row
                     for broker in (broker_answers(extra=[channel(550 * S, "G1")]), broker_answers()):
                         rows = [relabel(row) for row in broker]
@@ -313,6 +315,24 @@ class PeerDeathRestart(unittest.TestCase):
         self.assertEqual(self.judge(broker=two_binds)["checks"][0]["result"], "NOT_RUN_ENV_UNAVAILABLE")
         no_opening = broker_answers()[1:]
         self.assertEqual(self.judge(broker=no_opening)["checks"][0]["result"], "NOT_RUN_ENV_UNAVAILABLE")
+
+    def test_rows_that_disagree_with_the_bind_leave_the_generation_unknown(self):
+        # Review R5-2 (R2-1's rule): an allowed row of the tested execution naming another generation than its bind makes
+        # the dead generation unknown, so a reconnect into the bind's generation is NOT_RUN, never PASS.
+        disagree = [row.replace('"operation": "HTTP_REQUEST", "execution": "E1", "generation": "%s"' % gen("G1"),
+                                '"operation": "HTTP_REQUEST", "execution": "E1", "generation": "%s"' % gen("G5"))
+                    for row in broker_answers()]
+        self.assertEqual(self.judge(broker=disagree)["checks"][0]["result"], "NOT_RUN_ENV_UNAVAILABLE")
+
+    def test_judged_requests_follow_the_first_channel_attempt_which_counts_from_the_kill(self):
+        # Reviews R4-4, R5-1: requests before the restarted broker's first attempt are not judged; an attempt between the
+        # kill and the restart record (the probe polls) counts.
+        before_attempt = [row for row in broker_answers() if "@533" not in row] + [
+            answer(529 * S, "GATE", "REFUSED", reason="NOT_ACTIVE"), answer(533 * S, "SERVER", "FAILED")]
+        self.assertEqual(self.judge(broker=before_attempt)["checks"][0]["result"], "NOT_RUN_ENV_UNAVAILABLE")
+        early = [row for row in broker_answers() if "GATE:CHANNEL_OPEN:-@530" not in row and "GATE:CHANNEL_OPEN:-@532" not in row] \
+            + [channel(519 * S + S // 2, "G2", "ALLOWED"), channel(519 * S, "G1", "REFUSED", "GENERATION_CHANNEL_USED")]
+        self.assertEqual(self.judge(broker=early)["checks"][0]["result"], "PASS")
 
     def test_a_second_allowed_opening_of_a_generation_fails_whatever_the_labels(self):
         # Review R3-1: one channel per generation (T38).
