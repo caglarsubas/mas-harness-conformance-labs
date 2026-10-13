@@ -252,10 +252,17 @@ def _generation_at(answers, execution, instant):
 
 
 def _reconnects(answers, generation, since):
-    """Channels allowed into the tested execution's generation after the fault, at any later time (I05 v3: one channel per
-    generation, T38; reviews D5-2, R1-3): always broken."""
-    return [row for row in answers if row["party"] == "GATE" and row["operation"] == "CHANNEL_OPEN" and row["answer"] == "ALLOWED"
-            and generation is not None and row["generation"] == generation and row["sentBoottime"] > since]
+    """Channels allowed into the tested execution's generation after the fault, at any later time, and any second allowed
+    opening of one generation, whatever the labels (I05 v3: one channel per generation, T38; reviews D5-2, R1-3, R3-1):
+    always broken."""
+    openings = sorted((row for row in answers if row["party"] == "GATE" and row["operation"] == "CHANNEL_OPEN"
+                       and row["answer"] == "ALLOWED"), key=lambda row: row["sentBoottime"])
+    seen, broken = set(), []
+    for row in openings:
+        if row["generation"] in seen or (generation is not None and row["generation"] == generation and row["sentBoottime"] > since):
+            broken.append(row)
+        seen.add(row["generation"])
+    return broken
 
 
 def _bound_at(answers, execution, instant):
@@ -443,27 +450,41 @@ def peer_death_restart(start, records, answers):
     restarted = _at(restarts[0])
     checks = []
     if peer == "BROKER":
-        attempts = [row for row in answers if row["party"] == "GATE" and row["operation"] == "CHANNEL_OPEN"
-                    and row["sentBoottime"] > restarted]
         dead = _generation_at(answers, execution, killed)
         # The dead broker's generation is held (T26): nothing at all is allowed in it after the kill, whatever the
         # operation or execution (a reconnect, a status frame, a bind of another execution: reviews R1-2, R2-2).
         used = [row for row in answers if row["party"] == "GATE" and row["answer"] == "ALLOWED" and dead is not None
                 and row["generation"] == dead and row["sentBoottime"] > killed + MARGIN_NS]
+        binds = [row for row in _gate(answers) if row["execution"] == execution and row["operation"] == "BIND_EXECUTION"
+                 and row["answer"] == "ALLOWED" and row["sentBoottime"] < killed]
+        created = dead is not None and binds and any(
+            row["party"] == "GATE" and row["operation"] == "CHANNEL_OPEN" and row["answer"] == "ALLOWED"
+            and row["generation"] == dead and row["sentBoottime"] < binds[-1]["sentBoottime"] for row in answers)
+        # Review R2-3: only attempts before the tested execution's deadline count (the schedule puts them first).
+        attempts = [row for row in answers if row["party"] == "GATE" and row["operation"] == "CHANNEL_OPEN"
+                    and restarted < row["sentBoottime"] < deadline - MARGIN_NS]
         if not _bound_at(answers, execution, killed):
             checks.append(_not_run("E07-GATE", PEER_GATE, "the tested execution was not bound and live at the kill"))
-        elif dead is None:
-            checks.append(_not_run("E07-GATE", PEER_GATE, "the tested execution's bind is not logged or its rows name "
-                                                         "different generations: a reconnect cannot be judged"))
-        elif used:
-            checks.append(_check("E07-GATE", PEER_GATE, [], used, ""))
-        elif not attempts:
-            # Review R1-2: a reconnect shows only in the restarted broker's channel attempts, which the driver must log.
-            checks.append(_not_run("E07-GATE", PEER_GATE, "no channel attempt of the restarted broker is logged"))
         else:
-            checks.append(_gate_check("E07-GATE", PEER_GATE, answers, execution, killed, killed, deadline, PEER_REASONS,
-                                      "no gate exchange for the tested execution after the restart and before its deadline",
-                                      forbidden_from=killed, judged_after=restarted))
+            check = _gate_check("E07-GATE", PEER_GATE, answers, execution, killed, killed, deadline, PEER_REASONS,
+                                "no gate exchange for the tested execution after the restart and before its deadline",
+                                forbidden_from=killed, judged_after=restarted)
+            # A violation that needs no generation FAILs first (review R3-2); then the reconnect part must be judgeable.
+            if check["result"] == FAIL:
+                checks.append(check)
+            elif used:
+                checks.append(_check("E07-GATE", PEER_GATE, [], used, ""))
+            elif dead is None or len(binds) != 1 or not created:
+                # Reviews R2-1, R3-1: the dead generation is the one the tested execution's single logged bind names, and a
+                # logged channel opening created it before that bind; otherwise a reconnect cannot be judged.
+                checks.append(_not_run("E07-GATE", PEER_GATE, "the tested execution's generation is not established by "
+                                                             "one logged bind in a logged channel opening"))
+            elif not attempts:
+                # Review R1-2: a reconnect shows only in the restarted broker's channel attempts, which the driver must log.
+                checks.append(_not_run("E07-GATE", PEER_GATE, "no channel attempt of the restarted broker is logged before "
+                                                             "the deadline"))
+            else:
+                checks.append(check)
     if _served_at(answers, execution, killed):
         checks.append(_reader_check("E07-READER-" + peer, PEER_READER, answers, execution, killed, killed, deadline,
                                     "no reader answer for the tested execution after the restart and before its deadline",

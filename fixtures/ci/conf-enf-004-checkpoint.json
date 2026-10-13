@@ -2,7 +2,7 @@
  "added": {
   "probes/enforcement/BUILD_EVIDENCE.json": {
    "mode": "100644",
-   "sha256": "e215bf83a1bdbf12842438d4fa81b050f9731a9331e45090089f7653b9b4a029",
+   "sha256": "9ea64c80f74bea90d1a3ea11936efabd4d844d4e4b7cdb0add9dbd49724d29b1",
    "size": 2697
   },
   "probes/enforcement/Cargo.lock": {
@@ -72,7 +72,7 @@
   },
   "probes/enforcement/common/src/tree.rs": {
    "mode": "100644",
-   "sha256": "997d7a914bf3c8ca1079c98b4d930324ab55d9d7d1102ef7c4d88adbd72afcbb",
+   "sha256": "5f34477f58dd4948ce4da2afbf6da787f944d28edcebdffdec7774e4f8394fa9",
    "size": 318
   },
   "probes/enforcement/tg04_host/Cargo.toml": {
@@ -97,8 +97,8 @@
   },
   "probes/enforcement/tg05_clocks/src/main.rs": {
    "mode": "100644",
-   "sha256": "57e28b7e23f1adfc141f2eabeb04ee91a085b18b97adbcc5775b9e10a1326055",
-   "size": 18694
+   "sha256": "cdca82e8282d0fbfdec587ebad398d4482b551eb7f4498f6e067f63ef5fb88a1",
+   "size": 18776
   },
   "task-packets/CONF-ENF-004.yaml": {
    "mode": "100644",
@@ -122,7 +122,7 @@
   },
   "tests/enforcement/test_probes.py": {
    "mode": "100644",
-   "sha256": "e3f48bb2631b4cdf34ec22a086583dad8c32b98a2c682ce5e6633e5f9548c008",
+   "sha256": "0aa573e41e251daf769c2b289a058598388d853cdc0e80879323648080948779",
    "size": 13788
   },
   "tests/enforcement/tg04_host/__init__.py": {
@@ -147,8 +147,8 @@
   },
   "tests/enforcement/tg05_clocks/_verdicts.py": {
    "mode": "100644",
-   "sha256": "008c7e9e5ab17b17bd6c9a74edc5092bce3da14591b983bc8a35d4a67adc36d3",
-   "size": 37760
+   "sha256": "731fdd09a534788fdd73adb7d7e0b2dc32a2ebc2d0563a05afb890177ae0a7f4",
+   "size": 39299
   },
   "tests/enforcement/tg05_clocks/results.json": {
    "mode": "100644",
@@ -162,8 +162,8 @@
   },
   "tests/enforcement/tg05_clocks/test_verdicts.py": {
    "mode": "100644",
-   "sha256": "f32849125a1cf45d4c1e84949f1f35b8bedd75e3d6e6fc9b454193a8f930f70b",
-   "size": 35494
+   "sha256": "8b4bb59f1e02ef46b6978b332c94a283fe95827ae2a6206676c1a899662268b2",
+   "size": 38424
   }
  },
  "baseCommit": "25f38a51144e1b6a9042b52a75cca5b3c3bc13d6",

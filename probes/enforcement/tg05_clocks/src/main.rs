@@ -201,20 +201,20 @@ fn expiry_with_stalled_python(binding: &Binding) -> Result<(), String> {
             }
             for pid in cgroup::procs(Path::new(path)).map_err(|error| format!("{} cgroup.procs: {}", name, describe(&error)))? {
                 if !held.0.iter().any(|(known, _)| *known == pid) {
-                    fresh.push(pid);
+                    fresh.push((pid, *name, *path));
                 }
             }
         }
         if fresh.is_empty() {
             break;
         }
-        for pid in fresh {
-            // Pin the process and check it is the one listed (a reused PID shows other start ticks: review R2-4).
-            let before = proc::stat(pid).map_err(|error| format!("{} stat: {}", pid, describe(&error)))?;
+        for (pid, name, path) in fresh {
+            // Pin the process, then check the pinned process is still in the role's cgroup: a PID reused after the
+            // listing by a process outside it is refused, never stopped (reviews R2-4, R3-3).
             let pidfd = PidFd::open(pid).map_err(|error| format!("{} pidfd_open: {}", pid, describe(&error)))?;
-            let after = proc::stat(pid).map_err(|error| format!("{} stat: {}", pid, describe(&error)))?;
-            if before.start_ticks != after.start_ticks {
-                return Err(format!("process {} changed while its pidfd was opened", pid));
+            let members = cgroup::procs(Path::new(path)).map_err(|error| format!("{} cgroup.procs: {}", name, describe(&error)))?;
+            if pidfd.exited_within(0).unwrap_or(true) || !members.contains(&pid) {
+                return Err(format!("process {} left the {} cgroup while it was pinned", pid, name));
             }
             held.0.push((pid, pidfd));
         }
