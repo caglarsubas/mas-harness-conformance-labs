@@ -1,0 +1,1416 @@
+{
+ "schemaVersion": "r12.enforcement-tg-case-ledger/v1",
+ "packet": "CONF-ENF-004",
+ "testGroup": "TG-05",
+ "evidenceClass": "NATIVE_LIFETIME",
+ "rule": "Each plan case of the group, in plan order. Every case waits for W06's enrolled AMD64 and ARM64 hosts and is NOT_RUN_ENV_UNAVAILABLE until W06 runs it, never PASS before (AGENTS rule 14); D-PROBE-ROUTE (owner decision Q-T14) gates that run too, and `permissions` lists, in SELinux matrix v4 terms, what the case's probe needs beyond an enrolled host's policy. Its catalog names the contract rows (with the file each comes from) whose expected results W06 checks with the reference models while the case's probe runs. `probe` names the probe crate and case that inject the native fault, or `probeIn` the packet that brings them; a case with neither is judged by its catalog rows only. `verdicts` names the checks that judge the probe's timeline with W06's answer log, and `carries` the LEDGER-E09 properties the case carries (owner decision Q-T11) with the checks that observe each. In W06 a case is PASS only when its probe's faultResult is PASS in every run the case needs (one per peer for peer death/restart) and every verdict, catalog-row and carried-property check is PASS; it is FAIL when any of them fails, and NOT_RUN_ENV_UNAVAILABLE otherwise. A catalog row is checked in W06 when it is a vector (replayed through its reference model against the run's records) or a model rule (applied to the run's captures); spec-step and obligation rows are the basis the verdict and vector checks cite, not checks of their own. `harnessRestore` is what W06's harness does after every run, whether or not the probe ended.",
+ "cases": [
+  {
+   "tag": "MATRIX:expiry with stalled Python",
+   "phase": "W06_NATIVE_ONLY",
+   "obligations": [
+    "E08"
+   ],
+   "blockedBy": [
+    "D-W02A-F2",
+    "D-PROBE-ROUTE"
+   ],
+   "subject": "W05's released build on the enrolled AMD64 and ARM64 hosts in W06",
+   "result": "NOT_RUN_ENV_UNAVAILABLE",
+   "reason": "W06_NATIVE_ONLY: native evidence on the enrolled AMD64 and ARM64 hosts in W06; the catalog fixes the contract rows and obligation rows (owner decision Q-T13) whose expected results W06 checks; blocked by D-W02A-F2; blocked by D-PROBE-ROUTE",
+   "properties": [],
+   "evidence": [],
+   "catalog": [
+    {
+     "contract": "I05 gate channel v3",
+     "vectorSet": "transcripts",
+     "source": "architecture/i05-gate-channel-v3/vectors.json",
+     "basis": "a transcript with an EXPIRE event: the bound execution's signed lifetime ends",
+     "ids": [
+      "T36",
+      "T61",
+      "T62",
+      "T97",
+      "T112",
+      "T119"
+     ]
+    },
+    {
+     "contract": "W01 amendment W02D",
+     "vectorSet": "specSections",
+     "source": "architecture/host-interface-amendment-w02d/HOST_INTERFACE_SPEC.md",
+     "basis": "W02D 5.4 W6: on expiry or invalidation the broker freezes the leaf, kills through cgroup.kill and waits for populated 0 before releasing it, or HOLDs; recorded in W06, no latency bound is claimed",
+     "ids": [
+      "5.4 W6"
+     ]
+    },
+    {
+     "contract": "Enforcement feasibility obligation rows (recorded addition, owner decision Q-T13)",
+     "vectorSet": "obligationRows",
+     "source": "docs/alpha-2/ENFORCEMENT_FEASIBILITY.md",
+     "basis": "the plan's obligation rows the case serves, section 4 of ENFORCEMENT_FEASIBILITY.md at harness-onion a2eab93 (owner decision Q-T13, 2026-10-13): each row's required proof is the case's expected result at the level of the obligation",
+     "ids": [
+      "E08"
+     ]
+    }
+   ],
+   "vectors": 8,
+   "probe": {
+    "crate": "tg05_clocks",
+    "case": "expiry_with_stalled_python"
+   },
+   "probeIn": null,
+   "verdicts": [
+    "E08-STALLED"
+   ],
+   "carries": [],
+   "permissions": [
+    {
+     "class": "dir",
+     "perms": [
+      "search"
+     ],
+     "targets": [
+      "HOST_POLICY:/sys/fs/cgroup",
+      "HOST_POLICY:/proc",
+      "HOST_POLICY:/proc/sys/kernel/random"
+     ],
+     "assertions": [],
+     "grantedTo": null
+    },
+    {
+     "class": "file",
+     "perms": [
+      "open",
+      "read"
+     ],
+     "targets": [
+      "HOST_POLICY:/proc/sys/kernel/random/boot_id",
+      "HOST_POLICY:the W06 binding file"
+     ],
+     "assertions": [],
+     "grantedTo": null
+    },
+    {
+     "class": "file",
+     "perms": [
+      "execute"
+     ],
+     "targets": [
+      "HOST_POLICY:the probe binary"
+     ],
+     "assertions": [],
+     "grantedTo": null
+    },
+    {
+     "class": "fd",
+     "perms": [
+      "use"
+     ],
+     "targets": [
+      "HOST_POLICY:the descriptors W06's harness passes the probe (its standard output)"
+     ],
+     "assertions": [],
+     "grantedTo": null
+    },
+    {
+     "class": "fifo_file",
+     "perms": [
+      "write",
+      "append"
+     ],
+     "targets": [
+      "HOST_POLICY:the probe's standard output, when W06 pipes it"
+     ],
+     "assertions": [],
+     "grantedTo": null
+    },
+    {
+     "class": "file",
+     "perms": [
+      "write",
+      "append"
+     ],
+     "targets": [
+      "HOST_POLICY:the probe's standard output, when W06 redirects it to a file"
+     ],
+     "assertions": [],
+     "grantedTo": null
+    },
+    {
+     "class": "dir",
+     "perms": [
+      "search"
+     ],
+     "targets": [
+      "planeon_cgroup_slice_t",
+      "planeon_cgroup_delegate_t",
+      "planeon_cgroup_server_t",
+      "planeon_cgroup_worker_t"
+     ],
+     "assertions": [
+      "A38"
+     ],
+     "grantedTo": [
+      "init_t",
+      "planeon_broker_t",
+      "planeon_contain_t",
+      "planeon_observer_t",
+      "planeon_server_t"
+     ]
+    },
+    {
+     "class": "file",
+     "perms": [
+      "open",
+      "read"
+     ],
+     "targets": [
+      "planeon_cgroup_delegate_t",
+      "planeon_cgroup_server_t",
+      "planeon_cgroup_worker_t"
+     ],
+     "assertions": [
+      "A39"
+     ],
+     "grantedTo": [
+      "init_t",
+      "planeon_broker_t",
+      "planeon_contain_t",
+      "planeon_observer_t",
+      "planeon_server_t"
+     ]
+    },
+    {
+     "class": "dir",
+     "perms": [
+      "search"
+     ],
+     "targets": [
+      "planeon_server_t"
+     ],
+     "assertions": [],
+     "grantedTo": [
+      "planeon_broker_t",
+      "planeon_observer_t"
+     ]
+    },
+    {
+     "class": "file",
+     "perms": [
+      "open",
+      "read"
+     ],
+     "targets": [
+      "planeon_server_t"
+     ],
+     "assertions": [
+      "A59.planeon_server_t"
+     ],
+     "grantedTo": [
+      "planeon_broker_t",
+      "planeon_observer_t"
+     ]
+    },
+    {
+     "class": "dir",
+     "perms": [
+      "search"
+     ],
+     "targets": [
+      "planeon_worker_t"
+     ],
+     "assertions": [],
+     "grantedTo": [
+      "planeon_broker_t",
+      "planeon_observer_t",
+      "planeon_server_t"
+     ]
+    },
+    {
+     "class": "file",
+     "perms": [
+      "open",
+      "read"
+     ],
+     "targets": [
+      "planeon_worker_t"
+     ],
+     "assertions": [
+      "A59.planeon_worker_t"
+     ],
+     "grantedTo": [
+      "planeon_broker_t",
+      "planeon_observer_t",
+      "planeon_server_t"
+     ]
+    },
+    {
+     "class": "process",
+     "perms": [
+      "sigstop",
+      "signal"
+     ],
+     "targets": [
+      "planeon_server_t"
+     ],
+     "assertions": [
+      "A57"
+     ],
+     "grantedTo": [
+      "init_t"
+     ]
+    },
+    {
+     "class": "process",
+     "perms": [
+      "sigstop",
+      "signal"
+     ],
+     "targets": [
+      "planeon_worker_t"
+     ],
+     "assertions": [],
+     "grantedTo": [
+      "init_t"
+     ]
+    },
+    {
+     "class": "capability",
+     "perms": [
+      "kill"
+     ],
+     "targets": [],
+     "assertions": [],
+     "grantedTo": [
+      "init_t",
+      "planeon_admin_t",
+      "qualk8s_kubelet_t",
+      "qualk8s_runtime_t"
+     ]
+    }
+   ],
+   "permissionsIn": null,
+   "harnessRestore": "send SIGCONT to every process of the SERVER cgroup and the worker leaf"
+  },
+  {
+   "tag": "MATRIX:suspend",
+   "phase": "W06_NATIVE_ONLY",
+   "obligations": [
+    "E08"
+   ],
+   "blockedBy": [
+    "D-W02A-F2",
+    "D-PROBE-ROUTE"
+   ],
+   "subject": "W05's released build on the enrolled AMD64 and ARM64 hosts in W06",
+   "result": "NOT_RUN_ENV_UNAVAILABLE",
+   "reason": "W06_NATIVE_ONLY: native evidence on the enrolled AMD64 and ARM64 hosts in W06; the catalog fixes the contract rows and obligation rows (owner decision Q-T13) whose expected results W06 checks; blocked by D-W02A-F2; blocked by D-PROBE-ROUTE",
+   "properties": [],
+   "evidence": [],
+   "catalog": [
+    {
+     "contract": "I05 gate channel v3",
+     "vectorSet": "transcripts",
+     "source": "architecture/i05-gate-channel-v3/vectors.json",
+     "basis": "a transcript with an EXPIRE event: the bound execution's signed lifetime ends",
+     "ids": [
+      "T36",
+      "T61",
+      "T62",
+      "T97",
+      "T112",
+      "T119"
+     ]
+    },
+    {
+     "contract": "Native qualification profile v3",
+     "vectorSet": "negative",
+     "source": "architecture/native-profile-v3/vectors.json",
+     "basis": "the native v3 model's window rules: a capture, lifecycle capture or backend observation outside the record's signed validity window is refused",
+     "ids": [
+      "L10"
+     ]
+    },
+    {
+     "contract": "Native qualification profile v3",
+     "vectorSet": "modelRules",
+     "source": "scripts/native_qualification_v3.py",
+     "basis": "the native v3 model's window rules: a capture, lifecycle capture or backend observation outside the record's signed validity window is refused",
+     "ids": [
+      "expired capture",
+      "expired backend capture"
+     ]
+    },
+    {
+     "contract": "Enforcement feasibility obligation rows (recorded addition, owner decision Q-T13)",
+     "vectorSet": "obligationRows",
+     "source": "docs/alpha-2/ENFORCEMENT_FEASIBILITY.md",
+     "basis": "the plan's obligation rows the case serves, section 4 of ENFORCEMENT_FEASIBILITY.md at harness-onion a2eab93 (owner decision Q-T13, 2026-10-13): each row's required proof is the case's expected result at the level of the obligation",
+     "ids": [
+      "E08"
+     ]
+    }
+   ],
+   "vectors": 10,
+   "probe": {
+    "crate": "tg05_clocks",
+    "case": "suspend"
+   },
+   "probeIn": null,
+   "verdicts": [
+    "E08-SUSPEND"
+   ],
+   "carries": [],
+   "permissions": [
+    {
+     "class": "dir",
+     "perms": [
+      "search"
+     ],
+     "targets": [
+      "HOST_POLICY:/sys/fs/cgroup",
+      "HOST_POLICY:/proc",
+      "HOST_POLICY:/proc/sys/kernel/random"
+     ],
+     "assertions": [],
+     "grantedTo": null
+    },
+    {
+     "class": "file",
+     "perms": [
+      "open",
+      "read"
+     ],
+     "targets": [
+      "HOST_POLICY:/proc/sys/kernel/random/boot_id",
+      "HOST_POLICY:the W06 binding file"
+     ],
+     "assertions": [],
+     "grantedTo": null
+    },
+    {
+     "class": "file",
+     "perms": [
+      "execute"
+     ],
+     "targets": [
+      "HOST_POLICY:the probe binary"
+     ],
+     "assertions": [],
+     "grantedTo": null
+    },
+    {
+     "class": "fd",
+     "perms": [
+      "use"
+     ],
+     "targets": [
+      "HOST_POLICY:the descriptors W06's harness passes the probe (its standard output)"
+     ],
+     "assertions": [],
+     "grantedTo": null
+    },
+    {
+     "class": "fifo_file",
+     "perms": [
+      "write",
+      "append"
+     ],
+     "targets": [
+      "HOST_POLICY:the probe's standard output, when W06 pipes it"
+     ],
+     "assertions": [],
+     "grantedTo": null
+    },
+    {
+     "class": "file",
+     "perms": [
+      "write",
+      "append"
+     ],
+     "targets": [
+      "HOST_POLICY:the probe's standard output, when W06 redirects it to a file"
+     ],
+     "assertions": [],
+     "grantedTo": null
+    },
+    {
+     "class": "dir",
+     "perms": [
+      "search"
+     ],
+     "targets": [
+      "planeon_cgroup_slice_t",
+      "planeon_cgroup_delegate_t",
+      "planeon_cgroup_worker_t"
+     ],
+     "assertions": [
+      "A38"
+     ],
+     "grantedTo": [
+      "init_t",
+      "planeon_broker_t",
+      "planeon_contain_t",
+      "planeon_observer_t",
+      "planeon_server_t"
+     ]
+    },
+    {
+     "class": "file",
+     "perms": [
+      "open",
+      "read"
+     ],
+     "targets": [
+      "planeon_cgroup_delegate_t",
+      "planeon_cgroup_worker_t"
+     ],
+     "assertions": [
+      "A39"
+     ],
+     "grantedTo": [
+      "init_t",
+      "planeon_broker_t",
+      "planeon_contain_t",
+      "planeon_observer_t",
+      "planeon_server_t"
+     ]
+    },
+    {
+     "class": "dir",
+     "perms": [
+      "search"
+     ],
+     "targets": [
+      "planeon_worker_t"
+     ],
+     "assertions": [],
+     "grantedTo": [
+      "planeon_broker_t",
+      "planeon_observer_t",
+      "planeon_server_t"
+     ]
+    },
+    {
+     "class": "file",
+     "perms": [
+      "open",
+      "read"
+     ],
+     "targets": [
+      "planeon_worker_t"
+     ],
+     "assertions": [
+      "A59.planeon_worker_t"
+     ],
+     "grantedTo": [
+      "planeon_broker_t",
+      "planeon_observer_t",
+      "planeon_server_t"
+     ]
+    },
+    {
+     "class": "file",
+     "perms": [
+      "open",
+      "write"
+     ],
+     "targets": [
+      "HOST_POLICY:/sys/power/state",
+      "HOST_POLICY:/sys/class/rtc/rtc0/wakealarm"
+     ],
+     "assertions": [],
+     "grantedTo": null
+    }
+   ],
+   "permissionsIn": null,
+   "harnessRestore": "cancel the RTC wake alarm (write 0 to /sys/class/rtc/rtc0/wakealarm)"
+  },
+  {
+   "tag": "MATRIX:wall-clock rollback",
+   "phase": "W06_NATIVE_ONLY",
+   "obligations": [
+    "E08"
+   ],
+   "blockedBy": [
+    "D-W02A-F2",
+    "D-PROBE-ROUTE"
+   ],
+   "subject": "W05's released build on the enrolled AMD64 and ARM64 hosts in W06",
+   "result": "NOT_RUN_ENV_UNAVAILABLE",
+   "reason": "W06_NATIVE_ONLY: native evidence on the enrolled AMD64 and ARM64 hosts in W06; the catalog fixes the contract rows and obligation rows (owner decision Q-T13) whose expected results W06 checks; blocked by D-W02A-F2; blocked by D-PROBE-ROUTE",
+   "properties": [],
+   "evidence": [],
+   "catalog": [
+    {
+     "contract": "I05 gate channel v3",
+     "vectorSet": "transcripts",
+     "source": "architecture/i05-gate-channel-v3/vectors.json",
+     "basis": "a transcript with an EXPIRE event: the bound execution's signed lifetime ends",
+     "ids": [
+      "T36",
+      "T61",
+      "T62",
+      "T97",
+      "T112",
+      "T119"
+     ]
+    },
+    {
+     "contract": "Native qualification profile v3",
+     "vectorSet": "modelRules",
+     "source": "scripts/native_qualification_v3.py",
+     "basis": "the native v3 model's retained-capture rules: a later capture of the same role never starts before the previous one finished, never goes back in time and keeps the original deadline ('rollback or renewed lifetime'), and one inspection stays within its deadline ('inspection deadline')",
+     "ids": [
+      "rollback or renewed lifetime"
+     ]
+    },
+    {
+     "contract": "Enforcement feasibility obligation rows (recorded addition, owner decision Q-T13)",
+     "vectorSet": "obligationRows",
+     "source": "docs/alpha-2/ENFORCEMENT_FEASIBILITY.md",
+     "basis": "the plan's obligation rows the case serves, section 4 of ENFORCEMENT_FEASIBILITY.md at harness-onion a2eab93 (owner decision Q-T13, 2026-10-13): each row's required proof is the case's expected result at the level of the obligation",
+     "ids": [
+      "E08"
+     ]
+    }
+   ],
+   "vectors": 8,
+   "probe": {
+    "crate": "tg05_clocks",
+    "case": "wall_clock_rollback"
+   },
+   "probeIn": null,
+   "verdicts": [
+    "E08-ROLLBACK"
+   ],
+   "carries": [],
+   "permissions": [
+    {
+     "class": "dir",
+     "perms": [
+      "search"
+     ],
+     "targets": [
+      "HOST_POLICY:/sys/fs/cgroup",
+      "HOST_POLICY:/proc",
+      "HOST_POLICY:/proc/sys/kernel/random"
+     ],
+     "assertions": [],
+     "grantedTo": null
+    },
+    {
+     "class": "file",
+     "perms": [
+      "open",
+      "read"
+     ],
+     "targets": [
+      "HOST_POLICY:/proc/sys/kernel/random/boot_id",
+      "HOST_POLICY:the W06 binding file"
+     ],
+     "assertions": [],
+     "grantedTo": null
+    },
+    {
+     "class": "file",
+     "perms": [
+      "execute"
+     ],
+     "targets": [
+      "HOST_POLICY:the probe binary"
+     ],
+     "assertions": [],
+     "grantedTo": null
+    },
+    {
+     "class": "fd",
+     "perms": [
+      "use"
+     ],
+     "targets": [
+      "HOST_POLICY:the descriptors W06's harness passes the probe (its standard output)"
+     ],
+     "assertions": [],
+     "grantedTo": null
+    },
+    {
+     "class": "fifo_file",
+     "perms": [
+      "write",
+      "append"
+     ],
+     "targets": [
+      "HOST_POLICY:the probe's standard output, when W06 pipes it"
+     ],
+     "assertions": [],
+     "grantedTo": null
+    },
+    {
+     "class": "file",
+     "perms": [
+      "write",
+      "append"
+     ],
+     "targets": [
+      "HOST_POLICY:the probe's standard output, when W06 redirects it to a file"
+     ],
+     "assertions": [],
+     "grantedTo": null
+    },
+    {
+     "class": "dir",
+     "perms": [
+      "search"
+     ],
+     "targets": [
+      "planeon_cgroup_slice_t",
+      "planeon_cgroup_delegate_t",
+      "planeon_cgroup_worker_t"
+     ],
+     "assertions": [
+      "A38"
+     ],
+     "grantedTo": [
+      "init_t",
+      "planeon_broker_t",
+      "planeon_contain_t",
+      "planeon_observer_t",
+      "planeon_server_t"
+     ]
+    },
+    {
+     "class": "file",
+     "perms": [
+      "open",
+      "read"
+     ],
+     "targets": [
+      "planeon_cgroup_delegate_t",
+      "planeon_cgroup_worker_t"
+     ],
+     "assertions": [
+      "A39"
+     ],
+     "grantedTo": [
+      "init_t",
+      "planeon_broker_t",
+      "planeon_contain_t",
+      "planeon_observer_t",
+      "planeon_server_t"
+     ]
+    },
+    {
+     "class": "dir",
+     "perms": [
+      "search"
+     ],
+     "targets": [
+      "planeon_worker_t"
+     ],
+     "assertions": [],
+     "grantedTo": [
+      "planeon_broker_t",
+      "planeon_observer_t",
+      "planeon_server_t"
+     ]
+    },
+    {
+     "class": "file",
+     "perms": [
+      "open",
+      "read"
+     ],
+     "targets": [
+      "planeon_worker_t"
+     ],
+     "assertions": [
+      "A59.planeon_worker_t"
+     ],
+     "grantedTo": [
+      "planeon_broker_t",
+      "planeon_observer_t",
+      "planeon_server_t"
+     ]
+    },
+    {
+     "class": "capability",
+     "perms": [
+      "sys_time"
+     ],
+     "targets": [],
+     "assertions": [],
+     "grantedTo": [
+      "init_t"
+     ]
+    }
+   ],
+   "permissionsIn": null,
+   "harnessRestore": "set the wall clock again from the host's time source"
+  },
+  {
+   "tag": "MATRIX:peer death/restart",
+   "phase": "W06_NATIVE_ONLY",
+   "obligations": [
+    "E07"
+   ],
+   "blockedBy": [
+    "D-W02A-F2",
+    "D-PROBE-ROUTE"
+   ],
+   "subject": "W05's released build on the enrolled AMD64 and ARM64 hosts in W06",
+   "result": "NOT_RUN_ENV_UNAVAILABLE",
+   "reason": "W06_NATIVE_ONLY: native evidence on the enrolled AMD64 and ARM64 hosts in W06; the catalog fixes the contract rows and obligation rows (owner decision Q-T13) whose expected results W06 checks; blocked by D-W02A-F2; blocked by D-PROBE-ROUTE",
+   "properties": [],
+   "evidence": [],
+   "catalog": [
+    {
+     "contract": "I05 gate channel v3",
+     "vectorSet": "transcripts",
+     "source": "architecture/i05-gate-channel-v3/vectors.json",
+     "basis": "a transcript whose gate answers a channel loss or a changed broker peer as fatal (PEER_LOST, PEER_CHANGED): the peer died or was replaced",
+     "ids": [
+      "T26",
+      "T38",
+      "T41",
+      "T60",
+      "T93"
+     ]
+    },
+    {
+     "contract": "Native qualification profile v3",
+     "vectorSet": "negative",
+     "source": "architecture/native-profile-v3/vectors.json",
+     "basis": "native v3: a worker not started by the original broker is refused (Q06)",
+     "ids": [
+      "Q06"
+     ]
+    },
+    {
+     "contract": "W01 amendment W02D",
+     "vectorSet": "specSections",
+     "source": "architecture/host-interface-amendment-w02d/HOST_INTERFACE_SPEC.md",
+     "basis": "W02D 5.4 W1-W3: the broker freezes the empty leaf, clone3 places the child frozen before user space, and the broker inspects it through its pidfd before thawing; the original broker stays the parent",
+     "ids": [
+      "5.4 W2",
+      "5.4 W6"
+     ]
+    },
+    {
+     "contract": "Enforcement feasibility obligation rows (recorded addition, owner decision Q-T13)",
+     "vectorSet": "obligationRows",
+     "source": "docs/alpha-2/ENFORCEMENT_FEASIBILITY.md",
+     "basis": "the plan's obligation rows the case serves, section 4 of ENFORCEMENT_FEASIBILITY.md at harness-onion a2eab93 (owner decision Q-T13, 2026-10-13): each row's required proof is the case's expected result at the level of the obligation",
+     "ids": [
+      "E07"
+     ]
+    }
+   ],
+   "vectors": 9,
+   "probe": {
+    "crate": "tg05_clocks",
+    "case": "peer_death_restart"
+   },
+   "probeIn": null,
+   "verdicts": [
+    "E07-GATE",
+    "E07-READER-BROKER",
+    "E09-INSPECTION-BROKER",
+    "E07-READER-OBSERVER",
+    "E09-INSPECTION-OBSERVER"
+   ],
+   "carries": [
+    {
+     "case": "LEDGER-E09",
+     "property": "the peer's kernel rechecks on every inspection tick: its descriptors, SO_PEERCRED credentials, pidfd liveness and the socket path",
+     "checks": [
+      "E07-READER-BROKER",
+      "E07-READER-OBSERVER"
+     ]
+    },
+    {
+     "case": "LEDGER-E09",
+     "property": "the inspections' construction past their first native read (kernel views, policy epoch retention, page size and the peer's role pins) and the BPF view's program ID recheck on cleanup",
+     "checks": [
+      "E09-INSPECTION-BROKER",
+      "E09-INSPECTION-OBSERVER"
+     ]
+    }
+   ],
+   "permissions": [
+    {
+     "class": "dir",
+     "perms": [
+      "search"
+     ],
+     "targets": [
+      "HOST_POLICY:/sys/fs/cgroup",
+      "HOST_POLICY:/proc",
+      "HOST_POLICY:/proc/sys/kernel/random"
+     ],
+     "assertions": [],
+     "grantedTo": null
+    },
+    {
+     "class": "file",
+     "perms": [
+      "open",
+      "read"
+     ],
+     "targets": [
+      "HOST_POLICY:/proc/sys/kernel/random/boot_id",
+      "HOST_POLICY:the W06 binding file"
+     ],
+     "assertions": [],
+     "grantedTo": null
+    },
+    {
+     "class": "file",
+     "perms": [
+      "execute"
+     ],
+     "targets": [
+      "HOST_POLICY:the probe binary"
+     ],
+     "assertions": [],
+     "grantedTo": null
+    },
+    {
+     "class": "fd",
+     "perms": [
+      "use"
+     ],
+     "targets": [
+      "HOST_POLICY:the descriptors W06's harness passes the probe (its standard output)"
+     ],
+     "assertions": [],
+     "grantedTo": null
+    },
+    {
+     "class": "fifo_file",
+     "perms": [
+      "write",
+      "append"
+     ],
+     "targets": [
+      "HOST_POLICY:the probe's standard output, when W06 pipes it"
+     ],
+     "assertions": [],
+     "grantedTo": null
+    },
+    {
+     "class": "file",
+     "perms": [
+      "write",
+      "append"
+     ],
+     "targets": [
+      "HOST_POLICY:the probe's standard output, when W06 redirects it to a file"
+     ],
+     "assertions": [],
+     "grantedTo": null
+    },
+    {
+     "class": "dir",
+     "perms": [
+      "search"
+     ],
+     "targets": [
+      "planeon_cgroup_slice_t",
+      "planeon_cgroup_observer_t",
+      "planeon_cgroup_delegate_t",
+      "planeon_cgroup_broker_t",
+      "planeon_cgroup_worker_t"
+     ],
+     "assertions": [
+      "A38"
+     ],
+     "grantedTo": [
+      "init_t",
+      "planeon_broker_t",
+      "planeon_contain_t",
+      "planeon_observer_t",
+      "planeon_server_t"
+     ]
+    },
+    {
+     "class": "file",
+     "perms": [
+      "open",
+      "read"
+     ],
+     "targets": [
+      "planeon_cgroup_observer_t",
+      "planeon_cgroup_delegate_t",
+      "planeon_cgroup_broker_t",
+      "planeon_cgroup_worker_t"
+     ],
+     "assertions": [
+      "A39"
+     ],
+     "grantedTo": [
+      "init_t",
+      "planeon_broker_t",
+      "planeon_contain_t",
+      "planeon_observer_t",
+      "planeon_server_t"
+     ]
+    },
+    {
+     "class": "dir",
+     "perms": [
+      "search"
+     ],
+     "targets": [
+      "planeon_observer_t"
+     ],
+     "assertions": [],
+     "grantedTo": [
+      "planeon_broker_t",
+      "planeon_server_t"
+     ]
+    },
+    {
+     "class": "file",
+     "perms": [
+      "open",
+      "read"
+     ],
+     "targets": [
+      "planeon_observer_t"
+     ],
+     "assertions": [
+      "A59.planeon_observer_t"
+     ],
+     "grantedTo": [
+      "planeon_broker_t",
+      "planeon_server_t"
+     ]
+    },
+    {
+     "class": "dir",
+     "perms": [
+      "search"
+     ],
+     "targets": [
+      "planeon_broker_t"
+     ],
+     "assertions": [],
+     "grantedTo": [
+      "planeon_gate_t",
+      "planeon_observer_t",
+      "planeon_server_t"
+     ]
+    },
+    {
+     "class": "file",
+     "perms": [
+      "open",
+      "read"
+     ],
+     "targets": [
+      "planeon_broker_t"
+     ],
+     "assertions": [
+      "A59.planeon_broker_t"
+     ],
+     "grantedTo": [
+      "planeon_gate_t",
+      "planeon_observer_t",
+      "planeon_server_t"
+     ]
+    },
+    {
+     "class": "dir",
+     "perms": [
+      "search"
+     ],
+     "targets": [
+      "planeon_worker_t"
+     ],
+     "assertions": [],
+     "grantedTo": [
+      "planeon_broker_t",
+      "planeon_observer_t",
+      "planeon_server_t"
+     ]
+    },
+    {
+     "class": "file",
+     "perms": [
+      "open",
+      "read"
+     ],
+     "targets": [
+      "planeon_worker_t"
+     ],
+     "assertions": [
+      "A59.planeon_worker_t"
+     ],
+     "grantedTo": [
+      "planeon_broker_t",
+      "planeon_observer_t",
+      "planeon_server_t"
+     ]
+    },
+    {
+     "class": "process",
+     "perms": [
+      "sigkill"
+     ],
+     "targets": [
+      "planeon_observer_t",
+      "planeon_broker_t"
+     ],
+     "assertions": [
+      "A57"
+     ],
+     "grantedTo": [
+      "init_t"
+     ]
+    }
+   ],
+   "permissionsIn": null,
+   "harnessRestore": "start the killed peer's unit again if it did not restart"
+  },
+  {
+   "tag": "MATRIX:original deadlines",
+   "phase": "W06_NATIVE_ONLY",
+   "obligations": [
+    "E08",
+    "E11"
+   ],
+   "blockedBy": [
+    "D-W02A-F2",
+    "D-PROBE-ROUTE"
+   ],
+   "subject": "W05's released build on the enrolled AMD64 and ARM64 hosts in W06",
+   "result": "NOT_RUN_ENV_UNAVAILABLE",
+   "reason": "W06_NATIVE_ONLY: native evidence on the enrolled AMD64 and ARM64 hosts in W06; the catalog fixes the contract rows and obligation rows (owner decision Q-T13) whose expected results W06 checks; blocked by D-W02A-F2; blocked by D-PROBE-ROUTE",
+   "properties": [],
+   "evidence": [],
+   "catalog": [
+    {
+     "contract": "I05 gate channel v3",
+     "vectorSet": "transcripts",
+     "source": "architecture/i05-gate-channel-v3/vectors.json",
+     "basis": "a transcript with an EXPIRE event: the bound execution's signed lifetime ends",
+     "ids": [
+      "T36",
+      "T61",
+      "T62",
+      "T97",
+      "T112",
+      "T119"
+     ]
+    },
+    {
+     "contract": "Native qualification profile v3",
+     "vectorSet": "modelRules",
+     "source": "scripts/native_qualification_v3.py",
+     "basis": "the native v3 model's retained-capture rules: a later capture of the same role never starts before the previous one finished, never goes back in time and keeps the original deadline ('rollback or renewed lifetime'), and one inspection stays within its deadline ('inspection deadline')",
+     "ids": [
+      "rollback or renewed lifetime",
+      "inspection deadline"
+     ]
+    },
+    {
+     "contract": "Enforcement feasibility obligation rows (recorded addition, owner decision Q-T13)",
+     "vectorSet": "obligationRows",
+     "source": "docs/alpha-2/ENFORCEMENT_FEASIBILITY.md",
+     "basis": "the plan's obligation rows the case serves, section 4 of ENFORCEMENT_FEASIBILITY.md at harness-onion a2eab93 (owner decision Q-T13, 2026-10-13): each row's required proof is the case's expected result at the level of the obligation",
+     "ids": [
+      "E08",
+      "E11"
+     ]
+    }
+   ],
+   "vectors": 10,
+   "probe": {
+    "crate": "tg05_clocks",
+    "case": "original_deadlines"
+   },
+   "probeIn": null,
+   "verdicts": [
+    "E08-ORIGINAL",
+    "E11-STALE",
+    "E09-CONSTRUCTION"
+   ],
+   "carries": [
+    {
+     "case": "LEDGER-E09",
+     "property": "fixed factories on an enrolled Linux host: construction and original deadlines over real kernel I/O",
+     "checks": [
+      "E11-STALE",
+      "E09-CONSTRUCTION"
+     ]
+    }
+   ],
+   "permissions": [
+    {
+     "class": "dir",
+     "perms": [
+      "search"
+     ],
+     "targets": [
+      "HOST_POLICY:/sys/fs/cgroup",
+      "HOST_POLICY:/proc",
+      "HOST_POLICY:/proc/sys/kernel/random"
+     ],
+     "assertions": [],
+     "grantedTo": null
+    },
+    {
+     "class": "file",
+     "perms": [
+      "open",
+      "read"
+     ],
+     "targets": [
+      "HOST_POLICY:/proc/sys/kernel/random/boot_id",
+      "HOST_POLICY:the W06 binding file"
+     ],
+     "assertions": [],
+     "grantedTo": null
+    },
+    {
+     "class": "file",
+     "perms": [
+      "execute"
+     ],
+     "targets": [
+      "HOST_POLICY:the probe binary"
+     ],
+     "assertions": [],
+     "grantedTo": null
+    },
+    {
+     "class": "fd",
+     "perms": [
+      "use"
+     ],
+     "targets": [
+      "HOST_POLICY:the descriptors W06's harness passes the probe (its standard output)"
+     ],
+     "assertions": [],
+     "grantedTo": null
+    },
+    {
+     "class": "fifo_file",
+     "perms": [
+      "write",
+      "append"
+     ],
+     "targets": [
+      "HOST_POLICY:the probe's standard output, when W06 pipes it"
+     ],
+     "assertions": [],
+     "grantedTo": null
+    },
+    {
+     "class": "file",
+     "perms": [
+      "write",
+      "append"
+     ],
+     "targets": [
+      "HOST_POLICY:the probe's standard output, when W06 redirects it to a file"
+     ],
+     "assertions": [],
+     "grantedTo": null
+    },
+    {
+     "class": "dir",
+     "perms": [
+      "search"
+     ],
+     "targets": [
+      "planeon_cgroup_slice_t",
+      "planeon_cgroup_server_t",
+      "planeon_cgroup_delegate_t",
+      "planeon_cgroup_worker_t"
+     ],
+     "assertions": [
+      "A38"
+     ],
+     "grantedTo": [
+      "init_t",
+      "planeon_broker_t",
+      "planeon_contain_t",
+      "planeon_observer_t",
+      "planeon_server_t"
+     ]
+    },
+    {
+     "class": "file",
+     "perms": [
+      "open",
+      "read"
+     ],
+     "targets": [
+      "planeon_cgroup_server_t",
+      "planeon_cgroup_delegate_t",
+      "planeon_cgroup_worker_t"
+     ],
+     "assertions": [
+      "A39"
+     ],
+     "grantedTo": [
+      "init_t",
+      "planeon_broker_t",
+      "planeon_contain_t",
+      "planeon_observer_t",
+      "planeon_server_t"
+     ]
+    },
+    {
+     "class": "dir",
+     "perms": [
+      "search"
+     ],
+     "targets": [
+      "planeon_server_t"
+     ],
+     "assertions": [],
+     "grantedTo": [
+      "planeon_broker_t",
+      "planeon_observer_t"
+     ]
+    },
+    {
+     "class": "file",
+     "perms": [
+      "open",
+      "read"
+     ],
+     "targets": [
+      "planeon_server_t"
+     ],
+     "assertions": [
+      "A59.planeon_server_t"
+     ],
+     "grantedTo": [
+      "planeon_broker_t",
+      "planeon_observer_t"
+     ]
+    },
+    {
+     "class": "dir",
+     "perms": [
+      "search"
+     ],
+     "targets": [
+      "planeon_worker_t"
+     ],
+     "assertions": [],
+     "grantedTo": [
+      "planeon_broker_t",
+      "planeon_observer_t",
+      "planeon_server_t"
+     ]
+    },
+    {
+     "class": "file",
+     "perms": [
+      "open",
+      "read"
+     ],
+     "targets": [
+      "planeon_worker_t"
+     ],
+     "assertions": [
+      "A59.planeon_worker_t"
+     ],
+     "grantedTo": [
+      "planeon_broker_t",
+      "planeon_observer_t",
+      "planeon_server_t"
+     ]
+    },
+    {
+     "class": "process",
+     "perms": [
+      "sigkill"
+     ],
+     "targets": [
+      "planeon_server_t"
+     ],
+     "assertions": [
+      "A57"
+     ],
+     "grantedTo": [
+      "init_t"
+     ]
+    }
+   ],
+   "permissionsIn": null,
+   "harnessRestore": "start the SERVER unit again if it did not restart"
+  },
+  {
+   "tag": "S8-FREEZE",
+   "phase": "W06_NATIVE_ONLY",
+   "obligations": [
+    "E07",
+    "E08"
+   ],
+   "blockedBy": [
+    "D-W02A-F2",
+    "D-PROBE-ROUTE"
+   ],
+   "subject": "W05's released build on the enrolled AMD64 and ARM64 hosts in W06",
+   "result": "NOT_RUN_ENV_UNAVAILABLE",
+   "reason": "W06_NATIVE_ONLY: native evidence on the enrolled AMD64 and ARM64 hosts in W06; the catalog fixes the contract rows and obligation rows (owner decision Q-T13) whose expected results W06 checks; blocked by D-W02A-F2; blocked by D-PROBE-ROUTE",
+   "properties": [],
+   "evidence": [],
+   "catalog": [
+    {
+     "contract": "W01 amendment W02D",
+     "vectorSet": "specSections",
+     "source": "architecture/host-interface-amendment-w02d/HOST_INTERFACE_SPEC.md",
+     "basis": "W02D 5.4 W1-W3: the broker freezes the empty leaf, clone3 places the child frozen before user space, and the broker inspects it through its pidfd before thawing; the original broker stays the parent",
+     "ids": [
+      "5.4 W1",
+      "5.4 W2",
+      "5.4 W3"
+     ]
+    },
+    {
+     "contract": "Native qualification profile v3",
+     "vectorSet": "negative",
+     "source": "architecture/native-profile-v3/vectors.json",
+     "basis": "native v3: a worker not started by the original broker is refused (Q06)",
+     "ids": [
+      "Q06"
+     ]
+    },
+    {
+     "contract": "Enforcement feasibility obligation rows (recorded addition, owner decision Q-T13)",
+     "vectorSet": "obligationRows",
+     "source": "docs/alpha-2/ENFORCEMENT_FEASIBILITY.md",
+     "basis": "the plan's obligation rows the case serves, section 4 of ENFORCEMENT_FEASIBILITY.md at harness-onion a2eab93 (owner decision Q-T13, 2026-10-13): each row's required proof is the case's expected result at the level of the obligation",
+     "ids": [
+      "E07",
+      "E08"
+     ]
+    }
+   ],
+   "vectors": 6,
+   "probe": null,
+   "probeIn": null,
+   "verdicts": [],
+   "carries": [],
+   "permissions": [],
+   "permissionsIn": null,
+   "harnessRestore": null
+  }
+ ],
+ "blockers": [
+  {
+   "id": "D-PROBE-ROUTE",
+   "decision": "Q-T14",
+   "date": "2026-10-13",
+   "text": "the W06 route by which the native probes inject their faults and observe under the enrolled policy (decided in W06); it gates the W06 run of every TG-04 and TG-05 case, not the writing of its source. Each report records the route and the policy digest; on an unmodified enrolled host the probes report NOT_RUN with EACCES or EPERM."
+  }
+ ]
+}

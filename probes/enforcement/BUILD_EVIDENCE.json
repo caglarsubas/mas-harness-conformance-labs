@@ -1,0 +1,55 @@
+{
+ "schemaVersion": "r12.enforcement-probe-build-evidence/v1",
+ "packet": "CONF-ENF-004",
+ "kind": "AUTHOR_EVIDENCE_NOT_CI",
+ "decision": "Q-T2-B",
+ "probeTree": "f35ca15d515ef8ede493c82507a19ab14049c90482cfc88c25ee5c03bd1a73b1",
+ "toolchain": {
+  "rustc": "rustc 1.99.0 (b940084d7 2026-09-28)",
+  "cargo": "cargo 1.99.0 (5f94df478 2026-08-27)",
+  "inventorySha256": "97ebc29febe842f316f0d569cd777a43067b9f326f7683779ee0647a39ec372f",
+  "note": "the installed Rust 1.99.0 tree (owner decision Q-T2-TOOL); its rust-lld links the static musl binaries"
+ },
+ "environment": [
+  "PATH=$RUST_TREE/bin:/usr/bin:/bin",
+  "HOME=$SCRATCH",
+  "CARGO_HOME=$SCRATCH/cargo-home",
+  "CARGO_TARGET_DIR=$SCRATCH/target",
+  "$SCRATCH/bin/rust-lld: a two-line sh wrapper that sets DYLD_FALLBACK_LIBRARY_PATH=$RUST_TREE/lib and execs $RUST_TREE/lib/rustlib/aarch64-apple-darwin/bin/rust-lld (the tree's rust-lld does not find libLLVM.dylib otherwise, and cargo replaces that variable)",
+  "run from probes/enforcement, one target at a time"
+ ],
+ "commands": [
+  "CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER=$SCRATCH/bin/rust-lld CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_RUSTFLAGS='-C linker-flavor=ld.lld' cargo build --offline --locked --frozen --release -j1 --target x86_64-unknown-linux-musl --manifest-path Cargo.toml",
+  "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=$SCRATCH/bin/rust-lld CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_RUSTFLAGS='-C linker-flavor=ld.lld' cargo build --offline --locked --frozen --release -j1 --target aarch64-unknown-linux-musl --manifest-path Cargo.toml"
+ ],
+ "binaries": [
+  {
+   "target": "x86_64-unknown-linux-musl",
+   "crate": "tg04_host",
+   "sha256": "b57d5e92c29b33e9f36edf31d67a198230548c271e452a5a7055975fb915722e",
+   "size": 444400,
+   "file": "ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), static-pie linked, stripped"
+  },
+  {
+   "target": "x86_64-unknown-linux-musl",
+   "crate": "tg05_clocks",
+   "sha256": "b7849973dfaabd59223447774054fa8235e7aa2ba3380a726d150e8f96720de4",
+   "size": 523568,
+   "file": "ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), static-pie linked, stripped"
+  },
+  {
+   "target": "aarch64-unknown-linux-musl",
+   "crate": "tg04_host",
+   "sha256": "f7ec43f4f61aaadb033a5ee18328ae5c275e96a610f5411f1a7381d3288b86f9",
+   "size": 402888,
+   "file": "ELF 64-bit LSB executable, ARM aarch64, version 1 (SYSV), statically linked, stripped"
+  },
+  {
+   "target": "aarch64-unknown-linux-musl",
+   "crate": "tg05_clocks",
+   "sha256": "eb8eafe5673980bfd47d3d79d65d927454337ae7210825020d6240f613bb854b",
+   "size": 466848,
+   "file": "ELF 64-bit LSB executable, ARM aarch64, version 1 (SYSV), statically linked, stripped"
+  }
+ ]
+}

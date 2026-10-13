@@ -297,6 +297,13 @@
    "sha256": "59c582724ad6621b8961f26b250c4badda440d0552703f138a20175472d8f35b",
    "size": 763,
    "sourceCommit": "93d32e1cc5125b5878f51de31c61ada29e1fa6da"
+  },
+  {
+   "contract": "Enforcement feasibility obligation rows (recorded addition, owner decision Q-T13)",
+   "path": "docs/alpha-2/ENFORCEMENT_FEASIBILITY.md",
+   "sha256": "9fac4492e1b5f6255993374a6642072855a5855a40bcc68706a25b78fd822965",
+   "size": 20359,
+   "sourceCommit": "a2eab9365c8663cc1ae23a666e864b821f600fa6"
   }
  ]
 }

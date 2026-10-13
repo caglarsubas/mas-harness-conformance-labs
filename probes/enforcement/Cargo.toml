@@ -1,0 +1,15 @@
+[workspace]
+members = ["common", "tg04_host", "tg05_clocks"]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[profile.release]
+panic = "unwind"
+opt-level = 2
+codegen-units = 1
+debug = false
+strip = "symbols"

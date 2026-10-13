@@ -44,8 +44,13 @@ SUPPLEMENT = [("I05 gate channel v3 supplement (recorded addition, owner decisio
                "1c00bdb3ea112af6098a09158cce3e4a7a6098c9670f490ead4ca65d8bdbb5ac", 29077),
               ("I05 gate channel v3 supplement (recorded addition, owner decision Q-T10)", "architecture/i05-gate-channel-v3-supplement/status.json",
                "59c582724ad6621b8961f26b250c4badda440d0552703f138a20175472d8f35b", 763)]
+# Owner decision Q-T13 (2026-10-13): the plan's obligation rows (E01-E12), the TG-05 basis (E07, E08, E11) and LEDGER-E01/
+# E02's source, snapshotted from SOURCE_COMMIT after the supplement.
+FEASIBILITY = [("Enforcement feasibility obligation rows (recorded addition, owner decision Q-T13)", "docs/alpha-2/ENFORCEMENT_FEASIBILITY.md",
+                "9fac4492e1b5f6255993374a6642072855a5855a40bcc68706a25b78fd822965", 20359)]
 # Area-local modules area code may import (CONF-ENF-002); _models.py is the one module allowed to load code by path.
-AREA_MODULES = {"_models", "_catalog", "tg01_contract", "tg02_lifecycle", "tg03_persistence", "."}
+AREA_MODULES = {"_models", "_catalog", "_probes", "tg01_contract", "tg02_lifecycle", "tg03_persistence", "tg04_host",
+                "tg05_clocks", "."}
 # Owner decision Q-T9 (2026-10-13): LEDGER-E09's subject is R12's own reader, imported by this one test module only.
 SUBJECT_IMPORTS = {"tests/enforcement/tg02_lifecycle/test_reader_guards.py": {"harness_conformance"}}
 PATH_LOADERS = {"tests/enforcement/_models.py"}
@@ -150,10 +155,12 @@ class SnapshotTests(unittest.TestCase):
         expected = [dict(row, sourceCommit=SOURCE_COMMIT) for row in expected]
         expected += [{"contract": contract, "path": path, "sha256": sha, "size": size, "sourceCommit": SUPPLEMENT_COMMIT}
                      for contract, path, sha, size in SUPPLEMENT]
+        expected += [{"contract": contract, "path": path, "sha256": sha, "size": size, "sourceCommit": SOURCE_COMMIT}
+                     for contract, path, sha, size in FEASIBILITY]
         observed = [{key: row[key] for key in ("contract", "path", "sha256", "size", "sourceCommit") if key in expected[index]}
                     for index, row in enumerate(manifest()["files"])]
         self.assertEqual(observed, expected)
-        self.assertEqual(len(expected), 37 + len(ADDITIONS) + len(SUPPLEMENT))
+        self.assertEqual(len(expected), 37 + len(ADDITIONS) + len(SUPPLEMENT) + len(FEASIBILITY))
 
     def test_reference_model_imports_are_exactly_the_recorded_gaps(self):
         value = manifest()
@@ -252,9 +259,12 @@ class ToolchainTests(unittest.TestCase):
         tool = next(row for row in plan()["ownerDecisions"] if row["id"] == "D-TOOL")
         self.assertEqual(value["planDecision"], {key: tool[key] for key in ("id", "date", "decision")})
         self.assertEqual([(row["id"], row["date"]) for row in value["amendments"]],
-                         [("Q-T1", "2026-10-11"), ("Q-T2", "2026-10-11"), ("Q-T4", "2026-10-11"), ("Q-T5", "2026-10-11")])
+                         [("Q-T1", "2026-10-11"), ("Q-T2", "2026-10-11"), ("Q-T4", "2026-10-11"), ("Q-T5", "2026-10-11"),
+                          ("Q-T2-B", "2026-10-13"), ("Q-T2-TOOL", "2026-10-13")])
         states = {row["id"]: row["state"] for row in value["toolchains"]}
-        self.assertEqual(states, {"python-stdlib-unittest": "IN_USE", "rust-musl-static-probes": "DEFERRED"})
+        # Owner decision Q-T2 (b) (2026-10-13): the probe source is checked by the stdlib gates; it compiles only on the
+        # author's machine until the R12 Rust profile exists.
+        self.assertEqual(states, {"python-stdlib-unittest": "IN_USE", "rust-musl-static-probes": "SOURCE_ONLY"})
         self.assertIs(value["toolchains"][1]["installed"], False)
         self.assertEqual(value["toolchains"][0]["dependencies"], [])
 

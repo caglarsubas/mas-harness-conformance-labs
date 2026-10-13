@@ -38,6 +38,13 @@ ENF_003_CHANGED = {"tests/enforcement/README.md", "tests/enforcement/snapshots/m
                    "tests/enforcement/tg01_contract/test_tg01_contract.py", "tests/ci_checkpoint/test_checkpoint_chain.py"}
 ENF_003_ADDED_OUTSIDE_AREA = {"task-packets/CONF-ENF-003.yaml"}
 ENF_003_DECISIONS = ["Q-T8", "Q-T9", "Q-T10", "Q-T11"]
+ENF_003_HEAD = "25f38a51144e1b6a9042b52a75cca5b3c3bc13d6"
+ENF_004_RECORD = "fixtures/ci/conf-enf-004-checkpoint.json"
+ENF_004_CHANGED = {"tests/enforcement/README.md", "tests/enforcement/snapshots/manifest.json", "tests/enforcement/test_bootstrap.py",
+                   "tests/enforcement/toolchains.json", "tests/enforcement/_catalog.py", "tests/ci_checkpoint/test_checkpoint_chain.py"}
+ENF_004_DECISIONS = ["Q-T2-B", "Q-T2-TOOL", "Q-T12", "Q-T13", "Q-T14", "Q-T15", "Q-T16"]
+# CONF-ENF-004 adds the native probe source outside the enforcement area (W04-4a; owner decision Q-T2-B).
+ENF_004_PROBE_FILES = 20
 
 
 def head():
@@ -63,6 +70,11 @@ def enf_003():
     return HELPER.chain_record(entries()[:4], 3, sources), rows, sources
 
 
+def enf_004():
+    rows, sources = HELPER.checkpoint_chain_project(ROOT, *head(), keep=5)
+    return HELPER.chain_record(entries()[:5], 4, sources), rows, sources
+
+
 class ChainRegistryTests(unittest.TestCase):
     def test_the_registry_starts_with_conf_ci_002_and_then_conf_enf_001(self):
         rows, sources = head()
@@ -73,6 +85,7 @@ class ChainRegistryTests(unittest.TestCase):
         self.assertEqual(value[1]["path"], ENF_001_RECORD)
         self.assertEqual((value[2]["packetId"], value[2]["path"]), ("CONF-ENF-002", ENF_002_RECORD))
         self.assertEqual((value[3]["packetId"], value[3]["path"]), ("CONF-ENF-003", ENF_003_RECORD))
+        self.assertEqual((value[4]["packetId"], value[4]["path"]), ("CONF-ENF-004", ENF_004_RECORD))
         self.assertEqual(sources[HELPER.CHAIN_REGISTRY_PATH], HELPER.chain_registry_bytes(value))
         for entry in value:
             self.assertEqual(hashlib.sha256(sources[entry["path"]]).hexdigest(), entry["sha256"])
@@ -114,6 +127,23 @@ class ChainRegistryTests(unittest.TestCase):
         self.assertFalse([path for path in (*record["changed"], *record["added"]) if path.startswith("ci/")])
         self.assertEqual({path for path in record["added"] if not path.startswith("tests/enforcement/")}, ENF_003_ADDED_OUTSIDE_AREA)
         self.assertEqual([row["id"] for row in record["ownerDecisions"]], ENF_003_DECISIONS)
+        self.assertTrue(all(row["date"] == "2026-10-13" for row in record["ownerDecisions"]))
+        self.assertTrue(all(pin["mode"] == "100644" for pin in record["added"].values()))
+
+    def test_the_conf_enf_004_record_names_exactly_its_paths_and_decisions(self):
+        # CONF-ENF-004 (W04-4a): data, tests and the native probe source; no frozen helper, no ci/ path, no deletion.
+        record, rows, sources = enf_004()
+        self.assertEqual(record["predecessor"], {"packetId": "CONF-ENF-003", "sha256": entries()[3]["sha256"]})
+        self.assertEqual(record["baseCommit"], ENF_003_HEAD)
+        self.assertEqual(record["deleted"], {})
+        self.assertEqual(set(record["changed"]), ENF_004_CHANGED)
+        self.assertFalse(ENF_001_CHANGED & (set(record["changed"]) | set(record["added"])))
+        self.assertFalse([path for path in (*record["changed"], *record["added"]) if path.startswith(("ci/", "src/"))])
+        outside = {path for path in record["added"] if not path.startswith("tests/enforcement/")}
+        probes = {path for path in outside if path.startswith("probes/enforcement/")}
+        self.assertEqual(outside - probes, {"task-packets/CONF-ENF-004.yaml"})
+        self.assertEqual(len(probes), ENF_004_PROBE_FILES)
+        self.assertEqual([row["id"] for row in record["ownerDecisions"]], ENF_004_DECISIONS)
         self.assertTrue(all(row["date"] == "2026-10-13" for row in record["ownerDecisions"]))
         self.assertTrue(all(pin["mode"] == "100644" for pin in record["added"].values()))
 
