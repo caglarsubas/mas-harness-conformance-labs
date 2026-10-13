@@ -25,6 +25,12 @@ ENF_001_CHANGED = {"tests/platform/linux_baseline/_successor_inventory.py", "tes
 ENF_001_ADDED_OUTSIDE_AREA = {"task-packets/CONF-ENF-001.yaml", "tests/ci_checkpoint/test_checkpoint_chain.py"}
 ENF_001_DECISIONS = ["Q-T1", "Q-T2", "Q-T3"]
 CI_002_VIEW_FILES = 140
+ENF_001_HEAD = "83d2c55c4499163ad00113cfe260a2005ccdb7c9"
+ENF_002_RECORD = "fixtures/ci/conf-enf-002-checkpoint.json"
+ENF_002_CHANGED = {"tests/enforcement/README.md", "tests/enforcement/snapshots/manifest.json", "tests/enforcement/test_bootstrap.py",
+                   "tests/enforcement/toolchains.json", "tests/ci_checkpoint/test_checkpoint_chain.py"}
+ENF_002_ADDED_OUTSIDE_AREA = {"task-packets/CONF-ENF-002.yaml"}
+ENF_002_DECISIONS = ["Q-T4", "Q-T5", "Q-T6", "Q-T7"]
 
 
 def head():
@@ -40,6 +46,11 @@ def enf_001():
     return HELPER.chain_record(entries()[:2], 1, sources), rows, sources
 
 
+def enf_002():
+    rows, sources = HELPER.checkpoint_chain_project(ROOT, *head(), keep=3)
+    return HELPER.chain_record(entries()[:3], 2, sources), rows, sources
+
+
 class ChainRegistryTests(unittest.TestCase):
     def test_the_registry_starts_with_conf_ci_002_and_then_conf_enf_001(self):
         rows, sources = head()
@@ -48,6 +59,7 @@ class ChainRegistryTests(unittest.TestCase):
                                     "sha256": HELPER.CI_002_RECORD_SHA256})
         self.assertEqual(value[1]["packetId"], "CONF-ENF-001")
         self.assertEqual(value[1]["path"], ENF_001_RECORD)
+        self.assertEqual((value[2]["packetId"], value[2]["path"]), ("CONF-ENF-002", ENF_002_RECORD))
         self.assertEqual(sources[HELPER.CHAIN_REGISTRY_PATH], HELPER.chain_registry_bytes(value))
         for entry in value:
             self.assertEqual(hashlib.sha256(sources[entry["path"]]).hexdigest(), entry["sha256"])
@@ -61,6 +73,20 @@ class ChainRegistryTests(unittest.TestCase):
         area = {row["path"] for row in rows if row["path"].startswith("tests/enforcement/")}
         self.assertEqual(set(record["added"]), area | ENF_001_ADDED_OUTSIDE_AREA)
         self.assertEqual([row["id"] for row in record["ownerDecisions"]], ENF_001_DECISIONS)
+        self.assertTrue(all(row["date"] == "2026-10-11" for row in record["ownerDecisions"]))
+        self.assertTrue(all(pin["mode"] == "100644" for pin in record["added"].values()))
+
+    def test_the_conf_enf_002_record_names_exactly_its_paths_and_decisions(self):
+        # CONF-ENF-002 (W04-2): data and tests only, as Q-T3 promised; no frozen helper, no ci/ path, no deletion.
+        record, rows, sources = enf_002()
+        self.assertEqual(record["predecessor"], {"packetId": "CONF-ENF-001", "sha256": entries()[1]["sha256"]})
+        self.assertEqual(record["baseCommit"], ENF_001_HEAD)
+        self.assertEqual(record["deleted"], {})
+        self.assertEqual(set(record["changed"]), ENF_002_CHANGED)
+        self.assertFalse(ENF_001_CHANGED & (set(record["changed"]) | set(record["added"])))
+        self.assertFalse([path for path in (*record["changed"], *record["added"]) if path.startswith("ci/")])
+        self.assertEqual({path for path in record["added"] if not path.startswith("tests/enforcement/")}, ENF_002_ADDED_OUTSIDE_AREA)
+        self.assertEqual([row["id"] for row in record["ownerDecisions"]], ENF_002_DECISIONS)
         self.assertTrue(all(row["date"] == "2026-10-11" for row in record["ownerDecisions"]))
         self.assertTrue(all(pin["mode"] == "100644" for pin in record["added"].values()))
 
@@ -97,14 +123,15 @@ class ChainRefusalTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "checkpoint chain: " + message):
             HELPER.checkpoint_chain_project(ROOT, rows, sources)
 
-    def forge(self, change, message):
+    def forge(self, change, message, index=-1):
+        """Forge registered record `index` (the newest by default) and re-pin its registry entry to the forged bytes."""
         def mutate(rows, sources):
-            value = json.loads(sources[ENF_001_RECORD])
+            registry = json.loads(sources[HELPER.CHAIN_REGISTRY_PATH])["records"]
+            value = json.loads(sources[registry[index]["path"]])
             change(value)
             forged = json.dumps(value).encode()
-            registry = json.loads(sources[HELPER.CHAIN_REGISTRY_PATH])["records"]
-            registry[1]["sha256"] = hashlib.sha256(forged).hexdigest()
-            sources[ENF_001_RECORD] = forged
+            registry[index]["sha256"] = hashlib.sha256(forged).hexdigest()
+            sources[registry[index]["path"]] = forged
             sources[HELPER.CHAIN_REGISTRY_PATH] = HELPER.chain_registry_bytes(registry)
         self.assert_refused(mutate, message)
 
@@ -156,28 +183,39 @@ class ChainRefusalTests(unittest.TestCase):
                     self.assert_refused(mutate, "exact after-pin: " + path)
 
     def test_a_forged_record_is_refused(self):
+        # CONF-ENF-002: the newest record is forged, whichever packet registered it last; record-scoped refusals name it.
+        newest = entries()[-1]["packetId"]
         before = {"mode": "100644", "size": 1, "sha256": hashlib.sha256(b"x").hexdigest()}
-        for change, message in ((lambda value: value.update(extra=1), "closed record"),
-                                (lambda value: value.update(nativeAcceptance=True), "closed record"),
-                                (lambda value: value["predecessor"].update(sha256="0" * 64), "closed record"),
-                                (lambda value: value.update(ownerDecisions=[{"id": "Q-T1"}]), "owner decisions"),
-                                (lambda value: value["added"].update({HELPER.CHAIN_REGISTRY_PATH: before}), "each path named once"),
-                                (lambda value: value["added"].update({HELPER.CI_002_RECORD_PATH: before}), "each path named once"),
+        for change, message in ((lambda value: value.update(extra=1), "closed record: " + newest),
+                                (lambda value: value.update(nativeAcceptance=True), "closed record: " + newest),
+                                (lambda value: value["predecessor"].update(sha256="0" * 64), "closed record: " + newest),
+                                (lambda value: value.update(ownerDecisions=[{"id": "Q-T1"}]), "owner decisions: " + newest),
+                                (lambda value: value["added"].update({HELPER.CHAIN_REGISTRY_PATH: before}), "each path named once: " + newest),
+                                (lambda value: value["added"].update({HELPER.CI_002_RECORD_PATH: before}), "each path named once: " + newest),
                                 (lambda value: value["deleted"].update({"a/b": {"before": dict(before, size=2),
                                                                                 "beforeSourceBase64": "eA=="}}), "before-image"),
                                 (lambda value: value["deleted"].update({"README.md": {"before": before, "beforeSourceBase64": "eA=="}}),
                                  "deleted path present: README.md"),
                                 # Review E1-3: an empty decision list, a non-integer size, non-canonical base64.
-                                (lambda value: value.update(ownerDecisions=[]), "owner decisions"),
+                                (lambda value: value.update(ownerDecisions=[]), "owner decisions: " + newest),
                                 (lambda value: next(iter(value["added"].values())).update(size=5.0), "closed after-pin"),
                                 (lambda value: value["deleted"].update({"a/b": {"before": before, "beforeSourceBase64": "eB=="}}),
                                  "canonical before-image: a/b"),
                                 # Review E2-2, E2-3: a restored path under a file, a repeated decision id.
                                 (lambda value: value["deleted"].update({"README.md/x": {"before": before, "beforeSourceBase64": "eA=="}}),
                                  "path collision: README.md/x"),
-                                (lambda value: value["ownerDecisions"].append(dict(value["ownerDecisions"][0])), "owner decisions")):
+                                (lambda value: value["ownerDecisions"].append(dict(value["ownerDecisions"][0])), "owner decisions: " + newest)):
             with self.subTest(message=message):
                 self.forge(change, message)
+
+    def test_a_forged_earlier_record_breaks_its_successors_predecessor_pin(self):
+        # CONF-ENF-002: re-pinning an earlier record's registry entry is refused at the next record, whose predecessor pin
+        # names the original digest. (Rewriting every later record too is outside what code can detect; E1-2, review.)
+        value = entries()
+        self.assertGreaterEqual(len(value), 3)
+        for index in range(1, len(value) - 1):
+            with self.subTest(record=value[index]["packetId"]):
+                self.forge(lambda record: record.update(baseCommit="0" * 40), "closed record: " + value[index + 1]["packetId"], index)
 
     def test_a_stage_out_of_range_is_refused(self):
         for keep in (0, len(entries()) + 1, True):

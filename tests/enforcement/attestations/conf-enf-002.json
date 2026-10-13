@@ -1,0 +1,16 @@
+{
+ "schemaVersion": "r12.enforcement-independence-attestation/v1",
+ "packet": "CONF-ENF-002",
+ "lane": "parallel development lane (W04)",
+ "inputs": [
+  "the snapshotted adopted contract data and reference models in tests/enforcement/snapshots/ (harness-onion a2eab9365c8663cc1ae23a666e864b821f600fa6), including the recorded additions scripts/i06_backend_profile.py (Q-T5), architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md and architecture/seccomp-allowlists/status.json (Q-T7); expected results are the vectors' own",
+  "the comparison rules of the TG-01 replays follow harness-onion a2eab9365c8663cc1ae23a666e864b821f600fa6's own contract validators, read there (not snapshotted) as published contract tooling, not R10 source, W03 work in progress or an implementation (review R1-4): scripts/validate_selinux_matrix_v2.py (sha256 fe8b583ffc1263b4cd6404d21d69b7d66040ec25c8173e2a47890a073fd7bda4), scripts/validate_seccomp_allowlists.py (sha256 2fee329cb5c174e6a60f3e8f4172eb6dbbac61f116992c0dafff92f4490bc332) and scripts/validate_admission_channel_v3.py (sha256 7bd762d3069ad6add891063c5b5cd16c75534adb88b1afa245f050b5856dc247); expected results still come only from the vectors"
+ ],
+ "inputDigests": {
+  "tests/enforcement/snapshots/manifest.json": "5aeedf25a759f103adc72d8138cabda9b52111f59f240f7d6400020bdc2b658a"
+ },
+ "r10SourceRead": false,
+ "w03WorkInProgressRead": false,
+ "implementationReadOrRunForExpectedResults": false,
+ "reviewer": "a separate agent, never the author, checks this attestation in the packet's independent review"
+}

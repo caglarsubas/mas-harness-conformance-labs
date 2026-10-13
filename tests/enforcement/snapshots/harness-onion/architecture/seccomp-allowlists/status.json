@@ -1,0 +1,114 @@
+{
+  "schemaVersion": "planeon.internal.seccomp-allowlists-status/v1",
+  "contract": "planeon.internal.seccomp-allowlists/v1",
+  "kernel": {
+    "tag": "v6.12",
+    "commit": "adc218676eef25575469234709c2d87185ca223a"
+  },
+  "reviewRounds": [
+    {
+      "round": 1,
+      "record": "architecture/seccomp-allowlists/review-round1.json",
+      "recordSha256": "66e073daad7c3e8937036fe9c3e3188c5ea39c5c142585caad499db9272843a1",
+      "verdict": "CHANGES_REQUIRED",
+      "subjectDirectory": "architecture/seccomp-allowlists/round1/"
+    },
+    {
+      "round": 2,
+      "record": "architecture/seccomp-allowlists/review-round2.json",
+      "recordSha256": "f033e367510a8e4d0b26ff159ae4a86bea9dc217a6455e6ea895272efdea99db",
+      "verdict": "CHANGES_REQUIRED",
+      "subjectDirectory": "architecture/seccomp-allowlists/round2/"
+    },
+    {
+      "round": 3,
+      "record": "architecture/seccomp-allowlists/review-round3.json",
+      "recordSha256": "5bf54b2f65aff009b4d8f275a52ed52dc61f1f2cd25de5073a99039fb83f9ffd",
+      "verdict": "PASS_FOR_SOURCE_PUBLICATION",
+      "subjectDirectory": "CURRENT"
+    }
+  ],
+  "closedFindings": {
+    "F1": "CLOSED in round 2",
+    "F2": "CLOSED in round 2",
+    "F3": "CLOSED in round 2",
+    "F4": "CLOSED in round 2",
+    "F5": "CLOSED in round 2",
+    "F6": "CLOSED in round 2",
+    "F7": "CLOSED in round 2",
+    "F8": "CLOSED in round 2",
+    "F11": "CLOSED in round 2",
+    "F12": "CLOSED in round 2",
+    "F13": "CLOSED in round 3",
+    "F14": "CLOSED in round 3",
+    "F15": "CLOSED in round 3",
+    "F16": "CLOSED in round 3",
+    "F17": "CLOSED in round 3"
+  },
+  "carriedFindings": {
+    "F9": "W01 record: memfd_create without MFD_NOEXEC_SEAL gives an executable memfd unless vm.memfd_noexec forbids it",
+    "F10": "W03: planeon units must not use systemd options that install seccomp filters",
+    "F18": "next revision (NOTE): README CPYTHON_3_12 table row split across two lines",
+    "F19": "next revision (NOTE): module docstring omits ERRNO and decide_stack, action_name, require_covers"
+  },
+  "ownerDecisions": [
+    {
+      "date": "2026-10-09",
+      "decision": "W02d defines the WORKER allowlist from the worker's duties; the W01 section 5.3 WORKER row text 'Existing worker allowlist' is amended to 'the W02d worker allowlist' (carried to W01's record)",
+      "id": "W02d-Q1"
+    },
+    {
+      "date": "2026-10-09",
+      "decision": "exact duty syscalls per role from its row plus one closed runtime base per role (CPython 3.12 for SERVER and WORKER, one native static base for the five native roles); W03's language and libc must fit inside it or W02d reopens",
+      "id": "W02d-Q2"
+    },
+    {
+      "date": "2026-10-09",
+      "decision": "seccompFilterDigest is the SHA-256 of the classic-BPF sock_filter array (little-endian) the reference compiler emits per role and architecture; the boot-time proof that the installed filter equals it is an open T04/W02a-F obligation",
+      "id": "W02d-Q3"
+    }
+  ],
+  "carriedToW01": [
+    "W02d-Q1 WORKER row text amendment",
+    "W02d-QA worker execveat in W5's form",
+    "W02d-QC readers' inspection-reads row amendment",
+    "W6 pidfd kill needs CAP_KILL the broker lacks; cgroup.kill is the effective path",
+    "W4 does not name setgroups",
+    "F9 executable memfd"
+  ],
+  "carriedToW03": [
+    "runtime bases are closed requirements; trace the selected build at start-up and steady state on both arches",
+    "glibc 2.34+ without CET/shadow-stack arch_prctl at start-up",
+    "no systemd seccomp options (F10)",
+    "install exactly the compiled programs",
+    "the broker runs with no supplementary groups"
+  ],
+  "openObligations": [
+    "T04/W02a-F: boot-time proof that the installed filter equals the published digest (W02d-Q3)"
+  ],
+  "contractState": "ADOPTED_DATA_CONTRACT",
+  "obligations": {
+    "E01": "OPEN_UNPROVEN",
+    "E02": "OPEN_UNPROVEN",
+    "E03": "OPEN_UNPROVEN",
+    "E04": "OPEN_UNPROVEN",
+    "E05": "OPEN_UNPROVEN",
+    "E06": "OPEN_UNPROVEN",
+    "E07": "OPEN_UNPROVEN",
+    "E08": "OPEN_UNPROVEN",
+    "E09": "OPEN_UNPROVEN",
+    "E10": "OPEN_UNPROVEN",
+    "E11": "OPEN_UNPROVEN",
+    "E12": "OPEN_UNPROVEN"
+  },
+  "independentReviewer": "SEPARATE_AGENT_NOT_AUTHOR",
+  "nativeAcceptance": false,
+  "tenantAcceptance": false,
+  "filtersInstalled": false,
+  "roleCodeExists": false,
+  "traceValidated": false,
+  "distributionSelected": false,
+  "productExecution": false,
+  "runnerActivated": false,
+  "phaseComplete": false
+}

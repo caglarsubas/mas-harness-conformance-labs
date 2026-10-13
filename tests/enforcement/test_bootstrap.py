@@ -24,12 +24,25 @@ SOURCE_COMMIT = "a2eab9365c8663cc1ae23a666e864b821f600fa6"
 PLAN_SHA256 = "762c2dfa4356b5ac59491fc51359dc4e6ef26f6a22f08c7cca6982c0b2979f72"
 MANIFEST_FIELDS = {"schemaVersion", "sourceRepository", "sourceCommit", "root", "rule", "files"}
 FILE_FIELDS = {"contract", "path", "sha256", "size"}
-# Recorded gaps (tests/enforcement/toolchains.json): the only non-stdlib import, and the one sibling model not snapshotted.
+# Recorded gap (tests/enforcement/toolchains.json): the only non-stdlib import. CONF-ENF-002 closed G-I06-V1 by the
+# recorded addition below, so no snapshotted model imports a sibling that is not snapshotted.
 EXTERNAL_IMPORTS = {"scripts/i05_gate_channel_v3.py": {"jsonschema"}, "scripts/native_qualification_v3.py": {"jsonschema"}}
-MISSING_SIBLINGS = {"scripts/i06_backend_profile_v2.py": ("i06_backend_profile",)}
+MISSING_SIBLINGS = {}
+# Owner-decided additions to the plan's contract set, in manifest order after the plan's files. Review R1-3: each is
+# pinned here by sha256 and size (a2eab93's bytes), as the plan pins its own files, not only by the manifest.
+ADDITIONS = [("I06 backend profile v1 (recorded addition, owner decision Q-T5)", "scripts/i06_backend_profile.py",
+              "bea3c953573478be5b03ab81b4ebd859da62d1eaa2a1be8f361b9dd39a98555e", 44806),
+             ("W01 amendment W02D input (recorded addition, owner decision Q-T7)", "architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md",
+              "8a3a09bb5dbc08804dbea06dd0700a14648a9cdbc8efd62112dc64ba0b6ba1b4", 41971),
+             ("W01 amendment W02D input (recorded addition, owner decision Q-T7)", "architecture/seccomp-allowlists/status.json",
+              "08a541be25eb126d541a56242091eb953c8c7ec1c7fda8136ec47505fd0a6c0a", 4478)]
+# Area-local modules area code may import (CONF-ENF-002); _models.py is the one module allowed to load code by path.
+AREA_MODULES = {"_models", "tg01_contract", "."}
+PATH_LOADERS = {"tests/enforcement/_models.py"}
 ALLOWED_TOP = set(sys.stdlib_module_names) | {"__future__"}
-# Review E1-4/E2-1: dynamic and path-based loading is reported too (called by name, as an attribute, or through getattr),
-# so area code that loads a module this way fails these tests until a later reviewed packet admits it explicitly.
+# Review E1-4/E2-1/E3-1: dynamic and path-based loading is reported too, called by name, as an attribute, through getattr
+# with a constant name, or imported under another name. This is a best-effort static check, not a proof: a computed
+# name or an indirect lookup can evade it, so review of each packet's diff remains the guard (review E3-1).
 DYNAMIC_LOADERS = {"import_module", "spec_from_file_location", "exec_module", "run_path", "run_module", "SourceFileLoader"}
 DYNAMIC_BUILTINS = {"__import__", "exec", "eval", "compile"}
 # As an attribute or a getattr name, "compile" is re.compile and the like; the builtin alone loads nothing without exec.
@@ -70,10 +83,13 @@ def imported_tops(raw):
             tops |= {alias.name.split(".")[0] for alias in node.names}
         elif isinstance(node, ast.ImportFrom):
             tops.add("." if node.level else node.module.split(".")[0])
+            if any(alias.name in DYNAMIC_LOADERS | DYNAMIC_BUILTINS for alias in node.names):
+                tops.add("<dynamic>")
         elif isinstance(node, ast.Call) and (getattr(node.func, "attr", None) in DYNAMIC_ATTRS
                                              or getattr(node.func, "id", None) in DYNAMIC_LOADERS | DYNAMIC_BUILTINS
-                                             or any(isinstance(arg, ast.Constant) and arg.value in DYNAMIC_ATTRS
-                                                    for arg in node.args)):
+                                             # Review E3-2: a constant loader name only counts as a getattr argument.
+                                             or (getattr(node.func, "id", None) == "getattr"
+                                                 and any(isinstance(arg, ast.Constant) and arg.value in DYNAMIC_ATTRS for arg in node.args))):
             tops.add("<dynamic>")
     return tops
 
@@ -121,15 +137,16 @@ class SnapshotTests(unittest.TestCase):
         expected = [{"contract": "W04-0 enforcement test plan", "path": PLAN_PATH}]
         expected += [{"contract": contract["name"], "path": row["path"], "sha256": row["sha256"]}
                      for contract in source["contracts"] for row in contract["files"]]
-        observed = [{key: row[key] for key in ("contract", "path", "sha256") if key in expected[index]}
+        expected += [{"contract": contract, "path": path, "sha256": sha, "size": size} for contract, path, sha, size in ADDITIONS]
+        observed = [{key: row[key] for key in ("contract", "path", "sha256", "size") if key in expected[index]}
                     for index, row in enumerate(manifest()["files"])]
         self.assertEqual(observed, expected)
-        self.assertEqual(len(expected), 37)
+        self.assertEqual(len(expected), 37 + len(ADDITIONS))
 
     def test_reference_model_imports_are_exactly_the_recorded_gaps(self):
         value = manifest()
         models = {row["path"]: row for row in value["files"] if row["path"].endswith(".py")}
-        self.assertEqual(len(models), 8)
+        self.assertEqual(len(models), 9)
         siblings = {Path(path).stem for path in models}
         external, missing = {}, {}
         for path in models:
@@ -142,8 +159,15 @@ class SnapshotTests(unittest.TestCase):
                 missing[path] = absent
         self.assertEqual(external, EXTERNAL_IMPORTS)
         self.assertEqual(missing, {path: set(names) for path, names in MISSING_SIBLINGS.items()})
-        gaps = {row["id"]: row["snapshots"] for row in strict(regular(AREA / "toolchains.json"))["gaps"]}
-        self.assertEqual(gaps, {"G-JSONSCHEMA": sorted(EXTERNAL_IMPORTS), "G-I06-V1": sorted(MISSING_SIBLINGS)})
+        record = strict(regular(AREA / "toolchains.json"))
+        self.assertEqual({row["id"]: row["snapshots"] for row in record["gaps"]},
+                         {"G-JSONSCHEMA": sorted(EXTERNAL_IMPORTS),
+                          "G-REPLAY-INPUTS": ["scripts/i06_backend_profile_v2.py", "scripts/native_qualification_v3.py"]})
+        # Review R1-5: the I06 v2 and native v3 replays also need inputs outside the snapshots; the gap names them all.
+        inputs = next(row for row in record["gaps"] if row["id"] == "G-REPLAY-INPUTS")["missingInputs"]
+        self.assertEqual(len(inputs), 8)
+        self.assertFalse({row["path"] for row in inputs} & {row["path"] for row in value["files"]})
+        self.assertEqual([(row["id"], row["closedBy"]) for row in record["closedGaps"]], [("G-I06-V1", "Q-T5")])
 
 
 class IndependenceTests(unittest.TestCase):
@@ -164,8 +188,12 @@ class IndependenceTests(unittest.TestCase):
                 self.assertTrue(type(value["inputs"]) is list and value["inputs"] and all(type(row) is str and row for row in value["inputs"]))
                 self.assertTrue(all(type(value[key]) is str and value[key] for key in ("lane", "reviewer")))
                 self.assertTrue(type(value["inputDigests"]) is dict and value["inputDigests"])
+                # An input digest is the file as that packet left it: its checkpoint record's after-pin (CONF-ENF-002).
+                record = strict(regular(ROOT / "fixtures/ci" / (value["packet"].lower() + "-checkpoint.json")))
                 for relative, sha in value["inputDigests"].items():
-                    self.assertEqual(hashlib.sha256(regular(ROOT / relative)).hexdigest(), sha)
+                    pin = record["added"].get(relative) or record["changed"].get(relative, {}).get("after")
+                    self.assertIsNotNone(pin, relative)
+                    self.assertEqual(pin["sha256"], sha)
 
     def test_the_reader_never_imports_the_enforcement_area(self):
         for path in walk_files(ROOT / "src"):
@@ -181,8 +209,12 @@ class IndependenceTests(unittest.TestCase):
         for path in walk_files(AREA, skip=(SNAPSHOTS,)):
             if path.suffix != ".py":
                 continue
-            with self.subTest(path=path.relative_to(ROOT).as_posix()):
-                self.assertLessEqual(imported_tops(regular(path)) - {"."}, ALLOWED_TOP)
+            relative = path.relative_to(ROOT).as_posix()
+            with self.subTest(path=relative):
+                tops = imported_tops(regular(path)) - AREA_MODULES
+                if relative in PATH_LOADERS:
+                    tops.discard("<dynamic>")
+                self.assertLessEqual(tops, ALLOWED_TOP)
 
 
 class DetectorTests(unittest.TestCase):
@@ -193,16 +225,22 @@ class DetectorTests(unittest.TestCase):
                        "import importlib.util\nimportlib.util.spec_from_file_location('m', 'p.py')", "import runpy\nrunpy.run_path('p.py')"):
             with self.subTest(source=source):
                 self.assertIn("<dynamic>", imported_tops(source.encode()))
-        self.assertNotIn("<dynamic>", imported_tops(b"import re\nre.compile('x')"))
+        for source in ("from importlib import import_module as im\nim('jsonschema')", "from builtins import __import__ as imp"):
+            with self.subTest(source=source):
+                self.assertIn("<dynamic>", imported_tops(source.encode()))
+        for source in ("import re\nre.compile('x')", "print('eval')", "assert 'exec' == 'exec'"):
+            with self.subTest(source=source):
+                self.assertNotIn("<dynamic>", imported_tops(source.encode()))
 
 
 class ToolchainTests(unittest.TestCase):
     def test_the_toolchain_record_holds_the_owner_amendments(self):
         value = strict(regular(AREA / "toolchains.json"))
-        self.assertEqual(set(value), {"schemaVersion", "packet", "planDecision", "amendments", "toolchains", "gaps"})
+        self.assertEqual(set(value), {"schemaVersion", "packet", "planDecision", "amendments", "toolchains", "gaps", "closedGaps"})
         tool = next(row for row in plan()["ownerDecisions"] if row["id"] == "D-TOOL")
         self.assertEqual(value["planDecision"], {key: tool[key] for key in ("id", "date", "decision")})
-        self.assertEqual([(row["id"], row["date"]) for row in value["amendments"]], [("Q-T1", "2026-10-11"), ("Q-T2", "2026-10-11")])
+        self.assertEqual([(row["id"], row["date"]) for row in value["amendments"]],
+                         [("Q-T1", "2026-10-11"), ("Q-T2", "2026-10-11"), ("Q-T4", "2026-10-11"), ("Q-T5", "2026-10-11")])
         states = {row["id"]: row["state"] for row in value["toolchains"]}
         self.assertEqual(states, {"python-stdlib-unittest": "IN_USE", "rust-musl-static-probes": "DEFERRED"})
         self.assertIs(value["toolchains"][1]["installed"], False)

@@ -18,6 +18,18 @@
    "selected": "defer",
    "date": "2026-10-11",
    "decision": "defer. W04-1 records the Rust+musl need for the TG-04/TG-05 probes and installs nothing. Decide it in the first W04 packet that needs native probe source (W04-4/5)."
+  },
+  {
+   "id": "Q-T4",
+   "selected": "a",
+   "date": "2026-10-11",
+   "decision": "run the stdlib cases now (SELinux v4, seccomp v2, admission v3, W02D, and the I05/I07 checks that don't reach check_frame). Record each schema-dependent case as NOT_RUN_ENV_UNAVAILABLE, never PASS (AGENTS rule 14). The jsonschema profile is a later root change."
+  },
+  {
+   "id": "Q-T5",
+   "selected": "accept",
+   "date": "2026-10-11",
+   "decision": "in W04-2, snapshot scripts/i06_backend_profile.py from the same harness-onion commit, pinned by sha256, as a recorded addition to the plan's contract set."
   }
  ],
  "toolchains": [
@@ -54,17 +66,76 @@
     "scripts/native_qualification_v3.py"
    ],
    "finding": "jsonschema is outside the standard library: native_qualification_v3.py imports it at module load, and i05_gate_channel_v3.py imports it inside check_frame (the F00 closed-schema frame check). Through their sibling imports, i06_backend_profile_v2.py (loads native_qualification_v3) and i07_policy_write_v3.py (loads i05_gate_channel_v3) depend on it too. Under Q-T1 these reference-model paths cannot run in R12 as it stands.",
-   "decideIn": "before W04-2 (TG-01 MATRIX and CONTRACT-DATA replay I05, I07 and I06 v2 through these models)",
+   "decideIn": "a later owner root change adding a jsonschema profile (Q-T4); until then TG-01 records each vector that needs it NOT_RUN_ENV_UNAVAILABLE in tg01_contract/results.json",
    "affectsW04_2": true
   },
   {
-   "id": "G-I06-V1",
+   "id": "G-REPLAY-INPUTS",
    "snapshots": [
-    "scripts/i06_backend_profile_v2.py"
+    "scripts/i06_backend_profile_v2.py",
+    "scripts/native_qualification_v3.py"
    ],
-   "finding": "i06_backend_profile_v2.py imports scripts/i06_backend_profile.py (I06 v1), which the plan's contract set does not name, so it is not snapshotted; the I06 v2 reference model cannot load from the snapshots alone.",
-   "decideIn": "before W04-2 (TG-01 CONTRACT-DATA replays I06 v2)",
+   "missingInputs": [
+    {
+     "path": "architecture/i06-backend-profile/vectors.json",
+     "sha256": "b9c57d64eab03f307e10b02152426a10ebac2fd27102e27ef5873b5865be4cee",
+     "size": 155251,
+     "readBy": "I06 v2 (its v1Vectors pin; the cross-version bases)"
+    },
+    {
+     "path": "architecture/i06-backend-profile/writer-inventory.json",
+     "sha256": "8e6b3b7565cfc93a61162b84d740cffb2871eb66ab85e8c4e80ac813f1af3077",
+     "size": 40914,
+     "readBy": "I06 v2"
+    },
+    {
+     "path": "architecture/i06-backend-profile/identity-closure.json",
+     "sha256": "0a9b82ffa2d63bf48a8850574cdf3ece02bf1913f33a72cbb96ed30a40f1f3bb",
+     "size": 46703,
+     "readBy": "I06 v2 and native v3"
+    },
+    {
+     "path": "architecture/i06-backend-profile/upstream-bootstrap-rbac-v1.37.1.json",
+     "sha256": "7529c2a713af2fb90163175924c264d95f4242d7e0c26b1452c77febb13ed50e",
+     "size": 88532,
+     "readBy": "I06 v2"
+    },
+    {
+     "path": "architecture/native-profile-v2/vectors.json",
+     "sha256": "6d58d1f36b7bce5739b94dd89512d358b96878c70e1de7cf8f399050b881b396",
+     "size": 481933,
+     "readBy": "I06 v2 and native v3"
+    },
+    {
+     "path": "architecture/native-profile-v2/qualification.schema.json",
+     "sha256": "55bd641fd229f21e04ec00813bcfe600890584e982e290a210720ac5cb160ab0",
+     "size": 65003,
+     "readBy": "native v3"
+    },
+    {
+     "path": "architecture/native-qualification-inputs/qualification.schema.json",
+     "sha256": "bef248bfa82b234124c014f98e40c5791bced3171bb118b7ed1bb7b8daaf95c3",
+     "size": 37185,
+     "readBy": "native v3"
+    },
+    {
+     "path": "architecture/native-qualification-inputs/vectors.json",
+     "sha256": "cd1be009b721bb596887335184a33ab8e1f24aed8215477b63e28f058110748f",
+     "size": 212215,
+     "readBy": "native v3"
+    }
+   ],
+   "finding": "Review R1-5 (CONF-ENF-002): jsonschema is not the only thing between R12 and the I06 v2 and native v3 vector replays. At harness-onion a2eab93, validate_i06_backend_profile_v2.py replays the I06 v2 vectors against the I06 v1 vectors (its v1Vectors pin), the v1 writer inventory, identity closure and upstream bootstrap RBAC, and the W02a v3 and v2 vectors; validate_native_profile_v3.py replays the native v3 vectors against the native v1 and v2 schemas and vectors and the I06 identity closure. None of these is in the plan's contract set or snapshotted.",
+   "decideIn": "the packet that writes the I06 v2 and native v3 replays after the jsonschema profile (Q-T4): snapshot these inputs from a2eab93 as recorded additions, pinned by sha256, or record them as not run",
    "affectsW04_2": true
+  }
+ ],
+ "closedGaps": [
+  {
+   "id": "G-I06-V1",
+   "closedBy": "Q-T5",
+   "packet": "CONF-ENF-002",
+   "note": "scripts/i06_backend_profile.py is snapshotted from a2eab93 as a recorded addition; the I06 v2 model still cannot load without jsonschema (G-JSONSCHEMA)"
   }
  ]
 }
