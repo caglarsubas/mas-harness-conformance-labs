@@ -2,8 +2,8 @@
  "added": {
   "task-packets/CONF-ENF-007.yaml": {
    "mode": "100644",
-   "sha256": "f965fe6fa1285e224517eccd3c3e582bb3387a9aa55ffcfafe5a8f5e07673bcd",
-   "size": 10145
+   "sha256": "a4c74b6be1b4831a464c4fce1aeccc21bf3f81f24e9468759d7ed73c2c0acade",
+   "size": 10361
   },
   "tests/enforcement/attestations/conf-enf-007.json": {
    "mode": "100644",
