@@ -687,7 +687,8 @@ GATE_BROKER = (S44_GATE_BROKER + ": native v3 record negatives that set a gate o
                "capture rules, and their aliasing refusals serve the alias property)")
 ALIAS = (S44_ALIAS + ": native v3 negatives with the model's role-path aliasing refusals (one cgroup inode for two roles, one "
          "inode for two files, one file at two inodes), and record negatives that set a role's path field to another role's "
-         "value (the gate and broker cases among them)")
+         "value (the gate and broker cases among them); an entry that is not a role at a role's path, such as a backend "
+         "component in a role cgroup, is the backend rules'")
 LIFECYCLE = (S44_LIFECYCLE + ": native v3 negatives refused by the lifecycle subjects' cgroup path and placement schema, and "
              "capture negatives of a resident role whose own cgroup gains a lifecycle subject's process or whose inspected "
              "process runs in a lifecycle subject's domain (a resident role cgroup is a role's own cgroup: a process in the "
@@ -709,8 +710,9 @@ REUSED = ("the gate's half of 'never reuses a generation or nonce' across an upg
           "transcripts whose BIND_EXECUTION is refused as a replayed execution or a reused manifest (EXECUTION_REPLAY, "
           "MANIFEST_REUSED)")
 ROLLED_BACK = ("a rollback's half of 'never reinterprets accepted data': native v3's cross-version cases that give a v3 "
-               "record or capture back to the v2 reader, which refuses it. No adopted contract vector names an export; its "
-               "source test comes with W05's release set")
+               "record or capture back to the v2 reader, which refuses it (the backend profile's counterparts, I06 v2's "
+               "cross-version cases, are old profile rejection's rows). No adopted contract vector names an export, or a "
+               "record-side nonce reused after a rollback; those tests come with W05's release set and W06")
 REINTERPRET = ("the gate's half of 'never reinterprets accepted v1 data': an I05 v3 configuration refusal whose intent names an "
                "earlier contract version (a v1-shaped record)")
 SOURCE_ROWS = [
