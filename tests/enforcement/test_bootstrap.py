@@ -50,7 +50,7 @@ FEASIBILITY = [("Enforcement feasibility obligation rows (recorded addition, own
                 "9fac4492e1b5f6255993374a6642072855a5855a40bcc68706a25b78fd822965", 20359)]
 # Area-local modules area code may import (CONF-ENF-002); _models.py is the one module allowed to load code by path.
 AREA_MODULES = {"_models", "_catalog", "_probes", "tg01_contract", "tg02_lifecycle", "tg03_persistence", "tg04_host",
-                "tg05_clocks", "."}
+                "tg05_clocks", "tg08_compatibility", "."}
 # Owner decision Q-T9 (2026-10-13): LEDGER-E09's subject is R12's own reader, imported by this one test module only.
 SUBJECT_IMPORTS = {"tests/enforcement/tg02_lifecycle/test_reader_guards.py": {"harness_conformance"}}
 PATH_LOADERS = {"tests/enforcement/_models.py"}

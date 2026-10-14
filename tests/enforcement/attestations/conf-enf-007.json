@@ -1,0 +1,17 @@
+{
+ "schemaVersion": "r12.enforcement-independence-attestation/v1",
+ "packet": "CONF-ENF-007",
+ "lane": "parallel development lane (W04)",
+ "inputs": [
+  "the snapshotted adopted contract data and reference models in tests/enforcement/snapshots/ (manifest v2, unchanged): harness-onion a2eab9365c8663cc1ae23a666e864b821f600fa6 for the plan's contract set and its recorded additions, and harness-onion 93d32e1cc5125b5878f51de31c61ada29e1fa6da for the I05 v3 supplement; TG-08's expected results are the native qualification v3, I06 backend profile v2 and I05 gate channel v3 vectors' own refusals and outcomes, and its S44 properties are the sentences of W02D section 4.4",
+  "S44's results are what TG-01's replays of those vectors give under the verifier profile (owner decisions Q-T4 and Q-T20); no replay was written or changed in this packet",
+  "no R10 source, W03 work in progress, W05 build or R12 reader source was read or run for expected results; the catalog rules and tests were written from the contracts above"
+ ],
+ "inputDigests": {
+  "tests/enforcement/snapshots/manifest.json": "4bc27cb11d8b36374283322aa9417de9d7f0966ed7733d4f41fda5797fedb95d"
+ },
+ "r10SourceRead": false,
+ "w03WorkInProgressRead": false,
+ "implementationReadOrRunForExpectedResults": false,
+ "reviewer": "a separate agent, never the author, checks this attestation in the packet's independent review"
+}

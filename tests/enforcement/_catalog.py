@@ -1,4 +1,5 @@
-"""TG-02 to TG-05 case catalogs (TG-02/TG-03: W04-3, CONF-ENF-003; TG-04/TG-05: W04-4a, CONF-ENF-004).
+"""TG-02 to TG-05 and TG-08 case catalogs (TG-02/TG-03: W04-3, CONF-ENF-003; TG-04/TG-05: W04-4a, CONF-ENF-004; TG-08: W04-6,
+CONF-ENF-007).
 
 Every case of the plan's TG-02 (lifecycle) and TG-03 (persistence) groups that waits for W05's release set or for W06's
 native hosts is fixed now to the adopted contract vectors that specify it. Each selection is a rule over the vectors'
@@ -8,6 +9,8 @@ come with W05's release set, together with TG-01's CODEC case; until then every 
 TG-04 (host) and TG-05 (clocks) are native groups: every case waits for W06's enrolled hosts, and its catalog rows come
 from several contract files (SELinux matrix v4 checks, seccomp v2 decisions, native v3 vectors and the reference model's
 own rules, I05 v3 transcripts, W02D's items and spec steps), so each native row also names its source file.
+TG-08 (compatibility, W04-6, CONF-ENF-007) follows TG-02/TG-03: vector-file rows only, in a SOURCE part and an INSTALLED
+part kept apart; its offline case S44 lists one property per sentence of W02D section 4.4 (owner decision Q-T20).
 Standard library only (owner decision Q-T1, 2026-10-11).
 """
 from __future__ import annotations
@@ -565,6 +568,121 @@ NATIVE_RULES = {
 }
 
 
+# TG-08 compatibility (W04-6, CONF-ENF-007). Like TG-02/TG-03 its rows come from vector files only; S44 is the one offline
+# case, and each of its catalog rows serves one property, the sentence of W02D section 4.4 its basis starts with.
+NAT, I06 = _replays.NAT, _replays.I06
+EARLIER_RECORD = re.compile(r"\bv[12] (schema version|cgroup path)\b")
+GATE_AND_BROKER = {"EFFECT_GATE": "BROKER", "BROKER": "EFFECT_GATE"}
+ALIASES = ("duplicate cgroup inode", "one inode reported for two files", "one file reported at two inodes", "canonical installed path")
+MISSING_PARTS = ("schema $.roles required", "schema $.backendComponents required", "schema $.backendComponents additionalProperties",
+                 "backend components differ from the implementation profile", "schema $.backendProfile.componentKeys const",
+                 "one capture per resident role", "one observation per backend component")
+
+
+def _every(key):
+    return lambda vectors: [row["id"] for row in vectors[key]]
+
+
+def _record_ops(vectors):
+    """(row, op, the positive record's roles) for every op of every native v3 negative aimed at the record."""
+    return [(row, op, vectors["positive"][row["positive"]]["record"]["roles"])
+            for row in vectors["negative"] if row["target"] == "record" for op in row["ops"]]
+
+
+def _ids(pairs):
+    return list(dict.fromkeys(row["id"] for row, *_ in pairs))
+
+
+def _earlier_record(vectors):
+    """Negatives refused as not a v3 record, or whose intent names an earlier version's schema version or cgroup path."""
+    return [row["id"] for row in vectors["negative"] if row["refusal"] == "not a v3 record" or EARLIER_RECORD.search(row["intent"])]
+
+
+def _role_removed(vectors):
+    return _ids((row, op) for row, op, roles in _record_ops(vectors)
+                if op["op"] == "delete" and len(op["path"]) == 2 and op["path"][0] == "roles" and op["path"][1] in roles)
+
+
+def _role_added(vectors):
+    return _ids((row, op) for row, op, roles in _record_ops(vectors)
+                if op["op"] == "set" and len(op["path"]) == 2 and op["path"][0] == "roles" and op["path"][1] not in roles)
+
+
+def _gate_under_broker(vectors):
+    """A gate or broker path field (a string starting with '/') set to the other role's value at the same field: the gate
+    enrolled under the BROKER key, or at the broker's executable, cgroup or pin path."""
+    def swapped(op, roles):
+        path, value = op["path"], op.get("value")
+        return (op["op"] == "set" and len(path) >= 3 and path[0] == "roles" and path[1] in GATE_AND_BROKER
+                and type(value) is str and value.startswith("/") and _replays._at(roles[GATE_AND_BROKER[path[1]]], path[2:]) == value)
+    return _ids((row, op) for row, op, roles in _record_ops(vectors) if swapped(op, roles))
+
+
+def _i06_components(vectors):
+    """I06 v2 negatives refused because the backend's component set or component keys differ from its profile."""
+    return [row["id"] for key in ("evidenceNegative", "snapshotNegative") for row in vectors[key]
+            if re.search(r"componentKeys|component set differs", row["refusal"])]
+
+
+# S44's properties, one per sentence of W02D section 4.4 (the case's own list), each the head of its rows' basis.
+S44_SOURCE = "W02D 4.4 (architecture/host-interface-amendment-w02d/HOST_INTERFACE_SPEC.md section 4.4)"
+S44_VERSION = "a reader given a record of another version refuses it, with no fallback"
+S44_GATE_MISSING = "a record missing EFFECT_GATE refuses"
+S44_EXTRA_ROLE = "a record with an extra role refuses"
+S44_GATE_BROKER = "a record with the gate under the BROKER key or path refuses"
+S44_ALIAS = "a record with an aliased role path refuses"
+S44_LIFECYCLE = "a record with a lifecycle subject inside a resident role cgroup refuses"
+S44_BACKEND_KEYS = "a record with unknown backendComponents keys refuses"
+S44_PROPERTIES = (S44_VERSION, S44_GATE_MISSING, S44_EXTRA_ROLE, S44_GATE_BROKER, S44_ALIAS, S44_LIFECYCLE, S44_BACKEND_KEYS)
+CROSS_VERSION = S44_VERSION + ": every native v3 cross-version case (records and captures of v2 under v3 and of v3 under v2)"
+EARLIER_NEGATIVES = (S44_VERSION + ": native v3 negatives refused as not a v3 record, or carrying an earlier version's schema "
+                     "version or cgroup path")
+GATE_MISSING = S44_GATE_MISSING + ": native v3 record negatives that delete a role of the positive record"
+EXTRA_ROLE = S44_EXTRA_ROLE + ": native v3 record negatives that add a role name the positive record lacks"
+GATE_BROKER = (S44_GATE_BROKER + ": native v3 record negatives that set a gate or broker path field to the other role's value "
+               "at the same field")
+ALIAS = (S44_ALIAS + ": native v3 negatives with the model's aliasing refusals (duplicate cgroup inode, one inode for two "
+         "files, one file at two inodes, a non-canonical path)")
+LIFECYCLE = S44_LIFECYCLE + ": native v3 negatives refused by the lifecycle subjects' cgroup path and placement schema"
+BACKEND_KEYS = S44_BACKEND_KEYS + ": native v3 negatives refused by the backendComponents additionalProperties schema"
+OLD_RECORDS = ("a record, capture, frame or configuration of another contract version: every native v3 cross-version case and "
+               "its negatives refused as not a v3 record or carrying an earlier version's schema version or cgroup path")
+OLD_I06 = "an I06 v2 negative refused as another version or not a v3 record, and every cross-version case"
+OLD_I05 = "an I05 v3 frame or configuration refusal whose intent names an earlier contract version (v1 or v2)"
+MISSING = ("a record or qualification missing the gate role or a resident role's capture, or with a backend component "
+           "missing, unknown or outside its implementation profile: native v3 negatives refused by the role-set, "
+           "backend-component and one-capture rules")
+MISSING_I06 = "an I06 v2 negative refused because the backend's component set or component keys differ from its profile"
+MIGRATION = ("every native v3 migration case: a maintenance reboot between versions, no nonce reused or carried across "
+             "versions, valid predecessors, and the attested empty history (W02D 4.4: migration never reinterprets accepted "
+             "data and never reuses a generation or nonce)")
+SOURCE_ROWS = [
+    ("MATRIX:old profile rejection", "Native qualification profile v3", "crossVersion", NAT, OLD_RECORDS, _every("crossVersion")),
+    ("MATRIX:old profile rejection", "Native qualification profile v3", "negative", NAT, OLD_RECORDS, _earlier_record),
+    ("MATRIX:old profile rejection", "I06 backend profile v2", "vectors", I06, OLD_I06, _replays._i06_version),
+    ("MATRIX:old profile rejection", "I05 gate channel v3", "frames", I05, OLD_I05, _replays._earlier_version("frames")),
+    ("MATRIX:old profile rejection", "I05 gate channel v3", "configRefusals", I05, OLD_I05, _replays._earlier_version("configRefusals")),
+    ("MATRIX:new profile missing gate/backend", "Native qualification profile v3", "negative", NAT, MISSING, _native(*MISSING_PARTS)),
+    ("MATRIX:new profile missing gate/backend", "Native qualification profile v3", "negative", NAT, GATE_BROKER, _gate_under_broker),
+    ("MATRIX:new profile missing gate/backend", "I06 backend profile v2", "vectors", I06, MISSING_I06, _i06_components),
+    ("MATRIX:export/upgrade/rollback without nonce reuse", "Native qualification profile v3", "migration", NAT, MIGRATION,
+     _every("migration")),
+]
+RULES["TG-08"] = [
+    ("S44", "Native qualification profile v3", "crossVersion", NAT, CROSS_VERSION, _every("crossVersion")),
+    ("S44", "Native qualification profile v3", "negative", NAT, EARLIER_NEGATIVES, _earlier_record),
+    ("S44", "Native qualification profile v3", "negative", NAT, GATE_MISSING, _role_removed),
+    ("S44", "Native qualification profile v3", "negative", NAT, EXTRA_ROLE, _role_added),
+    ("S44", "Native qualification profile v3", "negative", NAT, GATE_BROKER, _gate_under_broker),
+    ("S44", "Native qualification profile v3", "negative", NAT, ALIAS, _native(*ALIASES)),
+    ("S44", "Native qualification profile v3", "negative", NAT, LIFECYCLE, _native("schema $.lifecycleSubjects.")),
+    ("S44", "Native qualification profile v3", "negative", NAT, BACKEND_KEYS, _native("schema $.backendComponents additionalProperties")),
+    *SOURCE_ROWS,
+    # The plan's INSTALLED case: the same migrations on the installed host in W06, kept apart from the source cases.
+    *[("INSTALLED",) + row[1:] for row in SOURCE_ROWS],
+]
+
+
 FEASIBILITY = "docs/alpha-2/ENFORCEMENT_FEASIBILITY.md"
 FEASIBILITY_NAME = "Enforcement feasibility obligation rows (recorded addition, owner decision Q-T13)"
 OBLIGATION_ROWS = ("the plan's obligation rows the case serves, section 4 of ENFORCEMENT_FEASIBILITY.md at harness-onion "
@@ -662,8 +780,21 @@ RULE = ("Each plan case of the group, in plan order. A W04_OFFLINE case lists it
         "decision Q-T11), so the case is PASS only when every property within its own scope is PASS. A case that waits for W05's release set "
         "or for W06's native hosts is NOT_RUN_ENV_UNAVAILABLE, never PASS (AGENTS rule 14), and its catalog names the contract "
         "vectors whose own outputs and final snapshots are its expected results.")
+TG08_RULE = ("Each plan case of the group, in plan order, in two parts kept apart as the plan's SOURCE_AND_INSTALLED_MIGRATION "
+             "evidence asks (`part`): the SOURCE cases are checked against source (S44 offline through the contracts' reference "
+             "models, the three MATRIX cases as source tests of W05's released build), and the INSTALLED case repeats the same "
+             "contract rows on the enrolled hosts in W06. S44 lists one property per sentence of W02D section 4.4; each catalog "
+             "row whose basis starts with a property's text serves that property. A property is PASS only when every one of its "
+             "vectors replayed and passed in this run, and NOT_RUN_ENV_UNAVAILABLE when its replay needs what the verifier "
+             "profile lacks (owner decisions Q-T4 and Q-T20); S44 is PASS only when every property is. A case that waits for "
+             "W05's release set or for W06's native hosts is NOT_RUN_ENV_UNAVAILABLE, never PASS (AGENTS rule 14), and its "
+             "catalog names the contract vectors whose own expected results are its expected results (owner decision Q-T8).")
+GROUP_RULES = {"TG-08": TG08_RULE}
+# TG-08's two parts: the installed host's case (W06) apart from the source cases.
+PARTS = {"TG-08": lambda case: "INSTALLED" if case["phase"] == "W06_NATIVE_ONLY" else "SOURCE"}
 PROPERTY_FIELDS = ("property", "source", "result", "reason", "tests", "carriedBy")
-PACKETS = {"TG-02": "CONF-ENF-003", "TG-03": "CONF-ENF-003", "TG-04": "CONF-ENF-004", "TG-05": "CONF-ENF-004"}
+PACKETS = {"TG-02": "CONF-ENF-003", "TG-03": "CONF-ENF-003", "TG-04": "CONF-ENF-004", "TG-05": "CONF-ENF-004",
+           "TG-08": "CONF-ENF-007"}
 NATIVE_RULE = ("Each plan case of the group, in plan order. Every case waits for W06's enrolled AMD64 and ARM64 hosts and is "
                "NOT_RUN_ENV_UNAVAILABLE until W06 runs it, never PASS before (AGENTS rule 14); D-PROBE-ROUTE (owner decision "
                "Q-T14) gates that run too, and `permissions` lists, in SELinux matrix v4 terms, what the case's probe needs "
@@ -821,8 +952,10 @@ def ledger(group, offline):
             # case's own scope; it stays NOT_RUN here and in the cases that carry it.
             gaps = [row for row in properties if row["result"] != "PASS" and not row["carriedBy"]]
             result = "PASS" if properties and not gaps else "NOT_RUN_ENV_UNAVAILABLE"
-            reason = None if result == "PASS" else "partly not run: " + "; ".join(
-                "%s (%s; carried by %s)" % (row["property"], row["reason"], ", ".join(row["carriedBy"])) for row in gaps)
+            # A gap carried by no native case (TG-08's S44, owner decision Q-T20) names only its own reason.
+            reason = None if result == "PASS" else ("partly not run: " if len(gaps) < len(properties) else "not run: ") + "; ".join(
+                "%s (%s%s)" % (row["property"], row["reason"], "; carried by " + ", ".join(row["carriedBy"]) if row["carriedBy"] else "")
+                for row in gaps)
         else:
             result = "NOT_RUN_ENV_UNAVAILABLE"
             blockers = case["blockedBy"] + ([PROBE_ROUTE["id"]] if native else [])
@@ -834,9 +967,12 @@ def ledger(group, offline):
                "evidence": evidence, "catalog": mine, "vectors": sum(len(row["ids"]) for row in mine)}
         if native:
             row.update(_native_case(group, case["tag"]))
+        if group in PARTS:
+            row["part"] = PARTS[group](case)
         cases.append(row)
     value = {"schemaVersion": "r12.enforcement-tg-case-ledger/v1", "packet": PACKETS[group], "testGroup": group,
-             "evidenceClass": plan_group["evidenceClass"], "rule": NATIVE_RULE if native else RULE, "cases": cases}
+             "evidenceClass": plan_group["evidenceClass"], "rule": GROUP_RULES.get(group, NATIVE_RULE if native else RULE),
+             "cases": cases}
     if native:
         value["blockers"] = [PROBE_ROUTE]
     return value
