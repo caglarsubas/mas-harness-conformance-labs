@@ -2,8 +2,8 @@
  "added": {
   "task-packets/CONF-ENF-007.yaml": {
    "mode": "100644",
-   "sha256": "6b987998e343631b81d737be00bf5087f0eec3a71aaa4639404aa6477a2e2105",
-   "size": 10382
+   "sha256": "e0328c1829ceae9f57ff48f46d6ad55775a2cce319695b002a32af050fb2c01f",
+   "size": 10479
   },
   "tests/enforcement/attestations/conf-enf-007.json": {
    "mode": "100644",
@@ -17,8 +17,8 @@
   },
   "tests/enforcement/tg08_compatibility/results.json": {
    "mode": "100644",
-   "sha256": "d1ddc671a65c760dc9997d68828b837b52b5714f1581d4bb172e992bef9b4389",
-   "size": 23782
+   "sha256": "b327f23d4d99ea60b0004461df6e5eee6957694141e0039980728f98febb9af3",
+   "size": 23966
   },
   "tests/enforcement/tg08_compatibility/test_tg08_compatibility.py": {
    "mode": "100644",
@@ -57,8 +57,8 @@
   "tests/enforcement/_catalog.py": {
    "after": {
     "mode": "100644",
-    "sha256": "489bc2ab55424fd8b99da91b7c23c9523e27d2eb4a07a74fcb82a085b703c4eb",
-    "size": 77718
+    "sha256": "9fc571d3ed5a32f700d452432fe086a67089ace91ec0b1215fe10f0f00a91e0e",
+    "size": 77816
    },
    "before": {
     "mode": "100644",
