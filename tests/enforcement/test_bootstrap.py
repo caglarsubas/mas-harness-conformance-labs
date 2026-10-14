@@ -75,6 +75,18 @@ def strict(raw):
     return json.loads(raw, object_pairs_hook=pairs)
 
 
+def left_by(packet, relative):
+    """The pin of `relative` as `packet` left it: the after-pin of the latest record, up to `packet`'s own in the append-only
+    registry, that added or changed it; None if none did."""
+    records = strict(regular(ROOT / "fixtures/ci/checkpoints.json"))["records"]
+    ids = [row["packetId"] for row in records]
+    found = None
+    for row in records[:ids.index(packet) + 1]:
+        record = strict(regular(ROOT / row["path"]))
+        found = record["added"].get(relative) or record["changed"].get(relative, {}).get("after") or found
+    return found
+
+
 def regular(path):
     info = os.lstat(path)
     if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
@@ -207,10 +219,11 @@ class IndependenceTests(unittest.TestCase):
                 self.assertTrue(type(value["inputs"]) is list and value["inputs"] and all(type(row) is str and row for row in value["inputs"]))
                 self.assertTrue(all(type(value[key]) is str and value[key] for key in ("lane", "reviewer")))
                 self.assertTrue(type(value["inputDigests"]) is dict and value["inputDigests"])
-                # An input digest is the file as that packet left it: its checkpoint record's after-pin (CONF-ENF-002).
-                record = strict(regular(ROOT / "fixtures/ci" / (value["packet"].lower() + "-checkpoint.json")))
+                # An input digest is the file as that packet left it (CONF-ENF-002): its own checkpoint record's after-pin,
+                # or, for an input the packet does not change, the after-pin of the latest earlier record in the registry
+                # that added or changed it (review D1-3 of CONF-ENF-007).
                 for relative, sha in value["inputDigests"].items():
-                    pin = record["added"].get(relative) or record["changed"].get(relative, {}).get("after")
+                    pin = left_by(value["packet"], relative)
                     self.assertIsNotNone(pin, relative)
                     self.assertEqual(pin["sha256"], sha)
 

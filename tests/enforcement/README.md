@@ -58,15 +58,17 @@ W04 test source for the Harness-Onion enforcement work, per the adopted W04-0 pl
 
 - `tg08_compatibility/` (TG-08, CONF-ENF-007): `results.json` lists the plan's cases in two parts kept apart (`part`):
   SOURCE (S44 and the three MATRIX cases) and INSTALLED (the same contract rows on the enrolled hosts in W06, blocked by
-  D-W02A-F2). S44 lists one property per sentence of W02D section 4.4, each served by the native v3 cross-version and
-  negative vectors whose catalog basis starts with it. A property is PASS only when every one of its vectors replayed and
-  passed in the run; the native v3 model imports jsonschema, so today every property is NOT_RUN_ENV_UNAVAILABLE (owner
-  decisions Q-T4 and Q-T20). S44 turns PASS once the jsonschema root bundle lands and TG-01's native v3 replay is written
-  with its missing inputs (gaps G-JSONSCHEMA and G-REPLAY-INPUTS in `toolchains.json`); until then a run that gains
-  jsonschema fails here, so the ledger is redone, never stale. The MATRIX cases wait for W05's release set (owner
-  decision Q-T8): old profile rejection (native v3, I06 v2 and I05 v3 vectors of another version), new profile missing
-  gate/backend (the role-set and backend-component refusals), and export/upgrade/rollback without nonce reuse (every
-  native v3 migration case).
+  D-W02A-F2). S44's subject is the native qualification v3 reference model. It lists one property per item of the plan's
+  S44 case (W02D section 4.4's rejection list), each served by the S44 rows whose catalog basis starts with it. A
+  property is PASS only when every one of its vectors replayed and passed in the run, and the table is derived from that
+  replay; the native v3 model imports jsonschema, so today every property is NOT_RUN_ENV_UNAVAILABLE (owner decisions Q-T4
+  and Q-T20). S44 turns PASS once the jsonschema root bundle lands and TG-01's native v3 replay is written with its missing
+  inputs (gaps G-JSONSCHEMA and G-REPLAY-INPUTS in `toolchains.json`); TG-08 then needs only its ledger regenerated. Until
+  then a run that gains jsonschema fails here, so the ledger is redone, never stale. The MATRIX cases wait for W05's
+  release set (owner decision Q-T8): old profile rejection (native v3, I06 v2 and I05 v3 vectors of another version), new
+  profile missing gate/backend (the role-set and backend-component refusals), and export/upgrade/rollback without nonce
+  reuse (every native v3 migration case, the I05 v3 BIND refusals of a replayed execution or reused manifest, and the
+  configuration refusal of v1-shaped data: 4.4's migration sentence).
 
 ## For W05 and W06 (TG-05)
 
