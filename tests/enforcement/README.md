@@ -66,8 +66,8 @@ W04 test source for the Harness-Onion enforcement work, per the adopted W04-0 pl
   inputs (gaps G-JSONSCHEMA and G-REPLAY-INPUTS in `toolchains.json`); TG-08 then needs only its ledger regenerated. Until
   then a run that gains jsonschema fails here, so the ledger is redone, never stale. The MATRIX cases wait for W05's
   release set (owner decision Q-T8): old profile rejection (native v3, I06 v2 and I05 v3 vectors of another version), new
-  profile missing gate/backend (the role-set and backend-component refusals and the gate under the broker's key or
-  paths), and export/upgrade/rollback without nonce reuse (every native v3 migration case, the v3-under-v2 cross-version
+  profile missing gate/backend (the role-set, backend-component and one-capture refusals, the gate under the broker's
+  key or paths, and I06 v2's component-set refusals), and export/upgrade/rollback without nonce reuse (every native v3 migration case, the v3-under-v2 cross-version
   cases a rollback meets, the I05 v3 BIND refusals of a replayed execution or reused manifest, and the configuration
   refusal of v1-shaped data: 4.4's migration sentence; no adopted contract vector names an export, so its source test
   comes with W05's release set).

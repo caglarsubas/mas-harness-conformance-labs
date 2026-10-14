@@ -2,8 +2,8 @@
  "added": {
   "task-packets/CONF-ENF-007.yaml": {
    "mode": "100644",
-   "sha256": "a4c74b6be1b4831a464c4fce1aeccc21bf3f81f24e9468759d7ed73c2c0acade",
-   "size": 10361
+   "sha256": "6b987998e343631b81d737be00bf5087f0eec3a71aaa4639404aa6477a2e2105",
+   "size": 10382
   },
   "tests/enforcement/attestations/conf-enf-007.json": {
    "mode": "100644",
@@ -17,13 +17,13 @@
   },
   "tests/enforcement/tg08_compatibility/results.json": {
    "mode": "100644",
-   "sha256": "ae9d9d9fbe67dec8d0b5091cce044c6320ea3122edd3a36c968faacc08f196ee",
-   "size": 23533
+   "sha256": "d1ddc671a65c760dc9997d68828b837b52b5714f1581d4bb172e992bef9b4389",
+   "size": 23782
   },
   "tests/enforcement/tg08_compatibility/test_tg08_compatibility.py": {
    "mode": "100644",
-   "sha256": "147574bf01159f175ea92d38af9b71144a9464d3895725d6146e954f2be8cf2b",
-   "size": 16968
+   "sha256": "a0cd8849e65b0d00f57014f6ac24ad49d92718dc3f60d21a95929ea44782de19",
+   "size": 17371
   }
  },
  "baseCommit": "09a765231bc7d215aba6c9777dc33bf51182a1e6",
@@ -44,8 +44,8 @@
   "tests/enforcement/README.md": {
    "after": {
     "mode": "100644",
-    "sha256": "2eddb90c4e91bb0b23b1a0cfe79a1d6de7b13ac8b1a9e4f46a6ba60a4b413b47",
-    "size": 11435
+    "sha256": "fd521c10e8ee89609e63ba87fc7bd7d84360b7cc3551d068b22ccdf1fa21377a",
+    "size": 11482
    },
    "before": {
     "mode": "100644",
@@ -57,8 +57,8 @@
   "tests/enforcement/_catalog.py": {
    "after": {
     "mode": "100644",
-    "sha256": "024c0c92a1751467922b8a18aa72d1f0e65ba957d8af5f8ffb84df43fe6764aa",
-    "size": 77108
+    "sha256": "489bc2ab55424fd8b99da91b7c23c9523e27d2eb4a07a74fcb82a085b703c4eb",
+    "size": 77718
    },
    "before": {
     "mode": "100644",

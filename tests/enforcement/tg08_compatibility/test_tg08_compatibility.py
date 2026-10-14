@@ -151,6 +151,11 @@ class LedgerTests(unittest.TestCase):
         s44 = next(row for row in ledger()["cases"] if row["tag"] == "S44")
         self.assertEqual(s44["subject"], _catalog.CASE_SUBJECTS[(GROUP, "S44")])
         self.assertNotIn("live_proxy_server", s44["subject"])
+        # Review R1-5: the source cases test W05's build on its records, evidence and frames; INSTALLED keeps W06's subject.
+        subjects = {row["tag"]: row["subject"] for row in ledger()["cases"]}
+        for tag in SOURCE_CASES:
+            self.assertEqual(subjects[tag], _catalog.CASE_SUBJECTS[(GROUP, tag)])
+        self.assertEqual(subjects["INSTALLED"], _catalog.SUBJECTS["W06_NATIVE_ONLY"])
 
     def test_no_case_passes_before_its_subject_exists_or_while_a_property_was_not_run(self):
         for row in ledger()["cases"]:

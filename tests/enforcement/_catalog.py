@@ -688,7 +688,7 @@ GATE_BROKER = (S44_GATE_BROKER + ": native v3 record negatives that set a gate o
 ALIAS = (S44_ALIAS + ": native v3 negatives with the model's role-path aliasing refusals (one cgroup inode for two roles, one "
          "inode for two files, one file at two inodes), and record negatives that set a role's path field to another role's "
          "value (the gate and broker cases among them); an entry that is not a role at a role's path, such as a backend "
-         "component in a role cgroup, is the backend rules'")
+         "component in a role cgroup (native v3 R60), is not an aliased role path and is in no TG-08 row")
 LIFECYCLE = (S44_LIFECYCLE + ": native v3 negatives refused by the lifecycle subjects' cgroup path and placement schema, and "
              "capture negatives of a resident role whose own cgroup gains a lifecycle subject's process or whose inspected "
              "process runs in a lifecycle subject's domain (a resident role cgroup is a role's own cgroup: a process in the "
@@ -861,6 +861,12 @@ GROUP_RULES = {"TG-08": TG08_RULE}
 CASE_SUBJECTS = {("TG-08", "S44"): ("the snapshotted native qualification v3 reference model, through which TG-01 replays the "
                                     "contract's vectors (owner decisions Q-T4 and Q-T20); the readers W02D 4.4 names are W05's "
                                     "roles, checked in TG-08's source and installed cases")}
+# Review R1-5: TG-08's source cases test W05's released build on its native v3 records, I06 evidence and I05 frames, not
+# only on the wire.
+CASE_SUBJECTS.update({("TG-08", tag): ("W05's released build, as source tests of its native qualification v3 records, I06 "
+                                       "backend evidence and I05 gate frames (owner decision Q-T8)")
+                      for tag in ("MATRIX:old profile rejection", "MATRIX:new profile missing gate/backend",
+                                  "MATRIX:export/upgrade/rollback without nonce reuse")})
 # TG-08's two parts: the installed host's case (W06) apart from the source cases.
 PARTS = {"TG-08": lambda case: "INSTALLED" if case["phase"] == "W06_NATIVE_ONLY" else "SOURCE"}
 PROPERTY_FIELDS = ("property", "source", "result", "reason", "tests", "carriedBy")

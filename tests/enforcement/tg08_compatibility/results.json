@@ -138,7 +138,7 @@
     {
      "contract": "Native qualification profile v3",
      "vectorSet": "negative",
-     "basis": "a record with an aliased role path refuses: native v3 negatives with the model's role-path aliasing refusals (one cgroup inode for two roles, one inode for two files, one file at two inodes), and record negatives that set a role's path field to another role's value (the gate and broker cases among them); an entry that is not a role at a role's path, such as a backend component in a role cgroup, is the backend rules'",
+     "basis": "a record with an aliased role path refuses: native v3 negatives with the model's role-path aliasing refusals (one cgroup inode for two roles, one inode for two files, one file at two inodes), and record negatives that set a role's path field to another role's value (the gate and broker cases among them); an entry that is not a role at a role's path, such as a backend component in a role cgroup (native v3 R60), is not an aliased role path and is in no TG-08 row",
      "ids": [
       "R43",
       "V43",
@@ -182,7 +182,7 @@
     "E10"
    ],
    "blockedBy": [],
-   "subject": "W05's released build, through a wire-level adapter (owner decision Q-T8)",
+   "subject": "W05's released build, as source tests of its native qualification v3 records, I06 backend evidence and I05 gate frames (owner decision Q-T8)",
    "result": "NOT_RUN_ENV_UNAVAILABLE",
    "reason": "AFTER_W05_RELEASE_SET: the subject is W05's released build, which does not exist yet; the catalog fixes the contract vectors and expected results now, and the executable source and the wire-level adapter come with W05's release set (owner decision Q-T8)",
    "properties": [],
@@ -265,7 +265,7 @@
     "E10"
    ],
    "blockedBy": [],
-   "subject": "W05's released build, through a wire-level adapter (owner decision Q-T8)",
+   "subject": "W05's released build, as source tests of its native qualification v3 records, I06 backend evidence and I05 gate frames (owner decision Q-T8)",
    "result": "NOT_RUN_ENV_UNAVAILABLE",
    "reason": "AFTER_W05_RELEASE_SET: the subject is W05's released build, which does not exist yet; the catalog fixes the contract vectors and expected results now, and the executable source and the wire-level adapter come with W05's release set (owner decision Q-T8)",
    "properties": [],
@@ -319,7 +319,7 @@
     "E11"
    ],
    "blockedBy": [],
-   "subject": "W05's released build, through a wire-level adapter (owner decision Q-T8)",
+   "subject": "W05's released build, as source tests of its native qualification v3 records, I06 backend evidence and I05 gate frames (owner decision Q-T8)",
    "result": "NOT_RUN_ENV_UNAVAILABLE",
    "reason": "AFTER_W05_RELEASE_SET: the subject is W05's released build, which does not exist yet; the catalog fixes the contract vectors and expected results now, and the executable source and the wire-level adapter come with W05's release set (owner decision Q-T8)",
    "properties": [],
