@@ -50,7 +50,7 @@ FEASIBILITY = [("Enforcement feasibility obligation rows (recorded addition, own
                 "9fac4492e1b5f6255993374a6642072855a5855a40bcc68706a25b78fd822965", 20359)]
 # Area-local modules area code may import (CONF-ENF-002); _models.py is the one module allowed to load code by path.
 AREA_MODULES = {"_models", "_catalog", "_probes", "tg01_contract", "tg02_lifecycle", "tg03_persistence", "tg04_host",
-                "tg05_clocks", "."}
+                "tg05_clocks", "tg08_compatibility", "."}
 # Owner decision Q-T9 (2026-10-13): LEDGER-E09's subject is R12's own reader, imported by this one test module only.
 SUBJECT_IMPORTS = {"tests/enforcement/tg02_lifecycle/test_reader_guards.py": {"harness_conformance"}}
 PATH_LOADERS = {"tests/enforcement/_models.py"}
@@ -73,6 +73,20 @@ def strict(raw):
             value[key] = item
         return value
     return json.loads(raw, object_pairs_hook=pairs)
+
+
+def left_by(packet, relative):
+    """The pin of `relative` as `packet` left it: the after-pin of the latest record, up to `packet`'s own in the append-only
+    registry, that added or changed it; None if none did or a later one deleted it (review D2-5)."""
+    records = strict(regular(ROOT / "fixtures/ci/checkpoints.json"))["records"]
+    ids = [row["packetId"] for row in records]
+    found = None
+    for row in records[:ids.index(packet) + 1]:
+        record = strict(regular(ROOT / row["path"]))
+        if relative in record.get("deleted", {}):
+            found = None
+        found = record["added"].get(relative) or record["changed"].get(relative, {}).get("after") or found
+    return found
 
 
 def regular(path):
@@ -207,10 +221,11 @@ class IndependenceTests(unittest.TestCase):
                 self.assertTrue(type(value["inputs"]) is list and value["inputs"] and all(type(row) is str and row for row in value["inputs"]))
                 self.assertTrue(all(type(value[key]) is str and value[key] for key in ("lane", "reviewer")))
                 self.assertTrue(type(value["inputDigests"]) is dict and value["inputDigests"])
-                # An input digest is the file as that packet left it: its checkpoint record's after-pin (CONF-ENF-002).
-                record = strict(regular(ROOT / "fixtures/ci" / (value["packet"].lower() + "-checkpoint.json")))
+                # An input digest is the file as that packet left it (CONF-ENF-002): its own checkpoint record's after-pin,
+                # or, for an input the packet does not change, the after-pin of the latest earlier record in the registry
+                # that added or changed it (review D1-3 of CONF-ENF-007).
                 for relative, sha in value["inputDigests"].items():
-                    pin = record["added"].get(relative) or record["changed"].get(relative, {}).get("after")
+                    pin = left_by(value["packet"], relative)
                     self.assertIsNotNone(pin, relative)
                     self.assertEqual(pin["sha256"], sha)
 

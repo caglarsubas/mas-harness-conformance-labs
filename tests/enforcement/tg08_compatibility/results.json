@@ -1,0 +1,561 @@
+{
+ "schemaVersion": "r12.enforcement-tg-case-ledger/v1",
+ "packet": "CONF-ENF-007",
+ "testGroup": "TG-08",
+ "evidenceClass": "SOURCE_AND_INSTALLED_MIGRATION",
+ "rule": "Each plan case of the group, in plan order, in two parts kept apart as the plan's SOURCE_AND_INSTALLED_MIGRATION evidence asks (`part`): the SOURCE cases are checked against source (S44 offline through the native qualification v3 reference model, the three MATRIX cases as source tests of W05's released build), and the INSTALLED case repeats the same contract rows on the enrolled hosts in W06. S44 lists one property per item of the plan's S44 case (W02D section 4.4's rejection list; 4.4's migration sentence is MATRIX:export/upgrade/rollback's, as the plan places it), and each S44 row serves the property its basis starts with. S44's subject is the native qualification v3 reference model the contract's vectors replay through, not a reader. A property is PASS only when every one of its vectors replayed and passed in this run, and NOT_RUN_ENV_UNAVAILABLE when its replay needs what the verifier profile lacks (owner decisions Q-T4 and Q-T20); S44 is PASS only when every property is. A case that waits for W05's release set or for W06's native hosts is NOT_RUN_ENV_UNAVAILABLE, never PASS (AGENTS rule 14), and its catalog names the contract vectors whose own expected results are its expected results (owner decision Q-T8).",
+ "cases": [
+  {
+   "tag": "S44",
+   "phase": "W04_OFFLINE",
+   "obligations": [
+    "E07",
+    "E10"
+   ],
+   "blockedBy": [],
+   "subject": "the snapshotted native qualification v3 reference model, through which TG-01 replays the contract's vectors (owner decisions Q-T4 and Q-T20); the readers W02D 4.4 names are W05's roles, checked in TG-08's source and installed cases",
+   "result": "NOT_RUN_ENV_UNAVAILABLE",
+   "reason": "not run: each reader refuses a record of another version with no fallback; a record missing EFFECT_GATE refuses; a record with an extra role refuses; a record with the gate under the BROKER key or path refuses; a record with an aliased role path refuses; a record with a lifecycle subject inside a resident role cgroup refuses; a record with unknown backendComponents keys refuses (its vectors replay through the native qualification v3 reference model, which imports jsonschema, absent from the verifier profile (gap G-JSONSCHEMA; owner decisions Q-T4 and Q-T20); TG-01 writes that replay, and adds its inputs outside the snapshots (gap G-REPLAY-INPUTS), with the jsonschema root bundle)",
+   "properties": [
+    {
+     "property": "each reader refuses a record of another version with no fallback",
+     "source": "W02D 4.4: architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md section 4.4, the same section in architecture/host-interface-amendment-w02d/HOST_INTERFACE_SPEC.md",
+     "result": "NOT_RUN_ENV_UNAVAILABLE",
+     "reason": "its vectors replay through the native qualification v3 reference model, which imports jsonschema, absent from the verifier profile (gap G-JSONSCHEMA; owner decisions Q-T4 and Q-T20); TG-01 writes that replay, and adds its inputs outside the snapshots (gap G-REPLAY-INPUTS), with the jsonschema root bundle",
+     "tests": [],
+     "carriedBy": []
+    },
+    {
+     "property": "a record missing EFFECT_GATE refuses",
+     "source": "W02D 4.4: architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md section 4.4, the same section in architecture/host-interface-amendment-w02d/HOST_INTERFACE_SPEC.md",
+     "result": "NOT_RUN_ENV_UNAVAILABLE",
+     "reason": "its vectors replay through the native qualification v3 reference model, which imports jsonschema, absent from the verifier profile (gap G-JSONSCHEMA; owner decisions Q-T4 and Q-T20); TG-01 writes that replay, and adds its inputs outside the snapshots (gap G-REPLAY-INPUTS), with the jsonschema root bundle",
+     "tests": [],
+     "carriedBy": []
+    },
+    {
+     "property": "a record with an extra role refuses",
+     "source": "W02D 4.4: architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md section 4.4, the same section in architecture/host-interface-amendment-w02d/HOST_INTERFACE_SPEC.md",
+     "result": "NOT_RUN_ENV_UNAVAILABLE",
+     "reason": "its vectors replay through the native qualification v3 reference model, which imports jsonschema, absent from the verifier profile (gap G-JSONSCHEMA; owner decisions Q-T4 and Q-T20); TG-01 writes that replay, and adds its inputs outside the snapshots (gap G-REPLAY-INPUTS), with the jsonschema root bundle",
+     "tests": [],
+     "carriedBy": []
+    },
+    {
+     "property": "a record with the gate under the BROKER key or path refuses",
+     "source": "W02D 4.4: architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md section 4.4, the same section in architecture/host-interface-amendment-w02d/HOST_INTERFACE_SPEC.md",
+     "result": "NOT_RUN_ENV_UNAVAILABLE",
+     "reason": "its vectors replay through the native qualification v3 reference model, which imports jsonschema, absent from the verifier profile (gap G-JSONSCHEMA; owner decisions Q-T4 and Q-T20); TG-01 writes that replay, and adds its inputs outside the snapshots (gap G-REPLAY-INPUTS), with the jsonschema root bundle",
+     "tests": [],
+     "carriedBy": []
+    },
+    {
+     "property": "a record with an aliased role path refuses",
+     "source": "W02D 4.4: architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md section 4.4, the same section in architecture/host-interface-amendment-w02d/HOST_INTERFACE_SPEC.md",
+     "result": "NOT_RUN_ENV_UNAVAILABLE",
+     "reason": "its vectors replay through the native qualification v3 reference model, which imports jsonschema, absent from the verifier profile (gap G-JSONSCHEMA; owner decisions Q-T4 and Q-T20); TG-01 writes that replay, and adds its inputs outside the snapshots (gap G-REPLAY-INPUTS), with the jsonschema root bundle",
+     "tests": [],
+     "carriedBy": []
+    },
+    {
+     "property": "a record with a lifecycle subject inside a resident role cgroup refuses",
+     "source": "W02D 4.4: architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md section 4.4, the same section in architecture/host-interface-amendment-w02d/HOST_INTERFACE_SPEC.md",
+     "result": "NOT_RUN_ENV_UNAVAILABLE",
+     "reason": "its vectors replay through the native qualification v3 reference model, which imports jsonschema, absent from the verifier profile (gap G-JSONSCHEMA; owner decisions Q-T4 and Q-T20); TG-01 writes that replay, and adds its inputs outside the snapshots (gap G-REPLAY-INPUTS), with the jsonschema root bundle",
+     "tests": [],
+     "carriedBy": []
+    },
+    {
+     "property": "a record with unknown backendComponents keys refuses",
+     "source": "W02D 4.4: architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md section 4.4, the same section in architecture/host-interface-amendment-w02d/HOST_INTERFACE_SPEC.md",
+     "result": "NOT_RUN_ENV_UNAVAILABLE",
+     "reason": "its vectors replay through the native qualification v3 reference model, which imports jsonschema, absent from the verifier profile (gap G-JSONSCHEMA; owner decisions Q-T4 and Q-T20); TG-01 writes that replay, and adds its inputs outside the snapshots (gap G-REPLAY-INPUTS), with the jsonschema root bundle",
+     "tests": [],
+     "carriedBy": []
+    }
+   ],
+   "evidence": [],
+   "catalog": [
+    {
+     "contract": "Native qualification profile v3",
+     "vectorSet": "crossVersion",
+     "basis": "each reader refuses a record of another version with no fallback: every native v3 cross-version case (records and captures of v2 under v3 and of v3 under v2; native v3 carries 4.4's v1/v2 pair one version on, and the literal v1/v2 vectors are native v2's, not snapshotted)",
+     "ids": [
+      "X01",
+      "X02",
+      "X03",
+      "X04",
+      "X05",
+      "X06",
+      "X07",
+      "X08",
+      "X09",
+      "X10",
+      "X11",
+      "X12",
+      "X13",
+      "X14"
+     ]
+    },
+    {
+     "contract": "Native qualification profile v3",
+     "vectorSet": "negative",
+     "basis": "each reader refuses a record of another version with no fallback: native v3 negatives refused as not a v3 record, or whose intent names an earlier version (a v1 schema version, a v1 cgroup path, a v2 fixture label)",
+     "ids": [
+      "R01",
+      "R07",
+      "C31",
+      "V29"
+     ]
+    },
+    {
+     "contract": "Native qualification profile v3",
+     "vectorSet": "negative",
+     "basis": "a record missing EFFECT_GATE refuses: native v3 record negatives that delete the EFFECT_GATE role",
+     "ids": [
+      "R02"
+     ]
+    },
+    {
+     "contract": "Native qualification profile v3",
+     "vectorSet": "negative",
+     "basis": "a record with an extra role refuses: native v3 record negatives that add a role name the positive record lacks",
+     "ids": [
+      "R03"
+     ]
+    },
+    {
+     "contract": "Native qualification profile v3",
+     "vectorSet": "negative",
+     "basis": "a record with the gate under the BROKER key or path refuses: native v3 record negatives that set a gate or broker path field to the other role's value at the same field (the record half; captured data that shows the gate at the broker's paths is refused by the capture rules, and their aliasing refusals serve the alias property)",
+     "ids": [
+      "R04",
+      "R05",
+      "R40",
+      "R75"
+     ]
+    },
+    {
+     "contract": "Native qualification profile v3",
+     "vectorSet": "negative",
+     "basis": "a record with an aliased role path refuses: native v3 negatives with the model's role-path aliasing refusals (one cgroup inode for two roles, one inode for two files, one file at two inodes), and record negatives that set a role's path field to another role's value (the gate and broker cases among them); a lifecycle subject placed at a role's cgroup path (R50) is the lifecycle property's, and a backend component there (native v3 R60) is in no TG-08 row",
+     "ids": [
+      "R43",
+      "V43",
+      "V44",
+      "V56",
+      "R04",
+      "R05",
+      "R40",
+      "R75"
+     ]
+    },
+    {
+     "contract": "Native qualification profile v3",
+     "vectorSet": "negative",
+     "basis": "a record with a lifecycle subject inside a resident role cgroup refuses: native v3 negatives refused by the lifecycle subjects' cgroup path and placement schema, and capture negatives of a resident role whose own cgroup gains a lifecycle subject's process or whose inspected process runs in a lifecycle subject's domain (a resident role cgroup is a role's own cgroup: a process in the broker's delegated service cgroup, C20, is the delegated-subtree rule's)",
+     "ids": [
+      "R50",
+      "R51",
+      "C14",
+      "C15",
+      "C30"
+     ]
+    },
+    {
+     "contract": "Native qualification profile v3",
+     "vectorSet": "negative",
+     "basis": "a record with unknown backendComponents keys refuses: native v3 negatives refused by the backendComponents additionalProperties schema",
+     "ids": [
+      "R55"
+     ]
+    }
+   ],
+   "vectors": 38,
+   "part": "SOURCE"
+  },
+  {
+   "tag": "MATRIX:old profile rejection",
+   "phase": "AFTER_W05_RELEASE_SET",
+   "obligations": [
+    "E07",
+    "E10"
+   ],
+   "blockedBy": [],
+   "subject": "W05's released build, through the wire-level adapter (owner decision Q-T8), as source tests of its native qualification v3 records, I06 backend evidence and I05 gate frames, transcripts and configurations",
+   "result": "NOT_RUN_ENV_UNAVAILABLE",
+   "reason": "AFTER_W05_RELEASE_SET: the subject is W05's released build, which does not exist yet; the catalog fixes the contract vectors and expected results now, and the executable source and the wire-level adapter come with W05's release set (owner decision Q-T8)",
+   "properties": [],
+   "evidence": [],
+   "catalog": [
+    {
+     "contract": "Native qualification profile v3",
+     "vectorSet": "crossVersion",
+     "basis": "a record, capture, frame or configuration of another contract version: every native v3 cross-version case and its negatives refused as not a v3 record or whose intent names an earlier version",
+     "ids": [
+      "X01",
+      "X02",
+      "X03",
+      "X04",
+      "X05",
+      "X06",
+      "X07",
+      "X08",
+      "X09",
+      "X10",
+      "X11",
+      "X12",
+      "X13",
+      "X14"
+     ]
+    },
+    {
+     "contract": "Native qualification profile v3",
+     "vectorSet": "negative",
+     "basis": "a record, capture, frame or configuration of another contract version: every native v3 cross-version case and its negatives refused as not a v3 record or whose intent names an earlier version",
+     "ids": [
+      "R01",
+      "R07",
+      "C31",
+      "V29"
+     ]
+    },
+    {
+     "contract": "I06 backend profile v2",
+     "vectorSet": "vectors",
+     "basis": "an I06 v2 negative refused as another version or not a v3 record, and every cross-version case",
+     "ids": [
+      "G03",
+      "G17",
+      "X01",
+      "X02",
+      "X03",
+      "X04",
+      "X05",
+      "X06"
+     ]
+    },
+    {
+     "contract": "I05 gate channel v3",
+     "vectorSet": "frames",
+     "basis": "an I05 v3 frame or configuration refusal whose intent names an earlier contract version (v1 or v2)",
+     "ids": [
+      "G10",
+      "G32",
+      "G34"
+     ]
+    },
+    {
+     "contract": "I05 gate channel v3",
+     "vectorSet": "configRefusals",
+     "basis": "an I05 v3 frame or configuration refusal whose intent names an earlier contract version (v1 or v2)",
+     "ids": [
+      "K04"
+     ]
+    }
+   ],
+   "vectors": 30,
+   "part": "SOURCE"
+  },
+  {
+   "tag": "MATRIX:new profile missing gate/backend",
+   "phase": "AFTER_W05_RELEASE_SET",
+   "obligations": [
+    "E07",
+    "E10"
+   ],
+   "blockedBy": [],
+   "subject": "W05's released build, through the wire-level adapter (owner decision Q-T8), as source tests of its native qualification v3 records, I06 backend evidence and I05 gate frames, transcripts and configurations",
+   "result": "NOT_RUN_ENV_UNAVAILABLE",
+   "reason": "AFTER_W05_RELEASE_SET: the subject is W05's released build, which does not exist yet; the catalog fixes the contract vectors and expected results now, and the executable source and the wire-level adapter come with W05's release set (owner decision Q-T8)",
+   "properties": [],
+   "evidence": [],
+   "catalog": [
+    {
+     "contract": "Native qualification profile v3",
+     "vectorSet": "negative",
+     "basis": "a record or qualification missing the gate role or a resident role's capture, or with a backend component missing, unknown or outside its implementation profile: native v3 negatives refused by the role-set, backend-component and one-capture rules",
+     "ids": [
+      "R02",
+      "R55",
+      "R56",
+      "R57",
+      "R58",
+      "Q01",
+      "Q02",
+      "Q03"
+     ]
+    },
+    {
+     "contract": "Native qualification profile v3",
+     "vectorSet": "negative",
+     "basis": "a record with the gate under the BROKER key or path refuses: native v3 record negatives that set a gate or broker path field to the other role's value at the same field (the record half; captured data that shows the gate at the broker's paths is refused by the capture rules, and their aliasing refusals serve the alias property)",
+     "ids": [
+      "R04",
+      "R05",
+      "R40",
+      "R75"
+     ]
+    },
+    {
+     "contract": "I06 backend profile v2",
+     "vectorSet": "vectors",
+     "basis": "an I06 v2 negative refused because the backend's component set or component keys differ from its profile",
+     "ids": [
+      "E07",
+      "E70",
+      "E71",
+      "G10"
+     ]
+    }
+   ],
+   "vectors": 16,
+   "part": "SOURCE"
+  },
+  {
+   "tag": "MATRIX:export/upgrade/rollback without nonce reuse",
+   "phase": "AFTER_W05_RELEASE_SET",
+   "obligations": [
+    "E11"
+   ],
+   "blockedBy": [],
+   "subject": "W05's released build, through the wire-level adapter (owner decision Q-T8), as source tests of its native qualification v3 records, I06 backend evidence and I05 gate frames, transcripts and configurations",
+   "result": "NOT_RUN_ENV_UNAVAILABLE",
+   "reason": "AFTER_W05_RELEASE_SET: the subject is W05's released build, which does not exist yet; the catalog fixes the contract vectors and expected results now, and the executable source and the wire-level adapter come with W05's release set (owner decision Q-T8)",
+   "properties": [],
+   "evidence": [],
+   "catalog": [
+    {
+     "contract": "Native qualification profile v3",
+     "vectorSet": "migration",
+     "basis": "every native v3 migration case: a maintenance reboot between versions, no nonce reused or carried across versions, valid predecessors, and the attested empty history (W02D 4.4: migration never reinterprets accepted v1 data and never reuses a v1 generation or nonce)",
+     "ids": [
+      "M01",
+      "M02",
+      "M03",
+      "M04",
+      "M05",
+      "M06",
+      "M07",
+      "M08",
+      "M09",
+      "M10",
+      "M11",
+      "M12",
+      "M13",
+      "M14"
+     ]
+    },
+    {
+     "contract": "Native qualification profile v3",
+     "vectorSet": "crossVersion",
+     "basis": "a rollback's half of 'never reinterprets accepted data': native v3's cross-version cases that give a v3 record or capture back to the v2 reader, which refuses it (the backend profile's counterparts, I06 v2's cross-version cases, are old profile rejection's rows). No adopted contract vector names an export, or a record-side nonce reused after a rollback; those tests come with W05's release set and W06",
+     "ids": [
+      "X05",
+      "X06",
+      "X07",
+      "X08",
+      "X12",
+      "X13",
+      "X14"
+     ]
+    },
+    {
+     "contract": "I05 gate channel v3",
+     "vectorSet": "transcripts",
+     "basis": "the gate's half of 'never reuses a generation or nonce' across an upgrade or a rollback: either needs the maintenance boot (W02D 5.5 M1), after which enrollment needs a fresh, non-reused generation (M3): I05 v3 transcripts whose BIND_EXECUTION is refused as a replayed execution or a reused manifest (EXECUTION_REPLAY, MANIFEST_REUSED)",
+     "ids": [
+      "T13",
+      "T75",
+      "T95"
+     ]
+    },
+    {
+     "contract": "I05 gate channel v3",
+     "vectorSet": "configRefusals",
+     "basis": "the gate's half of 'never reinterprets accepted v1 data': an I05 v3 configuration refusal whose intent names an earlier contract version (a v1-shaped record)",
+     "ids": [
+      "K04"
+     ]
+    }
+   ],
+   "vectors": 25,
+   "part": "SOURCE"
+  },
+  {
+   "tag": "INSTALLED",
+   "phase": "W06_NATIVE_ONLY",
+   "obligations": [
+    "E10",
+    "E11"
+   ],
+   "blockedBy": [
+    "D-W02A-F2"
+   ],
+   "subject": "W05's released build on the enrolled AMD64 and ARM64 hosts in W06",
+   "result": "NOT_RUN_ENV_UNAVAILABLE",
+   "reason": "W06_NATIVE_ONLY: native evidence on the enrolled hosts in W06; the catalog fixes the contract vectors and expected results now (owner decision Q-T8); blocked by D-W02A-F2",
+   "properties": [],
+   "evidence": [],
+   "catalog": [
+    {
+     "contract": "Native qualification profile v3",
+     "vectorSet": "crossVersion",
+     "basis": "a record, capture, frame or configuration of another contract version: every native v3 cross-version case and its negatives refused as not a v3 record or whose intent names an earlier version",
+     "ids": [
+      "X01",
+      "X02",
+      "X03",
+      "X04",
+      "X05",
+      "X06",
+      "X07",
+      "X08",
+      "X09",
+      "X10",
+      "X11",
+      "X12",
+      "X13",
+      "X14"
+     ]
+    },
+    {
+     "contract": "Native qualification profile v3",
+     "vectorSet": "negative",
+     "basis": "a record, capture, frame or configuration of another contract version: every native v3 cross-version case and its negatives refused as not a v3 record or whose intent names an earlier version",
+     "ids": [
+      "R01",
+      "R07",
+      "C31",
+      "V29"
+     ]
+    },
+    {
+     "contract": "I06 backend profile v2",
+     "vectorSet": "vectors",
+     "basis": "an I06 v2 negative refused as another version or not a v3 record, and every cross-version case",
+     "ids": [
+      "G03",
+      "G17",
+      "X01",
+      "X02",
+      "X03",
+      "X04",
+      "X05",
+      "X06"
+     ]
+    },
+    {
+     "contract": "I05 gate channel v3",
+     "vectorSet": "frames",
+     "basis": "an I05 v3 frame or configuration refusal whose intent names an earlier contract version (v1 or v2)",
+     "ids": [
+      "G10",
+      "G32",
+      "G34"
+     ]
+    },
+    {
+     "contract": "I05 gate channel v3",
+     "vectorSet": "configRefusals",
+     "basis": "an I05 v3 frame or configuration refusal whose intent names an earlier contract version (v1 or v2)",
+     "ids": [
+      "K04"
+     ]
+    },
+    {
+     "contract": "Native qualification profile v3",
+     "vectorSet": "negative",
+     "basis": "a record or qualification missing the gate role or a resident role's capture, or with a backend component missing, unknown or outside its implementation profile: native v3 negatives refused by the role-set, backend-component and one-capture rules",
+     "ids": [
+      "R02",
+      "R55",
+      "R56",
+      "R57",
+      "R58",
+      "Q01",
+      "Q02",
+      "Q03"
+     ]
+    },
+    {
+     "contract": "Native qualification profile v3",
+     "vectorSet": "negative",
+     "basis": "a record with the gate under the BROKER key or path refuses: native v3 record negatives that set a gate or broker path field to the other role's value at the same field (the record half; captured data that shows the gate at the broker's paths is refused by the capture rules, and their aliasing refusals serve the alias property)",
+     "ids": [
+      "R04",
+      "R05",
+      "R40",
+      "R75"
+     ]
+    },
+    {
+     "contract": "I06 backend profile v2",
+     "vectorSet": "vectors",
+     "basis": "an I06 v2 negative refused because the backend's component set or component keys differ from its profile",
+     "ids": [
+      "E07",
+      "E70",
+      "E71",
+      "G10"
+     ]
+    },
+    {
+     "contract": "Native qualification profile v3",
+     "vectorSet": "migration",
+     "basis": "every native v3 migration case: a maintenance reboot between versions, no nonce reused or carried across versions, valid predecessors, and the attested empty history (W02D 4.4: migration never reinterprets accepted v1 data and never reuses a v1 generation or nonce)",
+     "ids": [
+      "M01",
+      "M02",
+      "M03",
+      "M04",
+      "M05",
+      "M06",
+      "M07",
+      "M08",
+      "M09",
+      "M10",
+      "M11",
+      "M12",
+      "M13",
+      "M14"
+     ]
+    },
+    {
+     "contract": "Native qualification profile v3",
+     "vectorSet": "crossVersion",
+     "basis": "a rollback's half of 'never reinterprets accepted data': native v3's cross-version cases that give a v3 record or capture back to the v2 reader, which refuses it (the backend profile's counterparts, I06 v2's cross-version cases, are old profile rejection's rows). No adopted contract vector names an export, or a record-side nonce reused after a rollback; those tests come with W05's release set and W06",
+     "ids": [
+      "X05",
+      "X06",
+      "X07",
+      "X08",
+      "X12",
+      "X13",
+      "X14"
+     ]
+    },
+    {
+     "contract": "I05 gate channel v3",
+     "vectorSet": "transcripts",
+     "basis": "the gate's half of 'never reuses a generation or nonce' across an upgrade or a rollback: either needs the maintenance boot (W02D 5.5 M1), after which enrollment needs a fresh, non-reused generation (M3): I05 v3 transcripts whose BIND_EXECUTION is refused as a replayed execution or a reused manifest (EXECUTION_REPLAY, MANIFEST_REUSED)",
+     "ids": [
+      "T13",
+      "T75",
+      "T95"
+     ]
+    },
+    {
+     "contract": "I05 gate channel v3",
+     "vectorSet": "configRefusals",
+     "basis": "the gate's half of 'never reinterprets accepted v1 data': an I05 v3 configuration refusal whose intent names an earlier contract version (a v1-shaped record)",
+     "ids": [
+      "K04"
+     ]
+    }
+   ],
+   "vectors": 71,
+   "part": "INSTALLED"
+  }
+ ]
+}
