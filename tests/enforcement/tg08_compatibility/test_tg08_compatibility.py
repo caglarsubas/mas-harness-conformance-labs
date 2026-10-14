@@ -48,6 +48,7 @@ ANCHORS = {
     ("MATRIX:new profile missing gate/backend", NATIVE_V3, "negative", _catalog.GATE_BROKER): {"R04", "R05", "R75"},
     ("MATRIX:new profile missing gate/backend", I06_V2, "vectors", _catalog.MISSING_I06): {"E70", "E71"},
     ("MATRIX:export/upgrade/rollback without nonce reuse", NATIVE_V3, "migration", _catalog.MIGRATION): {"M02", "M03", "M04", "M11"},
+    ("MATRIX:export/upgrade/rollback without nonce reuse", NATIVE_V3, "crossVersion", _catalog.ROLLED_BACK): {"X05", "X12", "X14"},
     ("MATRIX:export/upgrade/rollback without nonce reuse", I05_V3, "transcripts", _catalog.REUSED): {"T75", "T95"},
     ("MATRIX:export/upgrade/rollback without nonce reuse", I05_V3, "configRefusals", _catalog.REINTERPRET): {"K04"},
 }
@@ -70,6 +71,7 @@ SELECTION_PINS = {
     ("MATRIX:new profile missing gate/backend", NATIVE_V3, "negative", _catalog.GATE_BROKER): (4, "075bba575abf4a4f"),
     ("MATRIX:new profile missing gate/backend", I06_V2, "vectors", _catalog.MISSING_I06): (4, "0dc092c6a1602dea"),
     ("MATRIX:export/upgrade/rollback without nonce reuse", NATIVE_V3, "migration", _catalog.MIGRATION): (14, "cb52b5b61264c027"),
+    ("MATRIX:export/upgrade/rollback without nonce reuse", NATIVE_V3, "crossVersion", _catalog.ROLLED_BACK): (7, "5b3e776637e2f2af"),
     ("MATRIX:export/upgrade/rollback without nonce reuse", I05_V3, "transcripts", _catalog.REUSED): (3, "f9bf7e1125cb1476"),
     ("MATRIX:export/upgrade/rollback without nonce reuse", I05_V3, "configRefusals", _catalog.REINTERPRET): (1, "51921225f9b265dd"),
 }

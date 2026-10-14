@@ -606,6 +606,12 @@ def _earlier_record(vectors):
             if row["refusal"] == "not a v3 record" or _replays.EARLIER_VERSION.search(row["intent"])]
 
 
+def _cross_version(kind_from, kind_to):
+    """Native v3 cross-version cases that give a `kind_from` record or capture to the `kind_to` reader (by their kind)."""
+    return lambda vectors: [row["id"] for row in vectors["crossVersion"]
+                            if row["kind"].startswith(kind_from + "_") and row["kind"].endswith("_UNDER_" + kind_to)]
+
+
 def _gate_removed(vectors):
     return _ids((row, op) for row, op, record in _ops(vectors, "record")
                 if op["op"] == "delete" and op["path"] == ["roles", "EFFECT_GATE"])
@@ -677,13 +683,15 @@ EARLIER_NEGATIVES = (S44_VERSION + ": native v3 negatives refused as not a v3 re
 GATE_MISSING = S44_GATE_MISSING + ": native v3 record negatives that delete the EFFECT_GATE role"
 EXTRA_ROLE = S44_EXTRA_ROLE + ": native v3 record negatives that add a role name the positive record lacks"
 GATE_BROKER = (S44_GATE_BROKER + ": native v3 record negatives that set a gate or broker path field to the other role's value "
-               "at the same field")
+               "at the same field (the record half; captured data that shows the gate at the broker's paths is refused by the "
+               "capture rules, and their aliasing refusals serve the alias property)")
 ALIAS = (S44_ALIAS + ": native v3 negatives with the model's role-path aliasing refusals (one cgroup inode for two roles, one "
          "inode for two files, one file at two inodes), and record negatives that set a role's path field to another role's "
          "value (the gate and broker cases among them)")
 LIFECYCLE = (S44_LIFECYCLE + ": native v3 negatives refused by the lifecycle subjects' cgroup path and placement schema, and "
-             "capture negatives of a resident role whose cgroup gains a lifecycle subject's process or whose inspected "
-             "process runs in a lifecycle subject's domain")
+             "capture negatives of a resident role whose own cgroup gains a lifecycle subject's process or whose inspected "
+             "process runs in a lifecycle subject's domain (a resident role cgroup is a role's own cgroup: a process in the "
+             "broker's delegated service cgroup, C20, is the delegated-subtree rule's)")
 BACKEND_KEYS = S44_BACKEND_KEYS + ": native v3 negatives refused by the backendComponents additionalProperties schema"
 OLD_RECORDS = ("a record, capture, frame or configuration of another contract version: every native v3 cross-version case and "
                "its negatives refused as not a v3 record or whose intent names an earlier version")
@@ -696,9 +704,13 @@ MISSING_I06 = "an I06 v2 negative refused because the backend's component set or
 MIGRATION = ("every native v3 migration case: a maintenance reboot between versions, no nonce reused or carried across "
              "versions, valid predecessors, and the attested empty history (W02D 4.4: migration never reinterprets accepted "
              "v1 data and never reuses a v1 generation or nonce)")
-REUSED = ("the gate's half of 'never reuses a generation or nonce' across an upgrade, which runs in a fresh generation (W02D "
-          "5.5): I05 v3 transcripts whose BIND_EXECUTION is refused as a replayed execution or a reused manifest "
-          "(EXECUTION_REPLAY, MANIFEST_REUSED)")
+REUSED = ("the gate's half of 'never reuses a generation or nonce' across an upgrade or a rollback: either needs the "
+          "maintenance boot (W02D 5.5 M1), after which enrollment needs a fresh, non-reused generation (M3): I05 v3 "
+          "transcripts whose BIND_EXECUTION is refused as a replayed execution or a reused manifest (EXECUTION_REPLAY, "
+          "MANIFEST_REUSED)")
+ROLLED_BACK = ("a rollback's half of 'never reinterprets accepted data': native v3's cross-version cases that give a v3 "
+               "record or capture back to the v2 reader, which refuses it. No adopted contract vector names an export; its "
+               "source test comes with W05's release set")
 REINTERPRET = ("the gate's half of 'never reinterprets accepted v1 data': an I05 v3 configuration refusal whose intent names an "
                "earlier contract version (a v1-shaped record)")
 SOURCE_ROWS = [
@@ -712,6 +724,8 @@ SOURCE_ROWS = [
     ("MATRIX:new profile missing gate/backend", "I06 backend profile v2", "vectors", I06, MISSING_I06, _i06_components),
     ("MATRIX:export/upgrade/rollback without nonce reuse", "Native qualification profile v3", "migration", NAT, MIGRATION,
      _every("migration")),
+    ("MATRIX:export/upgrade/rollback without nonce reuse", "Native qualification profile v3", "crossVersion", NAT, ROLLED_BACK,
+     _cross_version("V3", "V2")),
     ("MATRIX:export/upgrade/rollback without nonce reuse", "I05 gate channel v3", "transcripts", I05, REUSED,
      _transcripts(lambda row: _refused(row, "BIND_EXECUTION", REUSE))),
     ("MATRIX:export/upgrade/rollback without nonce reuse", "I05 gate channel v3", "configRefusals", I05, REINTERPRET,
@@ -830,8 +844,8 @@ RULE = ("Each plan case of the group, in plan order. A W04_OFFLINE case lists it
         "or for W06's native hosts is NOT_RUN_ENV_UNAVAILABLE, never PASS (AGENTS rule 14), and its catalog names the contract "
         "vectors whose own outputs and final snapshots are its expected results.")
 TG08_RULE = ("Each plan case of the group, in plan order, in two parts kept apart as the plan's SOURCE_AND_INSTALLED_MIGRATION "
-             "evidence asks (`part`): the SOURCE cases are checked against source (S44 offline through the contracts' reference "
-             "models, the three MATRIX cases as source tests of W05's released build), and the INSTALLED case repeats the same "
+             "evidence asks (`part`): the SOURCE cases are checked against source (S44 offline through the native qualification "
+             "v3 reference model, the three MATRIX cases as source tests of W05's released build), and the INSTALLED case repeats the same "
              "contract rows on the enrolled hosts in W06. S44 lists one property per item of the plan's S44 case (W02D section "
              "4.4's rejection list; 4.4's migration sentence is MATRIX:export/upgrade/rollback's, as the plan places it), and each "
              "S44 row serves the property its basis starts with. S44's subject is the native qualification v3 reference model "

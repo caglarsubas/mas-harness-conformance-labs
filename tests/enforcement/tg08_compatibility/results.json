@@ -3,7 +3,7 @@
  "packet": "CONF-ENF-007",
  "testGroup": "TG-08",
  "evidenceClass": "SOURCE_AND_INSTALLED_MIGRATION",
- "rule": "Each plan case of the group, in plan order, in two parts kept apart as the plan's SOURCE_AND_INSTALLED_MIGRATION evidence asks (`part`): the SOURCE cases are checked against source (S44 offline through the contracts' reference models, the three MATRIX cases as source tests of W05's released build), and the INSTALLED case repeats the same contract rows on the enrolled hosts in W06. S44 lists one property per item of the plan's S44 case (W02D section 4.4's rejection list; 4.4's migration sentence is MATRIX:export/upgrade/rollback's, as the plan places it), and each S44 row serves the property its basis starts with. S44's subject is the native qualification v3 reference model the contract's vectors replay through, not a reader. A property is PASS only when every one of its vectors replayed and passed in this run, and NOT_RUN_ENV_UNAVAILABLE when its replay needs what the verifier profile lacks (owner decisions Q-T4 and Q-T20); S44 is PASS only when every property is. A case that waits for W05's release set or for W06's native hosts is NOT_RUN_ENV_UNAVAILABLE, never PASS (AGENTS rule 14), and its catalog names the contract vectors whose own expected results are its expected results (owner decision Q-T8).",
+ "rule": "Each plan case of the group, in plan order, in two parts kept apart as the plan's SOURCE_AND_INSTALLED_MIGRATION evidence asks (`part`): the SOURCE cases are checked against source (S44 offline through the native qualification v3 reference model, the three MATRIX cases as source tests of W05's released build), and the INSTALLED case repeats the same contract rows on the enrolled hosts in W06. S44 lists one property per item of the plan's S44 case (W02D section 4.4's rejection list; 4.4's migration sentence is MATRIX:export/upgrade/rollback's, as the plan places it), and each S44 row serves the property its basis starts with. S44's subject is the native qualification v3 reference model the contract's vectors replay through, not a reader. A property is PASS only when every one of its vectors replayed and passed in this run, and NOT_RUN_ENV_UNAVAILABLE when its replay needs what the verifier profile lacks (owner decisions Q-T4 and Q-T20); S44 is PASS only when every property is. A case that waits for W05's release set or for W06's native hosts is NOT_RUN_ENV_UNAVAILABLE, never PASS (AGENTS rule 14), and its catalog names the contract vectors whose own expected results are its expected results (owner decision Q-T8).",
  "cases": [
   {
    "tag": "S44",
@@ -127,7 +127,7 @@
     {
      "contract": "Native qualification profile v3",
      "vectorSet": "negative",
-     "basis": "a record with the gate under the BROKER key or path refuses: native v3 record negatives that set a gate or broker path field to the other role's value at the same field",
+     "basis": "a record with the gate under the BROKER key or path refuses: native v3 record negatives that set a gate or broker path field to the other role's value at the same field (the record half; captured data that shows the gate at the broker's paths is refused by the capture rules, and their aliasing refusals serve the alias property)",
      "ids": [
       "R04",
       "R05",
@@ -153,7 +153,7 @@
     {
      "contract": "Native qualification profile v3",
      "vectorSet": "negative",
-     "basis": "a record with a lifecycle subject inside a resident role cgroup refuses: native v3 negatives refused by the lifecycle subjects' cgroup path and placement schema, and capture negatives of a resident role whose cgroup gains a lifecycle subject's process or whose inspected process runs in a lifecycle subject's domain",
+     "basis": "a record with a lifecycle subject inside a resident role cgroup refuses: native v3 negatives refused by the lifecycle subjects' cgroup path and placement schema, and capture negatives of a resident role whose own cgroup gains a lifecycle subject's process or whose inspected process runs in a lifecycle subject's domain (a resident role cgroup is a role's own cgroup: a process in the broker's delegated service cgroup, C20, is the delegated-subtree rule's)",
      "ids": [
       "R50",
       "R51",
@@ -289,7 +289,7 @@
     {
      "contract": "Native qualification profile v3",
      "vectorSet": "negative",
-     "basis": "a record with the gate under the BROKER key or path refuses: native v3 record negatives that set a gate or broker path field to the other role's value at the same field",
+     "basis": "a record with the gate under the BROKER key or path refuses: native v3 record negatives that set a gate or broker path field to the other role's value at the same field (the record half; captured data that shows the gate at the broker's paths is refused by the capture rules, and their aliasing refusals serve the alias property)",
      "ids": [
       "R04",
       "R05",
@@ -347,9 +347,23 @@
      ]
     },
     {
+     "contract": "Native qualification profile v3",
+     "vectorSet": "crossVersion",
+     "basis": "a rollback's half of 'never reinterprets accepted data': native v3's cross-version cases that give a v3 record or capture back to the v2 reader, which refuses it. No adopted contract vector names an export; its source test comes with W05's release set",
+     "ids": [
+      "X05",
+      "X06",
+      "X07",
+      "X08",
+      "X12",
+      "X13",
+      "X14"
+     ]
+    },
+    {
      "contract": "I05 gate channel v3",
      "vectorSet": "transcripts",
-     "basis": "the gate's half of 'never reuses a generation or nonce' across an upgrade, which runs in a fresh generation (W02D 5.5): I05 v3 transcripts whose BIND_EXECUTION is refused as a replayed execution or a reused manifest (EXECUTION_REPLAY, MANIFEST_REUSED)",
+     "basis": "the gate's half of 'never reuses a generation or nonce' across an upgrade or a rollback: either needs the maintenance boot (W02D 5.5 M1), after which enrollment needs a fresh, non-reused generation (M3): I05 v3 transcripts whose BIND_EXECUTION is refused as a replayed execution or a reused manifest (EXECUTION_REPLAY, MANIFEST_REUSED)",
      "ids": [
       "T13",
       "T75",
@@ -365,7 +379,7 @@
      ]
     }
    ],
-   "vectors": 18,
+   "vectors": 25,
    "part": "SOURCE"
   },
   {
@@ -467,7 +481,7 @@
     {
      "contract": "Native qualification profile v3",
      "vectorSet": "negative",
-     "basis": "a record with the gate under the BROKER key or path refuses: native v3 record negatives that set a gate or broker path field to the other role's value at the same field",
+     "basis": "a record with the gate under the BROKER key or path refuses: native v3 record negatives that set a gate or broker path field to the other role's value at the same field (the record half; captured data that shows the gate at the broker's paths is refused by the capture rules, and their aliasing refusals serve the alias property)",
      "ids": [
       "R04",
       "R05",
@@ -508,9 +522,23 @@
      ]
     },
     {
+     "contract": "Native qualification profile v3",
+     "vectorSet": "crossVersion",
+     "basis": "a rollback's half of 'never reinterprets accepted data': native v3's cross-version cases that give a v3 record or capture back to the v2 reader, which refuses it. No adopted contract vector names an export; its source test comes with W05's release set",
+     "ids": [
+      "X05",
+      "X06",
+      "X07",
+      "X08",
+      "X12",
+      "X13",
+      "X14"
+     ]
+    },
+    {
      "contract": "I05 gate channel v3",
      "vectorSet": "transcripts",
-     "basis": "the gate's half of 'never reuses a generation or nonce' across an upgrade, which runs in a fresh generation (W02D 5.5): I05 v3 transcripts whose BIND_EXECUTION is refused as a replayed execution or a reused manifest (EXECUTION_REPLAY, MANIFEST_REUSED)",
+     "basis": "the gate's half of 'never reuses a generation or nonce' across an upgrade or a rollback: either needs the maintenance boot (W02D 5.5 M1), after which enrollment needs a fresh, non-reused generation (M3): I05 v3 transcripts whose BIND_EXECUTION is refused as a replayed execution or a reused manifest (EXECUTION_REPLAY, MANIFEST_REUSED)",
      "ids": [
       "T13",
       "T75",
@@ -526,7 +554,7 @@
      ]
     }
    ],
-   "vectors": 64,
+   "vectors": 71,
    "part": "INSTALLED"
   }
  ]

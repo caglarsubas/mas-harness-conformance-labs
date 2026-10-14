@@ -77,12 +77,14 @@ def strict(raw):
 
 def left_by(packet, relative):
     """The pin of `relative` as `packet` left it: the after-pin of the latest record, up to `packet`'s own in the append-only
-    registry, that added or changed it; None if none did."""
+    registry, that added or changed it; None if none did or a later one deleted it (review D2-5)."""
     records = strict(regular(ROOT / "fixtures/ci/checkpoints.json"))["records"]
     ids = [row["packetId"] for row in records]
     found = None
     for row in records[:ids.index(packet) + 1]:
         record = strict(regular(ROOT / row["path"]))
+        if relative in record.get("deleted", {}):
+            found = None
         found = record["added"].get(relative) or record["changed"].get(relative, {}).get("after") or found
     return found
 
