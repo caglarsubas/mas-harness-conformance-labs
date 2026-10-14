@@ -22,7 +22,6 @@ import struct
 import sys
 import threading
 import time
-from types import FunctionType
 
 from .canonical import byte_digest, canonical_bytes, canonical_digest, require_canonical_document
 from .crypto import b64url_decode, verify
@@ -34,7 +33,9 @@ from .live_linux_boundary import credentials, process_identity, _custody_identit
 from .live_mutation_admission import (require, document, retained_profile, validate_messages,
     _time, ZERO, admission_binding, _AdmissionLog, parse_reservations, cleanup_receipt,
     retained_qualification_record, retained_broker_binding, QUALIFICATION_PATH,
-    BrokerTranscript, broker_document, _create_record)
+    BrokerTranscript, broker_document, _create_record, validate_observed_manifest,
+    validate_absent_status, _absence_record, delete_request_body, validate_delete_response,
+    _completion_frame, _completion_terminal, _failure_cleanup)
 from .live_proxy_client import (_TLS, tls_context, credential_leaf, _check_certificate,
                                 read_http, http_message)
 from .live_supervisor import utc_now, _verify_reference_authority
@@ -2575,9 +2576,9 @@ class _ServerQualificationBinding:
 class _KernelSelfInspection:
     """Server-owned composition of authenticated expected data and read views.
 
-    This is NOT the completed _KernelQualification or an execution permit.
-    Peer custody, per-I/O cross-reader fencing and external broker enforcement
-    remain separate obligations. The server's containment refusal is unchanged.
+    The private _KernelQualification owns this self reader; original peer
+    channels own their role readers. Neither observation grants execution:
+    the independently installed broker owns the active enforcement gate.
     No PID, role, backend, callback, record or descriptor is caller-selectable.
     """
     def __init__(self, owner):
@@ -3032,16 +3033,151 @@ class _KernelBrokerInspection(_KernelSelfInspection):
         self._process_binding()
 
 
-def _fixed_probes():
-    try:
-        from . import live_fixed_probes as module
-    except ImportError as exc:
-        raise ConformanceError("PROXY_FIXED_PROBES_UNAVAILABLE", "CONF-LIVE-004 is not installed") from exc
-    require(getattr(getattr(module, "__loader__", None), "archive", None) == EXECUTABLE,
-            "PROXY_PROBE_CUSTODY")
-    for name in ("require_server_containment", "execute_server_probe"):
-        require(type(getattr(module, name, None)) is FunctionType, "PROXY_FIXED_PROBES_UNAVAILABLE")
-    return module
+class _KernelQualification:
+    """One installed-server qualification lifetime, never a worker grant.
+
+    Owns the fixed self-reader composition and borrows the two original peer
+    channels. A channel retains/qualifies its own socket, pidfd and role readers;
+    this owner joins those lifetimes without closing their borrowed descriptors.
+    No worker is inspected or started here. Records remain expected values,
+    while the fixed native readers provide the actual kernel/code observations.
+    """
+    def __init__(self, owner):
+        self.owner = owner
+        self.closed = self.failed = self._self_checking = self._peer_checking = False
+        self.cleanup_failure = None
+        self._self_original = None
+        self._peers = {}
+        try:
+            require(type(self) is _KernelQualification and type(owner) is NativeProxyServer,
+                    "KERNEL_QUALIFICATION_OWNER")
+            owner._owner_check()
+            require(owner.qualification is owner._qualification_original is self
+                    and owner.self_inspection is None
+                    and type(owner.qualification_binding) is _ServerQualificationBinding
+                    and owner.qualification_binding.owner is owner,
+                    "KERNEL_QUALIFICATION_OWNER")
+            self.binding, self.files, self.deadline = owner.qualification_binding, owner.files, owner.deadline
+            self.pid, self.thread = owner.pid, owner.thread
+            self.last, self.wall = time.monotonic(), require_time(utc_now(), "now")
+            self._self_original = owner.self_inspection = object.__new__(_KernelSelfInspection)
+            # Retain before construction: partial readers still have exactly
+            # one close owner if an OS read or its post-I/O guard refuses.
+            _KernelSelfInspection.__init__(self._self_original, owner)
+            self._guard()
+        except BaseException:
+            self.failed = True
+            try:
+                self.close()
+            except BaseException:
+                pass  # keep the original refusal and sticky close uncertainty
+            raise
+
+    def _guard(self):
+        require(type(self) is _KernelQualification and not self.closed and not self.failed,
+                "KERNEL_QUALIFICATION_UNAVAILABLE")
+        owner = self.owner
+        require(type(owner) is NativeProxyServer, "KERNEL_QUALIFICATION_OWNER")
+        owner._owner_check()
+        require(owner.qualification is owner._qualification_original is self
+                and (owner.pid, owner.thread, owner.deadline) == (self.pid, self.thread, self.deadline)
+                and owner.qualification_binding is self.binding and owner.files is self.files
+                and self.binding.owner is owner and self.binding.files is self.files
+                and not self.binding.closed and not self.binding.poisoned
+                and type(self._self_original) is _KernelSelfInspection
+                and owner.self_inspection is self._self_original
+                and self._self_original.owner is owner
+                and not self._self_original.closed and not self._self_original.failed,
+                "KERNEL_QUALIFICATION_OWNER_CHANGED")
+        now, wall = time.monotonic(), require_time(utc_now(), "now")
+        require(self.last <= now < self.deadline and self.wall <= wall,
+                "KERNEL_QUALIFICATION_CLOCK_OR_EXPIRY")
+        self.last, self.wall = now, wall
+        for role, pin in self._peers.items():
+            require(self._peer_pin(role, pin[0]) == pin, "KERNEL_QUALIFICATION_PEER_REPLACED")
+
+    def check_self(self):
+        try:
+            require(not self._self_checking, "KERNEL_QUALIFICATION_REENTRANT")
+            self._self_checking = True
+            self._guard()
+            before, wall = self.last, self.wall
+            require(_KernelSelfInspection.check(self._self_original) is None,
+                    "KERNEL_QUALIFICATION_CHECK_RESULT")
+            self._guard()
+            require(self.last < before + 2 and (self.wall - wall).total_seconds() < 2,
+                    "KERNEL_QUALIFICATION_DEADLINE")
+        except BaseException:
+            self.failed = True
+            raise
+        finally:
+            self._self_checking = False
+
+    def _peer_pin(self, role, peer):
+        owner = self.owner
+        if role == "OBSERVER":
+            require(type(peer) is _Observer and owner.observer is peer,
+                    "KERNEL_QUALIFICATION_PEER_OWNER")
+            kind = _KernelObserverInspection
+        elif role == "BROKER":
+            require(type(peer) is _Broker and owner.broker is owner._broker_original is peer,
+                    "KERNEL_QUALIFICATION_PEER_OWNER")
+            kind = _KernelBrokerInspection
+        else:
+            require(False, "KERNEL_QUALIFICATION_ROLE")
+        require(peer.owner is owner and not peer.closed and not peer.failed
+                and peer.deadline == self.deadline and type(peer.inspection) is kind
+                and peer.inspection is peer._inspection_original
+                and peer.inspection.peer is peer and peer.inspection.owner is owner
+                and peer.inspection.binding is self.binding
+                and peer.inspection.server_inspection is self._self_original
+                and not peer.inspection.closed and not peer.inspection.failed,
+                "KERNEL_QUALIFICATION_PEER_CHANGED")
+        return (peer, peer._inspection_original, peer._socket_original,
+                peer._socket_fd, peer._socket_pin, peer._pidfd_original,
+                peer._pidfd_pin, peer._peer_original, peer._process_original,
+                peer.parent, peer.socket_identity)
+
+    def check_peer(self, role, retained_peer):
+        try:
+            require(type(role) is str and not self._peer_checking and not self._self_checking,
+                    "KERNEL_QUALIFICATION_REENTRANT")
+            self._peer_checking = True
+            self._guard()
+            before, wall = self.last, self.wall
+            pin = self._peer_pin(role, retained_peer)
+            if role not in self._peers:
+                self._peers[role] = pin  # no replacement/re-enrollment, even on failure
+            require(self._peers[role] == pin, "KERNEL_QUALIFICATION_PEER_REPLACED")
+            # Class dispatch prevents an instance callback from granting a
+            # qualification. Native role readers run within the channel's
+            # original two-second phase, including all post-I/O custody checks.
+            checker = _Observer.check if role == "OBSERVER" else _Broker.check
+            require(checker(retained_peer) is None, "KERNEL_QUALIFICATION_CHECK_RESULT")
+            self._guard()
+            require(self._peer_pin(role, retained_peer) == pin,
+                    "KERNEL_QUALIFICATION_PEER_REPLACED")
+            require(self.last < before + 2 and (self.wall - wall).total_seconds() < 2,
+                    "KERNEL_QUALIFICATION_DEADLINE")
+        except BaseException:
+            self.failed = True
+            raise
+        finally:
+            self._peer_checking = False
+
+    def close(self):
+        if not self.closed:
+            self.closed = True
+            resource, self._self_original = self._self_original, None
+            # Peer channels close their own role readers, sockets and pidfds.
+            # Do not close a caller-substituted owner attribute or borrowed file.
+            if resource is not None and hasattr(resource, "closed"):
+                try:
+                    _KernelSelfInspection.close(resource)
+                except BaseException as exc:
+                    self.cleanup_failure = self.cleanup_failure or exc
+        if self.cleanup_failure is not None:
+            raise self.cleanup_failure
 
 
 class _Observer:
@@ -3268,7 +3404,8 @@ class _Broker:
 
     Only the installed server constructs this channel. Bootstrap/check sends
     no frame. The separate begin phase sends only its internally bound DISPATCH;
-    the broker alone owns workers and no API operation is implemented here.
+    the broker alone owns workers. API effects use separate server-owned action
+    objects and do not make a received broker frame an execution permit.
     """
     def __init__(self, owner):
         self.owner, self.sock, self.pidfd = owner, None, None
@@ -3287,7 +3424,15 @@ class _Broker:
         self.created = self._created_original = None
         self.result = self._result_original = None
         self.retirement = self._retirement_original = None
+        self.credential = self._credential_original = None
+        self.get_action = self._get_action_original = None
+        self.absence = self._absence_original = None
+        self.last_get = self._last_get_original = None
+        self.last_get_raw = self._last_get_raw_original = None
+        self.delete_action = self._delete_action_original = None
+        self.completion = self._completion_original = None
         self._attempted_cases = set()
+        self.case_history, self.case_history_raw = (), b"[]"
         self.deadline = owner.deadline
         self.last_wall, self.last_mono = None, time.monotonic()
         try:
@@ -3362,6 +3507,10 @@ class _Broker:
                 and type(self.binding) is _ServerQualificationBinding
                 and self.owner.qualification_binding is self.binding and self.binding.owner is self.owner,
                 "BROKER_OWNER_CHANGED")
+        require(type(self.case_history) is tuple and len(self.case_history) <= len(CASES)
+                and all(type(raw) is bytes for raw in self.case_history)
+                and canonical_bytes([byte_digest(raw) for raw in self.case_history]) == self.case_history_raw,
+                "BROKER_CASE_HISTORY_CHANGED")
         self.owner._base_check()  # no broker/observer I/O or credential acquisition
         require(self.binding.check() is None, "BROKER_BINDING_CHECK_RESULT")
         require(self._binding_raw is None or self.binding._broker_raw == self._binding_raw,
@@ -3495,6 +3644,64 @@ class _Broker:
                 pass  # original cleanup failure stays sticky; never reconnect
             raise
 
+    def check_action_ownership(self):
+        """Driver pre-credential check, not a substitute for per-I/O admission."""
+        try:
+            with self._phase():
+                events = self.events
+                require(type(events) is _BrokerEvents and events is self._events_original
+                        and self.api is self._api_original is None, "BROKER_ACTION_PREFLIGHT_OWNER")
+                _BrokerEvents._check(events)
+                action = document(events.transcript.pending, 16384)
+                require(type(action) is dict and set(action) == {"actionId", "verb", "manifestDigest"}
+                        and action["verb"] in ("CREATE", "GET", "DELETE")
+                        and action["manifestDigest"] in document(events.binding_raw)["caseResourceDigests"][events.start.operation],
+                        "BROKER_ACTION_PREFLIGHT_SCOPE")
+                if action["verb"] == "CREATE":
+                    require(type(self.intent) is _BrokerIntent and self.intent is self._intent_original
+                            and self.intent.committed and not self.intent.failed, "BROKER_CREATE_INTENT_REQUIRED")
+                    _BrokerIntent._check(self.intent)
+                else:
+                    manifests = [row["manifest"] for row in self.owner.profile["resources"]
+                                 if row["manifestDigest"] == action["manifestDigest"]]
+                    require(len(manifests) == 1, "BROKER_GET_MANIFEST_REQUIRED")
+                    manifest = manifests[0]
+                    states, _, _ = parse_reservations(events.start.ledger_raw)
+                    current = states[(self.owner.envelope["tenantId"], self.owner.envelope["nonce"])]
+                    key = (manifest["apiVersion"], manifest["kind"], manifest["metadata"]["namespace"],
+                           manifest["metadata"]["name"])
+                    row = current.get("resources", {}).get(key)
+                    require(current["held"] and current["current"] == events.start.operation
+                            and row is not None and row["state"] == "CREATED"
+                            and row["operation"] == events.start.operation
+                            and row["manifestDigest"] == action["manifestDigest"]
+                            and type(row["uid"]) is str and row["uid"]
+                            and row["actionId"] < action["actionId"], "BROKER_GET_CREATED_UID_REQUIRED")
+                    if action["verb"] == "DELETE":
+                        prior = self.last_get
+                        require(type(prior) is _BrokerGetAction and prior is self._last_get_original
+                                and prior.events is events and prior.start is events.start
+                                and prior.retired and prior.advanced and prior.sent and not prior.failed
+                                and prior.outcome == "PRESENT" and prior.deadline == self.deadline
+                                and self.last_get_raw == self._last_get_raw_original == prior._cleanup_snapshot()
+                                and events.handoffs and document(events.handoffs[-1])["verb"] == "GET"
+                                and document(events.handoffs[-1])["actionId"] == document(prior.action_raw)["actionId"]
+                                and document(prior.action_raw)["manifestDigest"] == action["manifestDigest"]
+                                and prior.observed_mono <= time.monotonic() < min(self.deadline, prior.observed_mono + 5),
+                                "BROKER_DELETE_FRESH_GET_REQUIRED")
+                        require(not any(document(raw)["verb"] == "DELETE"
+                            and document(raw)["manifestDigest"] == action["manifestDigest"] for raw in events.handoffs),
+                            "BROKER_DELETE_ALREADY_ATTEMPTED")
+                        validate_observed_manifest(prior.response_raw, canonical_bytes(manifest), row["uid"])
+                _BrokerEvents._check(events)
+        except BaseException:
+            self.failed = True
+            try:
+                _Broker.close(self)
+            except BaseException:
+                pass  # no credential, API socket or corrective deletion is acquired
+            raise
+
     def record_create_intent(self):
         """Retain this pending CREATE's durable intent; no caller data or effect."""
         try:
@@ -3613,6 +3820,235 @@ class _Broker:
                 pass  # never undo the transcript, retry a close, or release accounting
             raise
 
+    def handoff_create_result(self):
+        """Consume retired CREATE owners; preserve the original run and channel.
+
+        This authorizes no API call, cleanup, worker or new lifetime. It only
+        makes the existing receiver eligible to validate the next chained frame.
+        The durable UID stays held and old action objects can never be reused.
+        """
+        try:
+            require(not self.closed and not self.failed and not self.busy,
+                    "BROKER_HANDOFF_UNAVAILABLE")
+            events = self.events
+            require(type(events) is _BrokerEvents and events is self._events_original,
+                    "BROKER_HANDOFF_EVENTS_REQUIRED")
+            with self._phase():
+                _BrokerEvents._handoff_create(events)
+            require(self.events is self._events_original is events,
+                    "BROKER_HANDOFF_OWNER_CHANGED")
+        except BaseException:
+            self.failed = True
+            try:
+                _Broker.close(self)
+            except BaseException:
+                pass  # retired FDs and consumed resources are never reopened
+            raise
+
+    def exchange_api_get(self):
+        """Read only the original pending GET's recorded UID; send no result."""
+        try:
+            require(not self.closed and not self.failed and not self.busy
+                    and self.get_action is self._get_action_original is None,
+                    "BROKER_GET_ALREADY_ATTEMPTED")
+            self.get_action = self._get_action_original = object.__new__(_BrokerGetAction)
+            self.get_action.__init__(self)
+            _BrokerGetAction._check(self.get_action)
+            self.get_action.complete = True
+        except BaseException:
+            self._fail_get()
+            raise
+
+    def send_get_result(self):
+        """Deliver the original bounded PRESENT observation once, not cleanup."""
+        try:
+            action = self.get_action
+            require(type(action) is _BrokerGetAction and action is self._get_action_original,
+                    "BROKER_GET_OWNER_CHANGED")
+            _BrokerGetAction.send_result(action)
+        except BaseException:
+            self._fail_get()
+            raise
+
+    def record_get_absence(self):
+        """Persist only the original authenticated GET's scoped NotFound fact."""
+        try:
+            require(not self.closed and not self.failed and not self.busy
+                    and self.absence is self._absence_original is None,
+                    "BROKER_ABSENCE_ALREADY_ATTEMPTED")
+            self.absence = self._absence_original = object.__new__(_BrokerAbsence)
+            self.absence.__init__(self)
+            _BrokerAbsence._state_check(self.absence)
+            self.absence.committed = True
+        except BaseException:
+            if type(self._absence_original) is _BrokerAbsence:
+                _BrokerAbsence._poison(self._absence_original)
+            self._fail_get()
+            raise
+
+    def handoff_get_result(self):
+        """Close the original GET connection before advancing the same channel."""
+        try:
+            action = self.get_action
+            require(type(action) is _BrokerGetAction and action is self._get_action_original,
+                    "BROKER_GET_OWNER_CHANGED")
+            _BrokerGetAction.handoff(action)
+        except BaseException:
+            self._fail_get()
+            raise
+
+    def _fail_get(self):
+        self.failed = True
+        if type(self._get_action_original) is _BrokerGetAction:
+            self._get_action_original.failed = True
+        try:
+            _Broker.close(self)
+        except BaseException:
+            pass  # no read retry, guessed absence, journal rollback or resource release
+
+    def exchange_api_delete(self):
+        """Delete only the original UID/version from the immediately prior GET."""
+        try:
+            require(not self.closed and not self.failed and not self.busy
+                    and self.delete_action is self._delete_action_original is None,
+                    "BROKER_DELETE_ALREADY_ATTEMPTED")
+            self.delete_action = self._delete_action_original = object.__new__(_BrokerDeleteAction)
+            self.delete_action.__init__(self)
+            _BrokerDeleteAction._check(self.delete_action)
+            self.delete_action.complete = True
+        except BaseException:
+            self._fail_delete()
+            raise
+
+    def send_delete_result(self):
+        """Deliver a bounded DELETE acknowledgement, never an absence claim."""
+        try:
+            action = self.delete_action
+            require(type(action) is _BrokerDeleteAction and action is self._delete_action_original,
+                    "BROKER_DELETE_OWNER_CHANGED")
+            _BrokerDeleteAction.send_result(action)
+        except BaseException:
+            self._fail_delete()
+            raise
+
+    def handoff_delete_result(self):
+        """Retire this connection, retaining the UID until a later absence GET."""
+        try:
+            action = self.delete_action
+            require(type(action) is _BrokerDeleteAction and action is self._delete_action_original,
+                    "BROKER_DELETE_OWNER_CHANGED")
+            _BrokerDeleteAction.handoff(action)
+        except BaseException:
+            self._fail_delete()
+            raise
+
+    def _fail_delete(self):
+        self.failed = True
+        if type(self._delete_action_original) is _BrokerDeleteAction:
+            self._delete_action_original.failed = True
+        try:
+            _Broker.close(self)
+        except BaseException:
+            pass  # retain CREATED accounting; never retry or weaken a precondition
+
+    def seal_cleanup(self):
+        """Seal the server's receipt/cleanup facts, without claiming terminal delivery."""
+        try:
+            require(not self.closed and not self.failed and not self.busy
+                    and self.completion is self._completion_original is None, "BROKER_COMPLETION_ALREADY_OWNED")
+            self.completion = self._completion_original = object.__new__(_BrokerCompletion)
+            self.completion.__init__(self)
+            _BrokerCompletion._check(self.completion)
+            self.completion.committed = True
+        except BaseException:
+            self._fail_completion()
+            raise
+
+    def send_cleanup(self):
+        try:
+            require(type(self.completion) is _BrokerCompletion and self.completion is self._completion_original,
+                    "BROKER_COMPLETION_OWNER_CHANGED")
+            _BrokerCompletion.send_cleanup(self.completion)
+        except BaseException:
+            self._fail_completion()
+            raise
+
+    def poll_terminal(self):
+        """One bounded same-channel poll; no reconnect and no new execution lifetime."""
+        try:
+            require(type(self.completion) is _BrokerCompletion and self.completion is self._completion_original,
+                    "BROKER_COMPLETION_OWNER_CHANGED")
+            return _BrokerCompletion.poll_terminal(self.completion)
+        except BaseException:
+            self._fail_completion()
+            raise
+
+    def record_terminal(self):
+        try:
+            require(type(self.completion) is _BrokerCompletion and self.completion is self._completion_original,
+                    "BROKER_COMPLETION_OWNER_CHANGED")
+            _BrokerCompletion.record_terminal(self.completion)
+        except BaseException:
+            self._fail_completion()
+            raise
+
+    def finish_case(self):
+        """Retire one clean completed case without reopening its nonce or channel."""
+        try:
+            completion = self.completion
+            require(type(completion) is _BrokerCompletion and completion is self._completion_original
+                    and completion.complete and completion.terminal_advanced and not completion.failed,
+                    "BROKER_CASE_TERMINAL_REQUIRED")
+            _BrokerCompletion._check(completion)
+            with self._phase():
+                _BrokerCompletion._guard(completion)
+                cleanup, terminal = document(completion.cleanup_raw), document(completion.terminal_raw)
+                require(completion.receipt_status == "PASS" and cleanup["state"] == "CLEAN"
+                        and terminal["payload"]["status"] == "COMPLETED", "BROKER_CASE_NOT_CLEAN_COMPLETED")
+                states, _, _ = parse_reservations(completion.final_ledger)
+                current = states[(self.owner.envelope["tenantId"], self.owner.envelope["nonce"])]
+                previous = [document(raw) for raw in self.case_history]
+                cases = [row["caseId"] for row in previous] + [completion.operation]
+                require(len(cases) == len(set(cases)) <= len(CASES)
+                        and set(cases) == self._attempted_cases
+                        and current["current"] is None and current["done"] == current["terminalCases"] == cases
+                        and "pendingCompletion" not in current
+                        and current["lastTerminalDigest"] == byte_digest(completion.terminal_raw)
+                        and current["held"] is (len(cases) < len(CASES)), "BROKER_CASE_HISTORY_CHANGED")
+                require(self._io(select.select, [self.sock], [], [self.sock], 0) == ([], [], []),
+                        "BROKER_CASE_TRAILING_DATA")
+                _BrokerCompletion._guard(completion)
+                dispatch = document(completion.dispatch_raw)
+                archive = canonical_bytes({"caseId": completion.operation, "challenge": dispatch["challenge"],
+                    "executionId": terminal["executionId"], "receiptDigest": byte_digest(completion.receipt_raw),
+                    "terminalDigest": byte_digest(completion.terminal_raw),
+                    "ledgerDigest": byte_digest(completion.final_ledger),
+                    "observerBootId": completion.start.observation_pin[0], "generation": dispatch["generation"]})
+                self.case_history += (archive,)
+                self.case_history_raw = canonical_bytes([byte_digest(raw) for raw in self.case_history])
+                # Retire only completed local owners. The peer, credential cache,
+                # ledger, deadline, attempted cases and all UID history survive.
+                for name in ("dispatch", "events", "completion", "last_get", "last_get_raw"):
+                    setattr(self, name, None)
+                    setattr(self, "_" + name + "_original", None)
+                self.owner.active_operation = None
+                self._check_peer()
+                require(self._io(completion.storage.read) == completion.final_ledger,
+                        "BROKER_CASE_HISTORY_CHANGED")
+            # No old completion can be reused: its owner check now refuses.
+        except BaseException:
+            self._fail_completion()
+            raise
+
+    def _fail_completion(self):
+        self.failed = True
+        if type(self._completion_original) is _BrokerCompletion:
+            _BrokerCompletion._poison(self._completion_original)
+        try:
+            _Broker.close(self)
+        except BaseException:
+            pass  # never undo sealed cleanup or invent an unreceived terminal
+
     def close(self):
         if not self.closed:
             self.closed = True
@@ -3657,8 +4093,8 @@ class _BrokerStart:
     """One fixed DISPATCH/STARTED phase, not a completed execution or API grant.
 
     Borrows the original broker and server resources; owns only private data.
-    The complete receipt/action/cleanup driver and native factory integration
-    remain separate. No caller frame, action or operation is accepted here.
+    Receipt/action/cleanup owners and the server driver compose later phases.
+    No caller frame, action or operation is accepted here.
     """
     def __init__(self, broker):
         self.failed, self.started = False, None
@@ -3696,6 +4132,8 @@ class _BrokerStart:
             observed = self._check()
             challenge = broker._io(os.urandom, 32)
             require(type(challenge) is bytes and len(challenge) == 32, "BROKER_CHALLENGE_INVALID")
+            require(all(document(raw)["challenge"] != challenge.hex() for raw in broker.case_history),
+                    "BROKER_CHALLENGE_REPLAY")
             dispatch = {"schemaVersion": "planeon.internal.broker-dispatch/v1",
                 "operation": "EXECUTE_FIXED_PROBE",
                 "bindingDigest": byte_digest(self.binding_raw), "reservationDigest": byte_digest(self.reservation_raw),
@@ -3723,6 +4161,8 @@ class _BrokerStart:
             transcript = BrokerTranscript(self.binding_raw, self.dispatch_raw)
             frame = transcript.accept(raw, "BROKER")
             require(frame["kind"] == "STARTED", "BROKER_CONTROLLED_START_REQUIRED")
+            require(all(document(raw)["executionId"] != frame["executionId"] for raw in broker.case_history),
+                    "BROKER_EXECUTION_REPLAY")
             self._check()
             self.transcript = self._transcript_original = transcript
             # Publish only after the enclosing broker phase's last guard passes.
@@ -3772,6 +4212,8 @@ class _BrokerStart:
         require(start <= now < end and 0 < (end - start).total_seconds() <= 5, "BROKER_OBSERVATION_EXPIRED")
         pin = (observed["observerBootId"], observed["generation"])
         require(self.observation_pin is None or self.observation_pin == pin, "BROKER_GENERATION_CHANGED")
+        require(all((document(raw)["observerBootId"], document(raw)["generation"]) == pin
+                    for raw in broker.case_history), "BROKER_GENERATION_CHANGED")
         self.observation_pin = pin
         # The observer call cannot change the durable operation or owned objects.
         self._state_check()
@@ -3787,6 +4229,7 @@ class _BrokerEvents:
     """
     def __init__(self, broker):
         self.failed = False
+        self.handoffs, self.handoffs_raw = (), b"[]"
         try:
             require(type(broker) is _Broker, "BROKER_EVENTS_OWNER")
             self.broker, self.owner = broker, broker.owner
@@ -3838,11 +4281,46 @@ class _BrokerEvents:
         broker._guard()
         require(self._snapshot(self.transcript) == self.transcript_raw
                 and not self.transcript.poisoned, "BROKER_TRANSCRIPT_CHANGED")
+        require(type(self.handoffs) is tuple and len(self.handoffs) <= 256
+                and all(type(raw) is bytes for raw in self.handoffs)
+                and canonical_bytes([byte_digest(raw) for raw in self.handoffs]) == self.handoffs_raw,
+                "BROKER_HANDOFF_HISTORY_CHANGED")
 
     def _check(self):
         self._state_check()
         self.start._check()  # original RUNNING history, observer generation and native peer
         self._state_check()
+
+    def _handoff_create(self):
+        self._check()
+        broker, retirement = self.broker, self.broker.retirement
+        require(type(retirement) is _BrokerCreateRetirement
+                and retirement is broker._retirement_original and retirement.complete is True
+                and retirement.retired is True and retirement.advanced is True
+                and retirement.events is self and not retirement.failed,
+                "BROKER_HANDOFF_RETIREMENT_REQUIRED")
+        _BrokerCreateRetirement._check(retirement)
+        require(self.transcript.pending is self.transcript.cleanup is self.transcript.terminal is None
+                and not self.transcript.chunks and len(self.handoffs) < 256,
+                "BROKER_HANDOFF_PHASE")
+        action = document(retirement.result.action_raw, 16384)
+        require(action["verb"] == "CREATE" and action["actionId"] in self.transcript.actions
+                and self.transcript_raw == retirement.after
+                and self.start.ledger_raw == retirement.ledger_raw,
+                "BROKER_HANDOFF_STATE")
+        archive = canonical_bytes({"actionId": action["actionId"], "verb": "CREATE", "manifestDigest": action["manifestDigest"],
+            "resultDigest": byte_digest(retirement.frame_raw), "createdDigest": retirement.created.digest,
+            "ledgerDigest": byte_digest(retirement.ledger_raw), "transcriptDigest": byte_digest(retirement.after)})
+        require(all(document(raw)["actionId"] != action["actionId"] for raw in self.handoffs),
+                "BROKER_HANDOFF_REPLAY")
+        # Consume only the already-closed action owners, with no I/O between
+        # final retired-state validation and the local one-way handoff.
+        for name in ("api", "intent", "exchange", "created", "result", "retirement"):
+            setattr(broker, name, None)
+            setattr(broker, "_" + name + "_original", None)
+        self.handoffs += (archive,)
+        self.handoffs_raw = canonical_bytes([byte_digest(raw) for raw in self.handoffs])
+        self._check()  # unchanged deadline, original peer/generation and exact UID history
 
     def receive(self):
         try:
@@ -3850,6 +4328,11 @@ class _BrokerEvents:
             transcript, broker = self.transcript, self.broker
             require(broker.retirement is broker._retirement_original is None,
                     "BROKER_ACTION_HANDOFF_REQUIRED")
+            require(broker.get_action is broker._get_action_original is None,
+                    "BROKER_GET_HANDOFF_REQUIRED")
+            require(broker.delete_action is broker._delete_action_original is None,
+                    "BROKER_DELETE_HANDOFF_REQUIRED")
+            require(broker.completion is broker._completion_original is None, "BROKER_CLEANUP_ALREADY_SEALED")
             require(transcript.pending is None, "BROKER_RESOURCE_RESULT_REQUIRED")
             require(transcript.cleanup is None and transcript.terminal is None,
                     "BROKER_INBOUND_PHASE_CLOSED")
@@ -4030,17 +4513,33 @@ class _BrokerApi:
             self.endpoint_raw, self.ca = self._inputs()
             self.endpoint = document(self.endpoint_raw)
             address = ipaddress.ip_address(self.endpoint["ipAddress"])
+            # The closed signed envelope carries the IP literal, not the
+            # qualification record's derived addressFamily field. Derive from
+            # that authenticated literal; a supplied private projection must
+            # still agree. Never add fields to or re-sign the envelope here.
+            family = "IPV4" if address.version == 4 else "IPV6"
             require(str(address) == self.endpoint["ipAddress"] and not address.is_unspecified
                     and not address.is_multicast and not (address.version == 6 and
                     (address.ipv4_mapped is not None or address.scope_id is not None))
-                    and self.endpoint["addressFamily"] == ("IPV4" if address.version == 4 else "IPV6"),
+                    and self.endpoint.get("addressFamily", family) == family,
                     "API_ENDPOINT_ADDRESS")
             self.target = (str(address), self.endpoint["port"]) if address.version == 4 else (str(address), self.endpoint["port"], 0, 0)
             self._target_original = self.target
             self._transport_check()
             path = self.endpoint["credentialFileReference"]
-            require(path not in self.secrets.raw, "API_CREDENTIAL_ALREADY_READ")
-            raw = self._io(self.secrets.read, path, mode=0o400, maximum=262144)
+            credential = broker._credential_original
+            require(broker.credential is credential, "API_CREDENTIAL_OWNER_CHANGED")
+            if credential is None:
+                require(path not in self.secrets.raw, "API_CREDENTIAL_ALREADY_READ")
+                raw = self._io(self.secrets.read, path, mode=0o400, maximum=262144)
+            else:
+                require(type(credential) is tuple and len(credential) == 3
+                        and credential[0] is self.secrets and credential[1] == path
+                        and type(self.secrets.raw.get(path)) is bytes
+                        and byte_digest(self.secrets.raw[path]) == credential[2],
+                        "API_CREDENTIAL_OWNER_CHANGED")
+                raw = self.secrets.raw[path]  # original retained read, never reopen a credential
+                self._transport_check()
             self._io(_check_certificate, credential_leaf(raw), self.owner.profile, self.endpoint, client=True)
             try:
                 self.memfd = self._memfd_original = os.memfd_create("planeon-api-identity", os.MFD_CLOEXEC | os.MFD_ALLOW_SEALING)
@@ -4092,6 +4591,10 @@ class _BrokerApi:
             self._transport_check()
             require(self.tls.handshake(self.owner.profile, self.endpoint) is None, "API_HANDSHAKE_RESULT")
             self._transport_check()
+            if credential is None:
+                require(broker.credential is broker._credential_original is None,
+                        "API_CREDENTIAL_OWNER_CHANGED")
+                broker.credential = broker._credential_original = (self.secrets, path, byte_digest(raw))
             self.ready = True
         except BaseException:
             self.failed = True
@@ -4175,7 +4678,26 @@ class _BrokerApi:
                             and broker.exchange is broker._exchange_original, "API_EXCHANGE_OWNER_CHANGED")
                     broker.exchange._state_check()
                     broker.exchange.intent._check()
+                if broker.get_action is not None or broker._get_action_original is not None:
+                    require(type(broker.get_action) is _BrokerGetAction
+                            and broker.get_action is broker._get_action_original,
+                            "API_GET_OWNER_CHANGED")
+                    _BrokerGetAction._state_check(broker.get_action)
+                if broker.delete_action is not None or broker._delete_action_original is not None:
+                    require(type(broker.delete_action) is _BrokerDeleteAction
+                            and broker.delete_action is broker._delete_action_original,
+                            "API_DELETE_OWNER_CHANGED")
+                    _BrokerDeleteAction._state_check(broker.delete_action)
             self.secrets.check()
+            credential = broker._credential_original
+            require(broker.credential is credential, "API_CREDENTIAL_OWNER_CHANGED")
+            if credential is not None:
+                require(type(credential) is tuple and len(credential) == 3
+                        and credential[0] is self.secrets
+                        and credential[1] == self.endpoint["credentialFileReference"]
+                        and type(self.secrets.raw.get(credential[1])) is bytes
+                        and byte_digest(self.secrets.raw[credential[1]]) == credential[2],
+                        "API_CREDENTIAL_OWNER_CHANGED")
             require(canonical_bytes(self.events.transcript.pending) == self.action_raw
                     and self._inputs() == (self.endpoint_raw, self.ca)
                     and canonical_bytes(self.endpoint) == self.endpoint_raw
@@ -4199,6 +4721,16 @@ class _BrokerApi:
                 require(type(broker.exchange) is _BrokerCreateExchange
                         and broker.exchange is broker._exchange_original, "API_EXCHANGE_OWNER_CHANGED")
                 broker.exchange._state_check()
+            if broker.get_action is not None or broker._get_action_original is not None:
+                require(type(broker.get_action) is _BrokerGetAction
+                        and broker.get_action is broker._get_action_original,
+                        "API_GET_OWNER_CHANGED")
+                _BrokerGetAction._state_check(broker.get_action)
+            if broker.delete_action is not None or broker._delete_action_original is not None:
+                require(type(broker.delete_action) is _BrokerDeleteAction
+                        and broker.delete_action is broker._delete_action_original,
+                        "API_DELETE_OWNER_CHANGED")
+                _BrokerDeleteAction._state_check(broker.delete_action)
         finally:
             self.checking = False
 
@@ -4332,6 +4864,651 @@ class _BrokerCreateExchange:
             except BaseException:
                 pass
             raise
+
+
+def _read_api_get_response(tls):
+    """Strict server-only resource response; HTTP404 stays a negative status.
+
+    No change to the campaign HTTP codec, no generic status fallback and no
+    automatic retry. A404 body still needs original resource/UID validation.
+    """
+    require(type(tls) is _TLS and type(tls.owner) is _BrokerApi
+            and tls.owner.tls is tls.owner._tls_original is tls, "API_GET_TLS_REQUIRED")
+    data = bytearray()
+    header_deadline = min(tls.deadline, time.monotonic() + 10)
+    while b"\r\n\r\n" not in data:
+        require(len(data) < 16384, "HTTP_HEADERS_SIZE")
+        part = tls.read(min(4096, 16384 - len(data)), header_deadline)
+        require(part, "HTTP_TRUNCATED_HEADERS")
+        data.extend(part)
+    headers, body = bytes(data).split(b"\r\n\r\n", 1)
+    require(len(headers) + 4 <= 16384, "HTTP_HEADERS_INVALID")
+    lines, fields = headers.split(b"\r\n"), {}
+    require(1 <= len(lines) <= 32, "HTTP_HEADERS_INVALID")
+    require(lines[0] in (b"HTTP/1.1 200 OK", b"HTTP/1.1 404 Not Found"), "HTTP_STATUS_INVALID")
+    for line in lines[1:]:
+        require(b": " in line and not line.startswith((b" ", b"\t")), "HTTP_HEADERS_INVALID")
+        name, value = line.split(b": ", 1)
+        name = name.lower()
+        require(name in (b"content-type", b"content-length", b"connection") and name not in fields
+                and value and all(32 <= n <= 126 for n in value), "HTTP_HEADER_FORBIDDEN")
+        fields[name] = value
+    require(set(fields) == {b"content-type", b"content-length", b"connection"}
+            and fields[b"content-type"] == b"application/json" and fields[b"connection"] == b"close"
+            and re.fullmatch(b"0|[1-9][0-9]{0,6}", fields[b"content-length"]), "HTTP_HEADERS_INVALID")
+    size = int(fields[b"content-length"])
+    require(0 < size <= 16384, "BROKER_GET_RESPONSE_SIZE")
+    require(len(body) <= size, "HTTP_SURPLUS")
+    while len(body) < size:
+        part = tls.read(min(65536, size + 1 - len(body)))
+        require(part, "HTTP_TRUNCATED_BODY")
+        body += part
+        require(len(body) <= size, "HTTP_SURPLUS")
+    require(tls.ssl.pending() == 0, "HTTP_PIPELINING")
+    require(tls.read(1) == b"", "HTTP_SURPLUS")
+    return lines[0], body
+
+
+class _BrokerGetAction:
+    """One server-owned GET exchange, result and retirement.
+
+    The recorded CREATE UID is the upper bound, not an invitation to adopt a
+    named object. A generic transport error is never ABSENT. This owner writes
+    no journal row; the separate absence recorder must commit before an ABSENT
+    result. Neither object alone can release capacity or complete cleanup.
+    """
+    def __init__(self, broker):
+        self.failed = self.complete = self.attempted = self.send_attempted = False
+        self.sent = self.retired = self.advanced = False
+        self.response_raw = self._response_original = None
+        self.response_status = self._status_original = None
+        self.outcome = None
+        self.frame_raw = self.after = None
+        self.observed_mono = self._observed_mono_original = None
+        try:
+            require(type(self) is _BrokerGetAction and type(broker) is _Broker
+                    and broker.get_action is broker._get_action_original is self,
+                    "BROKER_GET_OWNER")
+            self.broker, self.owner = broker, broker.owner
+            self.api, self.events, self.start = broker.api, broker.events, broker.dispatch
+            self._cleanup_api_original = self.api
+            require(type(self.api) is _BrokerApi and self.api is broker._api_original
+                    and self.api.ready and not self.api.closed and not self.api.failed
+                    and type(self.events) is _BrokerEvents and self.events is broker._events_original
+                    and type(self.start) is _BrokerStart and self.start is broker._dispatch_original,
+                    "BROKER_GET_PREREQUISITES")
+            self.action_raw = self.api.action_raw
+            self.profile_raw = canonical_bytes(self.owner.profile)
+            self.ledger_raw, self.before = self.start.ledger_raw, self.events.transcript_raw
+            self.deadline = broker.deadline
+            self.record_raw, self.manifest_raw = self._record()
+            self.socket, self.tls = self.api._socket_original, self.api._tls_original
+            self.secrets = self.api.secrets
+            self.transport_pin = (self.api._socket_fd, self.api._socket_pin, self.api._memfd_pin,
+                                  self.api.endpoint_raw, self.api.ca, self.api._target_original)
+            self.request_raw = self._request()
+            self._check()
+            self.attempted = True  # no automatic retry, including a late/partial read
+            _TLS.write(self.tls, self.request_raw)
+            self._check()
+            status_line, raw = _read_api_get_response(self.tls)
+            self._check()
+            require(type(raw) is bytes and 0 < len(raw) <= 16384, "BROKER_GET_RESPONSE_SIZE")
+            if status_line == b"HTTP/1.1 200 OK":
+                validate_observed_manifest(raw, self.manifest_raw, document(self.record_raw)["uid"])
+                self.outcome = "PRESENT"
+            else:
+                validate_absent_status(raw, self.manifest_raw, document(self.record_raw)["uid"])
+                self.outcome = "ABSENT"
+            self.response_status = self._status_original = status_line
+            self.response_raw = self._response_original = raw
+            self.observed_mono = self._observed_mono_original = time.monotonic()
+            self.frame_raw, self.after = self._candidate()
+            self._check()
+        except BaseException:
+            self.failed = True
+            raise
+
+    def _record(self):
+        action = document(self.action_raw, 16384)
+        require(set(action) == {"actionId", "verb", "manifestDigest"} and action["verb"] == "GET",
+                "BROKER_GET_ACTION_REQUIRED")
+        profile = document(self.profile_raw)
+        manifests = [r["manifest"] for r in profile["resources"]
+                     if r["manifestDigest"] == action["manifestDigest"]]
+        require(len(manifests) == 1, "BROKER_GET_MANIFEST_REQUIRED")
+        manifest = manifests[0]
+        states, _, _ = parse_reservations(self.ledger_raw)
+        prior = states.get((self.owner.envelope["tenantId"], self.owner.envelope["nonce"]))
+        require(prior is not None and prior["held"] is True and prior["current"] == self.start.operation
+                and canonical_bytes(prior["binding"]) == self.start.reservation_raw,
+                "BROKER_GET_RUNNING_REQUIRED")
+        key = (manifest["apiVersion"], manifest["kind"], manifest["metadata"]["namespace"],
+               manifest["metadata"]["name"])
+        record = prior.get("resources", {}).get(key)
+        require(record is not None and record["state"] == "CREATED"
+                and record["operation"] == self.start.operation
+                and record["manifestDigest"] == action["manifestDigest"]
+                and type(action["actionId"]) is int and record["actionId"] < action["actionId"]
+                and type(record["uid"]) is str and record["uid"], "BROKER_GET_CREATED_UID_REQUIRED")
+        require(tuple(record[k] for k in ("apiVersion", "kind", "namespace", "name")) == key,
+                "BROKER_GET_RESOURCE_CHANGED")
+        return canonical_bytes(record), canonical_bytes(manifest)
+
+    def _request(self):
+        manifest = document(self.manifest_raw, 16384)
+        namespace, name = (manifest["metadata"][k] for k in ("namespace", "name"))
+        plural = {"Pod": "pods", "ConfigMap": "configmaps", "Service": "services"}[manifest["kind"]]
+        require(manifest["apiVersion"] == "v1"
+                and namespace == document(self.profile_raw)["binding"]["namespace"]
+                and all(type(v) is str and re.fullmatch(r"[a-z0-9][a-z0-9.-]{0,62}", v)
+                        for v in (namespace, name)), "BROKER_GET_PATH_SCOPE")
+        return http_message("GET /api/v1/namespaces/" + namespace + "/" + plural + "/" + name + " HTTP/1.1",
+                            b"", self.api.endpoint["tls"]["serverName"])
+
+    def _candidate(self):
+        import base64
+        require(type(self.response_raw) is bytes and 0 < len(self.response_raw) <= 16384,
+                "BROKER_GET_RESPONSE_SIZE")
+        if self.response_status == b"HTTP/1.1 200 OK":
+            require(self.outcome == "PRESENT", "BROKER_GET_OUTCOME_CHANGED")
+            validate_observed_manifest(self.response_raw, self.manifest_raw, document(self.record_raw)["uid"])
+        else:
+            require(self.response_status == b"HTTP/1.1 404 Not Found" and self.outcome == "ABSENT",
+                    "BROKER_GET_OUTCOME_CHANGED")
+            validate_absent_status(self.response_raw, self.manifest_raw, document(self.record_raw)["uid"])
+        before = document(self.before)
+        action = document(self.action_raw, 16384)
+        require(before["pending"] == action and not before["chunks"]
+                and before["cleanup"] is before["terminal"] is None, "BROKER_GET_RESULT_PHASE")
+        candidate = BrokerTranscript(self.events.binding_raw, self.events.dispatch_raw)
+        for field in ("sequence", "previous", "execution", "pending", "cleanup", "terminal",
+                      "receipt_size", "failed_action", "poisoned"):
+            setattr(candidate, field, before[field])
+        candidate.actions = set(before["actions"])
+        require(_BrokerEvents._snapshot(candidate) == self.before, "BROKER_GET_TRANSCRIPT_CHANGED")
+        raw = candidate.server_frame("RESOURCE_RESULT", {"actionId": action["actionId"], "outcome": self.outcome,
+            "objectBase64": base64.b64encode(self.response_raw).decode("ascii") if self.outcome == "PRESENT" else None})
+        require(0 < len(raw) <= 65536, "BROKER_GET_RESULT_SIZE")
+        return raw, _BrokerEvents._snapshot(candidate)
+
+    def _state_check(self, closing=False):
+        broker, api = self.broker, self.api
+        require(type(self) is _BrokerGetAction and not self.failed and type(broker) is _Broker
+                and not broker.closed and not broker.failed
+                and broker.get_action is broker._get_action_original is self
+                and broker.owner is self.owner and self.owner.broker is self.owner._broker_original is broker
+                and type(api) is _BrokerApi and broker.api is broker._api_original is api
+                and api.broker is broker and api.owner is self.owner and not api.failed
+                and api.events is broker.events is broker._events_original is self.events
+                and self.events.start is broker.dispatch is broker._dispatch_original is self.start
+                and self.owner.secrets is api.secrets is self.secrets and self.secrets.owner is self.owner
+                and all(getattr(broker, n) is getattr(broker, "_" + n + "_original") is None
+                        for n in ("intent", "exchange", "created", "result", "retirement", "delete_action")),
+                "BROKER_GET_OWNER_CHANGED")
+        require(self.deadline == api.deadline == broker.deadline == self.owner.deadline
+                and self.action_raw == api.action_raw
+                and self.profile_raw == canonical_bytes(self.owner.profile)
+                and (self.record_raw, self.manifest_raw) == self._record()
+                and self.request_raw == self._request()
+                and self.response_raw == self._response_original
+                and self.response_status == self._status_original, "BROKER_GET_INPUT_CHANGED")
+        absence = broker.absence
+        if absence is None and broker._absence_original is None:
+            require(self.ledger_raw == self.start.ledger_raw, "BROKER_GET_INPUT_CHANGED")
+        else:
+            require(type(absence) is _BrokerAbsence and absence is broker._absence_original
+                    and absence.action is self, "BROKER_GET_ABSENCE_OWNER_CHANGED")
+            _BrokerAbsence._state_check(absence)
+        require(self.transport_pin == (api._socket_fd, api._socket_pin, api._memfd_pin,
+                                       api.endpoint_raw, api.ca, api._target_original)
+                and api.target == api._target_original and canonical_bytes(api.endpoint) == api.endpoint_raw
+                and _BrokerApi._inputs(api) == (api.endpoint_raw, api.ca), "BROKER_GET_TRANSPORT_CHANGED")
+        flags = (self.complete, self.attempted, self.send_attempted, self.sent, self.retired, self.advanced)
+        require(all(type(flag) is bool for flag in flags) and (not self.complete or self.attempted)
+                and (not self.sent or self.send_attempted and self.complete)
+                and (not self.retired or self.sent) and (not self.advanced or self.retired),
+                "BROKER_GET_LIFETIME_CHANGED")
+        expected = self.after if self.advanced else self.before
+        require(self.events.transcript_raw == expected
+                and _BrokerEvents._snapshot(self.events.transcript) == expected, "BROKER_GET_TRANSCRIPT_CHANGED")
+        if self.response_raw is None:
+            require(not self.complete and self.frame_raw is self.after is self.response_status is self.outcome is None,
+                    "BROKER_GET_RESULT_CHANGED")
+        else:
+            require((self.frame_raw, self.after) == self._candidate(), "BROKER_GET_RESULT_CHANGED")
+            require(type(self.observed_mono) in (int, float)
+                    and self.observed_mono == self._observed_mono_original
+                    and 0 <= self.observed_mono < self.deadline, "BROKER_GET_OBSERVATION_CLOCK")
+        if closing or self.retired:
+            require(api.closed is True and api.ready is False and api.checking is False
+                    and api.cleanup_failure is None and api.sock is api._socket_original is None
+                    and api.tls is api._tls_original is None and api.memfd is api._memfd_original is None,
+                    "BROKER_GET_API_NOT_CLOSED")
+        else:
+            require(api.closed is False and api.ready is True and api.cleanup_failure is None
+                    and api.sock is api._socket_original is self.socket
+                    and api.tls is api._tls_original is self.tls and api.memfd is api._memfd_original is None,
+                    "BROKER_GET_API_CHANGED")
+
+    def _guard(self, closing=False):
+        self._state_check(closing)
+        _BrokerEvents._check(self.events)
+        self._state_check(closing)
+
+    def _check(self):
+        self._state_check()
+        _BrokerApi.check(self.api)
+        self._state_check()
+
+    def send_result(self):
+        require(self.complete and not self.send_attempted and not self.sent and not self.retired,
+                "BROKER_GET_DELIVERY_ORDER")
+        self._check()
+        if self.outcome == "ABSENT":
+            absence = self.broker.absence
+            require(type(absence) is _BrokerAbsence and absence is self.broker._absence_original
+                    and absence.committed and absence.advanced, "BROKER_GET_ABSENCE_NOT_RECORDED")
+            _BrokerAbsence._state_check(absence)
+        with self.broker._phase():
+            self._guard()
+            raw = self.frame_raw
+            self.broker._prepare_wait()
+            self.send_attempted = True
+            try:
+                sent = self.broker.sock.send(raw)
+                require(type(sent) is int and sent == len(raw), "BROKER_GET_SEND_AMBIGUOUS")
+            finally:
+                self._guard()
+        self._check()
+        self.sent = True  # local send, not proof of broker receipt or cleanup
+
+    def handoff(self):
+        try:
+            require(self.sent and not self.retired and not self.advanced, "BROKER_GET_DELIVERY_REQUIRED")
+            self._check()
+            broker, events = self.broker, self.events
+            with broker._phase():
+                self._guard()
+                action = document(self.action_raw, 16384)
+                require(len(events.handoffs) < 256 and all(document(raw)["actionId"] != action["actionId"]
+                        for raw in events.handoffs), "BROKER_GET_HANDOFF_REPLAY")
+                try:
+                    require(_BrokerApi.close(self.api) is None, "BROKER_GET_CLOSE_RESULT")
+                except BaseException:
+                    try:
+                        _BrokerEvents._check(events)
+                        self._guard(closing=True)
+                    except BaseException:
+                        pass  # preserve original close failure and held ownership
+                    raise
+                else:
+                    self._guard(closing=True)
+                self.retired = True
+                self._guard()
+                BrokerTranscript.accept(events.transcript, self.frame_raw, "SERVER")
+                require(_BrokerEvents._snapshot(events.transcript) == self.after, "BROKER_GET_ADVANCE_MISMATCH")
+                events.transcript_raw = self.after
+                self.advanced = True
+                self._guard()
+            with broker._phase():
+                self._guard()  # fresh final guard; no new lifetime or peer
+                archive = canonical_bytes({"actionId": action["actionId"], "verb": "GET",
+                    "manifestDigest": action["manifestDigest"], "resultDigest": byte_digest(self.frame_raw),
+                    "recordDigest": byte_digest(self.record_raw), "ledgerDigest": byte_digest(self.start.ledger_raw),
+                    "transcriptDigest": byte_digest(self.after)})
+                events.handoffs += (archive,)
+                events.handoffs_raw = canonical_bytes([byte_digest(raw) for raw in events.handoffs])
+                broker.api = broker._api_original = None
+                broker.get_action = broker._get_action_original = None
+                broker.absence = broker._absence_original = None
+                broker.last_get = broker._last_get_original = self if self.outcome == "PRESENT" else None
+                broker.last_get_raw = broker._last_get_raw_original = (
+                    _BrokerGetAction._cleanup_snapshot(self) if self.outcome == "PRESENT" else None)
+                _BrokerEvents._check(events)
+        except BaseException:
+            self.failed = True
+            raise
+
+    def _cleanup_snapshot(self):
+        """Immutable local observation data, not a reusable delete permission."""
+        require(type(self) is _BrokerGetAction and not self.failed and self.complete and self.sent
+                and self.retired and self.advanced and self.outcome == "PRESENT"
+                and self.response_status == self._status_original == b"HTTP/1.1 200 OK"
+                and self.response_raw == self._response_original
+                and self.observed_mono == self._observed_mono_original
+                and self.api is self._cleanup_api_original,
+                "BROKER_DELETE_GET_REQUIRED")
+        return canonical_bytes({"action": document(self.action_raw), "record": document(self.record_raw),
+            "manifest": document(self.manifest_raw), "response": document(self.response_raw),
+            "profileDigest": byte_digest(self.profile_raw), "ledgerDigest": byte_digest(self.ledger_raw),
+            "bindingDigest": byte_digest(self.events.binding_raw), "dispatchDigest": byte_digest(self.events.dispatch_raw),
+            "resultDigest": byte_digest(self.frame_raw), "transcriptDigest": byte_digest(self.after),
+            "observedMonotonic": float(self.observed_mono).hex(), "deadline": float(self.deadline).hex()})
+
+
+class _BrokerDeleteAction:
+    """One guarded UID/version DELETE following the original delivered GET.
+
+    A successful response means only acknowledgement. The original CREATED
+    journal record remains held until a separate authenticated GET and durable
+    ABSENT record. No response loss, conflict or stale observation permits retry.
+    """
+    def __init__(self, broker):
+        self.failed = self.complete = self.attempted = self.request_written = False
+        self.send_attempted = self.sent = self.retired = self.advanced = False
+        self.response_raw = self._response_original = self.frame_raw = self.after = None
+        try:
+            require(type(self) is _BrokerDeleteAction and type(broker) is _Broker
+                    and broker.delete_action is broker._delete_action_original is self,
+                    "BROKER_DELETE_OWNER")
+            self.broker, self.owner = broker, broker.owner
+            self.api, self.events, self.start = broker.api, broker.events, broker.dispatch
+            require(type(self.api) is _BrokerApi and self.api is broker._api_original
+                    and self.api.ready and not self.api.closed and not self.api.failed
+                    and type(self.events) is _BrokerEvents and self.events is broker._events_original
+                    and type(self.start) is _BrokerStart and self.start is broker._dispatch_original,
+                    "BROKER_DELETE_PREREQUISITES")
+            self.get = broker.last_get
+            require(type(self.get) is _BrokerGetAction and self.get is broker._last_get_original,
+                    "BROKER_DELETE_GET_REQUIRED")
+            self.get_raw = broker.last_get_raw
+            self.action_raw, self.before = self.api.action_raw, self.events.transcript_raw
+            self.profile_raw, self.ledger_raw = canonical_bytes(self.owner.profile), self.start.ledger_raw
+            self.manifest_raw, self.record_raw = self.get.manifest_raw, self.get.record_raw
+            self.deadline, self.observation_pin = broker.deadline, self.start.observation_pin
+            self.socket, self.tls, self.secrets = self.api._socket_original, self.api._tls_original, self.api.secrets
+            self.transport_pin = (self.api._socket_fd, self.api._socket_pin, self.api._memfd_pin,
+                                  self.api.endpoint_raw, self.api.ca, self.api._target_original)
+            self.request_raw = self._request()
+            self._check()
+            self.attempted = True
+            _TLS.write(self.tls, self.request_raw)
+            self.request_written = True
+            self._check()
+            status_line, raw = _read_api_get_response(self.tls)
+            self._check()
+            require(status_line == b"HTTP/1.1 200 OK", "BROKER_DELETE_STATUS_INVALID")
+            validate_delete_response(raw, self.manifest_raw, document(self.record_raw)["uid"])
+            self.response_raw = self._response_original = raw
+            self.frame_raw, self.after = self._candidate()
+            self._check()
+        except BaseException:
+            self.failed = True
+            raise
+
+    def _request(self):
+        manifest = document(self.manifest_raw, 16384)
+        namespace, name = (manifest["metadata"][k] for k in ("namespace", "name"))
+        plural = {"Pod": "pods", "ConfigMap": "configmaps", "Service": "services"}[manifest["kind"]]
+        require(manifest["apiVersion"] == "v1"
+                and namespace == document(self.profile_raw)["binding"]["namespace"]
+                and all(type(v) is str and re.fullmatch(r"[a-z0-9][a-z0-9.-]{0,62}", v)
+                        for v in (namespace, name)), "BROKER_DELETE_PATH_SCOPE")
+        body = delete_request_body(self.get.response_raw, self.manifest_raw, document(self.record_raw)["uid"])
+        return http_message("DELETE /api/v1/namespaces/" + namespace + "/" + plural + "/" + name + " HTTP/1.1",
+                            body, self.api.endpoint["tls"]["serverName"])
+
+    def _get_check(self):
+        get, broker, events = self.get, self.broker, self.events
+        require(type(get) is _BrokerGetAction and broker.last_get is broker._last_get_original is get
+                and self.get_raw == broker.last_get_raw == broker._last_get_raw_original
+                and _BrokerGetAction._cleanup_snapshot(get) == self.get_raw
+                and get.broker is broker and get.owner is self.owner and get.events is events and get.start is self.start
+                and get.profile_raw == self.profile_raw and get.ledger_raw == self.ledger_raw
+                and get.record_raw == self.record_raw and get.manifest_raw == self.manifest_raw
+                and get.deadline == self.deadline and get.api is not self.api
+                and type(get.api) is _BrokerApi and get.api.closed and not get.api.ready
+                and get.api.cleanup_failure is None and get.api.sock is get.api.tls is get.api.memfd is None,
+                "BROKER_DELETE_GET_CHANGED")
+        require((self.record_raw, self.manifest_raw) == _BrokerGetAction._record(get),
+                "BROKER_DELETE_CREATED_UID_REQUIRED")
+        action, previous = document(self.action_raw, 16384), document(get.action_raw, 16384)
+        require(set(action) == {"actionId", "verb", "manifestDigest"} and action["verb"] == "DELETE"
+                and action["manifestDigest"] == previous["manifestDigest"]
+                and type(action["actionId"]) is int and previous["actionId"] < action["actionId"] <= 256,
+                "BROKER_DELETE_ACTION_REQUIRED")
+        require(events.handoffs and type(events.handoffs[-1]) is bytes, "BROKER_DELETE_GET_REQUIRED")
+        archive = document(events.handoffs[-1])
+        require(archive == {"actionId": previous["actionId"], "verb": "GET",
+            "manifestDigest": previous["manifestDigest"], "resultDigest": byte_digest(get.frame_raw),
+            "recordDigest": byte_digest(self.record_raw), "ledgerDigest": byte_digest(self.ledger_raw),
+            "transcriptDigest": byte_digest(get.after)}, "BROKER_DELETE_GET_NOT_LAST")
+        require(not any(document(raw)["verb"] == "DELETE" and
+                        document(raw)["manifestDigest"] == action["manifestDigest"] for raw in events.handoffs),
+                "BROKER_DELETE_RETRY_FORBIDDEN")
+        frame = document(get.frame_raw)
+        incoming = {**frame, "sequence": frame["sequence"] + 1, "previousDigest": byte_digest(get.frame_raw),
+                    "kind": "RESOURCE_ACTION", "payload": action}
+        before, after_get = document(self.before), document(get.after)
+        require(before == {**after_get, "sequence": incoming["sequence"], "previous": canonical_digest(incoming),
+                           "pending": action, "actions": sorted(after_get["actions"] + [action["actionId"]])},
+                "BROKER_DELETE_GET_NOT_IMMEDIATE")
+        # Observation and exact UID/version are both required. The short freshness
+        # window never renews the signed deadline; after the one write it grants no retry.
+        require(self.observation_pin == self.start.observation_pin, "BROKER_DELETE_GENERATION_CHANGED")
+        if not self.request_written:
+            now = time.monotonic()
+            require(get.observed_mono <= now < min(get.observed_mono + 5, self.deadline),
+                    "BROKER_DELETE_GET_STALE")
+
+    def _candidate(self):
+        validate_delete_response(self.response_raw, self.manifest_raw, document(self.record_raw)["uid"])
+        before, action = document(self.before), document(self.action_raw, 16384)
+        require(before["pending"] == action and not before["chunks"]
+                and before["cleanup"] is before["terminal"] is None, "BROKER_DELETE_RESULT_PHASE")
+        candidate = BrokerTranscript(self.events.binding_raw, self.events.dispatch_raw)
+        for field in ("sequence", "previous", "execution", "pending", "cleanup", "terminal",
+                      "receipt_size", "failed_action", "poisoned"):
+            setattr(candidate, field, before[field])
+        candidate.actions = set(before["actions"])
+        require(_BrokerEvents._snapshot(candidate) == self.before, "BROKER_DELETE_TRANSCRIPT_CHANGED")
+        raw = candidate.server_frame("RESOURCE_RESULT", {"actionId": action["actionId"],
+                                    "outcome": "DELETED", "objectBase64": None})
+        return raw, _BrokerEvents._snapshot(candidate)
+
+    def _state_check(self, closing=False):
+        broker, api = self.broker, self.api
+        require(type(self) is _BrokerDeleteAction and not self.failed and type(broker) is _Broker
+                and not broker.closed and not broker.failed
+                and broker.delete_action is broker._delete_action_original is self
+                and broker.owner is self.owner and self.owner.broker is self.owner._broker_original is broker
+                and type(api) is _BrokerApi and broker.api is broker._api_original is api
+                and api.broker is broker and api.owner is self.owner and not api.failed
+                and api.events is broker.events is broker._events_original is self.events
+                and self.events.start is broker.dispatch is broker._dispatch_original is self.start
+                and self.owner.secrets is api.secrets is self.secrets and self.secrets.owner is self.owner
+                and all(getattr(broker, n) is getattr(broker, "_" + n + "_original") is None for n in
+                        ("intent", "exchange", "created", "result", "retirement", "get_action", "absence")),
+                "BROKER_DELETE_OWNER_CHANGED")
+        require(self.deadline == api.deadline == broker.deadline == self.owner.deadline
+                and self.action_raw == api.action_raw and self.profile_raw == canonical_bytes(self.owner.profile)
+                and self.ledger_raw == self.start.ledger_raw and self.request_raw == self._request()
+                and self.response_raw == self._response_original, "BROKER_DELETE_INPUT_CHANGED")
+        self._get_check()
+        require(self.transport_pin == (api._socket_fd, api._socket_pin, api._memfd_pin,
+                                       api.endpoint_raw, api.ca, api._target_original)
+                and api.target == api._target_original and canonical_bytes(api.endpoint) == api.endpoint_raw
+                and _BrokerApi._inputs(api) == (api.endpoint_raw, api.ca), "BROKER_DELETE_TRANSPORT_CHANGED")
+        flags = (self.complete, self.attempted, self.request_written, self.send_attempted,
+                 self.sent, self.retired, self.advanced)
+        require(all(type(v) is bool for v in flags) and (not self.request_written or self.attempted)
+                and (not self.complete or self.request_written) and (not self.sent or self.send_attempted and self.complete)
+                and (not self.retired or self.sent) and (not self.advanced or self.retired),
+                "BROKER_DELETE_LIFETIME_CHANGED")
+        expected = self.after if self.advanced else self.before
+        require(self.events.transcript_raw == expected and _BrokerEvents._snapshot(self.events.transcript) == expected,
+                "BROKER_DELETE_TRANSCRIPT_CHANGED")
+        if self.response_raw is None:
+            require(not self.complete and self.frame_raw is self.after is None, "BROKER_DELETE_RESULT_CHANGED")
+        else:
+            require((self.frame_raw, self.after) == self._candidate(), "BROKER_DELETE_RESULT_CHANGED")
+        if closing or self.retired:
+            require(api.closed is True and api.ready is False and api.checking is False
+                    and api.cleanup_failure is None and api.sock is api._socket_original is None
+                    and api.tls is api._tls_original is None and api.memfd is api._memfd_original is None,
+                    "BROKER_DELETE_API_NOT_CLOSED")
+        else:
+            require(api.closed is False and api.ready is True and api.cleanup_failure is None
+                    and api.sock is api._socket_original is self.socket and api.tls is api._tls_original is self.tls
+                    and api.memfd is api._memfd_original is None, "BROKER_DELETE_API_CHANGED")
+
+    def _guard(self, closing=False):
+        self._state_check(closing)
+        _BrokerEvents._check(self.events)
+        self._state_check(closing)
+
+    def _check(self):
+        self._state_check()
+        _BrokerApi.check(self.api)
+        self._state_check()
+
+    def send_result(self):
+        require(self.complete and not self.send_attempted and not self.sent and not self.retired,
+                "BROKER_DELETE_DELIVERY_ORDER")
+        self._check()
+        with self.broker._phase():
+            self._guard()
+            self.broker._prepare_wait()
+            self.send_attempted = True
+            try:
+                sent = self.broker.sock.send(self.frame_raw)
+                require(type(sent) is int and sent == len(self.frame_raw), "BROKER_DELETE_SEND_AMBIGUOUS")
+            finally:
+                self._guard()
+        self._check()
+        self.sent = True
+
+    def handoff(self):
+        require(self.sent and not self.retired and not self.advanced, "BROKER_DELETE_DELIVERY_REQUIRED")
+        self._check()
+        broker, events = self.broker, self.events
+        with broker._phase():
+            self._guard()
+            action = document(self.action_raw)
+            require(len(events.handoffs) < 256 and all(document(raw)["actionId"] != action["actionId"]
+                    for raw in events.handoffs), "BROKER_DELETE_HANDOFF_REPLAY")
+            try:
+                require(_BrokerApi.close(self.api) is None, "BROKER_DELETE_CLOSE_RESULT")
+            except BaseException:
+                try:
+                    self._guard(closing=True)
+                except BaseException:
+                    pass  # preserve original close failure, never release the UID
+                raise
+            self._guard(closing=True)
+            self.retired = True
+            self._guard()
+            BrokerTranscript.accept(events.transcript, self.frame_raw, "SERVER")
+            require(_BrokerEvents._snapshot(events.transcript) == self.after, "BROKER_DELETE_ADVANCE_MISMATCH")
+            events.transcript_raw, self.advanced = self.after, True
+            self._guard()
+        with broker._phase():
+            self._guard()
+            archive = canonical_bytes({"actionId": action["actionId"], "verb": "DELETE",
+                "manifestDigest": action["manifestDigest"], "resultDigest": byte_digest(self.frame_raw),
+                "recordDigest": byte_digest(self.record_raw), "ledgerDigest": byte_digest(self.ledger_raw),
+                "transcriptDigest": byte_digest(self.after)})
+            events.handoffs += (archive,)
+            events.handoffs_raw = canonical_bytes([byte_digest(raw) for raw in events.handoffs])
+            broker.api = broker._api_original = None
+            broker.delete_action = broker._delete_action_original = None
+            broker.last_get = broker._last_get_original = None
+            broker.last_get_raw = broker._last_get_raw_original = None
+            _BrokerEvents._check(events)
+
+
+class _BrokerAbsence:
+    """One durable original-UID absence fact; not terminal or tenant acceptance."""
+    def __init__(self, broker):
+        self.failed = self.committed = self.writing = self.advanced = False
+        self.log = None
+        try:
+            require(type(self) is _BrokerAbsence and type(broker) is _Broker
+                    and broker.absence is broker._absence_original is self, "BROKER_ABSENCE_OWNER")
+            self.broker, self.action = broker, broker.get_action
+            require(type(self.action) is _BrokerGetAction and self.action is broker._get_action_original
+                    and self.action.complete and self.action.outcome == "ABSENT"
+                    and not self.action.send_attempted and not self.action.retired,
+                    "BROKER_ABSENCE_GET_REQUIRED")
+            self.owner, self.events, self.start = broker.owner, self.action.events, self.action.start
+            self.log, self.storage = self.owner.log, self.owner.storage
+            require(type(self.log) is _AdmissionLog and type(self.storage) is _State
+                    and self.log.storage is self.storage and self.storage.owner is self.owner,
+                    "BROKER_ABSENCE_STORAGE_OWNER")
+            self.before, self.response_raw = self.action.ledger_raw, self.action.response_raw
+            self.action_raw, self.profile_raw = self.action.action_raw, self.action.profile_raw
+            self.reservation_raw, self.binding_raw = self.start.reservation_raw, self.start.binding_raw
+            self.operation, self.deadline = self.start.operation, broker.deadline
+            self.now = utc_now()
+            resource, proof = _absence_record(self.reservation_raw, self.operation, self.profile_raw,
+                self.binding_raw, self.action_raw, self.before, self.response_raw)
+            _, previous, count = parse_reservations(self.before)
+            self.row_raw = canonical_bytes({"sequence": count + 1, "previousDigest": previous,
+                "binding": document(self.reservation_raw), "state": "ABSENT", "operation": self.operation,
+                "observedAt": self.now, "cleanup": None, "resource": resource, "absence": proof})
+            self.after, self.digest = self.before + self.row_raw + b"\n", byte_digest(self.row_raw)
+            parse_reservations(self.after)
+            self._state_check()
+            _BrokerGetAction._check(self.action)
+            with broker._phase():
+                self.events._check()
+                self._state_check()
+                self.writing = True
+                digest = broker._io(_AdmissionLog.record_absence, self.log, document(self.reservation_raw),
+                    self.operation, self.now, self.profile_raw, self.binding_raw, document(self.action_raw),
+                    expected_history=self.before, observed=self.response_raw)
+                require(type(digest) is str and digest == self.digest, "BROKER_ABSENCE_COMMIT_MISMATCH")
+                require(broker._io(self.storage.read) == self.after, "BROKER_ABSENCE_READBACK_MISMATCH")
+                self._state_check()
+                self.start.ledger_raw = self.after
+                self.advanced = True
+                self.events._check()
+                self._state_check()
+            _BrokerGetAction._check(self.action)
+        except BaseException:
+            self._poison()
+            raise
+
+    def _state_check(self):
+        broker, action = self.broker, self.action
+        require(type(self) is _BrokerAbsence and not self.failed and type(broker) is _Broker
+                and not broker.closed and not broker.failed
+                and broker.absence is broker._absence_original is self
+                and broker.owner is self.owner and self.owner.broker is self.owner._broker_original is broker
+                and type(action) is _BrokerGetAction and broker.get_action is broker._get_action_original is action
+                and action.broker is broker and action.complete and not action.failed and action.outcome == "ABSENT"
+                and action.response_status == action._status_original == b"HTTP/1.1 404 Not Found"
+                and action.response_raw == action._response_original == self.response_raw
+                and action.action_raw == self.action_raw and action.profile_raw == self.profile_raw
+                and action.ledger_raw == self.before and action.events is self.events and action.start is self.start
+                and type(self.events) is _BrokerEvents and type(self.start) is _BrokerStart
+                and broker.events is broker._events_original is self.events
+                and broker.dispatch is broker._dispatch_original is self.start
+                and self.events.start is self.start and self.start.owner is self.owner and self.start.broker is broker
+                and self.owner.log is self.log is self.start.log and type(self.log) is _AdmissionLog
+                and not self.log.poisoned and self.log.storage is self.storage is self.owner.storage is self.start.storage
+                and type(self.storage) is _State
+                and self.storage.owner is self.owner and self.deadline == broker.deadline == self.owner.deadline,
+                "BROKER_ABSENCE_INPUT_CHANGED")
+        resource, proof = _absence_record(self.reservation_raw, self.operation, self.profile_raw,
+            self.binding_raw, self.action_raw, self.before, self.response_raw)
+        _, previous, count = parse_reservations(self.before)
+        require(self.reservation_raw == self.start.reservation_raw and self.binding_raw == self.start.binding_raw
+                and self.operation == self.start.operation
+                and self.row_raw == canonical_bytes({"sequence": count + 1, "previousDigest": previous,
+                    "binding": document(self.reservation_raw), "state": "ABSENT", "operation": self.operation,
+                    "observedAt": self.now, "cleanup": None, "resource": resource, "absence": proof})
+                and self.digest == byte_digest(self.row_raw) and self.after == self.before + self.row_raw + b"\n"
+                and type(self.advanced) is bool and type(self.writing) is bool and type(self.committed) is bool
+                and (not self.advanced or self.writing) and (not self.committed or self.advanced)
+                and self.start.ledger_raw == (self.after if self.advanced else self.before),
+                "BROKER_ABSENCE_HISTORY_CHANGED")
+
+    def _poison(self):
+        self.failed = True
+        if self.writing and type(self.log) is _AdmissionLog:
+            self.log.poisoned = True
 
 
 class _BrokerCreated:
@@ -4767,10 +5944,415 @@ class _BrokerCreateRetirement:
             _BrokerCreateResult._poison(self._result_original)
 
 
+def _receipt_chunks_complete(chunks):
+    """Bounded object boundary detection only, never receipt validation or EOF.
+
+    The existing wire format has no end-of-chunks marker. A top-level object
+    boundary permits the full strict receipt validator to run; it does not
+    authorize cleanup or waive the terminal digest/trailing-frame checks.
+    Scan bytes so a UTF-8 code point split between frames is not misdecoded.
+    """
+    require(type(chunks) is list and 0 < len(chunks) <= 171
+            and all(type(part) is bytes and 0 < len(part) <= 24576 for part in chunks)
+            and sum(map(len, chunks)) <= 4194304, "BROKER_RECEIPT_CHUNKS_INVALID")
+    stack, quoted, escaped, started, ended = [], False, False, False, False
+    for part in chunks:
+        for value in part:
+            if ended:
+                require(value in (9, 10, 13, 32), "BROKER_RECEIPT_TRAILING_BYTES")
+            elif not started:
+                if value in (9, 10, 13, 32):
+                    continue
+                require(value == 123, "BROKER_RECEIPT_OBJECT_REQUIRED")
+                stack.append(125)
+                started = True
+            elif quoted:
+                require(value >= 32, "BROKER_RECEIPT_STRING_CONTROL")
+                if escaped:
+                    escaped = False
+                elif value == 92:
+                    escaped = True
+                elif value == 34:
+                    quoted = False
+            elif value == 34:
+                quoted = True
+            elif value in (123, 91):
+                require(len(stack) < 16, "BROKER_RECEIPT_DEPTH")
+                stack.append(125 if value == 123 else 93)
+            elif value in (125, 93):
+                require(stack and stack.pop() == value, "BROKER_RECEIPT_DELIMITER")
+                ended = not stack
+    return ended  # malformed complete JSON still fails the unchanged validator
+
+
+class _BrokerCompletion:
+    """Owned receipt/cleanup/terminal phases; no worker or client acceptance grant."""
+    def __init__(self, broker):
+        self.failed = self.writing = self.sealed = self.committed = False
+        self.send_attempted = self.delivered = self.cleanup_advanced = self.sent = False
+        self.receive_attempted = self.received = self.terminal_advanced = self.complete = False
+        self.terminal_raw = self.terminal_after = self.final_row = self.final_ledger = None
+        self.log = None
+        try:
+            require(type(self) is _BrokerCompletion and type(broker) is _Broker
+                    and broker.completion is broker._completion_original is self, "BROKER_COMPLETION_OWNER")
+            self.broker, self.owner = broker, broker.owner
+            self.events, self.start = broker.events, broker.dispatch
+            require(type(self.events) is _BrokerEvents and self.events is broker._events_original
+                    and type(self.start) is _BrokerStart and self.start is broker._dispatch_original,
+                    "BROKER_COMPLETION_PREREQUISITES")
+            self.log, self.storage = self.owner.log, self.owner.storage
+            self.before, self.ledger_before = self.events.transcript_raw, self.start.ledger_raw
+            self.chunks = tuple(self.events.transcript.chunks)
+            require(self.chunks and len(self.chunks) <= 171 and all(type(c) is bytes and 0 < len(c) <= 24576
+                    for c in self.chunks) and 0 < sum(map(len, self.chunks)) <= 4194304,
+                    "BROKER_COMPLETION_CHUNKS_REQUIRED")
+            self.receipt_raw = b"".join(self.chunks)
+            self.profile_raw = canonical_bytes(self.owner.profile)
+            self.session_binding_raw = canonical_bytes(self.owner.binding)
+            self.regressions_raw = canonical_bytes(self.owner.plan["regressions"]
+                if self.start.operation == "FULL_PREDECESSOR_REGRESSION" else {})
+            self.reservation_raw, self.binding_raw, self.dispatch_raw = (
+                self.start.reservation_raw, self.start.binding_raw, self.start.dispatch_raw)
+            self.operation, self.deadline = self.start.operation, broker.deadline
+            self.now = utc_now()
+            self.receipt_status = self._receipt()["status"]
+            states, _, _ = parse_reservations(self.ledger_before)
+            prior = states.get((self.owner.envelope["tenantId"], self.owner.envelope["nonce"]))
+            require(prior is not None and prior["current"] == self.operation and prior["held"]
+                    and canonical_bytes(prior["binding"]) == self.reservation_raw,
+                    "BROKER_COMPLETION_RUNNING_REQUIRED")
+            remaining = []
+            for key, row in sorted(prior.get("resources", {}).items()):
+                if row["operation"] == self.operation and row["state"] != "ABSENT":
+                    remaining.append({**{k: row[k] for k in
+                        ("apiVersion", "kind", "namespace", "name", "uid", "manifestDigest")},
+                        "reasonCode": "IO_AMBIGUOUS" if row["uid"] is None else "OBSERVATION_UNAVAILABLE"})
+            self.cleanup_raw = canonical_bytes(cleanup_receipt(byte_digest(self.reservation_raw), self.operation,
+                self.now, remaining, prior["cleanupDigest"]))
+            before = document(self.before)
+            require(before["pending"] is before["cleanup"] is before["terminal"] is None,
+                    "BROKER_COMPLETION_OUTSTANDING_ACTION")
+            self.proof_raw = canonical_bytes({"dispatch": document(self.dispatch_raw), "executionId": before["execution"],
+                "receiptDigest": byte_digest(self.receipt_raw), "receiptSize": len(self.receipt_raw),
+                "receiptStatus": self.receipt_status, "failedAction": before["failed_action"],
+                "cleanupSequence": before["sequence"] + 1, "cleanupPreviousDigest": before["previous"]})
+            self.cleanup_frame_raw = canonical_bytes(_completion_frame(document(self.reservation_raw), self.operation,
+                document(self.cleanup_raw), document(self.proof_raw)))
+            candidate = self._transcript(self.before)
+            BrokerTranscript.accept(candidate, self.cleanup_frame_raw, "SERVER")
+            self.cleanup_after = _BrokerEvents._snapshot(candidate)
+            self.seal_row, self.sealed_ledger = self._row("CLEANUP_SEALED", self.ledger_before, self.now,
+                cleanup=document(self.cleanup_raw), completion=document(self.proof_raw))
+            self._check()
+            with broker._phase():
+                self._guard()
+                self.writing = True
+                digest = broker._io(_AdmissionLog.record_completion, self.log, document(self.reservation_raw),
+                    "CLEANUP_SEALED", self.operation, self.now, expected_history=self.ledger_before,
+                    cleanup=document(self.cleanup_raw), completion=document(self.proof_raw))
+                require(digest == byte_digest(self.seal_row), "BROKER_COMPLETION_COMMIT_MISMATCH")
+                require(broker._io(self.storage.read) == self.sealed_ledger, "BROKER_COMPLETION_READBACK_MISMATCH")
+                self.start.ledger_raw, self.sealed = self.sealed_ledger, True
+                self._guard()
+            self._check()
+        except BaseException:
+            self._poison()
+            raise
+
+    def _receipt(self):
+        from .live_session import SCHEMA, validate_receipt
+        binding = document(self.session_binding_raw)
+        session = {k: v for k, v in binding.items() if k not in ("notBefore", "notAfter")}
+        session.update(schemaVersion=SCHEMA, issuedAt=binding["notBefore"], expiresAt=binding["notAfter"], state="RUNNING")
+        return validate_receipt(self.receipt_raw, session, binding, document(self.start.request_raw),
+                                document(self.regressions_raw), self.now)
+
+    def _transcript(self, snapshot):
+        before = document(snapshot)
+        candidate = BrokerTranscript(self.binding_raw, self.dispatch_raw)
+        for field in ("sequence", "previous", "execution", "pending", "cleanup", "terminal",
+                      "receipt_size", "failed_action", "poisoned"):
+            setattr(candidate, field, before[field])
+        candidate.actions, candidate.chunks = set(before["actions"]), list(self.chunks)
+        require(_BrokerEvents._snapshot(candidate) == snapshot, "BROKER_COMPLETION_TRANSCRIPT_CHANGED")
+        return candidate
+
+    def _row(self, state, history, now, **extra):
+        _, previous, count = parse_reservations(history)
+        row = canonical_bytes({"sequence": count + 1, "previousDigest": previous,
+            "binding": document(self.reservation_raw), "state": state, "operation": self.operation,
+            "observedAt": now, "cleanup": None, **extra})
+        after = history + row + b"\n"
+        parse_reservations(after)
+        return row, after
+
+    def _state_check(self):
+        broker, events, start = self.broker, self.events, self.start
+        require(type(self) is _BrokerCompletion and not self.failed and type(broker) is _Broker
+                and not broker.closed and not broker.failed and broker.completion is broker._completion_original is self
+                and broker.owner is self.owner and self.owner.broker is self.owner._broker_original is broker
+                and broker.events is broker._events_original is events and events.start is start
+                and broker.dispatch is broker._dispatch_original is start
+                and type(self.log) is _AdmissionLog and not self.log.poisoned
+                and self.log is self.owner.log is start.log and self.log.storage is self.storage
+                and type(self.storage) is _State and self.storage is self.owner.storage is start.storage
+                and self.storage.owner is self.owner and self.deadline == broker.deadline == self.owner.deadline
+                and all(getattr(broker, n) is getattr(broker, "_" + n + "_original") is None for n in
+                        ("api", "intent", "exchange", "created", "result", "retirement", "get_action", "absence", "delete_action")),
+                "BROKER_COMPLETION_OWNER_CHANGED")
+        require(self.profile_raw == canonical_bytes(self.owner.profile)
+                and self.session_binding_raw == canonical_bytes(self.owner.binding)
+                and self.regressions_raw == canonical_bytes(self.owner.plan["regressions"]
+                    if self.operation == "FULL_PREDECESSOR_REGRESSION" else {})
+                and self.reservation_raw == start.reservation_raw and self.operation == start.operation
+                and self.binding_raw == events.binding_raw == start.binding_raw
+                and self.dispatch_raw == events.dispatch_raw == start.dispatch_raw
+                and self.receipt_raw == b"".join(self.chunks) and tuple(events.transcript.chunks) == self.chunks
+                and self.receipt_status == self._receipt()["status"], "BROKER_COMPLETION_INPUT_CHANGED")
+        proof, before = document(self.proof_raw), document(self.before)
+        require(proof == {"dispatch": document(self.dispatch_raw), "executionId": before["execution"],
+            "receiptDigest": byte_digest(self.receipt_raw), "receiptSize": len(self.receipt_raw),
+            "receiptStatus": self.receipt_status, "failedAction": before["failed_action"],
+            "cleanupSequence": before["sequence"] + 1, "cleanupPreviousDigest": before["previous"]},
+            "BROKER_COMPLETION_PROOF_CHANGED")
+        require(self.cleanup_frame_raw == canonical_bytes(_completion_frame(document(self.reservation_raw),
+            self.operation, document(self.cleanup_raw), proof)), "BROKER_COMPLETION_FRAME_CHANGED")
+        require((self.seal_row, self.sealed_ledger) == self._row("CLEANUP_SEALED", self.ledger_before, self.now,
+            cleanup=document(self.cleanup_raw), completion=proof), "BROKER_COMPLETION_HISTORY_CHANGED")
+        flags = (self.sealed, self.committed, self.send_attempted, self.delivered, self.cleanup_advanced,
+                 self.sent, self.receive_attempted, self.received, self.terminal_advanced, self.complete)
+        require(all(type(flag) is bool for flag in flags) and (not self.committed or self.sealed)
+                and (not self.delivered or self.send_attempted and self.committed)
+                and (not self.cleanup_advanced or self.delivered) and (not self.sent or self.cleanup_advanced)
+                and (not self.receive_attempted or self.sent) and (not self.received or self.receive_attempted)
+                and (not self.terminal_advanced or self.received) and (not self.complete or self.terminal_advanced),
+                "BROKER_COMPLETION_LIFETIME_CHANGED")
+        expected = self.terminal_after if self.received else (self.cleanup_after if self.cleanup_advanced else self.before)
+        require(events.transcript_raw == expected and _BrokerEvents._snapshot(events.transcript) == expected,
+                "BROKER_COMPLETION_TRANSCRIPT_CHANGED")
+        candidate = self._transcript(self.before)
+        BrokerTranscript.accept(candidate, self.cleanup_frame_raw, "SERVER")
+        require(_BrokerEvents._snapshot(candidate) == self.cleanup_after, "BROKER_COMPLETION_FRAME_CHANGED")
+        if self.received:
+            _completion_terminal(document(self.reservation_raw), self.operation, document(self.cleanup_raw), proof,
+                                 self.terminal_raw)
+            BrokerTranscript.accept(candidate, self.terminal_raw, "BROKER")
+            require(_BrokerEvents._snapshot(candidate) == self.terminal_after, "BROKER_COMPLETION_TERMINAL_CHANGED")
+        else:
+            require(self.terminal_raw is self.terminal_after is None, "BROKER_COMPLETION_TERMINAL_CHANGED")
+        if self.terminal_advanced:
+            row = document(self.final_row, 32768)
+            require((self.final_row, self.final_ledger) == self._row("TERMINAL_RECORDED", self.sealed_ledger,
+                row["observedAt"], terminal=document(self.terminal_raw)), "BROKER_COMPLETION_HISTORY_CHANGED")
+        require(start.ledger_raw == (self.final_ledger if self.terminal_advanced else
+            self.sealed_ledger if self.sealed else self.ledger_before), "BROKER_COMPLETION_HISTORY_CHANGED")
+
+    def _guard(self):
+        self._state_check()
+        _BrokerEvents._check(self.events)
+        self._state_check()
+
+    def _check(self):
+        with self.broker._phase():
+            self._guard()
+
+    def send_cleanup(self):
+        require(self.committed and not self.send_attempted and not self.sent, "BROKER_COMPLETION_SEND_ORDER")
+        broker, events = self.broker, self.events
+        with broker._phase():
+            self._guard()
+            broker._prepare_wait()
+            self.send_attempted = True
+            try:
+                count = broker.sock.send(self.cleanup_frame_raw)
+                require(type(count) is int and count == len(self.cleanup_frame_raw), "BROKER_CLEANUP_SEND_AMBIGUOUS")
+            finally:
+                self._guard()
+        self._check()
+        self.delivered = True
+        with broker._phase():
+            self._guard()
+            BrokerTranscript.accept(events.transcript, self.cleanup_frame_raw, "SERVER")
+            events.transcript_raw, self.cleanup_advanced = self.cleanup_after, True
+            self._guard()
+        self.sent = True  # local send only; no durable terminal or capacity release
+
+    def poll_terminal(self):
+        require(self.sent and not self.receive_attempted and not self.received, "BROKER_TERMINAL_RECEIVE_ORDER")
+        broker, events = self.broker, self.events
+        with broker._phase():
+            self._guard()
+            before = time.monotonic()
+            require(broker.last_mono <= before < broker.end <= self.deadline, "BROKER_CLOCK_OR_DEADLINE")
+            try:
+                ready = select.select([broker.sock], [], [broker.sock], min(0.25, (broker.end - before) / 2))
+            finally:
+                self._guard()
+            require(type(ready) is tuple and len(ready) == 3 and ready[1:] == ([], [])
+                    and ready[0] in ([], [broker.sock]), "BROKER_READINESS_INVALID")
+            if not ready[0]:
+                return None
+            broker._prepare_wait()
+            self.receive_attempted = True
+            try:
+                raw, ancillary, flags, _ = broker.sock.recvmsg(65537, socket.CMSG_SPACE(12) + socket.CMSG_SPACE(253 * 4))
+                require(credentials(ancillary, flags) == broker._peer_original, "BROKER_MESSAGE_PEER")
+            finally:
+                self._guard()
+            terminal = _completion_terminal(document(self.reservation_raw), self.operation,
+                document(self.cleanup_raw), document(self.proof_raw), raw)
+            candidate = self._transcript(self.cleanup_after)
+            BrokerTranscript.accept(candidate, raw, "BROKER")
+            require(broker._io(select.select, [broker.sock], [], [broker.sock], 0) == ([], [], []),
+                    "BROKER_TERMINAL_TRAILING_DATA")
+            self._guard()
+            BrokerTranscript.accept(events.transcript, raw, "BROKER")
+            self.terminal_raw, self.terminal_after = canonical_bytes(terminal), _BrokerEvents._snapshot(candidate)
+            events.transcript_raw, self.received = self.terminal_after, True
+            self._guard()
+        self._check()
+        return self.terminal_raw  # data only; durable recording remains mandatory
+
+    def record_terminal(self):
+        require(self.received and not self.terminal_advanced and not self.complete, "BROKER_TERMINAL_RECORD_ORDER")
+        self._check()
+        now = utc_now()
+        self.final_row, self.final_ledger = self._row("TERMINAL_RECORDED", self.sealed_ledger, now,
+                                                   terminal=document(self.terminal_raw))
+        with self.broker._phase():
+            self._guard()
+            self.writing = True
+            digest = self.broker._io(_AdmissionLog.record_completion, self.log, document(self.reservation_raw),
+                "TERMINAL_RECORDED", self.operation, now, expected_history=self.sealed_ledger,
+                terminal=document(self.terminal_raw))
+            require(digest == byte_digest(self.final_row), "BROKER_TERMINAL_COMMIT_MISMATCH")
+            require(self.broker._io(self.storage.read) == self.final_ledger, "BROKER_TERMINAL_READBACK_MISMATCH")
+            self.start.ledger_raw, self.terminal_advanced = self.final_ledger, True
+            self._guard()
+        self._check()
+        self.complete = True  # source-side completion only; never tenant/native acceptance
+
+    def _poison(self):
+        self.failed = True
+        if self.writing and type(self.log) is _AdmissionLog:
+            self.log.poisoned = True
+
+
+def _failure_reason(error):
+    """Closed accounting reason only; never persist arbitrary exception text."""
+    reason = error.reason if type(error) is ConformanceError and type(error.reason) is str else None
+    if reason in ("BROKER_CLOCK_OR_DEADLINE", "PROXY_CLOCK_OR_EXPIRY", "PROXY_EXPIRED",
+                  "BROKER_OBSERVATION_EXPIRED", "API_CONNECT_DEADLINE", "TLS_DEADLINE",
+                  "HTTP_HEADER_DEADLINE"):
+        return "DEADLINE"
+    if reason == "ADMISSION_UID_CHANGED":
+        return "UID_CHANGED"
+    if reason == "ADMISSION_DELETE_DENIED":
+        return "DELETE_DENIED"
+    if isinstance(error, OSError) or reason in ("BROKER_SEND_AMBIGUOUS", "BROKER_GET_SEND_AMBIGUOUS",
+            "BROKER_DELETE_SEND_AMBIGUOUS", "BROKER_CLEANUP_SEND_AMBIGUOUS", "HTTP_TRUNCATED"):
+        return "IO_AMBIGUOUS"
+    return "OBSERVATION_UNAVAILABLE"
+
+
+class _FailureAccounting:
+    """Original server's fail-only local append, never a cleanup/execution grant.
+
+    Constructed while the real transport boundary is valid, before dispatch.
+    After failure it may use only the original intact journal and file custody;
+    it never contacts an observer/broker/API, reads a credential, reopens a file,
+    supplies a worker result or extends the execution deadline.
+    """
+    def __init__(self, owner):
+        require(type(owner) is NativeProxyServer and owner.failure_accounting is
+                owner._failure_accounting_original is self, "FAILURE_ACCOUNTING_OWNER")
+        self.owner, self.broker = owner, owner.broker
+        self.storage, self.log, self.files = owner.storage, owner.log, owner.files
+        self.store_pin = (self.storage.directory, self.storage.lock, self.storage.fd,
+                          canonical_bytes({k: list(v) for k, v in self.storage.identities.items()}))
+        self.operation, self.deadline = owner.active_operation, owner.deadline
+        self.reservation_raw = canonical_bytes(owner.reservation)
+        self.inputs_raw = canonical_bytes([owner.envelope, owner.capacity, owner.profile, owner.plan])
+        self.attempted = self.writing = self.complete = False
+        self.before = self.after = self.row_raw = None
+        self.refusal = None
+        self._state_check()
+        require(not self.broker.closed and not self.broker.failed and not self.log.poisoned
+                and self.log._storage_ambiguous is False and type(self.log._verified_history) is bytes,
+                "FAILURE_ACCOUNTING_PREREQUISITES")
+        _State.check(self.storage)
+
+    def _state_check(self):
+        owner = self.owner
+        require(type(self) is _FailureAccounting and type(owner) is NativeProxyServer
+                and owner.failure_accounting is owner._failure_accounting_original is self
+                and type(self.broker) is _Broker and owner.broker is owner._broker_original is self.broker
+                and self.broker.owner is owner and self.broker.deadline == self.deadline == owner.deadline
+                and type(self.storage) is _State and owner.storage is self.storage and self.storage.owner is owner
+                and self.store_pin == (self.storage.directory, self.storage.lock, self.storage.fd,
+                                       canonical_bytes({k: list(v) for k, v in self.storage.identities.items()}))
+                and type(self.log) is _AdmissionLog and owner.log is self.log and self.log.storage is self.storage
+                and type(self.files) is _Files and owner.files is self.files and self.files.owner is owner
+                and owner.reserved is True and owner.active_operation == self.operation and self.operation in CASES
+                and self.reservation_raw == canonical_bytes(owner.reservation)
+                and self.inputs_raw == canonical_bytes([owner.envelope, owner.capacity, owner.profile, owner.plan]),
+                "FAILURE_ACCOUNTING_OWNER_CHANGED")
+        NativeProxyServer._owner_check(owner)
+        if self.writing:
+            require(self.attempted and self.broker.closed and self.broker.failed
+                    and self.storage._failure_accounting is self
+                    and self.log._storage_ambiguous is False
+                    and self.log._verified_history in (self.before, self.after), "FAILURE_ACCOUNTING_STATE_CHANGED")
+
+    def record(self, error):
+        # This input is an exception already caught by the fixed driver, not a
+        # caller-provided resource list, cleanup result or authority override.
+        require(not self.attempted, "FAILURE_ACCOUNTING_ALREADY_ATTEMPTED")
+        self.attempted = True
+        require(isinstance(error, BaseException), "FAILURE_ACCOUNTING_ERROR_REQUIRED")
+        self._state_check()
+        require(self.broker.closed and self.broker.failed and self.log._storage_ambiguous is False
+                and getattr(self.storage, "_failure_accounting", None) is None,
+                "FAILURE_ACCOUNTING_UNAVAILABLE")
+        self.before = self.log._verified_history
+        require(type(self.before) is bytes, "FAILURE_ACCOUNTING_HISTORY_REQUIRED")
+        states, previous, count = parse_reservations(self.before)
+        binding = document(self.reservation_raw)
+        prior = states.get((binding["tenantId"], binding["runNonce"]))
+        require(prior is not None and prior["current"] == self.operation and prior["held"],
+                "FAILURE_ACCOUNTING_ACTIVE_CASE_REQUIRED")
+        now, reason = utc_now(), _failure_reason(error)
+        events = self.broker._events_original
+        if (type(error) is ConformanceError and error.reason == "API_EXACT_GRANT_REQUIRED"
+                and type(events) is _BrokerEvents and events is self.broker.events
+                and events.owner is self.owner and events.start.operation == self.operation
+                and type(events.transcript.pending) is dict
+                and events.transcript.pending.get("verb") == "DELETE"):
+            reason = "DELETE_DENIED"  # accounting only, never a renewed DELETE grant
+        cleanup = _failure_cleanup(binding, self.operation, now, prior, reason)
+        self.row_raw = canonical_bytes({"sequence": count + 1, "previousDigest": previous,
+            "binding": binding, "state": "FAILURE_RECORDED", "operation": self.operation,
+            "observedAt": now, "cleanup": cleanup, "failure": {"reasonCode": reason}})
+        self.after = self.before + self.row_raw + b"\n"
+        parse_reservations(self.after)
+        self.storage._failure_accounting = self
+        self.writing = True
+        self._state_check()
+        digest = _AdmissionLog.record_failure(self.log, binding, self.operation, now, reason,
+                                             expected_history=self.before)
+        self._state_check()
+        require(digest == byte_digest(self.row_raw) and self.storage.read() == self.after,
+                "FAILURE_ACCOUNTING_READBACK_CHANGED")
+        self._state_check()
+        self.complete = True  # retained failure evidence only; never an HTTP success
+
+
 class _State:
     """Exclusive precreated store. Never create, truncate, repair or rotate it."""
     def __init__(self, owner):
         self.owner, self.lock, self.fd = owner, None, None
+        self._failure_accounting = None
         self.identities = {}
         self.directory = owner.files._open(STATE, True, 0o700)
         for name, attr in (("admission.lock", "lock"), ("reservations.jsonl", "fd")):
@@ -4787,6 +6369,11 @@ class _State:
         self.check()
 
     def check(self):
+        accounting = getattr(self, "_failure_accounting", None)
+        if accounting is not None:
+            require(type(accounting) is _FailureAccounting and accounting.storage is self,
+                    "ADMISSION_FAILURE_OWNER_CHANGED")
+            _FailureAccounting._state_check(accounting)
         self.owner._owner_check()
         self.owner.files.check()
         for attr, name in (("lock", "admission.lock"), ("fd", "reservations.jsonl")):
@@ -4794,6 +6381,8 @@ class _State:
             require(_custody_identity(os.fstat(getattr(self, attr)))[:6] == expected
                     and _custody_identity(os.stat(name, dir_fd=self.directory, follow_symlinks=False))[:6] == expected,
                     "ADMISSION_STORE_CHANGED")
+        if accounting is not None:
+            _FailureAccounting._state_check(accounting)
 
     @contextmanager
     def transaction(self):
@@ -4855,9 +6444,11 @@ class NativeProxyServer:
         self.observer = self.storage = self.listener = self.connection = None
         self.broker = self._broker_original = None
         self.qualification_binding = None
+        self.qualification = self._qualification_original = None
         self.self_inspection = None
         self.memfd = None
         self.active_operation = None
+        self.failure_accounting = self._failure_accounting_original = None
         self.reserved = False
         self.last_wall, self.last_mono = require_time(utc_now(), "now"), time.monotonic()
         try:
@@ -4899,14 +6490,14 @@ class NativeProxyServer:
                                              self.profile, self.observation_binding, self.endpoint])
             self.qualification_binding = object.__new__(_ServerQualificationBinding)
             self.qualification_binding.__init__(self)
-            self.self_inspection = object.__new__(_KernelSelfInspection)
-            self.self_inspection.__init__(self)
-            require(_fixed_probes().require_server_containment(self) is None, "PROXY_CONTAINMENT_UNAVAILABLE")
+            self.qualification = self._qualification_original = object.__new__(_KernelQualification)
+            self.qualification.__init__(self)
             self.storage = object.__new__(_State)
             self.storage.__init__(self)
             self.log = _AdmissionLog(self.storage)
             self.observer = object.__new__(_Observer)
             self.observer.__init__(self)
+            self.qualification.check_peer("OBSERVER", self.observer)
             self.broker = self._broker_original = object.__new__(_Broker)
             self.broker.__init__(self)
             self.files.sealed = True
@@ -4967,15 +6558,18 @@ class NativeProxyServer:
                 and self.snapshot == canonical_bytes([self.envelope, self.capacity, self.plan, self.binding,
                                                        self.profile, self.observation_binding, self.endpoint]),
                 "PROXY_AUTHORITY_CHANGED")
-        self.qualification_binding.check()
-        self.self_inspection.check()
-        require(_fixed_probes().require_server_containment(self) is None, "PROXY_CONTAINMENT_UNAVAILABLE")
+        require(type(self.qualification) is _KernelQualification
+                and self.qualification is self._qualification_original,
+                "PROXY_QUALIFICATION_REQUIRED")
+        require(_KernelQualification.check_self(self.qualification) is None,
+                "PROXY_CONTAINMENT_UNAVAILABLE")
 
     def _broker_check(self):
         self._owner_check()
         require(type(self.broker) is _Broker and self.broker is self._broker_original
                 and self.broker.owner is self, "PROXY_BROKER_REQUIRED")
-        require(self.broker.check() is None, "PROXY_BROKER_CHECK_RESULT")
+        require(_KernelQualification.check_peer(self.qualification, "BROKER", self.broker) is None,
+                "PROXY_BROKER_CHECK_RESULT")
 
     def _transport_check(self):
         self._base_check()
@@ -5005,7 +6599,6 @@ class NativeProxyServer:
                 require(before <= now < deadline, "PROXY_ACCEPT_DEADLINE")
 
     def serve(self):
-        from .live_session import SCHEMA, validate_receipt
         for _ in CASES:
             try:
                 self._accept()
@@ -5022,24 +6615,10 @@ class NativeProxyServer:
                 self._transport_check()
                 self.log.record(self.reservation, "RUNNING", operation, utc_now())
                 self.active_operation = operation
-                # CONF-LIVE-004 owns actual probes and the broker-fenced native
-                # execution adapter. An absent adapter never returns a receipt.
-                result = _fixed_probes().execute_server_probe(request, self, self.deadline)
-                require(type(result) is tuple and len(result) == 2 and type(result[0]) is bytes
-                        and type(result[1]) is list, "PROXY_PROBE_RESULT_INVALID")
+                receipt_raw = self._drive_case()
+                receipt = document(receipt_raw, 4194304)
                 self._transport_check()
-                states, _, _ = parse_reservations(self.storage.read())
-                prior = states[(self.envelope["tenantId"], self.envelope["nonce"])]
-                cleanup = cleanup_receipt(canonical_digest(self.reservation), operation, utc_now(), result[1], prior["cleanupDigest"])
-                session = {k: v for k, v in self.binding.items() if k not in ("notBefore", "notAfter")}
-                session.update(schemaVersion=SCHEMA, issuedAt=self.binding["notBefore"], expiresAt=self.binding["notAfter"], state="RUNNING")
-                receipt = validate_receipt(result[0], session, self.binding, request,
-                    self.plan["regressions"] if operation == "FULL_PREDECESSOR_REGRESSION" else {}, utc_now())
-                require(receipt["status"] != "PASS" or not result[1], "PROXY_CLEANUP_NOT_PROVEN")
-                self.log.record(self.reservation, "RECORDED", operation, cleanup["observedAt"], cleanup)
-                self.active_operation = None
-                self._transport_check()
-                tls.write(http_message("HTTP/1.1 200 OK", canonical_bytes(receipt)))
+                tls.write(http_message("HTTP/1.1 200 OK", receipt_raw))
                 tls.notify_close()
                 if receipt["status"] != "PASS":
                     return
@@ -5047,6 +6626,85 @@ class NativeProxyServer:
                 connection, self.connection = self.connection, None
                 if connection is not None:
                     connection.close()
+
+    def _drive_case(self):
+        """Drive the fixed original broker; never import, call or spawn a worker."""
+        self._transport_check()
+        broker = self.broker
+        require(type(broker) is _Broker and broker is self._broker_original and broker.owner is self
+                and self.active_operation in CASES, "PROXY_DRIVER_OWNER_INVALID")
+        require(self.failure_accounting is self._failure_accounting_original is None,
+                "FAILURE_ACCOUNTING_ALREADY_OWNED")
+        self.failure_accounting = self._failure_accounting_original = object.__new__(_FailureAccounting)
+        self.failure_accounting.__init__(self)
+        try:
+            _Broker.begin(broker)
+            while True:
+                self._transport_check()
+                raw = _Broker.poll(broker)
+                if raw is None:
+                    continue  # bounded poll guards retain the original deadline
+                frame = broker_document(raw, "frame")
+                if frame["kind"] == "RESOURCE_ACTION":
+                    verb = frame["payload"]["verb"]
+                    if verb == "CREATE":
+                        _Broker.record_create_intent(broker)
+                    _Broker.check_action_ownership(broker)
+                    _Broker.prepare_api(broker)
+                    if verb == "CREATE":
+                        _Broker.exchange_api_create(broker)
+                        _Broker.record_api_created(broker)
+                        _Broker.send_create_result(broker)
+                        _Broker.retire_create_result(broker)
+                        _Broker.handoff_create_result(broker)
+                    elif verb == "GET":
+                        _Broker.exchange_api_get(broker)
+                        if broker.get_action.outcome == "ABSENT":
+                            _Broker.record_get_absence(broker)
+                        _Broker.send_get_result(broker)
+                        _Broker.handoff_get_result(broker)
+                    elif verb == "DELETE":
+                        _Broker.exchange_api_delete(broker)
+                        _Broker.send_delete_result(broker)
+                        _Broker.handoff_delete_result(broker)
+                    else:
+                        require(False, "BROKER_RESOURCE_VERB_INVALID")
+                else:
+                    require(frame["kind"] == "RECEIPT_CHUNK", "BROKER_INBOUND_KIND_UNAVAILABLE")
+                    if _receipt_chunks_complete(broker.events.transcript.chunks):
+                        break
+            _Broker.seal_cleanup(broker)
+            _Broker.send_cleanup(broker)
+            while _Broker.poll_terminal(broker) is None:
+                self._transport_check()
+            _Broker.record_terminal(broker)
+            completion = broker.completion
+            require(type(completion) is _BrokerCompletion and completion is broker._completion_original
+                    and completion.complete and not completion.failed, "PROXY_TERMINAL_REQUIRED")
+            _BrokerCompletion._check(completion)
+            receipt_raw = completion.receipt_raw
+            if completion.receipt_status == "PASS":
+                _Broker.finish_case(broker)
+            # FAIL/UNAVAILABLE cannot advance the case or release its capacity.
+            self._transport_check()
+            self.failure_accounting = self._failure_accounting_original = None
+            return receipt_raw
+        except BaseException as error:
+            broker.failed = True
+            try:
+                _Broker.close(broker)
+            except BaseException:
+                pass  # retain every intent/UID/cleanup row; no retry or wider effect
+            accounting = self._failure_accounting_original
+            try:
+                require(type(accounting) is _FailureAccounting, "FAILURE_ACCOUNTING_UNAVAILABLE")
+                _FailureAccounting.record(accounting, error)
+            except BaseException:
+                # An uncertain journal/custody cannot be repaired or bypassed.
+                # Preserve the original refusal and all previously durable facts.
+                if type(accounting) is _FailureAccounting:
+                    accounting.refusal = "ACCOUNTING_UNAVAILABLE"
+            raise
 
     def close(self):
         global _ACTIVE
@@ -5058,7 +6716,16 @@ class NativeProxyServer:
         self.broker = self._broker_original = None
         if broker is not None:
             operations.append(broker.close)  # never close a substituted current attribute
-        for attr in ("connection", "listener", "observer", "storage", "self_inspection", "qualification_binding", "secrets", "files"):
+        qualification = getattr(self, "_qualification_original", None)
+        self.qualification = self._qualification_original = self.self_inspection = None
+        for attr in ("connection", "listener", "observer", "storage"):
+            resource = getattr(self, attr, None)
+            setattr(self, attr, None)
+            if resource is not None:
+                operations.append(resource.close)
+        if qualification is not None:
+            operations.append(qualification.close)
+        for attr in ("qualification_binding", "secrets", "files"):
             resource = getattr(self, attr, None)
             setattr(self, attr, None)
             if resource is not None:
