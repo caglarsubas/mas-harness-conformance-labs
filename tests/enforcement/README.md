@@ -12,8 +12,22 @@ W04 test source for the Harness-Onion enforcement work, per the adopted W04-0 pl
   dependency. The native probes are Rust, standard library only, under `probes/enforcement/` (owner decision Q-T2-B,
   2026-10-13): CI checks their source with the standard-library gates in `test_probes.py`; they compile only on the
   author's machine with the installed Rust 1.99.0 tree (Q-T2-TOOL), recorded in `probes/enforcement/BUILD_EVIDENCE.json`
-  as author evidence, until the R12 Rust profile exists. `toolchains.json` records both, the open gaps G-JSONSCHEMA and
-  G-REPLAY-INPUTS (the I06 v2 and native v3 replays' inputs outside the snapshots) and the closed gap G-I06-V1 (Q-T5).
+  as author evidence, until the R12 Rust profile exists. `toolchains.json` records them, and the closed gaps G-I06-V1
+  (Q-T5), G-JSONSCHEMA and G-REPLAY-INPUTS (Q-LC-1..4, CONF-ENF-009).
+- The jsonschema child (owner decisions Q-LC-1..4, 2026-10-18, CONF-ENF-009). The nine TG-01 vector sets whose reference
+  models need jsonschema run in a child process, `/opt/planeon/toolchains/met-001/.venv/bin/python3 -I -B`, launched by
+  absolute path from `tg01_contract/_child.py`. The owner's G-JSONSCHEMA root bundle (policy d9b99bd6, Q-JS-1..4,
+  2026-10-16) installed that venv for R12's verifier profile. R12's own interpreter and code stay standard library only;
+  nothing is prefetched or added to `pyproject.toml` or `toolchain.lock` (AGENTS rule 16, Q-LC-2).
+  - The child row in `toolchains.json` pins the interpreter (path, base root, version, prefixes), jsonschema 4.24.0 and
+    the venv's tree digest.
+  - A missing or changed interpreter, jsonschema or venv tree, a launch failure, output on stderr, or any child vector not
+    run fails the run; nothing becomes NOT_RUN_ENV_UNAVAILABLE.
+  - The child also re-runs each set with one pinned expectation flipped, and the parent requires each flip to be caught.
+  - Re-provisioning (Q-JS-4): a re-provisioned met-001 venv changes the tree digest, so it needs an R12 packet that
+    re-pins it.
+  - The launcher verifies the venv against its inventory record (toolchain-met-a2-001, 186e7863…) before each run. R12
+    code never reads that record: the verifier sandbox denies reads under `/etc/planeon`.
 - The stdlib-only R12 reader (`src/`) never imports this area, and this area's own test code imports only the standard
   library and this area. The one exception is `tg02_lifecycle/test_reader_guards.py`, which imports the R12 reader as
   LEDGER-E09's subject (owner decision Q-T9).
@@ -30,8 +44,9 @@ W04 test source for the Harness-Onion enforcement work, per the adopted W04-0 pl
 
 - `tg01_contract/` (TG-01, CONF-ENF-002): every adopted contract's vectors replayed through its snapshotted reference
   model, loaded only through `_models.py`. `tg01_contract/results.json` is the ledger each run must reproduce exactly:
-  every vector PASS, or NOT_RUN_ENV_UNAVAILABLE where its replay needs jsonschema (owner decision Q-T4); CODEC waits
-  for W05's release. Its `caseResults` give each plan case per contract: PASS only when every vector mapped to the
+  every vector PASS when it was replayed and passed in this run, the nine jsonschema sets (`runner` CHILD_MET_001) in the
+  child process (CONF-ENF-009, owner decisions Q-LC-1..4); CODEC waits for W05's release. The I06 v2 and native v3
+  replays read the eight G-REPLAY-INPUTS files, snapshotted from a2eab93 as recorded additions (owner decision Q-LC-4). Its `caseResults` give each plan case per contract: PASS only when every vector mapped to the
   case ran and passed, otherwise NOT_RUN_ENV_UNAVAILABLE with the counts. W02D's reference check also reads the W01 base and `seccomp-allowlists/status.json`, snapshotted
   as recorded additions (owner decision Q-T7). The I05 v3 supplement (S01-S06, harness-onion 93d32e1) is replayed as
   its own vector set (owner decisions Q-T6, Q-T10).
@@ -61,10 +76,9 @@ W04 test source for the Harness-Onion enforcement work, per the adopted W04-0 pl
   D-W02A-F2). S44's subject is the native qualification v3 reference model. It lists one property per item of the plan's
   S44 case (W02D section 4.4's rejection list), each served by the S44 rows whose catalog basis starts with it. A
   property is PASS only when every one of its vectors replayed and passed in the run, and the table is derived from that
-  replay; the native v3 model imports jsonschema, so today every property is NOT_RUN_ENV_UNAVAILABLE (owner decisions Q-T4
-  and Q-T20). S44 turns PASS once the jsonschema root bundle lands and TG-01's native v3 replay is written with its missing
-  inputs (gaps G-JSONSCHEMA and G-REPLAY-INPUTS in `toolchains.json`); TG-08 then needs only its ledger regenerated. Until
-  then a run that gains jsonschema fails here, so the ledger is redone, never stale. The MATRIX cases wait for W05's
+  replay (owner decision Q-T20). The native v3 replay runs in TG-01's child process (CONF-ENF-009), so S44's properties
+  are PASS, and the ledger was regenerated by CONF-ENF-009; a missing child interpreter fails the run rather than turning
+  a property NOT_RUN. The MATRIX cases wait for W05's
   release set (owner decision Q-T8): old profile rejection (native v3, I06 v2 and I05 v3 vectors of another version), new
   profile missing gate/backend (the role-set, backend-component and one-capture refusals, the gate under the broker's
   key or paths, and I06 v2's component-set refusals), and export/upgrade/rollback without nonce reuse (every native v3 migration case, the v3-under-v2 cross-version

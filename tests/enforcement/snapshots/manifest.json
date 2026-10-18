@@ -304,6 +304,62 @@
    "sha256": "9fac4492e1b5f6255993374a6642072855a5855a40bcc68706a25b78fd822965",
    "size": 20359,
    "sourceCommit": "a2eab9365c8663cc1ae23a666e864b821f600fa6"
+  },
+  {
+   "contract": "G-REPLAY-INPUTS (recorded addition, owner decision Q-LC-4)",
+   "path": "architecture/i06-backend-profile/vectors.json",
+   "sha256": "b9c57d64eab03f307e10b02152426a10ebac2fd27102e27ef5873b5865be4cee",
+   "size": 155251,
+   "sourceCommit": "a2eab9365c8663cc1ae23a666e864b821f600fa6"
+  },
+  {
+   "contract": "G-REPLAY-INPUTS (recorded addition, owner decision Q-LC-4)",
+   "path": "architecture/i06-backend-profile/writer-inventory.json",
+   "sha256": "8e6b3b7565cfc93a61162b84d740cffb2871eb66ab85e8c4e80ac813f1af3077",
+   "size": 40914,
+   "sourceCommit": "a2eab9365c8663cc1ae23a666e864b821f600fa6"
+  },
+  {
+   "contract": "G-REPLAY-INPUTS (recorded addition, owner decision Q-LC-4)",
+   "path": "architecture/i06-backend-profile/identity-closure.json",
+   "sha256": "0a9b82ffa2d63bf48a8850574cdf3ece02bf1913f33a72cbb96ed30a40f1f3bb",
+   "size": 46703,
+   "sourceCommit": "a2eab9365c8663cc1ae23a666e864b821f600fa6"
+  },
+  {
+   "contract": "G-REPLAY-INPUTS (recorded addition, owner decision Q-LC-4)",
+   "path": "architecture/i06-backend-profile/upstream-bootstrap-rbac-v1.37.1.json",
+   "sha256": "7529c2a713af2fb90163175924c264d95f4242d7e0c26b1452c77febb13ed50e",
+   "size": 88532,
+   "sourceCommit": "a2eab9365c8663cc1ae23a666e864b821f600fa6"
+  },
+  {
+   "contract": "G-REPLAY-INPUTS (recorded addition, owner decision Q-LC-4)",
+   "path": "architecture/native-profile-v2/vectors.json",
+   "sha256": "6d58d1f36b7bce5739b94dd89512d358b96878c70e1de7cf8f399050b881b396",
+   "size": 481933,
+   "sourceCommit": "a2eab9365c8663cc1ae23a666e864b821f600fa6"
+  },
+  {
+   "contract": "G-REPLAY-INPUTS (recorded addition, owner decision Q-LC-4)",
+   "path": "architecture/native-profile-v2/qualification.schema.json",
+   "sha256": "55bd641fd229f21e04ec00813bcfe600890584e982e290a210720ac5cb160ab0",
+   "size": 65003,
+   "sourceCommit": "a2eab9365c8663cc1ae23a666e864b821f600fa6"
+  },
+  {
+   "contract": "G-REPLAY-INPUTS (recorded addition, owner decision Q-LC-4)",
+   "path": "architecture/native-qualification-inputs/qualification.schema.json",
+   "sha256": "bef248bfa82b234124c014f98e40c5791bced3171bb118b7ed1bb7b8daaf95c3",
+   "size": 37185,
+   "sourceCommit": "a2eab9365c8663cc1ae23a666e864b821f600fa6"
+  },
+  {
+   "contract": "G-REPLAY-INPUTS (recorded addition, owner decision Q-LC-4)",
+   "path": "architecture/native-qualification-inputs/vectors.json",
+   "sha256": "cd1be009b721bb596887335184a33ab8e1f24aed8215477b63e28f058110748f",
+   "size": 212215,
+   "sourceCommit": "a2eab9365c8663cc1ae23a666e864b821f600fa6"
   }
  ]
 }

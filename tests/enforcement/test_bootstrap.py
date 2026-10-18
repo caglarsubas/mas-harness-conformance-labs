@@ -48,6 +48,37 @@ SUPPLEMENT = [("I05 gate channel v3 supplement (recorded addition, owner decisio
 # E02's source, snapshotted from SOURCE_COMMIT after the supplement.
 FEASIBILITY = [("Enforcement feasibility obligation rows (recorded addition, owner decision Q-T13)", "docs/alpha-2/ENFORCEMENT_FEASIBILITY.md",
                 "9fac4492e1b5f6255993374a6642072855a5855a40bcc68706a25b78fd822965", 20359)]
+# Owner decision Q-LC-4 (2026-10-18, CONF-ENF-009): the eight inputs the I06 v2 and native v3 replays read beyond the
+# snapshots (closed gap G-REPLAY-INPUTS), snapshotted from SOURCE_COMMIT after the feasibility rows and pinned here too.
+REPLAY_INPUTS = [
+                 ("G-REPLAY-INPUTS (recorded addition, owner decision Q-LC-4)", "architecture/i06-backend-profile/vectors.json",
+                  "b9c57d64eab03f307e10b02152426a10ebac2fd27102e27ef5873b5865be4cee", 155251),
+                 ("G-REPLAY-INPUTS (recorded addition, owner decision Q-LC-4)", "architecture/i06-backend-profile/writer-inventory.json",
+                  "8e6b3b7565cfc93a61162b84d740cffb2871eb66ab85e8c4e80ac813f1af3077", 40914),
+                 ("G-REPLAY-INPUTS (recorded addition, owner decision Q-LC-4)", "architecture/i06-backend-profile/identity-closure.json",
+                  "0a9b82ffa2d63bf48a8850574cdf3ece02bf1913f33a72cbb96ed30a40f1f3bb", 46703),
+                 ("G-REPLAY-INPUTS (recorded addition, owner decision Q-LC-4)", "architecture/i06-backend-profile/upstream-bootstrap-rbac-v1.37.1.json",
+                  "7529c2a713af2fb90163175924c264d95f4242d7e0c26b1452c77febb13ed50e", 88532),
+                 ("G-REPLAY-INPUTS (recorded addition, owner decision Q-LC-4)", "architecture/native-profile-v2/vectors.json",
+                  "6d58d1f36b7bce5739b94dd89512d358b96878c70e1de7cf8f399050b881b396", 481933),
+                 ("G-REPLAY-INPUTS (recorded addition, owner decision Q-LC-4)", "architecture/native-profile-v2/qualification.schema.json",
+                  "55bd641fd229f21e04ec00813bcfe600890584e982e290a210720ac5cb160ab0", 65003),
+                 ("G-REPLAY-INPUTS (recorded addition, owner decision Q-LC-4)", "architecture/native-qualification-inputs/qualification.schema.json",
+                  "bef248bfa82b234124c014f98e40c5791bced3171bb118b7ed1bb7b8daaf95c3", 37185),
+                 ("G-REPLAY-INPUTS (recorded addition, owner decision Q-LC-4)", "architecture/native-qualification-inputs/vectors.json",
+                  "cd1be009b721bb596887335184a33ab8e1f24aed8215477b63e28f058110748f", 212215)]
+# The closed gap's readBy for each input, rewritten by CONF-ENF-009 to name the R12 replay that reads it (design review
+# D3-2): identity-closure is read only by the I06 v2 RBAC-snapshot replay.
+REPLAY_READERS = {
+    "architecture/i06-backend-profile/vectors.json": "I06 v2 (its v1Vectors pin; the cross-version bases)",
+    "architecture/i06-backend-profile/writer-inventory.json": "I06 v2",
+    "architecture/i06-backend-profile/identity-closure.json": "I06 v2 (the RBAC-snapshot replays' closure)",
+    "architecture/i06-backend-profile/upstream-bootstrap-rbac-v1.37.1.json": "I06 v2",
+    "architecture/native-profile-v2/vectors.json": "I06 v2 and native v3",
+    "architecture/native-profile-v2/qualification.schema.json": "native v3",
+    "architecture/native-qualification-inputs/qualification.schema.json": "native v3",
+    "architecture/native-qualification-inputs/vectors.json": "native v3",
+}
 # Area-local modules area code may import (CONF-ENF-002); _models.py is the one module allowed to load code by path.
 AREA_MODULES = {"_models", "_catalog", "_probes", "tg01_contract", "tg02_lifecycle", "tg03_persistence", "tg04_host",
                 "tg05_clocks", "tg08_compatibility", "."}
@@ -170,11 +201,12 @@ class SnapshotTests(unittest.TestCase):
         expected += [{"contract": contract, "path": path, "sha256": sha, "size": size, "sourceCommit": SUPPLEMENT_COMMIT}
                      for contract, path, sha, size in SUPPLEMENT]
         expected += [{"contract": contract, "path": path, "sha256": sha, "size": size, "sourceCommit": SOURCE_COMMIT}
-                     for contract, path, sha, size in FEASIBILITY]
+                     for contract, path, sha, size in FEASIBILITY + REPLAY_INPUTS]
         observed = [{key: row[key] for key in ("contract", "path", "sha256", "size", "sourceCommit") if key in expected[index]}
                     for index, row in enumerate(manifest()["files"])]
         self.assertEqual(observed, expected)
-        self.assertEqual(len(expected), 37 + len(ADDITIONS) + len(SUPPLEMENT) + len(FEASIBILITY))
+        self.assertEqual(len(expected), 37 + len(ADDITIONS) + len(SUPPLEMENT) + len(FEASIBILITY) + len(REPLAY_INPUTS))
+        self.assertEqual(len(expected), 51)
 
     def test_reference_model_imports_are_exactly_the_recorded_gaps(self):
         value = manifest()
@@ -193,14 +225,26 @@ class SnapshotTests(unittest.TestCase):
         self.assertEqual(external, EXTERNAL_IMPORTS)
         self.assertEqual(missing, {path: set(names) for path, names in MISSING_SIBLINGS.items()})
         record = strict(regular(AREA / "toolchains.json"))
-        self.assertEqual({row["id"]: row["snapshots"] for row in record["gaps"]},
+        # CONF-ENF-009 (owner decisions Q-LC-1..4): both gaps are closed. The models still import jsonschema, which the
+        # child process provides; each closed row keeps the snapshots it binds.
+        self.assertEqual(record["gaps"], [])
+        closed = {row["id"]: row for row in record["closedGaps"]}
+        self.assertEqual({name: row["snapshots"] for name, row in closed.items() if "snapshots" in row},
                          {"G-JSONSCHEMA": sorted(EXTERNAL_IMPORTS),
                           "G-REPLAY-INPUTS": ["scripts/i06_backend_profile_v2.py", "scripts/native_qualification_v3.py"]})
-        # Review R1-5: the I06 v2 and native v3 replays also need inputs outside the snapshots; the gap names them all.
-        inputs = next(row for row in record["gaps"] if row["id"] == "G-REPLAY-INPUTS")["missingInputs"]
-        self.assertEqual(len(inputs), 8)
-        self.assertFalse({row["path"] for row in inputs} & {row["path"] for row in value["files"]})
-        self.assertEqual([(row["id"], row["closedBy"]) for row in record["closedGaps"]], [("G-I06-V1", "Q-T5")])
+        # Review R1-5: the I06 v2 and native v3 replays need inputs beyond the model snapshots; they are now snapshotted.
+        inputs = closed["G-REPLAY-INPUTS"]["missingInputs"]
+        self.assertEqual([(row["path"], row["sha256"], row["size"]) for row in inputs],
+                         [(path, sha, size) for _, path, sha, size in REPLAY_INPUTS])
+        self.assertEqual({row["path"]: row["readBy"] for row in inputs}, REPLAY_READERS)
+        files = {row["path"]: row for row in value["files"]}
+        self.assertTrue(all((files[row["path"]]["sha256"], files[row["path"]]["size"]) == (row["sha256"], row["size"])
+                            for row in inputs))
+        self.assertEqual([(row["id"], row["closedBy"]) for row in record["closedGaps"]],
+                         [("G-I06-V1", "Q-T5"), ("G-JSONSCHEMA", "Q-LC-1..4"), ("G-REPLAY-INPUTS", "Q-LC-1..4")])
+        self.assertEqual({name: row["packet"] for name, row in closed.items()},
+                         {"G-I06-V1": "CONF-ENF-002", "G-JSONSCHEMA": "CONF-ENF-009", "G-REPLAY-INPUTS": "CONF-ENF-009"})
+        self.assertFalse({"decideIn", "affectsW04_2"} & {key for row in record["closedGaps"] for key in row})
 
 
 class IndependenceTests(unittest.TestCase):
@@ -275,11 +319,17 @@ class ToolchainTests(unittest.TestCase):
         self.assertEqual(value["planDecision"], {key: tool[key] for key in ("id", "date", "decision")})
         self.assertEqual([(row["id"], row["date"]) for row in value["amendments"]],
                          [("Q-T1", "2026-10-11"), ("Q-T2", "2026-10-11"), ("Q-T4", "2026-10-11"), ("Q-T5", "2026-10-11"),
-                          ("Q-T2-B", "2026-10-13"), ("Q-T2-TOOL", "2026-10-13")])
+                          ("Q-T2-B", "2026-10-13"), ("Q-T2-TOOL", "2026-10-13"), ("Q-LC-1", "2026-10-18"),
+                          ("Q-LC-2", "2026-10-18"), ("Q-LC-3", "2026-10-18"), ("Q-LC-4", "2026-10-18")])
         states = {row["id"]: row["state"] for row in value["toolchains"]}
         # Owner decision Q-T2 (b) (2026-10-13): the probe source is checked by the stdlib gates; it compiles only on the
         # author's machine until the R12 Rust profile exists.
-        self.assertEqual(states, {"python-stdlib-unittest": "IN_USE", "rust-musl-static-probes": "SOURCE_ONLY"})
+        self.assertEqual(states, {"python-stdlib-unittest": "IN_USE", "rust-musl-static-probes": "SOURCE_ONLY",
+                                  "python-met-001-child": "IN_USE"})
+        # CONF-ENF-009 (Q-LC-2, AGENTS rule 16): the child interpreter is the third row, pinned, not a dependency.
+        self.assertEqual([row["id"] for row in value["toolchains"]],
+                         ["python-stdlib-unittest", "rust-musl-static-probes", "python-met-001-child"])
+        self.assertEqual(value["toolchains"][2]["decidedBy"], "Q-LC-2")
         self.assertIs(value["toolchains"][1]["installed"], False)
         self.assertEqual(value["toolchains"][0]["dependencies"], [])
 

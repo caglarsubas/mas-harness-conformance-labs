@@ -1,9 +1,14 @@
 """TG-01 replays: each adopted contract's vectors through its snapshotted reference model (W04-2, CONF-ENF-002).
 
 Expected results come only from the vectors; the models are the adopted contracts' reference models, never an
-implementation. Every vector is replayed in full. A vector whose replay reaches the reference model's jsonschema import
-(gap G-JSONSCHEMA) is counted NOT_RUN_ENV_UNAVAILABLE under owner decision Q-T4 (2026-10-11), never PASS; any other
-difference raises Mismatch naming the vector. Each replay returns a Tally of the vector ids in each result.
+implementation. Every vector is replayed in full, and any difference raises Mismatch naming the vector. Each replay
+returns a Tally of the vector ids in each result.
+
+The nine vector sets whose models need jsonschema (CHILD_SETS) run in a child process on the pinned met-001 venv python
+(CONF-ENF-009, owner decisions Q-LC-1..4, 2026-10-18; `_child.py`): in this interpreter, which stays standard library
+only, each of them runs its standard-library pre-checks and then returns the child's verified tally. A replay that still
+reaches a missing jsonschema import is counted NOT_RUN_ENV_UNAVAILABLE (owner decision Q-T4), and the parent refuses any
+such id from the child, so no child set can be NOT_RUN.
 """
 from __future__ import annotations
 
@@ -24,6 +29,11 @@ I06 = "architecture/i06-backend-profile-v2/"
 NAT = "architecture/native-profile-v3/"
 # I07's writer identity values, as the I07 v3 contract states them for the qualification namespace.
 I07_NAMESPACE, I07_AUTHORITY = "planeon-qual", "127.0.0.1:6443"
+I06_V1 = "architecture/i06-backend-profile/"
+NAT_V2 = "architecture/native-profile-v2/"
+NAT_V1 = "architecture/native-qualification-inputs/"
+# True only inside the child process (set by child_report on this module), where the jsonschema replays run.
+IN_CHILD = False
 
 
 class Mismatch(AssertionError):
@@ -303,7 +313,7 @@ def i05_config_refusals():
     return tally
 
 
-def i05_frames():
+def _i05_frames():
     model, schema, vectors = _i05()
     tally = Tally()
     for row in vectors["frames"]:
@@ -314,17 +324,22 @@ def i05_frames():
 INPUT_TYPES = {"bytes": bytes, "bytearray": bytearray, "str": lambda raw: raw.decode("ascii")}
 
 
-def i05_byte_frames():
+def _i05_byte_frames():
     model, schema, vectors = _i05()
     tally = Tally()
     for row in vectors["byteFrames"]:
         raw = INPUT_TYPES[row["inputType"]](base64.b64decode(row["base64"], validate=True))
         tally.run(row["id"], lambda: require(refusal(lambda: model.decode_frame(raw, schema)) == row["expect"], "I05 byte frame " + row["id"]))
-    require([row["id"] for row in vectors["byteFrames"]] == ["B%02d" % n for n in range(1, 15)], "I05 byte checks in order")
+    _i05_byte_frames_pre()
     return tally
 
 
-def i05_transcripts():
+def _i05_byte_frames_pre():
+    vectors = _models.data(I05 + "vectors.json")
+    require([row["id"] for row in vectors["byteFrames"]] == ["B%02d" % n for n in range(1, 15)], "I05 byte checks in order")
+
+
+def _i05_transcripts():
     model, schema, vectors = _i05()
     tally = Tally()
     for row in vectors["transcripts"]:
@@ -347,26 +362,40 @@ def _plain(row):
     return [output for event, output in zip(row["events"], row["outputs"]) if event["type"] not in INJECTIONS]
 
 
-def i05_supplement():
-    supplement, (model, schema, vectors) = _models.data(I05_SUPPLEMENT + "vectors.json"), _i05()
+def _i05_supplement_checks(supplement, row, by_id):
+    """The standard-library checks of one supplement transcript (Q-T10, review R1-10); they run before the model."""
+    reference = supplement["configs"][row["config"]]
+    require(set(reference) == {"vectorsPath", "key"} and reference["vectorsPath"] == I05 + "vectors.json"
+            and reference["key"] == ["configs", row["config"]], "I05 supplement configuration " + row["id"])
+    require(set(row) <= {"id", "intent", "config", "events", "outputs", "final", "equals"}
+            and len(row["outputs"]) == len(row["events"]), "I05 supplement transcript shape " + row["id"])
+    if "equals" in row:  # optional in the supplement format
+        require(row["equals"] in by_id and row["equals"] != row["id"], "I05 supplement equals target " + row["id"])
+        other = by_id[row["equals"]]
+        require(_plain(row) == _plain(other) and row["final"] == other["final"], "I05 supplement equals " + row["id"])
+
+
+def _i05_supplement_pre():
+    """The supplement's whole standard-library part: its contract binding and every transcript's own checks."""
+    supplement = _models.data(I05_SUPPLEMENT + "vectors.json")
     manifest = {row["path"]: row["sha256"] for row in _models._manifest()["files"]}
     require(supplement["contract"] == {"path": I05 + "vectors.json", "sha256": manifest[I05 + "vectors.json"],
                                        "model": {"path": "scripts/i05_gate_channel_v3.py",
                                                  "sha256": manifest["scripts/i05_gate_channel_v3.py"]}},
             "the supplement names the pinned v3 vectors and model")
     by_id = {row["id"]: row for row in supplement["transcripts"]}
+    for row in supplement["transcripts"]:
+        _i05_supplement_checks(supplement, row, by_id)
+    return supplement, by_id
+
+
+def _i05_supplement():
+    supplement, by_id = _i05_supplement_pre()
+    model, schema, vectors = _i05()
     tally = Tally()
     for row in supplement["transcripts"]:
         def check(row=row):
-            reference = supplement["configs"][row["config"]]
-            require(set(reference) == {"vectorsPath", "key"} and reference["vectorsPath"] == I05 + "vectors.json"
-                    and reference["key"] == ["configs", row["config"]], "I05 supplement configuration " + row["id"])
-            require(set(row) <= {"id", "intent", "config", "events", "outputs", "final", "equals"}
-                    and len(row["outputs"]) == len(row["events"]), "I05 supplement transcript shape " + row["id"])
-            if "equals" in row:  # optional in the supplement format
-                require(row["equals"] in by_id and row["equals"] != row["id"], "I05 supplement equals target " + row["id"])
-                other = by_id[row["equals"]]
-                require(_plain(row) == _plain(other) and row["final"] == other["final"], "I05 supplement equals " + row["id"])
+            _i05_supplement_checks(supplement, row, by_id)
             outputs, final = model.replay(vectors["configs"][row["config"]], row["events"], schema)
             require(outputs == row["outputs"] and final == row["final"], "I05 supplement transcript " + row["id"])
         tally.run(row["id"], check)
@@ -409,7 +438,7 @@ def i07_outcome_checks():
     return tally
 
 
-def i07_frames():
+def _i07_frames():
     model, kinds, schema, vectors = _i07()
     tally = Tally()
     for row in vectors["frames"]:
@@ -420,7 +449,7 @@ def i07_frames():
     return tally
 
 
-def i07_byte_frames():
+def _i07_byte_frames():
     model, kinds, schema, vectors = _i07()
     tally = Tally()
     for row in vectors["byteFrames"]:
@@ -431,7 +460,7 @@ def i07_byte_frames():
     return tally
 
 
-def i07_transcripts():
+def _i07_transcripts():
     model, kinds, schema, vectors = _i07()
     schemas = {"i05": _models.data(I05 + "channel.schema.json"), "i07": schema}
     tally = Tally()
@@ -468,29 +497,411 @@ def w02d_amendment():
     return tally
 
 
-# I06 backend profile v2 and native qualification profile v3 --------------------------------------------------------
-# Both models import jsonschema when they load (I06 v2 through native v3), so no vector can be replayed here. If the
-# environment ever provides jsonschema, the load succeeds and these refuse until real replays are written (Q-T4). The
-# replays also need inputs that are not snapshotted (gap G-REPLAY-INPUTS in toolchains.json, review R1-5).
+# The child sets (CONF-ENF-009, owner decisions Q-LC-1..4, 2026-10-18) ---------------------------------------------
+# These nine vector sets need jsonschema: I05 and I07 through check_frame, I06 v2 and native v3 when their models load.
+# In this interpreter each runs its standard-library pre-checks and returns the child's verified tally (_child.py); in
+# the child process (IN_CHILD) each runs its full replay. Expected results come only from the vector files.
 
-def _unwritten(name):
-    _models.model(name)
-    raise Mismatch(name + " loaded: jsonschema is available, so write its vector replay (owner decision Q-T4) and snapshot"
-                   " its missing inputs first (gap G-REPLAY-INPUTS)")
+CHILD_SETS = (
+    ("I05 gate channel v3", "frames"),
+    ("I05 gate channel v3", "byteFrames"),
+    ("I05 gate channel v3", "transcripts"),
+    ("I05 gate channel v3", "supplement"),
+    ("I07 policy write v3", "frames"),
+    ("I07 policy write v3", "byteFrames"),
+    ("I07 policy write v3", "transcripts"),
+    ("I06 backend profile v2", "vectors"),
+    ("Native qualification profile v3", "vectors"),
+)
+
+
+def _dispatch(key, replay, pre=None):
+    if pre is not None:
+        pre()
+    if IN_CHILD:
+        return replay()
+    from tg01_contract import _child
+    return _child.tally(key)
+
+
+def i05_frames():
+    return _dispatch(CHILD_SETS[0], _i05_frames)
+
+
+def i05_byte_frames():
+    return _dispatch(CHILD_SETS[1], _i05_byte_frames, _i05_byte_frames_pre)
+
+
+def i05_transcripts():
+    return _dispatch(CHILD_SETS[2], _i05_transcripts)
+
+
+def i05_supplement():
+    return _dispatch(CHILD_SETS[3], _i05_supplement, _i05_supplement_pre)
+
+
+def i07_frames():
+    return _dispatch(CHILD_SETS[4], _i07_frames)
+
+
+def i07_byte_frames():
+    return _dispatch(CHILD_SETS[5], _i07_byte_frames)
+
+
+def i07_transcripts():
+    return _dispatch(CHILD_SETS[6], _i07_transcripts)
 
 
 def i06_v2_vectors():
-    vectors = _models.data(I06 + "vectors.json")
-    ids = [row["id"] for key in ("evidenceAccepted", "snapshotAccepted", "evidenceNegative", "snapshotNegative", "crossVersion")
-           for row in vectors[key]]
-    return Tally().whole(ids, lambda: _unwritten("i06_backend_profile_v2"))
+    return _dispatch(CHILD_SETS[7], _i06_v2_replay)
 
 
 def native_v3_vectors():
+    return _dispatch(CHILD_SETS[8], _native_v3_replay)
+
+
+# Closed vector operations, each the adopted layer's own (harness-onion a2eab93): I06 v2's admits a dict selector that
+# must match exactly one list element; native v3's uses plain keys. Both add `append` to set and delete.
+
+def _locate(node, key):
+    if type(key) is dict:
+        found = [index for index, item in enumerate(node) if type(item) is dict and all(item.get(k) == v for k, v in key.items())]
+        require(len(found) == 1, "vector selector must match exactly one element")
+        return found[0]
+    return key
+
+
+def apply_i06(value, ops):
+    value = copy.deepcopy(value)
+    for op in ops:
+        require(type(op) is dict and op.get("op") in ("set", "delete", "append") and type(op.get("path")) is list
+                and op["path"], "closed vector operation")
+        *parents, last = op["path"]
+        node = value
+        for key in parents:
+            node = node[_locate(node, key)]
+        if op["op"] == "set":
+            node[_locate(node, last)] = copy.deepcopy(op["value"])
+        elif op["op"] == "delete":
+            del node[_locate(node, last)]
+        else:
+            node[_locate(node, last)].append(copy.deepcopy(op["value"]))
+    return value
+
+
+def apply_native(value, ops):
+    value = copy.deepcopy(value)
+    for op in ops:
+        require(type(op) is dict and op.get("op") in ("set", "delete", "append") and type(op.get("path")) is list
+                and op["path"], "closed vector operation")
+        *parents, last = op["path"]
+        node = value
+        for key in parents:
+            node = node[key]
+        if op["op"] == "set":
+            node[last] = copy.deepcopy(op["value"])
+        elif op["op"] == "delete":
+            del node[last]
+        else:
+            node[last].append(copy.deepcopy(op["value"]))
+    return value
+
+
+def _loaded(name, ids, tally):
+    """The model, or None after recording every id NOT_RUN when its load reaches a missing jsonschema (Q-T4)."""
+    try:
+        return _models.model(name)
+    except ModuleNotFoundError as exc:
+        if exc.name != "jsonschema":
+            raise
+        tally.ids["NOT_RUN_ENV_UNAVAILABLE"].extend(ids)
+        return None
+
+
+# I06 backend profile v2 ----------------------------------------------------------------------------------------------
+# As a2eab93's validate_i06_v2_vectors replays each vector, without its contract-history sets (CHANGED_REPLAYS,
+# MOVED_ACCEPTED, DISTINCTNESS), which check the contract's history rather than a vector's result.
+
+I06_KEYS = ("evidenceAccepted", "snapshotAccepted", "evidenceNegative", "snapshotNegative", "crossVersion")
+I06_HEADER = {"evidenceClass", "kubernetesBaseline", "qualificationNamespace", "v1Vectors", "w02aBackend", "evidencePositive",
+              "snapshotPositive", "evidenceAccepted", "snapshotAccepted", "evidenceNegative", "snapshotNegative", "crossVersion"}
+# The evidenceNegative rows that record the production refusal of a test-only backend; the positive pre-check takes
+# its text from them (design review D2-7).
+I06_PRODUCTION_ROWS = ("E35", "G12")
+
+
+def _i06_ids(vectors):
+    return [row["id"] for key in I06_KEYS for row in vectors[key]]
+
+
+def _i06_v2_replay():
+    vectors = _models.data(I06 + "vectors.json")
+    ids = _i06_ids(vectors)
+    tally = Tally()
+    model = _loaded("i06_backend_profile_v2", ids, tally)
+    if model is None:
+        return tally
+    v1_raw = _models.snapshot_bytes(I06_V1 + "vectors.json")
+    v1_vectors = _models.data(I06_V1 + "vectors.json")
+    inventory = _models.data(I06_V1 + "writer-inventory.json")
+    closure = _models.data(I06_V1 + "identity-closure.json")
+    bootstrap = _models.data(I06_V1 + "upstream-bootstrap-rbac-v1.37.1.json")
+    w02a_vectors, w02a_schema = _models.data(NAT + "vectors.json"), _models.data(NAT + "qualification.schema.json")
+    w02a_v2_vectors = _models.data(NAT_V2 + "vectors.json")
+    require(type(vectors) is dict and set(vectors) == I06_HEADER and vectors["evidenceClass"] == "DATA_CHECK_ONLY"
+            and vectors["kubernetesBaseline"] == "v1.37.1"
+            and vectors["v1Vectors"] == {"path": I06_V1 + "vectors.json", "sha256": hashlib.sha256(v1_raw).hexdigest()}
+            and vectors["w02aBackend"] == {"vectors": NAT + "vectors.json", "schema": NAT + "qualification.schema.json",
+                                           "positive": 0}, "I06 v2 vectors header")
+    namespace = vectors["qualificationNamespace"]
+    evidence, snapshot = vectors["evidencePositive"], vectors["snapshotPositive"]
+    positives = w02a_vectors["positive"]
+    require(namespace == v1_vectors["qualificationNamespace"] and snapshot == v1_vectors["snapshotPositive"]
+            and evidence["schemaVersion"] == model.EVIDENCE_VERSION
+            and {key: value for key, value in evidence.items() if key not in ("schemaVersion", "w02aRecord")}
+            == {key: value for key, value in v1_vectors["evidencePositive"].items() if key != "schemaVersion"}
+            and evidence["w02aRecord"] == {"schemaVersion": model.W02A_VERSION,
+                                           "qualificationDigest": model.record_digest(positives[0]["record"])},
+            "I06 v2 positives are the v1 positives bound to W02a v3 positive 0")
+    production = {row["refusal"] for row in vectors["evidenceNegative"] if row["id"] in I06_PRODUCTION_ROWS}
+    require(len(production) == 1 and sum(row["id"] in I06_PRODUCTION_ROWS for row in vectors["evidenceNegative"]) == 2,
+            "I06 v2 production refusal recorded by its vectors")
+
+    def w02a(row):
+        p = positives[row.get("w02aPositive", 0)]
+        return apply_i06(p["record"], row["backendOps"]), p["profile"], p["endpoints"]
+
+    def bound(record):
+        base = copy.deepcopy(evidence)
+        base["w02aRecord"]["qualificationDigest"] = model.record_digest(record)
+        return base
+
+    def evidence_result(row):
+        record, profile, endpoints = w02a(row)
+        return model.explain(model.check_evidence, apply_i06(bound(record), row["ops"]), inventory, record, profile,
+                             endpoints, w02a_schema, row["testFixture"])
+
+    def snapshot_result(row):
+        return model.explain(model.check_rbac_snapshot, apply_i06(snapshot, row["ops"]), closure, inventory, bootstrap,
+                             row.get("namespace", namespace))
+
+    record, profile, endpoints = positives[0]["record"], positives[0]["profile"], positives[0]["endpoints"]
+    require(model.explain(model.check_evidence, evidence, inventory, record, profile, endpoints, w02a_schema, True) is None
+            and model.explain(model.check_evidence, evidence, inventory, record, profile, endpoints, w02a_schema, False)
+            in production
+            and model.explain(model.check_rbac_snapshot, snapshot, closure, inventory, bootstrap, namespace) is None,
+            "I06 v2 positives: accepted as a fixture, refused in production, snapshot accepted")
+    for row in vectors["evidenceAccepted"]:
+        tally.run(row["id"], lambda row=row: require(row["testFixture"] is True and evidence_result(row) is None,
+                                                     "I06 v2 evidenceAccepted vector " + row["id"]))
+    for row in vectors["snapshotAccepted"]:
+        tally.run(row["id"], lambda row=row: require(snapshot_result(row) is None, "I06 v2 snapshotAccepted vector " + row["id"]))
+    for key, replay in (("evidenceNegative", evidence_result), ("snapshotNegative", snapshot_result)):
+        for row in vectors[key]:
+            def check(row=row, key=key, replay=replay):
+                result = replay(row)
+                require(result is not None and result == row["refusal"], "I06 v2 %s vector %s" % (key, row["id"]))
+            tally.run(row["id"], check)
+    old_record = w02a_v2_vectors["positive"][0]["record"]
+    old_backend = {"backendProfile": old_record["backendProfile"], "backendComponents": old_record["backendComponents"]}
+    for row in vectors["crossVersion"]:
+        def cross(row=row):
+            if row["subject"] == "snapshot":
+                value = apply_i06(snapshot, row["ops"])
+                v1 = model.v1.explain(model.v1.check_rbac_snapshot, value, closure, inventory, bootstrap, row["namespace"])
+                v2 = snapshot_result({"ops": row["ops"], "namespace": row["namespace"]})
+                require(v1 is None and row["v1Result"] == v1 and v2 is not None and row["v2Result"] == v2,
+                        "I06 v2 crossVersion vector " + row["id"])
+                return
+            require(row["subject"] == "evidence" and row["v1Subject"] in ("v1", "v2") and row["v2Subject"] in ("v1", "v2"),
+                    "I06 v2 closed cross-version vector " + row["id"])
+            current, current_profile, current_endpoints = w02a(row)
+            bases = {"v1": v1_vectors["evidencePositive"], "v2": bound(current)}
+            v1 = model.v1.explain(model.v1.check_evidence, apply_i06(bases[row["v1Subject"]], row["ops"]), inventory,
+                                  apply_i06(old_backend, row["backendOps"]), row["production"])
+            v2 = model.explain(model.check_evidence, apply_i06(bases[row["v2Subject"]], row["ops"]), inventory, current,
+                               current_profile, current_endpoints, w02a_schema, not row["production"])
+            require(row["v1Result"] == v1 and row["v2Result"] == v2, "I06 v2 crossVersion vector " + row["id"])
+        tally.run(row["id"], cross)
+    require(len(ids) == len(set(ids)), "unique I06 v2 vector identifiers")
+    return tally
+
+
+# Native qualification profile v3 -------------------------------------------------------------------------------------
+# As a2eab93's validate_v3_vectors replays each vector. Its validate_v3_schema and the schema's own label-slot and
+# closure bindings are contract checks, not vector replays, and stay with the adopted packet (design review D2-4).
+
+NAT_KEYS = ("negative", "accepted", "crossVersion", "migration")
+
+
+def _native_ids(vectors):
+    return ["positive:%d" % index for index in range(len(vectors["positive"]))] + [
+        row["id"] for key in NAT_KEYS for row in vectors[key]]
+
+
+def _native_v3_replay():
     vectors = _models.data(NAT + "vectors.json")
-    ids = ["positive:%d" % index for index in range(len(vectors["positive"]))]
-    ids += [row["id"] for key in ("negative", "accepted", "crossVersion", "migration") for row in vectors[key]]
-    return Tally().whole(ids, lambda: _unwritten("native_qualification_v3"))
+    ids = _native_ids(vectors)
+    tally = Tally()
+    model = _loaded("native_qualification_v3", ids, tally)
+    if model is None:
+        return tally
+    schema = _models.data(NAT + "qualification.schema.json")
+    v1_schema, v1_vectors = _models.data(NAT_V1 + "qualification.schema.json"), _models.data(NAT_V1 + "vectors.json")
+    v2_schema, v2_vectors = _models.data(NAT_V2 + "qualification.schema.json"), _models.data(NAT_V2 + "vectors.json")
+
+    def pin(value):
+        return model.digest(model.canonical(value))
+
+    require(vectors["schemaSha256"] == model.SCHEMA_SHA256 == pin(schema)
+            and vectors["v1SchemaSha256"] == model.V1_SCHEMA_SHA256 == pin(v1_schema)
+            and vectors["v2SchemaSha256"] == model.V2_SCHEMA_SHA256 == pin(v2_schema)
+            and vectors["evidenceClass"] == "DATA_CHECK_ONLY" and vectors["nativeAcceptance"] is False
+            and vectors["tenantAcceptance"] is False, "native v3 vectors bound to the pinned schemas")
+    history1 = [row["record"] for row in v1_vectors["positive"]]
+    history = [row["record"] for row in v2_vectors["positive"]]
+    positives = vectors["positive"]
+
+    def qualify(p, bundle, test_fixture=True):
+        return model.explain(model.check_qualification, p["record"], p["profile"], p["endpoints"], bundle["captures"],
+                             bundle["lifecycle"], bundle["backendCaptures"], history1, history, v1_schema, v2_schema,
+                             schema, False, test_fixture)
+
+    for index, p in enumerate(positives):
+        tally.run("positive:%d" % index, lambda p=p, index=index: require(
+            qualify(p, p) is None, "native v3 positive vector positive:%d" % index))
+    for kind in ("negative", "accepted"):
+        for row in vectors[kind]:
+            def check(row=row, kind=kind):
+                p = positives[row["positive"]]
+                profile = apply_native(p["profile"], row.get("profileOps", []))
+                endpoints = apply_native(p["endpoints"], row.get("endpointOps", []))
+                target = row["target"]
+                if target == "record":
+                    record = apply_native(p["record"], row["ops"])
+                    if row.get("rebindProfile"):
+                        record["profileDigest"] = "sha256:" + pin(profile)
+                    result = model.explain(model.check_record, record, profile, endpoints, schema)
+                elif target == "capture":
+                    capture = apply_native(next(c for c in p["captures"] if c["role"] == row["role"]), row["ops"])
+                    result = model.explain(model.check_capture, p["record"], capture, row["role"], schema)
+                elif target == "lifecycle":
+                    result = model.explain(model.check_lifecycle_capture, p["record"], apply_native(p["lifecycle"], row["ops"]),
+                                           schema)
+                elif target == "backend":
+                    capture = apply_native(next(c for c in p["backendCaptures"] if c["component"] == row["component"]),
+                                           row["ops"])
+                    result = model.explain(model.check_backend_capture, p["record"], capture, schema)
+                else:
+                    require(target == "qualification", "native v3 closed vector target " + row["id"])
+                    bundle = apply_native({key: p[key] for key in ("captures", "lifecycle", "backendCaptures")}, row["ops"])
+                    result = qualify(p, bundle, row.get("testFixture", True))
+                require(result == (row["refusal"] if kind == "negative" else None), "native v3 %s vector %s" % (kind, row["id"]))
+            tally.run(row["id"], check)
+    under_v3 = {"V2_CAPTURE_UNDER_V3": lambda old: (old["captures"][0], model.check_capture, ("SERVER",)),
+                "V2_LIFECYCLE_UNDER_V3": lambda old: (old["lifecycle"], model.check_lifecycle_capture, ()),
+                "V2_BACKEND_CAPTURE_UNDER_V3": lambda old: (old["backendCaptures"][0], model.check_backend_capture, ())}
+    under_v2 = {"V3_RECORD_UNDER_V2": lambda p: (p["record"], "record"),
+                "V3_CAPTURE_UNDER_V2": lambda p: (p["captures"][0], "capture"),
+                "V3_LIFECYCLE_UNDER_V2": lambda p: (p["lifecycle"], "lifecycleCapture"),
+                "V3_BACKEND_CAPTURE_UNDER_V2": lambda p: (p["backendCaptures"][0], "backendCapture")}
+    for row in vectors["crossVersion"]:
+        def cross(row=row):
+            p = positives[row["index"]]
+            if row["kind"] == "V2_RECORD_UNDER_V3":
+                result = model.explain(model.check_record, history[row["index"]], p["profile"], p["endpoints"], schema)
+                require(result == row["expect"] and row["expect"] == "not a v3 record", "native v3 crossVersion vector " + row["id"])
+            elif row["kind"] in under_v3:
+                value, check_fn, args = under_v3[row["kind"]](v2_vectors["positive"][row["index"]])
+                require(model.explain(check_fn, p["record"], value, *args, schema) == row["expect"],
+                        "native v3 crossVersion vector " + row["id"])
+            else:
+                require(row["kind"] in under_v2, "native v3 closed cross-version kind " + row["id"])
+                value, variant = under_v2[row["kind"]](p)
+                errors = {(error.json_path, error.validator) for error in model.schema_errors(value, v2_schema, variant)}
+                require(type(row["mustInclude"]) is list and row["mustInclude"] != []
+                        and all(tuple(pair) in errors for pair in row["mustInclude"]), "native v3 crossVersion vector " + row["id"])
+        tally.run(row["id"], cross)
+    for row in vectors["migration"]:
+        def migrate(row=row):
+            p = positives[row["positive"]]
+            profile = apply_native(p["profile"], row.get("profileOps", []))
+            record = apply_native(p["record"], row.get("ops", []))
+            if row.get("rebindProfile"):
+                record["profileDigest"] = "sha256:" + pin(profile)
+            old1 = [copy.deepcopy(history1[index]) for index in row["v1Positives"]]
+            old2 = [copy.deepcopy(history[index]) for index in row["v2Positives"]]
+            for key, olds in (("v1Ops", old1), ("v2Ops", old2)):
+                for change in row.get(key, []):
+                    olds[change["index"]] = apply_native(olds[change["index"]], change["ops"])
+            result = model.explain(model.check_migration, old1, old2, record, profile, v1_schema, v2_schema, schema,
+                                   row.get("noEarlierHistory", False))
+            require(result == row["expect"], "native v3 migration vector " + row["id"])
+        tally.run(row["id"], migrate)
+    require(len(ids) == len(set(ids)), "unique native v3 vector identifiers")
+    return tally
+
+
+# The parent's own ids per child set, from the pinned vector files (design review D1-9), and the child's report ------
+
+def expected_ids(key):
+    contract, vector_set = key
+    if key == CHILD_SETS[3]:
+        return [row["id"] for row in _models.data(I05_SUPPLEMENT + "vectors.json")["transcripts"]]
+    if key == CHILD_SETS[7]:
+        return _i06_ids(_models.data(I06 + "vectors.json"))
+    if key == CHILD_SETS[8]:
+        return _native_ids(_models.data(NAT + "vectors.json"))
+    require(key in CHILD_SETS, "not a child set")
+    prefix = I05 if contract == "I05 gate channel v3" else I07
+    return [row["id"] for row in _models.data(prefix + "vectors.json")[vector_set]]
+
+
+# One pinned flip per child set (design review D2-2): the vector's expectation is replaced in memory by a sentinel, the
+# set is replayed again, and Mismatch must name that vector. Each target reaches the jsonschema-dependent model call
+# before its expectation is compared, and none is linked by `equals`.
+FLIPS = {
+    CHILD_SETS[0]: (I05 + "vectors.json", "frames", "G01", "expect"),
+    CHILD_SETS[1]: (I05 + "vectors.json", "byteFrames", "B01", "expect"),
+    CHILD_SETS[2]: (I05 + "vectors.json", "transcripts", "T01", "final"),
+    CHILD_SETS[3]: (I05_SUPPLEMENT + "vectors.json", "transcripts", "S05", "final"),
+    CHILD_SETS[4]: (I07 + "vectors.json", "frames", "G01", "expect"),
+    CHILD_SETS[5]: (I07 + "vectors.json", "byteFrames", "B01", "expect"),
+    CHILD_SETS[6]: (I07 + "vectors.json", "transcripts", "T01", "final"),
+    CHILD_SETS[7]: (I06 + "vectors.json", "evidenceNegative", "E01", "refusal"),
+    CHILD_SETS[8]: (NAT + "vectors.json", "negative", "R02", "refusal"),
+}
+
+
+def _flip(key):
+    path, list_key, ident, field = FLIPS[key]
+    original = _models.data
+
+    def forged(relative):
+        value = original(relative)
+        if relative == path:
+            rows = [row for row in value[list_key] if row["id"] == ident]
+            require(len(rows) == 1, "flip target " + ident)
+            rows[0][field] = {"flipped": True} if field == "final" else "FLIPPED"
+        return value
+
+    _models.data = forged
+    try:
+        REPLAYS[key]()
+    except Mismatch as exc:
+        return re.search(r"\b%s\b" % re.escape(ident), str(exc)) is not None
+    finally:
+        _models.data = original
+    return False
+
+
+def child_report():
+    """Run inside the child: every child set's tally, then its pinned flip."""
+    global IN_CHILD
+    IN_CHILD = True
+    tallies = {"|".join(key): REPLAYS[key]().ids for key in CHILD_SETS}
+    flips = {"|".join(key): {"id": FLIPS[key][2], "field": FLIPS[key][3], "caught": _flip(key)} for key in CHILD_SETS}
+    return tallies, flips
 
 
 REPLAYS = {

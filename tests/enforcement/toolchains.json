@@ -42,6 +42,30 @@
    "selected": "allowed",
    "date": "2026-10-13",
    "decision": "the installed Rust 1.99.0 tree, by its inventory sha256 97ebc29f…, is an allowed W04 tool input, recorded in each packet's attestation. It is a compiler, not W03 source; read no R10 file."
+  },
+  {
+   "id": "Q-LC-1",
+   "selected": "a",
+   "date": "2026-10-18",
+   "decision": "both gaps (G-JSONSCHEMA and G-REPLAY-INPUTS) in one packet; all 668 TG-01 rows plus S44."
+  },
+  {
+   "id": "Q-LC-2",
+   "selected": "a",
+   "date": "2026-10-18",
+   "decision": "the met-001 venv python by absolute path in a child process (-I -B); R12 code stays stdlib-only; a missing or changed interpreter or jsonschema fails closed."
+  },
+  {
+   "id": "Q-LC-3",
+   "selected": "a",
+   "date": "2026-10-18",
+   "decision": "packet id CONF-ENF-009 (005, 006 and 008 stay reserved for the stopped W04-4b/4c/5)."
+  },
+  {
+   "id": "Q-LC-4",
+   "selected": "a",
+   "date": "2026-10-18",
+   "decision": "inputs from harness-onion a2eab93."
   }
  ],
  "toolchains": [
@@ -71,9 +95,41 @@
    "ciGate": "tests/enforcement/test_probes.py (standard library): file set, manifests, unsafe and foreign code, generated files, tree digest, probe map; the compile gate comes with the R12 Rust profile root bundle (with Q-T4's jsonschema profile), before W06 needs binaries",
    "authorEvidence": "probes/enforcement/BUILD_EVIDENCE.json: both musl targets built locally with the installed Rust 1.99.0 tree (Q-T2-TOOL), tied to the probe-tree digest; author evidence, not CI evidence",
    "installed": false
+  },
+  {
+   "id": "python-met-001-child",
+   "groups": "TG-01's nine jsonschema vector sets (and TG-08's S44 through the native v3 replay)",
+   "state": "IN_USE",
+   "decidedBy": "Q-LC-2",
+   "path": "/opt/planeon/toolchains/met-001/.venv/bin/python3",
+   "arguments": [
+    "-I",
+    "-B"
+   ],
+   "realpathRoot": "/opt/planeon/python/3.12.14",
+   "versionInfo": [
+    3,
+    12,
+    14,
+    "final",
+    0
+   ],
+   "prefix": "/opt/planeon/toolchains/met-001/.venv",
+   "basePrefix": "/opt/planeon/python/3.12.14",
+   "jsonschema": "4.24.0",
+   "venvTreeSha256": "4eea662cd0034d5cca1cde7653afc7ce72d5d86f09af6d47e04aad1a8c04bf9c",
+   "installedBy": "the owner's G-JSONSCHEMA root bundle (policy d9b99bd6, Q-JS-1..4, installed 2026-10-16) gives R12's profile the met-001 venv; the replays run there in a child process (tests/enforcement/tg01_contract/_child.py); its inventory record /etc/planeon/toolchain-met-a2-001.inventory.json (186e78638175ad90075c30b8a7dabcd334258706793a6aae6c823c93aaf412c4) is verified by the launcher before each run and is not read by R12 code, because the sandbox denies reads under /etc/planeon",
+   "rule": "a re-provisioned met-001 changes venvTreeSha256 and needs an R12 packet (Q-JS-4); nothing is prefetched or added to pyproject.toml or toolchain.lock (AGENTS rule 16, Q-LC-2)"
   }
  ],
- "gaps": [
+ "gaps": [],
+ "closedGaps": [
+  {
+   "id": "G-I06-V1",
+   "closedBy": "Q-T5",
+   "packet": "CONF-ENF-002",
+   "note": "scripts/i06_backend_profile.py is snapshotted from a2eab93 as a recorded addition; the I06 v2 model still cannot load without jsonschema (G-JSONSCHEMA)"
+  },
   {
    "id": "G-JSONSCHEMA",
    "snapshots": [
@@ -81,8 +137,9 @@
     "scripts/native_qualification_v3.py"
    ],
    "finding": "jsonschema is outside the standard library: native_qualification_v3.py imports it at module load, and i05_gate_channel_v3.py imports it inside check_frame (the F00 closed-schema frame check). Through their sibling imports, i06_backend_profile_v2.py (loads native_qualification_v3) and i07_policy_write_v3.py (loads i05_gate_channel_v3) depend on it too. Under Q-T1 these reference-model paths cannot run in R12 as it stands.",
-   "decideIn": "a later owner root change adding a jsonschema profile (Q-T4); until then TG-01 records each vector that needs it NOT_RUN_ENV_UNAVAILABLE in tg01_contract/results.json",
-   "affectsW04_2": true
+   "closedBy": "Q-LC-1..4",
+   "packet": "CONF-ENF-009",
+   "note": "the owner's G-JSONSCHEMA root bundle (policy d9b99bd6, Q-JS-1..4, installed 2026-10-16) gives R12's profile the met-001 venv; the replays run there in a child process (tests/enforcement/tg01_contract/_child.py); TG-01's 668 NOT_RUN vectors and TG-08's S44 now replay and pass"
   },
   {
    "id": "G-REPLAY-INPUTS",
@@ -107,7 +164,7 @@
      "path": "architecture/i06-backend-profile/identity-closure.json",
      "sha256": "0a9b82ffa2d63bf48a8850574cdf3ece02bf1913f33a72cbb96ed30a40f1f3bb",
      "size": 46703,
-     "readBy": "I06 v2 and native v3"
+     "readBy": "I06 v2 (the RBAC-snapshot replays' closure)"
     },
     {
      "path": "architecture/i06-backend-profile/upstream-bootstrap-rbac-v1.37.1.json",
@@ -141,16 +198,9 @@
     }
    ],
    "finding": "Review R1-5 (CONF-ENF-002): jsonschema is not the only thing between R12 and the I06 v2 and native v3 vector replays. At harness-onion a2eab93, validate_i06_backend_profile_v2.py replays the I06 v2 vectors against the I06 v1 vectors (its v1Vectors pin), the v1 writer inventory, identity closure and upstream bootstrap RBAC, and the W02a v3 and v2 vectors; validate_native_profile_v3.py replays the native v3 vectors against the native v1 and v2 schemas and vectors and the I06 identity closure. None of these is in the plan's contract set or snapshotted.",
-   "decideIn": "the packet that writes the I06 v2 and native v3 replays after the jsonschema profile (Q-T4): snapshot these inputs from a2eab93 as recorded additions, pinned by sha256, or record them as not run",
-   "affectsW04_2": true
-  }
- ],
- "closedGaps": [
-  {
-   "id": "G-I06-V1",
-   "closedBy": "Q-T5",
-   "packet": "CONF-ENF-002",
-   "note": "scripts/i06_backend_profile.py is snapshotted from a2eab93 as a recorded addition; the I06 v2 model still cannot load without jsonschema (G-JSONSCHEMA)"
+   "closedBy": "Q-LC-1..4",
+   "packet": "CONF-ENF-009",
+   "note": "the eight inputs are snapshotted from a2eab93 as recorded additions (owner decision Q-LC-4), pinned in snapshots/manifest.json and test_bootstrap's REPLAY_INPUTS; the I06 v2 and native v3 replays are written"
   }
  ]
 }
