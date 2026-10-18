@@ -853,7 +853,9 @@ TG08_RULE = ("Each plan case of the group, in plan order, in two parts kept apar
              "S44 row serves the property its basis starts with. S44's subject is the native qualification v3 reference model "
              "the contract's vectors replay through, not a reader. A property is PASS only when every one of its "
              "vectors replayed and passed in this run, and NOT_RUN_ENV_UNAVAILABLE when its replay needs what the verifier "
-             "profile lacks (owner decisions Q-T4 and Q-T20); S44 is PASS only when every property is. A case that waits for "
+             "profile lacks (owner decisions Q-T4 and Q-T20). The native v3 replay runs in TG-01's child process on the pinned "
+             "met-001 venv python, and a missing or changed child interpreter fails the run instead of recording NOT_RUN "
+             "(owner decisions Q-LC-1..4); S44 is PASS only when every property is. A case that waits for "
              "W05's release set or for W06's native hosts is NOT_RUN_ENV_UNAVAILABLE, never PASS (AGENTS rule 14), and its "
              "catalog names the contract vectors whose own expected results are its expected results (owner decision Q-T8).")
 GROUP_RULES = {"TG-08": TG08_RULE}
@@ -872,7 +874,7 @@ CASE_SUBJECTS.update({("TG-08", tag): ("W05's released build, through the wire-l
 PARTS = {"TG-08": lambda case: "INSTALLED" if case["phase"] == "W06_NATIVE_ONLY" else "SOURCE"}
 PROPERTY_FIELDS = ("property", "source", "result", "reason", "tests", "carriedBy")
 PACKETS = {"TG-02": "CONF-ENF-003", "TG-03": "CONF-ENF-003", "TG-04": "CONF-ENF-004", "TG-05": "CONF-ENF-004",
-           "TG-08": "CONF-ENF-007"}
+           "TG-08": "CONF-ENF-009"}
 NATIVE_RULE = ("Each plan case of the group, in plan order. Every case waits for W06's enrolled AMD64 and ARM64 hosts and is "
                "NOT_RUN_ENV_UNAVAILABLE until W06 runs it, never PASS before (AGENTS rule 14); D-PROBE-ROUTE (owner decision "
                "Q-T14) gates that run too, and `permissions` lists, in SELinux matrix v4 terms, what the case's probe needs "

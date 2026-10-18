@@ -1,24 +1,31 @@
-"""TG-01 contract tests (W04-2, CONF-ENF-002): every adopted contract's vectors through its snapshotted reference model.
+"""TG-01 contract tests (W04-2, CONF-ENF-002; jsonschema replays CONF-ENF-009): every adopted contract's vectors
+through its snapshotted reference model.
 
-The run must reproduce tg01_contract/results.json exactly: each vector PASS, or NOT_RUN_ENV_UNAVAILABLE when its replay
-needs jsonschema (owner decision Q-T4, 2026-10-11), never PASS for a vector that was not run. A model or vector that
-disagrees fails here; an environment that gains jsonschema also fails here, so the ledger is redone, never stale.
+The run must reproduce tg01_contract/results.json exactly: each vector PASS when it was replayed and passed in this run,
+never PASS for a vector that was not run (AGENTS rule 14). The nine sets whose models need jsonschema run in a child
+process on the pinned met-001 venv python (owner decisions Q-LC-1..4, 2026-10-18; _child.py); R12's own interpreter stays
+standard library only, and a missing or changed child interpreter or jsonschema fails here instead of recording
+NOT_RUN_ENV_UNAVAILABLE. A model or vector that disagrees fails here.
 """
 from __future__ import annotations
 
+import copy
 import hashlib
 import importlib.util
+import os
 import sys
+import tempfile
 import types
 import unittest
 from pathlib import Path
 
 import _models
-from tg01_contract import _replays
+from tg01_contract import _child, _replays
 
 HERE = Path(__file__).resolve().parent
 RESULTS = {"PASS", "FAIL", "WARN", "NOT_APPLICABLE", "NOT_RUN_ENV_UNAVAILABLE"}
-ROW_FIELDS = {"contract", "vectorSet", "cases", "vectors", "results", "notRunIds", "reason"}
+ROW_FIELDS = {"contract", "vectorSet", "cases", "vectors", "results", "notRunIds", "reason", "runner"}
+RUNNERS = {"IN_PROCESS", "CHILD_MET_001"}
 SELECTION_FIELDS = {"case", "contract", "vectorSet", "basis", "ids"}
 CASE_FIELDS = {"case", "contract", "vectors", "results", "result"}
 PLAN = "architecture/enforcement-test-plan/traceability.json"
@@ -130,7 +137,7 @@ class LedgerTests(unittest.TestCase):
         self.assertEqual(set(value), {"schemaVersion", "packet", "testGroup", "profile", "rule", "rows", "selections", "caseResults",
                                       "deferred"})
         self.assertEqual((value["schemaVersion"], value["packet"], value["testGroup"]),
-                         ("r12.enforcement-tg01-results/v1", "CONF-ENF-003", "TG-01"))
+                         ("r12.enforcement-tg01-results/v1", "CONF-ENF-009", "TG-01"))
         keys = [(row["contract"], row["vectorSet"]) for row in value["rows"]]
         self.assertEqual(keys, list(_replays.REPLAYS))
         for row in value["rows"]:
@@ -140,6 +147,13 @@ class LedgerTests(unittest.TestCase):
                 self.assertEqual(sum(row["results"].values()), row["vectors"])
                 self.assertEqual(len(row["notRunIds"]), row["results"]["NOT_RUN_ENV_UNAVAILABLE"])
                 self.assertEqual(row["reason"] is None, not row["notRunIds"])
+                self.assertIn(row["runner"], RUNNERS)
+        # CONF-ENF-009: exactly the nine jsonschema sets run in the child, and none of them may record a vector not run.
+        child = [(row["contract"], row["vectorSet"]) for row in value["rows"] if row["runner"] == "CHILD_MET_001"]
+        self.assertEqual(child, list(_replays.CHILD_SETS))
+        for row in value["rows"]:
+            if row["runner"] == "CHILD_MET_001":
+                self.assertEqual((row["results"]["PASS"], row["notRunIds"], row["reason"]), (row["vectors"], [], None))
 
     def test_every_offline_tg01_case_and_contract_is_covered_and_codec_is_deferred(self):
         group, value = tg01(), ledger()
@@ -200,8 +214,8 @@ class LedgerTests(unittest.TestCase):
                 vectors = _models.data(VECTOR_DATA[row["contract"]] + "vectors.json")
                 self.assertEqual(row["vectors"], SET_SIZES[key](vectors) if key in SET_SIZES else len(vectors[row["vectorSet"]]))
 
-    def test_the_jsonschema_gap_is_real_in_this_environment(self):
-        # Q-T4: a NOT_RUN_ENV_UNAVAILABLE row is only true while the profile lacks jsonschema.
+    def test_jsonschema_stays_out_of_r12s_interpreter(self):
+        # Q-T1, Q-T4 and Q-LC-2: R12's own interpreter stays standard library only; jsonschema runs only in the child.
         self.assertIsNone(importlib.util.find_spec("jsonschema"))
 
 
@@ -356,6 +370,153 @@ class FidelityTests(unittest.TestCase):
                         _replays.w02d_amendment()
                 finally:
                     _models.snapshot_bytes = original
+
+
+class ChildTests(unittest.TestCase):
+    """CONF-ENF-009 (owner decisions Q-LC-1..4): the child process, its pins and the parent's closed checks."""
+
+    def good_report(self):
+        pin = _child.pins()
+        names = ["|".join(key) for key in _replays.CHILD_SETS]
+        return {"interpreter": {"versionInfo": pin["versionInfo"], "prefix": pin["prefix"], "basePrefix": pin["basePrefix"],
+                                "isolated": 1, "dontWriteBytecode": True},
+                "jsonschema": pin["jsonschema"],
+                "tallies": {name: {"PASS": _replays.expected_ids(key), "NOT_RUN_ENV_UNAVAILABLE": []}
+                            for name, key in zip(names, _replays.CHILD_SETS)},
+                "flips": {name: {"id": _replays.FLIPS[key][2], "field": _replays.FLIPS[key][3], "caught": True}
+                          for name, key in zip(names, _replays.CHILD_SETS)}}
+
+    def test_the_child_ran_every_child_set_with_its_pinned_results(self):
+        tallies = _child.run()
+        self.assertEqual(list(tallies), ["|".join(key) for key in _replays.CHILD_SETS])
+        for key in _replays.CHILD_SETS:
+            with self.subTest(set=key):
+                self.assertEqual(tallies["|".join(key)], {"PASS": _replays.expected_ids(key), "NOT_RUN_ENV_UNAVAILABLE": []})
+
+    def test_the_pin_row_is_the_installed_met_001_venv(self):
+        pin = _child.pins()
+        self.assertEqual((pin["state"], pin["decidedBy"], pin["path"], pin["arguments"]),
+                         ("IN_USE", "Q-LC-2", "/opt/planeon/toolchains/met-001/.venv/bin/python3", ["-I", "-B"]))
+        self.assertEqual((pin["prefix"], pin["basePrefix"], pin["realpathRoot"], pin["jsonschema"], pin["versionInfo"]),
+                         ("/opt/planeon/toolchains/met-001/.venv", "/opt/planeon/python/3.12.14", "/opt/planeon/python/3.12.14",
+                          "4.24.0", [3, 12, 14, "final", 0]))
+        self.assertEqual(_child.tree_digest(pin["prefix"]), pin["venvTreeSha256"])
+
+    def test_a_report_that_differs_from_the_pins_is_refused(self):
+        good = self.good_report()
+        pin = _child.pins()
+        self.assertEqual(list(_child.check_report(copy.deepcopy(good), pin)), list(good["tallies"]))
+        first, last = "|".join(_replays.CHILD_SETS[0]), "|".join(_replays.CHILD_SETS[-1])
+
+        def changed(change):
+            value = copy.deepcopy(good)
+            change(value)
+            return value
+        forged = {
+            "extra key": lambda v: v.update(extra=1),
+            "key order": lambda v: v.update({"jsonschema": v.pop("jsonschema")}),
+            "version": lambda v: v["interpreter"].update(versionInfo=[3, 12, 13, "final", 0]),
+            "prefix": lambda v: v["interpreter"].update(prefix="/opt/planeon/toolchains/other/.venv"),
+            "not isolated": lambda v: v["interpreter"].update(isolated=0),
+            "bytecode": lambda v: v["interpreter"].update(dontWriteBytecode=False),
+            "jsonschema": lambda v: v.update(jsonschema="4.23.0"),
+            "missing set": lambda v: v["tallies"].pop(last),
+            "set order": lambda v: v.update(tallies=dict(reversed(list(v["tallies"].items())))),
+            "not run": lambda v: v["tallies"][first].update(NOT_RUN_ENV_UNAVAILABLE=[v["tallies"][first]["PASS"].pop()]),
+            "dropped id": lambda v: v["tallies"][last]["PASS"].pop(),
+            "reordered ids": lambda v: v["tallies"][last]["PASS"].reverse(),
+            "flip not caught": lambda v: v["flips"][first].update(caught=False),
+            "flip on another vector": lambda v: v["flips"][last].update(id="R03"),
+            "flip on another field": lambda v: v["flips"][first].update(field="frame"),
+        }
+        for name, change in forged.items():
+            with self.subTest(forged=name):
+                with self.assertRaises(_child.ChildError):
+                    _child.check_report(changed(change), pin)
+
+    def test_a_changed_venv_tree_or_a_missing_interpreter_fails_closed(self):
+        pin = _child.pins()
+        cases = {"tree": dict(pin, venvTreeSha256="0" * 64), "path": dict(pin, path="/opt/planeon/toolchains/met-001/.venv/bin/none"),
+                 "root": dict(pin, realpathRoot="/opt/planeon/python/3.12.13")}
+        original = _child.pins
+        for name, value in cases.items():
+            with self.subTest(case=name):
+                _child.pins = lambda value=value: value
+                try:
+                    with self.assertRaises(_child.ChildError):
+                        _child._launch()
+                finally:
+                    _child.pins = original
+
+    def test_a_failed_launch_is_cached_and_raised_again(self):
+        saved, launch, calls = dict(_child._OUTCOME), _child._launch, []
+
+        def failing():
+            calls.append(1)
+            raise _child.ChildError("forged launch failure")
+        _child._OUTCOME.clear()
+        _child._launch = failing
+        try:
+            for _ in range(3):
+                with self.assertRaises(_child.ChildError):
+                    _child.run()
+            self.assertEqual(len(calls), 1)
+        finally:
+            _child._launch = launch
+            _child._OUTCOME.clear()
+            _child._OUTCOME.update(saved)
+
+    def test_the_tree_digest_sees_files_links_modes_and_pth_files(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / "lib").mkdir()
+            (root / "lib/module.py").write_bytes(b"x = 1\n")
+            before = _child.tree_digest(folder)
+            self.assertEqual(_child.tree_digest(folder), before)
+            for change in (lambda: (root / "lib/module.py").write_bytes(b"x = 2\n"),
+                           lambda: (root / "lib/module.py").chmod(0o755),
+                           lambda: (root / "lib/_virtualenv.pth").write_bytes(b"import os\n"),
+                           lambda: os.symlink("lib/module.py", root / "link")):
+                change()
+                after = _child.tree_digest(folder)
+                self.assertNotEqual(after, before)
+                before = after
+
+    def test_the_flips_are_the_pinned_targets_past_the_jsonschema_call(self):
+        self.assertEqual({key: (target[1], target[2], target[3]) for key, target in _replays.FLIPS.items()}, {
+            ("I05 gate channel v3", "frames"): ("frames", "G01", "expect"),
+            ("I05 gate channel v3", "byteFrames"): ("byteFrames", "B01", "expect"),
+            ("I05 gate channel v3", "transcripts"): ("transcripts", "T01", "final"),
+            ("I05 gate channel v3", "supplement"): ("transcripts", "S05", "final"),
+            ("I07 policy write v3", "frames"): ("frames", "G01", "expect"),
+            ("I07 policy write v3", "byteFrames"): ("byteFrames", "B01", "expect"),
+            ("I07 policy write v3", "transcripts"): ("transcripts", "T01", "final"),
+            ("I06 backend profile v2", "vectors"): ("evidenceNegative", "E01", "refusal"),
+            ("Native qualification profile v3", "vectors"): ("negative", "R02", "refusal")})
+        for key, (path, list_key, ident, field) in _replays.FLIPS.items():
+            with self.subTest(set=key):
+                rows = [row for row in _models.data(path)[list_key] if row["id"] == ident]
+                self.assertEqual(len(rows), 1)
+                self.assertIn(field, rows[0])
+                self.assertIn(ident, _replays.expected_ids(key))
+        # The supplement's target is linked by `equals` in neither direction, so only the model replay can catch it.
+        transcripts = _models.data(_replays.I05_SUPPLEMENT + "vectors.json")["transcripts"]
+        self.assertFalse([row["id"] for row in transcripts if row["id"] == "S05" and "equals" in row or row.get("equals") == "S05"])
+
+    def test_the_child_sets_keep_their_standard_library_pre_checks_in_this_interpreter(self):
+        original = _models.data
+
+        def forged(path):
+            value = original(path)
+            if path == _replays.I05 + "vectors.json":
+                value["byteFrames"].reverse()
+            return value
+        _models.data = forged
+        try:
+            with self.assertRaises(_replays.Mismatch):
+                _replays.REPLAYS["I05 gate channel v3", "byteFrames"]()
+        finally:
+            _models.data = original
 
 
 if __name__ == "__main__":

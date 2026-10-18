@@ -52,6 +52,28 @@ ENF_007_RECORD = "fixtures/ci/conf-enf-007-checkpoint.json"
 ENF_007_CHANGED = {"tests/enforcement/README.md", "tests/enforcement/test_bootstrap.py", "tests/enforcement/_catalog.py",
                    "tests/ci_checkpoint/test_checkpoint_chain.py"}
 ENF_007_DECISIONS = ["RESUME-2", "Q-T20", "Q-T21", "Q-T20-ACK"]
+ENF_007_HEAD = "094b5539395d83a1b57e0e65881aa1b063a01b05"
+# CONF-ENF-009 (W04, the jsonschema ledger conversion; owner decisions Q-LC-1..4, 2026-10-18) follows CONF-ENF-007; it adds
+# the eight G-REPLAY-INPUTS snapshots and the TG-01 child process. CONF-ENF-005, -006 and -008 stay reserved (Q-LC-3).
+ENF_009_RECORD = "fixtures/ci/conf-enf-009-checkpoint.json"
+ENF_009_CHANGED = {"tests/ci_checkpoint/test_checkpoint_chain.py",
+                   "tests/enforcement/README.md",
+                   "tests/enforcement/_catalog.py",
+                   "tests/enforcement/snapshots/manifest.json",
+                   "tests/enforcement/test_bootstrap.py",
+                   "tests/enforcement/tg01_contract/_replays.py",
+                   "tests/enforcement/tg01_contract/results.json",
+                   "tests/enforcement/tg01_contract/test_tg01_contract.py",
+                   "tests/enforcement/tg08_compatibility/results.json",
+                   "tests/enforcement/tg08_compatibility/test_tg08_compatibility.py",
+                   "tests/enforcement/toolchains.json"}
+ENF_009_DECISIONS = ["Q-LC-1", "Q-LC-2", "Q-LC-3", "Q-LC-4"]
+ENF_009_SNAPSHOTS = {"architecture/i06-backend-profile/vectors.json", "architecture/i06-backend-profile/writer-inventory.json",
+                     "architecture/i06-backend-profile/identity-closure.json",
+                     "architecture/i06-backend-profile/upstream-bootstrap-rbac-v1.37.1.json",
+                     "architecture/native-profile-v2/vectors.json", "architecture/native-profile-v2/qualification.schema.json",
+                     "architecture/native-qualification-inputs/qualification.schema.json",
+                     "architecture/native-qualification-inputs/vectors.json"}
 
 
 def head():
@@ -87,6 +109,11 @@ def enf_007():
     return HELPER.chain_record(entries()[:6], 5, sources), rows, sources
 
 
+def enf_009():
+    rows, sources = HELPER.checkpoint_chain_project(ROOT, *head(), keep=7)
+    return HELPER.chain_record(entries()[:7], 6, sources), rows, sources
+
+
 class ChainRegistryTests(unittest.TestCase):
     def test_the_registry_starts_with_conf_ci_002_and_then_conf_enf_001(self):
         rows, sources = head()
@@ -99,6 +126,7 @@ class ChainRegistryTests(unittest.TestCase):
         self.assertEqual((value[3]["packetId"], value[3]["path"]), ("CONF-ENF-003", ENF_003_RECORD))
         self.assertEqual((value[4]["packetId"], value[4]["path"]), ("CONF-ENF-004", ENF_004_RECORD))
         self.assertEqual((value[5]["packetId"], value[5]["path"]), ("CONF-ENF-007", ENF_007_RECORD))
+        self.assertEqual((value[6]["packetId"], value[6]["path"]), ("CONF-ENF-009", ENF_009_RECORD))
         self.assertEqual(sources[HELPER.CHAIN_REGISTRY_PATH], HELPER.chain_registry_bytes(value))
         for entry in value:
             self.assertEqual(hashlib.sha256(sources[entry["path"]]).hexdigest(), entry["sha256"])
@@ -174,6 +202,27 @@ class ChainRegistryTests(unittest.TestCase):
                          {"task-packets/CONF-ENF-007.yaml"})
         self.assertEqual([row["id"] for row in record["ownerDecisions"]], ENF_007_DECISIONS)
         self.assertTrue(all(row["date"] == "2026-10-14" for row in record["ownerDecisions"]))
+        self.assertTrue(all(pin["mode"] == "100644" for pin in record["added"].values()))
+
+    def test_the_conf_enf_009_record_names_exactly_its_paths_and_decisions(self):
+        # CONF-ENF-009: the enforcement area only; the eight recorded-addition snapshots are its only snapshot paths, no
+        # existing snapshot changes, and no frozen helper, ci/, src/ or probe path is touched.
+        record, rows, sources = enf_009()
+        self.assertEqual(record["predecessor"], {"packetId": "CONF-ENF-007", "sha256": entries()[5]["sha256"]})
+        self.assertEqual(record["baseCommit"], ENF_007_HEAD)
+        self.assertEqual(record["deleted"], {})
+        self.assertEqual(set(record["changed"]), ENF_009_CHANGED)
+        self.assertFalse(ENF_001_CHANGED & (set(record["changed"]) | set(record["added"])))
+        self.assertFalse([path for path in (*record["changed"], *record["added"]) if path.startswith(("ci/", "src/", "probes/"))])
+        root = "tests/enforcement/snapshots/harness-onion/"
+        self.assertEqual({path for path in record["added"] if path.startswith("tests/enforcement/snapshots/")},
+                         {root + path for path in ENF_009_SNAPSHOTS})
+        self.assertEqual([path for path in record["changed"] if path.startswith("tests/enforcement/snapshots/")],
+                         ["tests/enforcement/snapshots/manifest.json"])
+        self.assertEqual({path for path in record["added"] if not path.startswith("tests/enforcement/")},
+                         {"task-packets/CONF-ENF-009.yaml"})
+        self.assertEqual([row["id"] for row in record["ownerDecisions"]], ENF_009_DECISIONS)
+        self.assertTrue(all(row["date"] == "2026-10-18" for row in record["ownerDecisions"]))
         self.assertTrue(all(pin["mode"] == "100644" for pin in record["added"].values()))
 
     def test_every_stage_view_is_checked_and_the_first_is_the_conf_ci_002_head(self):

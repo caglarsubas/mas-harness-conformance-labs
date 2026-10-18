@@ -1,0 +1,29 @@
+{
+ "schemaVersion": "r12.enforcement-independence-attestation/v1",
+ "packet": "CONF-ENF-009",
+ "lane": "parallel development lane (W04)",
+ "inputs": [
+  "the snapshotted adopted contract data and reference models in tests/enforcement/snapshots/ (manifest v2), plus the eight G-REPLAY-INPUTS files added by this packet from harness-onion a2eab9365c8663cc1ae23a666e864b821f600fa6 (owner decision Q-LC-4): the I06 backend profile v1 vectors, writer inventory, identity closure and upstream bootstrap RBAC, the native profile v2 vectors and schema, and the native qualification v1 schema and vectors",
+  "the expected results are the vectors' own: the I05 and I07 v3 frames, byte frames, transcripts and supplement, the I06 backend profile v2 vectors and the native qualification v3 vectors; the I06 v2 and native v3 replays follow the adopted layers' replay rules at a2eab93, without their contract-history checks",
+  "the replays run in a child process on the owner-installed met-001 venv python (owner decisions Q-LC-1..4; G-JSONSCHEMA root bundle, policy d9b99bd6), which only provides jsonschema to the snapshotted reference models",
+  "no R10 source, W03 work in progress, W05 build or R12 reader source was read or run for expected results"
+ ],
+ "inputDigests": {
+  "tests/enforcement/snapshots/manifest.json": "f25b2f694d6e6de7612b99f21d38b9ff7e03cac32ed8355bcb7649adb5f28dce",
+  "tests/enforcement/toolchains.json": "d33f5d08df16b103a6def007c586005120900ec54248c2c48cca94e589adb9f3",
+  "tests/enforcement/tg01_contract/results.json": "c965d99c17a1a338579c1af9324b9a20af687e94027d29ca2c12c17cb435b4a9",
+  "tests/enforcement/tg08_compatibility/results.json": "6a28261a771610b600cd23f2dc2a581db39aa24331b847aa866fc45fbda835a2",
+  "tests/enforcement/snapshots/harness-onion/architecture/i06-backend-profile/vectors.json": "b9c57d64eab03f307e10b02152426a10ebac2fd27102e27ef5873b5865be4cee",
+  "tests/enforcement/snapshots/harness-onion/architecture/i06-backend-profile/writer-inventory.json": "8e6b3b7565cfc93a61162b84d740cffb2871eb66ab85e8c4e80ac813f1af3077",
+  "tests/enforcement/snapshots/harness-onion/architecture/i06-backend-profile/identity-closure.json": "0a9b82ffa2d63bf48a8850574cdf3ece02bf1913f33a72cbb96ed30a40f1f3bb",
+  "tests/enforcement/snapshots/harness-onion/architecture/i06-backend-profile/upstream-bootstrap-rbac-v1.37.1.json": "7529c2a713af2fb90163175924c264d95f4242d7e0c26b1452c77febb13ed50e",
+  "tests/enforcement/snapshots/harness-onion/architecture/native-profile-v2/vectors.json": "6d58d1f36b7bce5739b94dd89512d358b96878c70e1de7cf8f399050b881b396",
+  "tests/enforcement/snapshots/harness-onion/architecture/native-profile-v2/qualification.schema.json": "55bd641fd229f21e04ec00813bcfe600890584e982e290a210720ac5cb160ab0",
+  "tests/enforcement/snapshots/harness-onion/architecture/native-qualification-inputs/qualification.schema.json": "bef248bfa82b234124c014f98e40c5791bced3171bb118b7ed1bb7b8daaf95c3",
+  "tests/enforcement/snapshots/harness-onion/architecture/native-qualification-inputs/vectors.json": "cd1be009b721bb596887335184a33ab8e1f24aed8215477b63e28f058110748f"
+ },
+ "r10SourceRead": false,
+ "w03WorkInProgressRead": false,
+ "implementationReadOrRunForExpectedResults": false,
+ "reviewer": "a separate agent, never the author, checks this attestation in the packet's independent review"
+}

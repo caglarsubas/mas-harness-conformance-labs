@@ -1,9 +1,9 @@
 {
  "schemaVersion": "r12.enforcement-tg-case-ledger/v1",
- "packet": "CONF-ENF-007",
+ "packet": "CONF-ENF-009",
  "testGroup": "TG-08",
  "evidenceClass": "SOURCE_AND_INSTALLED_MIGRATION",
- "rule": "Each plan case of the group, in plan order, in two parts kept apart as the plan's SOURCE_AND_INSTALLED_MIGRATION evidence asks (`part`): the SOURCE cases are checked against source (S44 offline through the native qualification v3 reference model, the three MATRIX cases as source tests of W05's released build), and the INSTALLED case repeats the same contract rows on the enrolled hosts in W06. S44 lists one property per item of the plan's S44 case (W02D section 4.4's rejection list; 4.4's migration sentence is MATRIX:export/upgrade/rollback's, as the plan places it), and each S44 row serves the property its basis starts with. S44's subject is the native qualification v3 reference model the contract's vectors replay through, not a reader. A property is PASS only when every one of its vectors replayed and passed in this run, and NOT_RUN_ENV_UNAVAILABLE when its replay needs what the verifier profile lacks (owner decisions Q-T4 and Q-T20); S44 is PASS only when every property is. A case that waits for W05's release set or for W06's native hosts is NOT_RUN_ENV_UNAVAILABLE, never PASS (AGENTS rule 14), and its catalog names the contract vectors whose own expected results are its expected results (owner decision Q-T8).",
+ "rule": "Each plan case of the group, in plan order, in two parts kept apart as the plan's SOURCE_AND_INSTALLED_MIGRATION evidence asks (`part`): the SOURCE cases are checked against source (S44 offline through the native qualification v3 reference model, the three MATRIX cases as source tests of W05's released build), and the INSTALLED case repeats the same contract rows on the enrolled hosts in W06. S44 lists one property per item of the plan's S44 case (W02D section 4.4's rejection list; 4.4's migration sentence is MATRIX:export/upgrade/rollback's, as the plan places it), and each S44 row serves the property its basis starts with. S44's subject is the native qualification v3 reference model the contract's vectors replay through, not a reader. A property is PASS only when every one of its vectors replayed and passed in this run, and NOT_RUN_ENV_UNAVAILABLE when its replay needs what the verifier profile lacks (owner decisions Q-T4 and Q-T20). The native v3 replay runs in TG-01's child process on the pinned met-001 venv python, and a missing or changed child interpreter fails the run instead of recording NOT_RUN (owner decisions Q-LC-1..4); S44 is PASS only when every property is. A case that waits for W05's release set or for W06's native hosts is NOT_RUN_ENV_UNAVAILABLE, never PASS (AGENTS rule 14), and its catalog names the contract vectors whose own expected results are its expected results (owner decision Q-T8).",
  "cases": [
   {
    "tag": "S44",
@@ -14,67 +14,83 @@
    ],
    "blockedBy": [],
    "subject": "the snapshotted native qualification v3 reference model, through which TG-01 replays the contract's vectors (owner decisions Q-T4 and Q-T20); the readers W02D 4.4 names are W05's roles, checked in TG-08's source and installed cases",
-   "result": "NOT_RUN_ENV_UNAVAILABLE",
-   "reason": "not run: each reader refuses a record of another version with no fallback; a record missing EFFECT_GATE refuses; a record with an extra role refuses; a record with the gate under the BROKER key or path refuses; a record with an aliased role path refuses; a record with a lifecycle subject inside a resident role cgroup refuses; a record with unknown backendComponents keys refuses (its vectors replay through the native qualification v3 reference model, which imports jsonschema, absent from the verifier profile (gap G-JSONSCHEMA; owner decisions Q-T4 and Q-T20); TG-01 writes that replay, and adds its inputs outside the snapshots (gap G-REPLAY-INPUTS), with the jsonschema root bundle)",
+   "result": "PASS",
+   "reason": null,
    "properties": [
     {
      "property": "each reader refuses a record of another version with no fallback",
      "source": "W02D 4.4: architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md section 4.4, the same section in architecture/host-interface-amendment-w02d/HOST_INTERFACE_SPEC.md",
-     "result": "NOT_RUN_ENV_UNAVAILABLE",
-     "reason": "its vectors replay through the native qualification v3 reference model, which imports jsonschema, absent from the verifier profile (gap G-JSONSCHEMA; owner decisions Q-T4 and Q-T20); TG-01 writes that replay, and adds its inputs outside the snapshots (gap G-REPLAY-INPUTS), with the jsonschema root bundle",
-     "tests": [],
+     "result": "PASS",
+     "reason": null,
+     "tests": [
+      "S44Tests.test_each_property_is_the_replay_of_its_vectors_in_this_run"
+     ],
      "carriedBy": []
     },
     {
      "property": "a record missing EFFECT_GATE refuses",
      "source": "W02D 4.4: architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md section 4.4, the same section in architecture/host-interface-amendment-w02d/HOST_INTERFACE_SPEC.md",
-     "result": "NOT_RUN_ENV_UNAVAILABLE",
-     "reason": "its vectors replay through the native qualification v3 reference model, which imports jsonschema, absent from the verifier profile (gap G-JSONSCHEMA; owner decisions Q-T4 and Q-T20); TG-01 writes that replay, and adds its inputs outside the snapshots (gap G-REPLAY-INPUTS), with the jsonschema root bundle",
-     "tests": [],
+     "result": "PASS",
+     "reason": null,
+     "tests": [
+      "S44Tests.test_each_property_is_the_replay_of_its_vectors_in_this_run"
+     ],
      "carriedBy": []
     },
     {
      "property": "a record with an extra role refuses",
      "source": "W02D 4.4: architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md section 4.4, the same section in architecture/host-interface-amendment-w02d/HOST_INTERFACE_SPEC.md",
-     "result": "NOT_RUN_ENV_UNAVAILABLE",
-     "reason": "its vectors replay through the native qualification v3 reference model, which imports jsonschema, absent from the verifier profile (gap G-JSONSCHEMA; owner decisions Q-T4 and Q-T20); TG-01 writes that replay, and adds its inputs outside the snapshots (gap G-REPLAY-INPUTS), with the jsonschema root bundle",
-     "tests": [],
+     "result": "PASS",
+     "reason": null,
+     "tests": [
+      "S44Tests.test_each_property_is_the_replay_of_its_vectors_in_this_run"
+     ],
      "carriedBy": []
     },
     {
      "property": "a record with the gate under the BROKER key or path refuses",
      "source": "W02D 4.4: architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md section 4.4, the same section in architecture/host-interface-amendment-w02d/HOST_INTERFACE_SPEC.md",
-     "result": "NOT_RUN_ENV_UNAVAILABLE",
-     "reason": "its vectors replay through the native qualification v3 reference model, which imports jsonschema, absent from the verifier profile (gap G-JSONSCHEMA; owner decisions Q-T4 and Q-T20); TG-01 writes that replay, and adds its inputs outside the snapshots (gap G-REPLAY-INPUTS), with the jsonschema root bundle",
-     "tests": [],
+     "result": "PASS",
+     "reason": null,
+     "tests": [
+      "S44Tests.test_each_property_is_the_replay_of_its_vectors_in_this_run"
+     ],
      "carriedBy": []
     },
     {
      "property": "a record with an aliased role path refuses",
      "source": "W02D 4.4: architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md section 4.4, the same section in architecture/host-interface-amendment-w02d/HOST_INTERFACE_SPEC.md",
-     "result": "NOT_RUN_ENV_UNAVAILABLE",
-     "reason": "its vectors replay through the native qualification v3 reference model, which imports jsonschema, absent from the verifier profile (gap G-JSONSCHEMA; owner decisions Q-T4 and Q-T20); TG-01 writes that replay, and adds its inputs outside the snapshots (gap G-REPLAY-INPUTS), with the jsonschema root bundle",
-     "tests": [],
+     "result": "PASS",
+     "reason": null,
+     "tests": [
+      "S44Tests.test_each_property_is_the_replay_of_its_vectors_in_this_run"
+     ],
      "carriedBy": []
     },
     {
      "property": "a record with a lifecycle subject inside a resident role cgroup refuses",
      "source": "W02D 4.4: architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md section 4.4, the same section in architecture/host-interface-amendment-w02d/HOST_INTERFACE_SPEC.md",
-     "result": "NOT_RUN_ENV_UNAVAILABLE",
-     "reason": "its vectors replay through the native qualification v3 reference model, which imports jsonschema, absent from the verifier profile (gap G-JSONSCHEMA; owner decisions Q-T4 and Q-T20); TG-01 writes that replay, and adds its inputs outside the snapshots (gap G-REPLAY-INPUTS), with the jsonschema root bundle",
-     "tests": [],
+     "result": "PASS",
+     "reason": null,
+     "tests": [
+      "S44Tests.test_each_property_is_the_replay_of_its_vectors_in_this_run"
+     ],
      "carriedBy": []
     },
     {
      "property": "a record with unknown backendComponents keys refuses",
      "source": "W02D 4.4: architecture/host-interface-inputs/resolved/HOST_INTERFACE_SPEC.md section 4.4, the same section in architecture/host-interface-amendment-w02d/HOST_INTERFACE_SPEC.md",
-     "result": "NOT_RUN_ENV_UNAVAILABLE",
-     "reason": "its vectors replay through the native qualification v3 reference model, which imports jsonschema, absent from the verifier profile (gap G-JSONSCHEMA; owner decisions Q-T4 and Q-T20); TG-01 writes that replay, and adds its inputs outside the snapshots (gap G-REPLAY-INPUTS), with the jsonschema root bundle",
-     "tests": [],
+     "result": "PASS",
+     "reason": null,
+     "tests": [
+      "S44Tests.test_each_property_is_the_replay_of_its_vectors_in_this_run"
+     ],
      "carriedBy": []
     }
    ],
-   "evidence": [],
+   "evidence": [
+    "S44Tests.test_each_property_is_the_replay_of_its_vectors_in_this_run"
+   ],
    "catalog": [
     {
      "contract": "Native qualification profile v3",
