@@ -1,0 +1,31 @@
+{
+ "implementationReadOrRunForExpectedResults": false,
+ "inputDigests": {
+  "<harness-onion>/architecture/agent-loop/README.md@35b733b5": "666c4221d3edbdd5187c17db9c43c122b1f7900a9fa0b3ddc430db3bee2b8e5a",
+  "<harness-onion>/architecture/agent-loop/loop-profile.schema.json@35b733b5": "d75a5b943929f7678c8e8c8cacf2e937312bcc06caf15018de73ae9b9abac0bb",
+  "<harness-onion>/architecture/run-manifest/README.md@35b733b5": "279d374e5ddd1b6305611f3565a7af14046b305e59cf9634a88bd358818ce826",
+  "<harness-onion>/architecture/run-manifest/distribution-gate.schema.json@35b733b5": "f521fc6691984959473ef4f184e863193c060acc0b2ed1012dcf1d2c9d3a1683",
+  "<harness-onion>/architecture/topology-coordination/README.md@35b733b5": "890af54aa39c6fbec35615bec8cadb5ffa62c33a5ccce0e21b7af5fcd3fb9c90",
+  "<harness-onion>/architecture/topology-coordination/board-transcript.schema.json@35b733b5": "8a3cc5b87953e97a4b42362df382f9b101931be1d55de84f441b16020b405b7c",
+  "<harness-onion>/architecture/topology-coordination/topology-spec.schema.json@35b733b5": "a326f70fd56d4300aa1bfaa3838a888c90347a75fc84164188e4af42052e82d0",
+  "<harness-onion>/architecture/verdict-ledger/README.md@35b733b5": "dde6efc45fc2e1ad675635d0a18a1d6a82b49c960616af239f47071e2914e3f7",
+  "<harness-onion>/architecture/verdict-ledger/ledger.schema.json@35b733b5": "8a570cfb26b16fb3f7fa1cf799bd564fe717fd3d356dbca890dab747b2dc9326"
+ },
+ "inputs": [
+  "<harness-onion>/architecture/topology-coordination/README.md@35b733b5",
+  "<harness-onion>/architecture/topology-coordination/board-transcript.schema.json@35b733b5",
+  "<harness-onion>/architecture/topology-coordination/topology-spec.schema.json@35b733b5",
+  "<harness-onion>/architecture/agent-loop/README.md@35b733b5",
+  "<harness-onion>/architecture/agent-loop/loop-profile.schema.json@35b733b5",
+  "<harness-onion>/architecture/run-manifest/README.md@35b733b5",
+  "<harness-onion>/architecture/run-manifest/distribution-gate.schema.json@35b733b5",
+  "<harness-onion>/architecture/verdict-ledger/README.md@35b733b5",
+  "<harness-onion>/architecture/verdict-ledger/ledger.schema.json@35b733b5"
+ ],
+ "note": "Designed from the roadmap text of MAS-RA-010 and the merged harness-onion contracts only (owner decisions Q-NX-1..6, Q-MAS1-1, Q-MAS1-2, Q-MAS1-REV2). The owner's warm-start repositories, R10 source and W03 work in progress were not read.",
+ "packet": "CONF-MAS-001",
+ "r10SourceRead": false,
+ "schemaVersion": "r12.mas-attestation/v1",
+ "w03WorkInProgressRead": false,
+ "warmSourceRead": false
+}

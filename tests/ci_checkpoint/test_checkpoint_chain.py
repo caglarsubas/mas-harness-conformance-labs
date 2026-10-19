@@ -74,6 +74,26 @@ ENF_009_SNAPSHOTS = {"architecture/i06-backend-profile/vectors.json", "architect
                      "architecture/native-profile-v2/vectors.json", "architecture/native-profile-v2/qualification.schema.json",
                      "architecture/native-qualification-inputs/qualification.schema.json",
                      "architecture/native-qualification-inputs/vectors.json"}
+ENF_009_HEAD = "d024a03ac664189e6b6e004e8a44e440841747cd"
+# CONF-MAS-001 (MAS-RA-010 packet 1; owner decisions Q-NX-1..6, Q-MAS1-1..3, Q-MAS1-REV2 and Q-MAS1-F1, 2026-10-19)
+# follows CONF-ENF-009; it adds the tests/mas simulation area and acceptance argv 14, and changes only this test.
+MAS_001_RECORD = "fixtures/ci/conf-mas-001-checkpoint.json"
+MAS_001_CHANGED = {"tests/ci_checkpoint/test_checkpoint_chain.py"}
+MAS_001_ADDED = {"task-packets/CONF-MAS-001.yaml",
+                 "tests/mas/README.md",
+                 "tests/mas/_classes.py",
+                 "tests/mas/_ledger.py",
+                 "tests/mas/_sim.py",
+                 "tests/mas/attestation.json",
+                 "tests/mas/classes.json",
+                 "tests/mas/contracts.json",
+                 "tests/mas/results.json",
+                 "tests/mas/test_classes.py",
+                 "tests/mas/test_extractors.py",
+                 "tests/mas/test_ledger.py",
+                 "tests/mas/test_sim.py"}
+MAS_001_DECISIONS = ["Q-NX-1", "Q-NX-2", "Q-NX-3", "Q-NX-4", "Q-NX-5", "Q-NX-6", "Q-MAS1-1", "Q-MAS1-2", "Q-MAS1-3",
+                     "Q-MAS1-REV2", "Q-MAS1-F1"]
 
 
 def head():
@@ -114,6 +134,11 @@ def enf_009():
     return HELPER.chain_record(entries()[:7], 6, sources), rows, sources
 
 
+def mas_001():
+    rows, sources = HELPER.checkpoint_chain_project(ROOT, *head(), keep=8)
+    return HELPER.chain_record(entries()[:8], 7, sources), rows, sources
+
+
 class ChainRegistryTests(unittest.TestCase):
     def test_the_registry_starts_with_conf_ci_002_and_then_conf_enf_001(self):
         rows, sources = head()
@@ -127,6 +152,7 @@ class ChainRegistryTests(unittest.TestCase):
         self.assertEqual((value[4]["packetId"], value[4]["path"]), ("CONF-ENF-004", ENF_004_RECORD))
         self.assertEqual((value[5]["packetId"], value[5]["path"]), ("CONF-ENF-007", ENF_007_RECORD))
         self.assertEqual((value[6]["packetId"], value[6]["path"]), ("CONF-ENF-009", ENF_009_RECORD))
+        self.assertEqual((value[7]["packetId"], value[7]["path"]), ("CONF-MAS-001", MAS_001_RECORD))
         self.assertEqual(sources[HELPER.CHAIN_REGISTRY_PATH], HELPER.chain_registry_bytes(value))
         for entry in value:
             self.assertEqual(hashlib.sha256(sources[entry["path"]]).hexdigest(), entry["sha256"])
@@ -223,6 +249,20 @@ class ChainRegistryTests(unittest.TestCase):
                          {"task-packets/CONF-ENF-009.yaml"})
         self.assertEqual([row["id"] for row in record["ownerDecisions"]], ENF_009_DECISIONS)
         self.assertTrue(all(row["date"] == "2026-10-18" for row in record["ownerDecisions"]))
+        self.assertTrue(all(pin["mode"] == "100644" for pin in record["added"].values()))
+
+    def test_the_conf_mas_001_record_names_exactly_its_paths_and_decisions(self):
+        # CONF-MAS-001: a new tests/mas area and its packet YAML; the only changed path is this test, and no frozen
+        # helper, ci/, src/, probe or enforcement path is touched.
+        record, rows, sources = mas_001()
+        self.assertEqual(record["predecessor"], {"packetId": "CONF-ENF-009", "sha256": entries()[6]["sha256"]})
+        self.assertEqual(record["baseCommit"], ENF_009_HEAD)
+        self.assertEqual(record["deleted"], {})
+        self.assertEqual(set(record["changed"]), MAS_001_CHANGED)
+        self.assertEqual(set(record["added"]), MAS_001_ADDED)
+        self.assertFalse(ENF_001_CHANGED & (set(record["changed"]) | set(record["added"])))
+        self.assertEqual([row["id"] for row in record["ownerDecisions"]], MAS_001_DECISIONS)
+        self.assertTrue(all(row["date"] == "2026-10-19" for row in record["ownerDecisions"]))
         self.assertTrue(all(pin["mode"] == "100644" for pin in record["added"].values()))
 
     def test_every_stage_view_is_checked_and_the_first_is_the_conf_ci_002_head(self):
