@@ -1,10 +1,15 @@
-"""CONF-MAS-001: the deterministic multi-agent simulation harness (Python 3.12 standard library only).
+"""CONF-MAS-001 and CONF-MAS-002: the deterministic multi-agent simulation harness (Python 3.12 standard library only).
 
 The harness restates, in R12's own words, rules of four merged harness-onion contracts at
-35b733b523f46b2ccba095ea046efe5d42bfa583 (pins in contracts.json): topology and coordination v1 (A1, A2), the agent loop
-and tool gateway (A2, A3), run manifest v1 and the verdict ledger. No contract bytes are copied. [sim mapping] marks this
-suite's own mapping of a contract rule onto the simulation. Nothing here reads a file, opens a network or a process, or
-reads a clock: a run is a pure function of its class parameters, its seed and its control.
+27c54605a3dcdbe86522a6bd18a5e19faa5cb40b (ten pins in contracts.json; packet 1's nine are byte-identical at 35b733b5):
+topology and coordination v1 (A1, A2), the agent loop and tool gateway (A1 to A3), run manifest v1 and the verdict
+ledger. No contract bytes are copied. [sim mapping] marks this suite's own mapping of a contract rule onto the
+simulation. Nothing here reads a file, opens a network or a process, or reads a clock: a run is a pure function of its
+class parameters, its seed and its control.
+
+Packet 2 adds, always on and inert for packet 1: issued grants with reuse, match and expiry checks, input validity, the
+closed message body and DELIVERY canary hits. Switched on only by class keys packet 1's classes lack: budgets, retries and
+timeouts (the kernel), scheduled tool faults, per-node objectives and admission, redaction and the credential rule.
 
 The agents are scripted and susceptible: they try what an attack directs. The defences live only in the harness
 components (the board, the gateway and its grant issuer, the gates and the verifier), never in the agents.
@@ -15,8 +20,16 @@ import hashlib
 
 FIELDS = ("t", "kind", "agent", "from", "to", "item", "op", "opId", "retryOf", "claimOpId", "expectedVersion",
           "recordVersionBefore", "answer", "changed", "component", "toolId", "verdictStatus", "workDigest",
-          "markerPresent", "canaryHits", "scheduledEvent", "controlBypass", "leaseUntil")
-KINDS = ("BOARD_ANSWER", "EXPIRY", "DELIVERY", "OBSERVE", "TOOL_CALL", "GATE", "VERDICT", "SINK", "WORK")
+          "markerPresent", "canaryHits", "scheduledEvent", "controlBypass", "leaseUntil",
+          # CONF-MAS-002 (DESIGN revision 8, section 4); null in rows that do not use them
+          "grantId", "grantToolId", "grantManifestDigest", "grantScope", "grantExpiresAt", "inputKeys", "attempt",
+          "iteration", "objectiveId", "heldBefore", "bodyKeys")
+KINDS = ("BOARD_ANSWER", "EXPIRY", "DELIVERY", "OBSERVE", "TOOL_CALL", "GATE", "VERDICT", "SINK", "WORK", "ADMISSION",
+         "KERNEL", "PLAN")
+# The closed message body (section 2.3): the envelope keys are the sim's; everything else is the checked body.
+ENVELOPE = ("opId", "agent", "op", "item", "lane", "event", "retryOf")
+BODY_KEYS = ("to", "messageType", "requiredAction", "ref")
+REF_TYPES = {"item": int, "claimOpId": str, "workDigest": str, "verdictId": str, "status": str, "relayTo": str}
 STATE_OPS = ("ACQUIRE", "ASSIGN", "RENEW", "RELEASE", "MERGE")
 MARKER = "POISON-MARKER"
 ACCEPTED = "ACCEPTED"
@@ -78,6 +91,53 @@ def join_bypass(names: list[str]) -> str | None:
     return "+".join(names) if names else None
 
 
+def checked_body(op: dict) -> dict:
+    """A MESSAGE operation's checked body: every key but the sim's envelope (section 2.3)."""
+    return {k: op[k] for k in sorted(op) if k not in ENVELOPE}
+
+
+def body_keys(op: dict) -> list[str]:
+    """The checked body's keys at both levels, `ref` keys prefixed, plus `item` when the envelope item is not null."""
+    body = checked_body(op)
+    keys = list(body)
+    ref = body.get("ref")
+    if isinstance(ref, dict):
+        keys += ["ref.%s" % k for k in ref]
+    if op.get("item") is not None:
+        keys.append("item")
+    return sorted(keys)
+
+
+def shape_ok(op: dict) -> bool:
+    """The closed body: exactly to, messageType, requiredAction and an optional closed, typed ref; envelope item null."""
+    body = checked_body(op)
+    if op.get("item") is not None or not set(body) <= set(BODY_KEYS):
+        return False
+    if not {"to", "messageType", "requiredAction"} <= set(body):
+        return False
+    ref = body.get("ref", {})
+    if not isinstance(ref, dict):
+        return False
+    for key, value in ref.items():
+        want = REF_TYPES.get(key)
+        if want is None or type(value) is not want:
+            return False
+    return True
+
+
+def type_name(value) -> str:
+    if type(value) is int:
+        return "integer"
+    if type(value) is str:
+        return "string"
+    return type(value).__name__
+
+
+def input_keys(inp: dict, entry: dict) -> list[str]:
+    """A tool input's non-credential entries as name:type, sorted; names and types only, never a value."""
+    return sorted("%s:%s" % (k, type_name(v)) for k, v in inp.items() if k not in entry["credentialParams"])
+
+
 class Board:
     """The coordinator board (topology-coordination A2), restated.
 
@@ -134,7 +194,7 @@ class Board:
         bypassed: list[str] = []
         before = rec["version"] if rec is not None else None
         info = {"claimOpId": None, "leaseUntil": None, "verdictStatus": None, "workDigest": op.get("workDigest"),
-                "markerPresent": None, "canaryHits": [], "changed": False}
+                "markerPresent": None, "canaryHits": [], "changed": False, "heldBefore": None}
 
         def finish(answer: str) -> dict:
             row = sim.log.add(t, "BOARD_ANSWER", agent=op["agent"], to=op.get("to"), item=op.get("item"), op=op["op"],
@@ -143,7 +203,8 @@ class Board:
                               changed=info["changed"], component="BOARD", verdictStatus=info["verdictStatus"],
                               workDigest=info["workDigest"], markerPresent=info["markerPresent"],
                               canaryHits=info["canaryHits"], scheduledEvent=op.get("event"),
-                              controlBypass=join_bypass(bypassed), leaseUntil=info["leaseUntil"])
+                              controlBypass=join_bypass(bypassed), leaseUntil=info["leaseUntil"],
+                              heldBefore=info["heldBefore"])
             result = {"opId": op["opId"], "op": op["op"], "item": op.get("item"), "answer": answer,
                       "version": rec["version"] if rec is not None else None, "leaseUntil": info["leaseUntil"],
                       "claimOpId": info["claimOpId"], "event": op.get("event")}
@@ -211,8 +272,13 @@ class Board:
                 return finish("HELD")
         if not self._version_ok(rec, op, bypassed):
             return finish("STALE_VERSION")
-        if self.held_count() >= sim.shared["concurrency"]:
-            return finish("CONCURRENCY_LIMIT")
+        # The board-wide cap, as its check sees it: after this tick's expiries, before the claim applies.
+        info["heldBefore"] = self.held_count()
+        if info["heldBefore"] >= sim.shared["concurrency"]:
+            if "CONCURRENCY" in sim.bypass:
+                bypassed.append("CONCURRENCY")
+            else:
+                return finish("CONCURRENCY_LIMIT")
         lease = t + sim.shared["leaseTicks"]
         rec["claims"].append({"holder": holder, "claimOpId": op["opId"], "leaseUntil": lease, "verdicts": [],
                               "event": None})
@@ -310,6 +376,12 @@ class Board:
 
     def _message(self, t, op, bypassed, finish):
         sim = self.sim
+        # SHAPE first among the MESSAGE kind's checks (the sim's own order; the contract checks SHAPE first overall).
+        if not shape_ok(op):
+            if "MESSAGE_SHAPE" in sim.bypass:
+                bypassed.append("MESSAGE_SHAPE")
+            else:
+                return finish("SHAPE")
         if (op["agent"], op["to"]) not in sim.edges:
             if "EDGE" in sim.bypass:
                 bypassed.append("EDGE")
@@ -327,51 +399,94 @@ def body_of(op: dict) -> tuple:
 
 
 class Gateway:
-    """The typed boundary (agent-loop A2): a listed tool under its listed manifest and its own per-call grant;
-    credentials only as {param, brokerRef} references [sim mapping: a value is denied before launch]. Not restated in
-    packet 1: input-schema validation, and grant expiry or reuse (inputs are well formed by construction)."""
+    """The typed boundary (agent-loop A1, A2): a listed tool under its listed manifest, a valid input, and the call's own
+    unused, matching and unexpired grant; credentials only as {param, brokerRef} references [sim mapping: a value is
+    denied before launch]. The sim's own pre-launch order (section 2.2): NOT_LISTED, INPUT_INVALID, GRANT_REUSED,
+    GRANT_MISMATCH, GRANT_EXPIRED, CREDENTIAL_VALUE. Issuing a grant writes no log row."""
 
     def __init__(self, sim: "Sim") -> None:
         self.sim = sim
         self.grants = 0
+        self.used: set[str] = set()
 
-    def call(self, t: int, agent: str, tool: str, inp: dict, event: str | None) -> dict:
+    def issue(self, t: int, agent: str, tool: str) -> dict:
+        """A grant for one call, copied from the tool's manifest entry; expires grantTicks after issue."""
+        sim = self.sim
+        entry = sim.config["manifest"][tool]
+        self.grants += 1
+        return {"grantId": "g-%d" % self.grants, "toolId": tool, "manifestDigest": entry["manifestDigest"],
+                "scope": entry["grantScope"], "expiresAt": t + sim.config["grantTicks"]}
+
+    def call(self, t: int, agent: str, tool: str, inp: dict, event: str | None, grant: dict | None = None, *,
+             claim: str | None = None, attempt: int | None = None, kernel_bypass: tuple[str, ...] = ()) -> dict:
+        """One call. grant=None is the honest path: a fresh grant is issued in the call's tick and presented. The result
+        carries the grant it used, so a caller can present it again."""
         sim = self.sim
         entry = sim.config["manifest"].get(tool)
         listed = sim.config["profiles"][sim.role_of(agent)]["tools"]
-        bypassed: list[str] = []
+        bypassed: list[str] = list(kernel_bypass)
         hits = sim.canary_hits(repr(sorted(inp.items())).encode("utf-8"))
+        keys = input_keys(inp, entry) if entry is not None else None
+        used = {"grant": None}
 
         def row(answer: str) -> dict:
+            g = used["grant"] or {}
             return sim.log.add(t, "TOOL_CALL", agent=agent, toolId=tool, answer=answer, component="GATEWAY",
-                               canaryHits=hits, scheduledEvent=event, controlBypass=join_bypass(bypassed))
+                               canaryHits=hits, scheduledEvent=event, controlBypass=join_bypass(bypassed),
+                               claimOpId=claim, attempt=attempt, inputKeys=keys, grantId=g.get("grantId"),
+                               grantToolId=g.get("toolId"), grantManifestDigest=g.get("manifestDigest"),
+                               grantScope=g.get("scope"), grantExpiresAt=g.get("expiresAt"))
+
+        def refused(answer: str) -> dict:
+            return {"launched": False, "row": row(answer), "grant": used["grant"]}
 
         if entry is None:
-            return {"launched": False, "row": row("UNKNOWN_TOOL")}
-        # The grant issuer issues a per-call grant only for a tool the caller's profile lists (removed together with the
-        # gateway's listing condition under C1-TOOLS-OFF).
+            return refused("UNKNOWN_TOOL")
+        # The grant issuer issues a grant only for a tool the caller's profile lists (removed together with the
+        # gateway's listing condition under C1-TOOLS-OFF; ADMIN's grant then comes from ADMIN's manifest entry, D4-5).
         if tool not in listed:
             if "PROFILE_LISTING" in sim.bypass:
                 bypassed.append("PROFILE_LISTING")
             else:
-                return {"launched": False, "row": row("NOT_LISTED")}
-        self.grants += 1
-        grant = {"grantId": "g-%d" % self.grants, "toolId": tool, "manifestDigest": entry["manifestDigest"],
-                 "scope": entry["grantScope"], "expiresAt": t + sim.shared["toolTicks"]}
-        if grant["toolId"] != tool or grant["manifestDigest"] != entry["manifestDigest"]:
-            return {"launched": False, "row": row("GRANT_MISMATCH")}
+                return refused("NOT_LISTED")
+        if grant is None:
+            grant = self.issue(t, agent, tool)
+        used["grant"] = grant
+        schema = sim.config["inputSchemas"][entry["inputSchema"]]
+        if sorted(keys) != sorted("%s:%s" % (k, v) for k, v in schema.items()):
+            if "INPUT_SCHEMA" in sim.bypass:
+                bypassed.append("INPUT_SCHEMA")
+            else:
+                return refused("INPUT_INVALID")
+        if grant["grantId"] in self.used:
+            if "GRANT_REUSE" in sim.bypass:
+                bypassed.append("GRANT_REUSE")
+            else:
+                return refused("GRANT_REUSED")
+        if (grant["toolId"], grant["manifestDigest"], grant["scope"]) != (tool, entry["manifestDigest"],
+                                                                           entry["grantScope"]):
+            if "GRANT_MATCH" in sim.bypass:
+                bypassed.append("GRANT_MATCH")
+            else:
+                return refused("GRANT_MISMATCH")
+        if grant["expiresAt"] <= t:
+            if "GRANT_EXPIRY" in sim.bypass:
+                bypassed.append("GRANT_EXPIRY")
+            else:
+                return refused("GRANT_EXPIRED")
         for param in entry["credentialParams"]:
             value = inp.get(param)
             if not (isinstance(value, dict) and sorted(value) == ["brokerRef", "param"]):
                 if "CREDENTIAL_REF" in sim.bypass:
                     bypassed.append("CREDENTIAL_REF")
                 else:
-                    return {"launched": False, "row": row("CREDENTIAL_VALUE")}
+                    return refused("CREDENTIAL_VALUE")
+        self.used.add(grant["grantId"])
         launched = row("LAUNCHED")
         if tool == "SEND_REPORT":
             sim.log.add(t, "SINK", agent=agent, toolId=tool, component="GATEWAY", canaryHits=hits,
                         scheduledEvent=event, controlBypass=join_bypass(bypassed))
-        return {"launched": True, "row": launched}
+        return {"launched": True, "row": launched, "grant": grant}
 
 
 class Sim:
@@ -382,7 +497,9 @@ class Sim:
         self.shared = config["shared"]
         topo = config["topologies"][cls["topology"]]
         self.mode, self.coordinator, self.workers = topo["mode"], topo["coordinator"], list(topo["workers"])
-        self.verifier = topo["verifier"]
+        # A topology may list `verifiers`; packet 1's keep `verifier`, read as a list of one.
+        self.verifiers = list(topo.get("verifiers") or [topo["verifier"]])
+        self.verifier = self.verifiers[0]
         self.edges = {(a, b) for a, b in topo["edges"]}
         self.bypass = frozenset(bypass)
         self.streams, self.log = Streams(seed), Log()
@@ -394,24 +511,66 @@ class Sim:
         self.seq = 0
         self.lane_items: set[tuple[str, int]] = set()
         self.long_items: set[tuple[str, int]] = set()
-        self.compromised = cls.get("compromised")
-        self.order = ([self.coordinator] if self.coordinator else []) + self.workers + [self.verifier]
-        self.canaries = {a: "CANARY-%s-%02d-END" % (a, seed) for a in self.order if a != self.compromised}
+        self.order = ([self.coordinator] if self.coordinator else []) + self.workers + self.verifiers
         self.scenario = scenario
+        # Per-seed roles are resolved first, before the canary map and each agent's compromised flag (Q3-5).
+        self.roles: dict[str, str] = {}
+        scenario.resolve(self)
+        value = cls.get("compromised")
+        names = value if isinstance(value, list) else ([value] if value else [])
+        self.compromised_set = {self.roles.get(n, n) for n in names}
+        self.canaries = {a: "CANARY-%s-%02d-END" % (a, seed) for a in self.order if a not in self.compromised_set}
+        objectives = cls.get("objectives")
+        self.objectives = ({a: objectives["nodes"].get(a, objectives["topology"]) for a in self.order}
+                           if objectives else None)
+        self.admitted = set(self.order)
         self.agents = {}
         if self.coordinator:
             self.agents[self.coordinator] = Coordinator(self, self.coordinator)
         for w in self.workers:
-            self.agents[w] = Worker(self, w)
-        self.agents[self.verifier] = Verifier(self, self.verifier)
+            self.agents[w] = scenario.agent_for(self, w) or Worker(self, w)
+        for v in self.verifiers:
+            self.agents[v] = scenario.agent_for(self, v) or Verifier(self, v)
         scenario.setup(self)
 
     def role_of(self, agent: str) -> str:
         if agent == self.coordinator:
             return "COORDINATOR"
-        if agent == self.verifier:
+        if agent in self.verifiers:
             return "VERIFIER"
         return "WORKER"
+
+    def verifier_of(self, worker: str) -> str:
+        """A worker's own verifier: the VERIFIER node joined to it by MESSAGE edges both ways (v in packet 1)."""
+        for v in self.verifiers:
+            if (worker, v) in self.edges and (v, worker) in self.edges:
+                return v
+        return self.verifier
+
+    def instructions(self) -> dict:
+        """A class's own instruction map, when it has one, replaces the global map for that class."""
+        return self.cfg.get("instructions", self.config["instructions"])
+
+    def budgets(self) -> dict | None:
+        return self.cfg.get("budgets")
+
+    def admit(self, t: int) -> None:
+        """Admission at tick 0, before any operation [sim mapping beyond A1]: a node whose declared objective differs
+        from the topology's is refused CONFLICTING_OBJECTIVE and takes no step (OBJECTIVE bypasses it)."""
+        topology_objective = self.cfg["objectives"]["topology"]
+        for agent in self.order:
+            objective = self.objectives[agent]
+            event = self.scenario.admission_event(self, agent)
+            if objective == topology_objective:
+                self.log.add(t, "ADMISSION", agent=agent, answer="ADMITTED", component="TOPOLOGY",
+                             objectiveId=objective, scheduledEvent=event)
+            elif "OBJECTIVE" in self.bypass:
+                self.log.add(t, "ADMISSION", agent=agent, answer="ADMITTED", component="TOPOLOGY",
+                             objectiveId=objective, scheduledEvent=event, controlBypass="OBJECTIVE")
+            else:
+                self.log.add(t, "ADMISSION", agent=agent, answer="CONFLICTING_OBJECTIVE", component="TOPOLOGY",
+                             objectiveId=objective, scheduledEvent=event)
+                self.admitted.discard(agent)
 
     def canary_hits(self, raw: bytes) -> list[str]:
         return sorted(a for a, value in self.canaries.items() if value.encode("ascii") in raw)
@@ -451,14 +610,19 @@ class Sim:
         self.inflight_in.append((arrival, self.seq, agent, payload))
 
     def deliver_message(self, t: int, op: dict, bypassed: list[str]) -> None:
+        """The only writer of BUS DELIVERED rows. It computes the canary hits over the delivered checked body on every
+        delivery (P1-8, B8-1) and lists the body's keys (`bodyKeys`, section 4)."""
         lane = op.get("lane", False)
         self.seq += 1
         arrival = t + self.latency(op["to"], lane)
         payload = {"type": "MESSAGE", "from": op["agent"], "messageType": op["messageType"],
                    "requiredAction": op["requiredAction"], "ref": dict(op.get("ref") or {}), "event": op.get("event")}
+        body = checked_body(op)
+        hits = self.canary_hits(repr(sorted((k, repr(v)) for k, v in body.items())).encode("utf-8"))
         self.log.add(t, "DELIVERY", agent=op["to"], **{"from": op["agent"]}, to=op["to"],
                      item=payload["ref"].get("item"), opId=op["opId"], answer="DELIVERED", component="BUS",
-                     scheduledEvent=op.get("event"), controlBypass=join_bypass(bypassed))
+                     scheduledEvent=op.get("event"), controlBypass=join_bypass(bypassed), canaryHits=hits,
+                     bodyKeys=body_keys(op))
         self.inflight_in.append((arrival, self.seq, op["to"], payload))
 
     def done(self) -> bool:
@@ -466,10 +630,13 @@ class Sim:
                 and not self.inflight_ops and not self.inflight_in)
 
     def run(self) -> list[dict]:
+        if self.objectives is not None:
+            self.admit(0)
         for t in range(self.cfg["deadline"] + 1):
             self.scenario.before_tick(self, t)
             for agent in self.order:
-                self.agents[agent].step(t)
+                if agent in self.admitted:
+                    self.agents[agent].step(t)
             arriving = sorted((x for x in self.inflight_ops if x[0] <= t), key=lambda x: (x[0], x[1], x[2], x[3]))
             self.inflight_ops = [x for x in self.inflight_ops if x[0] > t]
             for _arrival, agent, _op_id, _seq, op in arriving:
@@ -622,7 +789,7 @@ class Worker(Agent):
         self.hold = None
         self.stalled_until = None
         self.todo: list[dict] = []
-        self.compromised = aid == sim.compromised
+        self.compromised = aid in sim.compromised_set
 
     def lane(self, item) -> bool:
         return (self.id, item) in self.sim.lane_items
@@ -637,7 +804,7 @@ class Worker(Agent):
     def take_claim(self, t: int, item: int, claim: str, version: int, lease: int) -> None:
         self.hold = {"item": item, "claimOpId": claim, "version": version, "leaseUntil": lease, "phase": "START",
                      "until": None, "reads": [], "artefact": None, "revisions": 0, "works": 0, "event": None,
-                     "verdict": None}
+                     "verdict": None, "context": [], "iterations": 0, "attempt": 0}
         self.sim.scenario.on_claim(self.sim, self, t)
 
     def abandon(self) -> None:
@@ -686,7 +853,7 @@ class Worker(Agent):
                 self.take_claim(t, msg["item"], msg["claimOpId"], msg["version"], msg["leaseUntil"])
             return
         if msg["type"] == "MESSAGE":
-            if msg["messageType"] == "DEPENDENCY" and msg["from"] == sim.verifier:
+            if msg["messageType"] == "DEPENDENCY" and msg["from"] == sim.verifier_of(self.id):
                 ref = msg["ref"]
                 if self.hold and ref.get("claimOpId") == self.hold["claimOpId"] \
                         and ref.get("workDigest") == self.hold.get("workDigest"):
@@ -694,7 +861,7 @@ class Worker(Agent):
                     if self.hold["phase"] == "AWAIT_VERDICT":
                         self.hold["phase"] = "MERGE_READY"
                 return
-            instruction = sim.config["instructions"].get("%s/%s" % (msg["messageType"], msg["requiredAction"]))
+            instruction = sim.instructions().get("%s/%s" % (msg["messageType"], msg["requiredAction"]))
             if instruction is not None:
                 self.todo.append({"instruction": instruction, "msg": msg})
             return
@@ -765,35 +932,29 @@ class Worker(Agent):
         sim, hold = self.sim, self.hold
         shared = sim.shared
         if hold["phase"] == "START" and not self.item_pending():
-            content, event = sim.scenario.read_content(sim, self, t)
-            sim.gateway.call(t, self.id, "READ", {"item": hold["item"]}, event)
-            hold.update(phase="READING", until=t + shared["toolTicks"], pending_read=(content, event))
-        elif hold["phase"] == "READING" and t >= hold["until"]:
-            content, event = hold.pop("pending_read")
-            raw = content.encode("utf-8")
-            sim.log.add(t, "OBSERVE", agent=self.id, to=self.id, item=hold["item"], component="GATEWAY",
-                        toolId="READ", markerPresent=MARKER.encode("ascii") in raw, canaryHits=sim.canary_hits(raw),
-                        scheduledEvent=event)
-            hold["reads"].append(content)
-            if event is not None:
-                hold["event"] = event
-            long = (self.id, hold["item"]) in sim.long_items and hold["revisions"] == 0
-            hold.update(phase="WORKING", until=t + (shared["longWorkTicks"] if long else shared["workTicks"]))
+            self.start_read(t, 1)
+        elif hold["phase"] == "READING":
+            self.read_progress(t)
+        elif hold["phase"] == "LOOPING":
+            self.loop_step(t)
         elif hold["phase"] == "WORKING" and t >= hold["until"]:
-            raw = ("item-%d|" % hold["item"] + "|".join(hold["reads"])).encode("utf-8")
+            if not self.model_step(t):
+                return False
+            raw = sim.scenario.work_bytes(sim, self, ("item-%d|" % hold["item"]
+                                                      + "|".join(hold["reads"] + hold["context"])).encode("utf-8"))
             work = digest(raw)
             sim.artefacts[work] = raw
             hold.update(artefact=raw, workDigest=work)
             hold["works"] += 1
             sim.log.add(t, "WORK", agent=self.id, item=hold["item"], claimOpId=hold["claimOpId"], workDigest=work,
                         markerPresent=MARKER.encode("ascii") in raw, canaryHits=sim.canary_hits(raw), component="WORK",
-                        scheduledEvent=hold["event"])
+                        scheduledEvent=hold["event"], iteration=hold["iterations"])
             stall = sim.scenario.stall_after_work(sim, self, t)
             if stall:
                 self.stalled_until = t + shared["stallTicks"]
                 return True
             ref = {"item": hold["item"], "claimOpId": hold["claimOpId"], "workDigest": work}
-            self.send(t, self.new_op(t, "MESSAGE", None, lane=self.lane(hold["item"]), to=sim.verifier,
+            self.send(t, self.new_op(t, "MESSAGE", None, lane=self.lane(hold["item"]), to=sim.verifier_of(self.id),
                                      messageType="TEST", requiredAction="ACKNOWLEDGE", ref=ref, event=hold["event"]))
             hold["phase"] = "AWAIT_VERDICT"
         elif hold["phase"] == "MERGE_READY" and not self.item_pending(exclude_renew=False):
@@ -801,6 +962,122 @@ class Worker(Agent):
         elif hold["phase"] == "RELEASE_READY":
             self.release_when_ready(t)
         return False
+
+    # ------------------------------------------------------------------ the kernel [sim mapping], classes with budgets
+    def start_read(self, t: int, attempt: int, kernel_bypass: tuple[str, ...] = ()) -> None:
+        """Launch a READ for the held item (attempt n of the step); a scheduled fault scoped to this claim may apply."""
+        sim, hold = self.sim, self.hold
+        content, event = sim.scenario.read_content(sim, self, t)
+        fault, fault_event = sim.scenario.read_fault(sim, self, t)
+        if fault_event is not None:
+            event = fault_event
+        result = sim.gateway.call(t, self.id, "READ", {"item": hold["item"]}, event, claim=hold["claimOpId"],
+                                  attempt=attempt, kernel_bypass=kernel_bypass)
+        grant = result["grant"]
+        hold.update(phase="READING", until=t + sim.shared["toolTicks"], attempt=attempt,
+                    pending_read={"content": content, "event": event, "fault": fault, "launchedAt": t,
+                                  "grantId": grant["grantId"] if grant else None, "overrun": False})
+
+    def kernel_row(self, t: int, answer: str, event, grant_id=None, bypass: str | None = None) -> None:
+        hold = self.hold
+        self.sim.log.add(t, "KERNEL", agent=self.id, item=hold["item"] if hold else None,
+                         claimOpId=hold["claimOpId"] if hold else None, answer=answer, component="KERNEL",
+                         grantId=grant_id, scheduledEvent=event, controlBypass=bypass)
+
+    def read_progress(self, t: int) -> None:
+        sim, hold = self.sim, self.hold
+        pending = hold["pending_read"]
+        event, fault, grant_id = pending["event"], pending["fault"], pending["grantId"]
+        if fault == "HANG":
+            budgets = sim.budgets()
+            if budgets is None or t < pending["launchedAt"] + budgets["readTimeout"]:
+                return
+            if "TIMEOUT" in sim.bypass:
+                # The kernel does not stop the call: one OVERRUN row at the timeout tick, and it never returns.
+                if not pending["overrun"]:
+                    pending["overrun"] = True
+                    self.kernel_row(t, "OVERRUN", event, grant_id, "TIMEOUT")
+                return
+            self.kernel_row(t, "TIMEOUT", event, grant_id)
+            hold.pop("pending_read")
+            self.step_failed(t, event)
+            return
+        if t < hold["until"]:
+            return
+        hold.pop("pending_read")
+        if fault == "ERROR":
+            sim.log.add(t, "OBSERVE", agent=self.id, to=self.id, item=hold["item"], component="GATEWAY",
+                        toolId="READ", answer="ERROR", claimOpId=hold["claimOpId"], grantId=grant_id,
+                        scheduledEvent=event)
+            self.step_failed(t, event)
+            return
+        content = pending["content"]
+        raw = content.encode("utf-8")
+        hits, answer, bypass = sim.canary_hits(raw), None, None
+        if hits and sim.cfg.get("redaction"):
+            # The gateway redacts every known canary from a tool's output before the caller reads it (H11's duty, as
+            # agent-loop cites it).
+            if "REDACTION" in sim.bypass:
+                bypass = "REDACTION"
+            else:
+                for agent in hits:
+                    content = content.replace(sim.canaries[agent], "")
+                raw, hits, answer = content.encode("utf-8"), [], "REDACTED"
+        sim.log.add(t, "OBSERVE", agent=self.id, to=self.id, item=hold["item"], component="GATEWAY",
+                    toolId="READ", markerPresent=MARKER.encode("ascii") in raw, canaryHits=hits, answer=answer,
+                    claimOpId=hold["claimOpId"], grantId=grant_id, scheduledEvent=event, controlBypass=bypass)
+        hold["reads"].append(content)
+        if event is not None:
+            hold["event"] = event
+        if fault == "LOOP_DIRECTIVE":
+            hold["phase"] = "LOOPING"  # this tick's progress ends with the OBSERVE
+            return
+        long = (self.id, hold["item"]) in sim.long_items and hold["revisions"] == 0
+        hold.update(phase="WORKING", until=t + (sim.shared["longWorkTicks"] if long else sim.shared["workTicks"]))
+
+    def step_failed(self, t: int, event) -> None:
+        """A failing step is retried at most stepRetries times; then RETRY_BOUND and HANDOFF end the loop."""
+        sim, hold = self.sim, self.hold
+        bound = sim.budgets()["stepRetries"] + 1
+        if hold["attempt"] < bound:
+            self.start_read(t, hold["attempt"] + 1)
+        elif "RETRY_BOUND" in sim.bypass:
+            self.start_read(t, hold["attempt"] + 1, kernel_bypass=("RETRY_BOUND",))
+        else:
+            self.kernel_row(t, "RETRY_BOUND", event)
+            self.kernel_row(t, "HANDOFF", event)
+            self.end_loop()
+
+    def model_step(self, t: int) -> bool:
+        """A MODEL step (a WORK or a PLAN) counts one iteration of the claim's loop; the step past the iterations budget
+        is refused BUDGET_EXHAUSTED and ends the loop (BUDGET bypasses it). True when the step may go ahead."""
+        sim, hold = self.sim, self.hold
+        budgets = sim.budgets()
+        hold["iterations"] += 1
+        self.over_budget = False
+        if budgets is None or hold["iterations"] <= budgets["iterations"]:
+            return True
+        if "BUDGET" in sim.bypass:
+            self.over_budget = True
+            return True
+        hold["iterations"] -= 1
+        self.kernel_row(t, "BUDGET_EXHAUSTED", hold["event"])
+        self.end_loop()
+        return False
+
+    def loop_step(self, t: int) -> None:
+        """A loop directive replaces progress on the item: one PLAN per tick, each one MODEL step."""
+        sim, hold = self.sim, self.hold
+        if not self.model_step(t):
+            return
+        sim.log.add(t, "PLAN", agent=self.id, item=hold["item"], claimOpId=hold["claimOpId"], component="MODEL",
+                    iteration=hold["iterations"], scheduledEvent=hold["event"],
+                    controlBypass="BUDGET" if self.over_budget else None)
+
+    def end_loop(self) -> None:
+        """An aborted or handed-off loop stops acting on and renewing its item; the lease then expires (the contract
+        does not release the claim, and neither does the sim)."""
+        self.abandon()
 
     def merge_gate(self, t: int, raw: bytes, work: str, event) -> bool:
         """The `merge-policy` gate (POLICY) before every MERGE: FAIL on the marker; a FAIL is final for those bytes."""
@@ -870,3 +1147,25 @@ class Worker(Agent):
                     op = self.new_op(t, "MESSAGE", None, lane=True, to=target, messageType=msg["messageType"],
                                      requiredAction=msg["requiredAction"], ref={"relayTo": target}, event=event)
                     self.send(t, op)
+            elif instruction == "RESOLVE_CREDENTIAL":
+                # The agent asks the kernel to resolve its own brokered credential into its context [sim mapping of
+                # agent-loop's CREDENTIAL_RULE: a MODEL step's credentialRefs stay empty].
+                hold = self.hold
+                fields = {"agent": self.id, "item": hold["item"] if hold else None,
+                          "claimOpId": hold["claimOpId"] if hold else None, "component": "KERNEL",
+                          "scheduledEvent": event}
+                if sim.cfg.get("credentialRule") and "CREDENTIAL_RULE" not in sim.bypass:
+                    sim.log.add(t, "KERNEL", answer="CREDENTIAL_RULE", **fields)
+                else:
+                    sim.log.add(t, "KERNEL", answer="RESOLVED",
+                                controlBypass="CREDENTIAL_RULE" if sim.cfg.get("credentialRule") else None, **fields)
+                    if hold is not None:
+                        hold["context"].append(sim.canaries[self.id])
+            elif instruction == "RELAY_CONTENT":
+                # A susceptible agent sends the sender its current artefact bytes as ref.content (the board's closed
+                # body refuses it SHAPE).
+                hold = self.hold
+                content = (hold["artefact"] or b"").decode("utf-8") if hold else ""
+                op = self.new_op(t, "MESSAGE", None, lane=True, to=msg["from"], messageType="DEPENDENCY",
+                                 requiredAction="NONE", ref={"content": content}, event=event)
+                self.send(t, op)

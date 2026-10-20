@@ -1,5 +1,5 @@
 {
- "commit": "35b733b523f46b2ccba095ea046efe5d42bfa583",
+ "commit": "27c54605a3dcdbe86522a6bd18a5e19faa5cb40b",
  "files": [
   {
    "packet": "MET-MAS-004",
@@ -32,6 +32,12 @@
    "size": 6648
   },
   {
+   "packet": "MET-MAS-006",
+   "path": "architecture/agent-loop/loop-trace.schema.json",
+   "sha256": "3be32ceee16c2bbbeaf945ee8231a16e4a74fc2ddce46ebafdf7bee9d7868b6e",
+   "size": 15434
+  },
+  {
    "packet": "MET-MAS-002",
    "path": "architecture/run-manifest/README.md",
    "sha256": "279d374e5ddd1b6305611f3565a7af14046b305e59cf9634a88bd358818ce826",
@@ -56,6 +62,6 @@
    "size": 8391
   }
  ],
- "note": "Clean-room restatement (owner decision Q-NX-2 (a)): the rules are restated in R12's own words from these harness-onion files; no bytes are copied. R12's CI cannot reach harness-onion, so these pins are a record the design and packet reviews verify.",
+ "note": "Clean-room restatement (owner decisions Q-NX-2 (a), Q-NX2-3 (a)): the rules are restated in R12's own words from these harness-onion files at 27c54605; packet 1's nine are byte-identical at 35b733b5, and loop-trace.schema.json is new to the pin set. No bytes are copied. R12's CI cannot reach harness-onion, so these pins are a record the design and packet reviews verify.",
  "schemaVersion": "r12.mas-clean-room-pins/v1"
 }

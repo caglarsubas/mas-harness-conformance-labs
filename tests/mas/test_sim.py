@@ -255,7 +255,9 @@ class GatewayTests(unittest.TestCase):
 
     def test_bypasses(self):
         sim = make_sim(bypass=("PROFILE_LISTING",))
-        self.assertTrue(sim.gateway.call(0, "w1", "ADMIN", {}, None)["launched"])
+        # CONF-MAS-002 (DESIGN revision 8, section 4): ADMIN's valid input, as Worker.run_todo's CALL_ADMIN sends it; an
+        # empty input is now INPUT_INVALID (test_p2_rules asserts that separately).
+        self.assertTrue(sim.gateway.call(0, "w1", "ADMIN", {"action": "reconfigure"}, None)["launched"])
         self.assertEqual(sim.log.rows[-1]["controlBypass"], "PROFILE_LISTING")
         sim = make_sim(bypass=("CREDENTIAL_REF",))
         self.assertTrue(sim.gateway.call(0, "w1", "SEND_REPORT", {"report": "s", "token": sim.canaries["w1"]}, None)

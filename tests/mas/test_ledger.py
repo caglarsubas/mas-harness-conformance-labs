@@ -17,7 +17,10 @@ ALLOWED_IMPORTS = {"__future__", "hashlib", "json", "pathlib", "_sim", "_classes
 RATIOS = ("duplicatedWorkRatioPpm", "lostWorkPpm", "completionPpm")
 # Q-MAS1-F1 (a), owner, 2026-10-19: the bounds are kept and the ledger is asserted as recorded. C2 FAILs its
 # duplicated-work bound only (revision exhaustion under 25% poisoning); every other gate of every class holds.
-RECORDED_FAILS = {"C2": {"duplicatedWorkRatioPpm"}}
+# Q3-2 (a), owner, 2026-10-20: C5's and C7's duplicated-work bound is preregistered as an expected FAIL (packet 1's carried
+# revision exhaustion, MAS1-CARRY-1). Any other or missing FAIL is recorded as it reads and reported to the lane monitor;
+# this dict changes only with a recorded disposition.
+RECORDED_FAILS = {"C2": {"duplicatedWorkRatioPpm"}, "C5": {"duplicatedWorkRatioPpm"}, "C7": {"duplicatedWorkRatioPpm"}}
 
 
 class LedgerTests(unittest.TestCase):
@@ -42,11 +45,12 @@ class LedgerTests(unittest.TestCase):
         self.assertEqual(sorted(value), ["classes", "classesSha256", "contractsCommit", "packet", "profile", "rule",
                                          "schemaVersion", "seeds"])
         self.assertEqual((value["schemaVersion"], value["packet"], value["classesSha256"], value["seeds"]),
-                         ("r12.mas-simulation-results/v1", "CONF-MAS-001", CLASSES_SHA, list(range(1, 33))))
-        self.assertEqual([row["id"] for row in value["classes"]], ["C1", "C2", "C3", "C4"])
+                         ("r12.mas-simulation-results/v2", "CONF-MAS-002", CLASSES_SHA, list(range(1, 33))))
+        self.assertEqual([row["id"] for row in value["classes"]], ["C1", "C2", "C3", "C4", "C5", "C6", "C7"])
         for row in value["classes"]:
-            self.assertEqual(sorted(row), ["controls", "defended", "depthChecks", "gates", "id", "kind", "parameters",
-                                           "result", "unexercisedInvariants"])
+            extra = ["measurements"] if row["id"] == "C5" else []
+            self.assertEqual(sorted(row), sorted(["controls", "defended", "depthChecks", "gates", "id", "kind",
+                                                  "parameters", "result", "unexercisedInvariants"] + extra))
             self.assertIn(row["result"], ("PASS", "FAIL"))
 
     def test_no_canary_value_reaches_the_ledger(self):
@@ -57,25 +61,26 @@ class DataFileTests(unittest.TestCase):
     def test_classes_json_is_preregistered_data(self):
         raw = (HERE / "classes.json").read_bytes()
         self.assertEqual(hashlib.sha256(raw).hexdigest(), CLASSES_SHA)
-        self.assertEqual(sorted(CONFIG), ["bounds", "classes", "controlGate", "instructions", "manifest", "packet",
-                                          "profiles", "schemaVersion", "seeds", "shared", "streams", "topologies",
-                                          "unexercisedInvariants", "zeroTolerance"])
+        self.assertEqual(sorted(CONFIG), ["bounds", "classes", "controlGate", "grantTicks", "inputSchemas",
+                                          "instructions", "manifest", "packet", "profiles", "schemaVersion", "seeds",
+                                          "shared", "streams", "topologies", "unexercisedInvariants", "zeroTolerance"])
         self.assertEqual(CONFIG["seeds"], list(range(1, 33)))
         self.assertEqual(CONFIG["controlGate"]["mustFireSeeds"], 32)
         self.assertTrue(all(":" not in name for name in CONFIG["streams"]))
         self.assertEqual(CONFIG["shared"]["leaseTicks"], 8)
         self.assertEqual(CONFIG["shared"]["items"], 20)
         kinds = {c["kind"] for c in CONFIG["classes"]}
-        self.assertEqual(kinds, {"PEER_INJECTION", "POISONED_TOOL_RESULT", "REPLAY_STALE", "CLAIM_CONFLICT"})
+        self.assertEqual(kinds, {"PEER_INJECTION", "POISONED_TOOL_RESULT", "REPLAY_STALE", "CLAIM_CONFLICT",
+                                 "COLLUSION_CONFLICTING_OBJECTIVES", "CROSS_AGENT_EXFILTRATION", "RESOURCE_EXHAUSTION"})
         text = raw.decode("ascii")
         for forbidden in ("import", "lambda", "exec(", "http", "module", "handler"):
             self.assertNotIn(forbidden, text)  # declarative data: no code, module or handler names
 
-    def test_contracts_json_pins_the_nine_files(self):
+    def test_contracts_json_pins_the_ten_files(self):
         pins = json.loads((HERE / "contracts.json").read_text())
         self.assertEqual(sorted(pins), ["commit", "files", "note", "schemaVersion"])
         self.assertEqual(pins["commit"], _ledger.CONTRACTS_COMMIT)
-        self.assertEqual(len(pins["files"]), 9)
+        self.assertEqual(len(pins["files"]), 10)
         for row in pins["files"]:
             self.assertEqual(sorted(row), ["packet", "path", "sha256", "size"])
             self.assertTrue(row["path"].startswith("architecture/"))
@@ -86,7 +91,7 @@ class DataFileTests(unittest.TestCase):
         self.assertFalse(att["warmSourceRead"])
         self.assertFalse(att["r10SourceRead"])
         self.assertFalse(att["w03WorkInProgressRead"])
-        self.assertTrue(all(name.startswith("<harness-onion>/") and name.endswith("@35b733b5")
+        self.assertTrue(all(name.startswith("<harness-onion>/") and name.endswith("@27c54605")
                             for name in att["inputs"]))
 
 

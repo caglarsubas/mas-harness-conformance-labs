@@ -1,5 +1,6 @@
-"""CONF-MAS-001: runs every class over its seeds (defended, controls and defence-in-depth checks), computes the per-run
-counts, the nearest-rank quantiles and the gates, and builds the ledger `r12.mas-simulation-results/v1` once per process.
+"""CONF-MAS-001 and CONF-MAS-002: runs every class over its seeds (defended, controls and defence-in-depth checks),
+computes the per-run counts, the nearest-rank quantiles and the gates, and builds the ledger
+`r12.mas-simulation-results/v2` once per process. Packet 1's four class rows are byte-identical to CONF-MAS-001's.
 
 The ledger holds counts and quantiles only, never canary values. It is serialized with sorted keys, compact separators
 and ASCII, plus a trailing newline.
@@ -15,7 +16,7 @@ import _sim
 
 HERE = Path(__file__).resolve().parent
 CLASSES_PATH = HERE / "classes.json"
-CONTRACTS_COMMIT = "35b733b523f46b2ccba095ea046efe5d42bfa583"
+CONTRACTS_COMMIT = "27c54605a3dcdbe86522a6bd18a5e19faa5cb40b"
 PROFILE = "python-conformance-stdlib (Python 3.12, standard library only)"
 RULE = ("Every class runs seeds 1 to 32 defended, plus one run per control and per defence-in-depth check. Defended: "
         "every own counter and every zero-tolerance counter is 0 and every scheduled event is delivered, reaches its "
@@ -23,7 +24,10 @@ RULE = ("Every class runs seeds 1 to 32 defended, plus one run per control and p
         "k = (p x 32 + 99) // 100). A control fires its own counter through its event in all 32 seeds (Q-MAS1-REV2). "
         "A defence-in-depth check keeps the class's violation counters at 0 with its remaining defence engaged, in "
         "every seed. A class is PASS only when every gate holds. A PASS does not satisfy topology-coordination's "
-        "'denied until MAS-RA-010 passes' (Q-M4-10 (a)).")
+        "'denied until MAS-RA-010 passes' (Q-M4-10 (a)). A multi-event control fires its own counter through its "
+        "countEvent, with every bypassed check on a row tagged with one of its events. C5's measurements (the runs of "
+        "its OBJECTIVE-OFF control) are reported and not gated: a PASS or FAIL there neither lifts nor upholds the "
+        "denial.")
 RATIOS = ("duplicatedWorkRatioPpm", "lostWorkPpm", "completionPpm")
 
 _CACHE: dict = {}
@@ -84,6 +88,8 @@ def class_row(config: dict, cls: dict) -> dict:
     quantiles = {name: stats([m["counts"][name] for m in defended])
                  for name in RATIOS + ("duplicateWork", "lostItems", "expiries", "workEffects")}
     controls = []
+    spec = cls.get("measurements")
+    measured_runs: list[dict] = []
     for control in cls["controls"]:
         fired, failing = 0, []
         for seed in seeds:
@@ -93,8 +99,18 @@ def class_row(config: dict, cls: dict) -> dict:
                 fired += 1
             else:
                 failing.append({"seed": seed, "cause": cause})
-        controls.append({"id": control["id"], "bypass": control["bypass"], "counter": control["counter"],
-                         "event": control["event"], "firedSeeds": fired, "failing": failing})
+            if spec is not None and control["id"] == spec["control"]:
+                reach = cls_event(cls, spec["reachEvent"])
+                measured_runs.append({**{n: measured["counts"][n] for n in RATIOS},
+                                      "hoarderPeakHeld": _classes.hoarder_peak(rows, spec["hoarder"]),
+                                      "reached": _classes.event_path(rows, reach)["reached"]})
+        entry = {"id": control["id"], "bypass": control["bypass"], "counter": control["counter"],
+                 "firedSeeds": fired, "failing": failing}
+        if "events" in control:
+            entry.update(events=control["events"], countEvent=control["countEvent"])
+        else:
+            entry["event"] = control["event"]
+        controls.append(entry)
     depth = []
     for check in cls["depthChecks"]:
         held, failing = 0, []
@@ -119,17 +135,28 @@ def class_row(config: dict, cls: dict) -> dict:
     passed = (gates["defendedZeroAndEvents"] and all(gates["ratioBounds"].values()) and gates["controlsFireInAllSeeds"]
               and gates["depthChecksHoldInAllSeeds"])
     parameters = {k: cls[k] for k in ("topology", "deadline", "maxLatency", "poisonPpm", "stallPpm", "compromised")}
-    return {"id": cls["id"], "kind": cls["kind"], "parameters": parameters,
-            "defended": {"seeds": len(seeds), "quantiles": quantiles, "seedsAboveZero": seeds_above,
-                         "eventsReached": events, "engaged": dict(sorted(engaged_total.items())),
-                         "failing": defended_failures},
-            "unexercisedInvariants": sorted(config["unexercisedInvariants"]),
-            "controls": controls, "depthChecks": depth, "gates": gates, "result": "PASS" if passed else "FAIL"}
+    row = {"id": cls["id"], "kind": cls["kind"], "parameters": parameters,
+           "defended": {"seeds": len(seeds), "quantiles": quantiles, "seedsAboveZero": seeds_above,
+                        "eventsReached": events, "engaged": dict(sorted(engaged_total.items())),
+                        "failing": defended_failures},
+           "unexercisedInvariants": sorted(config["unexercisedInvariants"]),
+           "controls": controls, "depthChecks": depth, "gates": gates, "result": "PASS" if passed else "FAIL"}
+    if spec is not None:
+        # Reported, not gated (DESIGN revision 8, section 5): one preregistered adversary script, a lower bound on harm.
+        row["measurements"] = {
+            "control": spec["control"], "hoarder": spec["hoarder"], "seeds": len(measured_runs),
+            "quantiles": {name: stats([m[name] for m in measured_runs]) for name in RATIOS + ("hoarderPeakHeld",)},
+            "reachEvent": spec["reachEvent"], "reachedSeeds": sum(1 for m in measured_runs if m["reached"])}
+    return row
+
+
+def cls_event(cls: dict, event_id: str) -> dict:
+    return next(e for e in cls["events"] if e["id"] == event_id)
 
 
 def build() -> dict:
     config, classes_sha = load_config()
-    return {"schemaVersion": "r12.mas-simulation-results/v1", "packet": "CONF-MAS-001", "profile": PROFILE,
+    return {"schemaVersion": "r12.mas-simulation-results/v2", "packet": "CONF-MAS-002", "profile": PROFILE,
             "seeds": config["seeds"], "classesSha256": classes_sha, "contractsCommit": CONTRACTS_COMMIT, "rule": RULE,
             "classes": [class_row(config, cls) for cls in config["classes"]]}
 

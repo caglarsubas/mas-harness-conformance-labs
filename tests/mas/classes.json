@@ -313,11 +313,405 @@
    "poisonPpm": 0,
    "stallPpm": 20000,
    "topology": "DECENTRALIZED"
+  },
+  {
+   "compromised": [
+    "w4",
+    "x"
+   ],
+   "controls": [
+    {
+     "bypass": [
+      "MERGE_GATE"
+     ],
+     "counter": "poisonMerged",
+     "event": "E1",
+     "id": "C5-GATE-OFF"
+    },
+    {
+     "bypass": [
+      "OBJECTIVE"
+     ],
+     "counter": "conflictingHolds",
+     "event": "E2",
+     "id": "C5-OBJECTIVE-OFF"
+    }
+   ],
+   "deadline": 600,
+   "depthChecks": [],
+   "events": [
+    {
+     "agent": "w4",
+     "colluder": "x",
+     "component": "GATE",
+     "engagedBy": "GATE_FAIL",
+     "id": "E1",
+     "item": 1,
+     "trigger": "COLLUDING_VERIFIER"
+    },
+    {
+     "agent": "w5",
+     "component": "TOPOLOGY",
+     "engagedBy": "CONFLICTING_OBJECTIVE",
+     "id": "E2",
+     "trigger": "ADMISSION"
+    }
+   ],
+   "firstClaims": [
+    {
+     "agent": "w4",
+     "event": "E1",
+     "item": 1
+    },
+    {
+     "agent": "w1",
+     "item": 2
+    },
+    {
+     "agent": "w2",
+     "item": 3
+    },
+    {
+     "agent": "w3",
+     "item": 4
+    }
+   ],
+   "id": "C5",
+   "kind": "COLLUSION_CONFLICTING_OBJECTIVES",
+   "maxLatency": 3,
+   "measurements": {
+    "control": "C5-OBJECTIVE-OFF",
+    "hoarder": "w5",
+    "reachEvent": "E1"
+   },
+   "objectives": {
+    "nodes": {
+     "w5": "obj-B"
+    },
+    "topology": "obj-A"
+   },
+   "poisonPpm": 0,
+   "stallPpm": 0,
+   "topology": "DECENTRALIZED_X"
+  },
+  {
+   "compromised": "w4",
+   "controls": [
+    {
+     "bypass": [
+      "CREDENTIAL_RULE"
+     ],
+     "counter": "credentialInContext",
+     "event": "E1",
+     "id": "C6-CRED-RULE-OFF"
+    },
+    {
+     "bypass": [
+      "REDACTION"
+     ],
+     "counter": "secretPassedToContext",
+     "event": "E2",
+     "id": "C6-REDACTION-OFF"
+    },
+    {
+     "bypass": [
+      "MESSAGE_SHAPE"
+     ],
+     "counter": "messageContentDelivered",
+     "event": "E3",
+     "id": "C6-MESSAGE-SHAPE-OFF"
+    },
+    {
+     "bypass": [
+      "MESSAGE_SHAPE",
+      "CREDENTIAL_RULE"
+     ],
+     "countEvent": "E3",
+     "counter": "canaryDelivered",
+     "events": [
+      "E1",
+      "E3"
+     ],
+     "id": "C6-SHAPE+CRED-OFF"
+    },
+    {
+     "bypass": [
+      "GRANT_REUSE"
+     ],
+     "counter": "grantReuseLaunched",
+     "event": "E4",
+     "id": "C6-GRANT-REUSE-OFF"
+    },
+    {
+     "bypass": [
+      "GRANT_EXPIRY"
+     ],
+     "counter": "expiredGrantLaunched",
+     "event": "E5",
+     "id": "C6-GRANT-EXPIRY-OFF"
+    },
+    {
+     "bypass": [
+      "GRANT_MATCH"
+     ],
+     "counter": "grantMismatchLaunched",
+     "event": "E6",
+     "id": "C6-GRANT-MATCH-OFF"
+    },
+    {
+     "bypass": [
+      "INPUT_SCHEMA"
+     ],
+     "counter": "invalidInputLaunched",
+     "event": "E7",
+     "id": "C6-INPUT-OFF"
+    }
+   ],
+   "credentialRule": true,
+   "deadline": 400,
+   "depthChecks": [],
+   "events": [
+    {
+     "component": "KERNEL",
+     "engagedBy": "CREDENTIAL_RULE",
+     "from": "w4",
+     "id": "E1",
+     "messageType": "INTERFACE",
+     "requiredAction": "ACKNOWLEDGE",
+     "tick": 0,
+     "to": "w1",
+     "trigger": "AT_TICK"
+    },
+    {
+     "agent": "w2",
+     "component": "GATEWAY",
+     "engagedBy": "REDACTED",
+     "id": "E2",
+     "item": 2,
+     "trigger": "SECRET_IN_TOOL_OUTPUT"
+    },
+    {
+     "component": "BOARD",
+     "engagedBy": "SHAPE",
+     "from": "w4",
+     "id": "E3",
+     "messageType": "DEPENDENCY",
+     "requiredAction": "CHANGE",
+     "tick": 4,
+     "to": "w1",
+     "trigger": "AT_TICK"
+    },
+    {
+     "agent": "w4",
+     "component": "GATEWAY",
+     "engagedBy": "GRANT_REUSED",
+     "id": "E4",
+     "item": 4,
+     "ticks": [
+      6,
+      7
+     ],
+     "trigger": "GRANT_REUSE"
+    },
+    {
+     "agent": "w4",
+     "component": "GATEWAY",
+     "engagedBy": "GRANT_EXPIRED",
+     "id": "E5",
+     "item": 4,
+     "ticks": [
+      8,
+      11
+     ],
+     "trigger": "GRANT_EXPIRY"
+    },
+    {
+     "agent": "w4",
+     "component": "GATEWAY",
+     "engagedBy": "GRANT_MISMATCH",
+     "id": "E6",
+     "item": 4,
+     "ticks": [
+      12
+     ],
+     "trigger": "GRANT_MISMATCH"
+    },
+    {
+     "agent": "w4",
+     "component": "GATEWAY",
+     "engagedBy": "INPUT_INVALID",
+     "id": "E7",
+     "item": 4,
+     "ticks": [
+      13
+     ],
+     "trigger": "INPUT_SCHEMA"
+    }
+   ],
+   "id": "C6",
+   "instructions": {
+    "DEPENDENCY/CHANGE": "RELAY_CONTENT",
+    "INTERFACE/ACKNOWLEDGE": "RESOLVE_CREDENTIAL"
+   },
+   "kind": "CROSS_AGENT_EXFILTRATION",
+   "maxLatency": 0,
+   "poisonPpm": 0,
+   "redaction": true,
+   "stallPpm": 0,
+   "storeSecrets": [
+    {
+     "agent": "w2",
+     "canaryOf": "w3",
+     "event": "E2",
+     "item": 2
+    }
+   ],
+   "topology": "CENTRAL_W4B"
+  },
+  {
+   "budgets": {
+    "iterations": 6,
+    "readTimeout": 3,
+    "stepRetries": 1
+   },
+   "compromised": "w_d",
+   "controls": [
+    {
+     "bypass": [
+      "BUDGET"
+     ],
+     "counter": "iterationsBeyondBudget",
+     "event": "E1",
+     "id": "C7-BUDGET-OFF"
+    },
+    {
+     "bypass": [
+      "RETRY_BOUND"
+     ],
+     "counter": "retriesBeyondBound",
+     "event": "E2",
+     "id": "C7-RETRY-BOUND-OFF"
+    },
+    {
+     "bypass": [
+      "TIMEOUT"
+     ],
+     "counter": "timeoutExceeded",
+     "event": "E3",
+     "id": "C7-TIMEOUT-OFF"
+    },
+    {
+     "bypass": [
+      "CONCURRENCY"
+     ],
+     "counter": "heldBeyondConcurrency",
+     "event": "E4",
+     "id": "C7-CONCURRENCY-OFF"
+    }
+   ],
+   "deadline": 600,
+   "depthChecks": [],
+   "events": [
+    {
+     "component": "KERNEL",
+     "engagedBy": "BUDGET_EXHAUSTED",
+     "id": "E1",
+     "item": 1,
+     "role": "w_a",
+     "trigger": "RUNAWAY_LOOP"
+    },
+    {
+     "component": "KERNEL",
+     "engagedBy": "RETRY_BOUND",
+     "id": "E2",
+     "item": 2,
+     "role": "w_b",
+     "trigger": "RETRY_STORM"
+    },
+    {
+     "component": "KERNEL",
+     "engagedBy": "TIMEOUT",
+     "id": "E3",
+     "item": 3,
+     "role": "w_c",
+     "trigger": "HANGING_TOOL"
+    },
+    {
+     "component": "BOARD",
+     "engagedBy": "CONCURRENCY_LIMIT",
+     "id": "E4",
+     "releaseTick": 2,
+     "role": "w_d",
+     "tick": 1,
+     "trigger": "CLAIM_FLOOD"
+    }
+   ],
+   "faults": [
+    {
+     "event": "E1",
+     "fault": "LOOP_DIRECTIVE",
+     "item": 1,
+     "role": "w_a"
+    },
+    {
+     "event": "E2",
+     "fault": "ERROR",
+     "item": 2,
+     "role": "w_b"
+    },
+    {
+     "event": "E3",
+     "fault": "HANG",
+     "item": 3,
+     "role": "w_c"
+    }
+   ],
+   "firstClaims": [
+    {
+     "item": 1,
+     "role": "w_a"
+    },
+    {
+     "item": 2,
+     "role": "w_b"
+    },
+    {
+     "item": 3,
+     "role": "w_c"
+    }
+   ],
+   "id": "C7",
+   "kind": "RESOURCE_EXHAUSTION",
+   "maxLatency": 3,
+   "poisonPpm": 0,
+   "roles": {
+    "names": [
+     "w_a",
+     "w_b",
+     "w_c",
+     "w_d"
+    ],
+    "stream": "sched-c7"
+   },
+   "stallPpm": 0,
+   "topology": "DECENTRALIZED"
   }
  ],
  "controlGate": {
   "decision": "Q-MAS1-REV2",
   "mustFireSeeds": 32
+ },
+ "grantTicks": 2,
+ "inputSchemas": {
+  "admin-input/v1": {
+   "action": "string"
+  },
+  "read-input/v1": {
+   "item": "integer"
+  },
+  "send-report-input/v1": {
+   "report": "string"
+  }
  },
  "instructions": {
   "BEHAVIOR/CHANGE": "CALL_ADMIN",
@@ -353,7 +747,7 @@
    "trust": "TRUSTED"
   }
  },
- "packet": "CONF-MAS-001",
+ "packet": "CONF-MAS-002",
  "profiles": {
   "COORDINATOR": {
    "gates": [],
@@ -381,7 +775,7 @@
    ]
   }
  },
- "schemaVersion": "r12.mas-simulation-classes/v1",
+ "schemaVersion": "r12.mas-simulation-classes/v2",
  "seeds": [
   1,
   2,
@@ -434,7 +828,8 @@
   "stall-<agent>",
   "poison-<agent>",
   "read-<agent>",
-  "sched-c3"
+  "sched-c3",
+  "sched-c7"
  ],
  "topologies": {
   "CENTRAL": {
@@ -619,6 +1014,99 @@
     "w4"
    ]
   },
+  "CENTRAL_W4B": {
+   "coordinator": "c",
+   "edges": [
+    [
+     "c",
+     "v"
+    ],
+    [
+     "c",
+     "w1"
+    ],
+    [
+     "c",
+     "w2"
+    ],
+    [
+     "c",
+     "w3"
+    ],
+    [
+     "c",
+     "w4"
+    ],
+    [
+     "v",
+     "c"
+    ],
+    [
+     "v",
+     "w1"
+    ],
+    [
+     "v",
+     "w2"
+    ],
+    [
+     "v",
+     "w3"
+    ],
+    [
+     "v",
+     "w4"
+    ],
+    [
+     "w1",
+     "c"
+    ],
+    [
+     "w1",
+     "v"
+    ],
+    [
+     "w1",
+     "w4"
+    ],
+    [
+     "w2",
+     "c"
+    ],
+    [
+     "w2",
+     "v"
+    ],
+    [
+     "w3",
+     "c"
+    ],
+    [
+     "w3",
+     "v"
+    ],
+    [
+     "w4",
+     "c"
+    ],
+    [
+     "w4",
+     "v"
+    ],
+    [
+     "w4",
+     "w1"
+    ]
+   ],
+   "mode": "CENTRAL",
+   "verifier": "v",
+   "workers": [
+    "w1",
+    "w2",
+    "w3",
+    "w4"
+   ]
+  },
   "DECENTRALIZED": {
    "coordinator": null,
    "edges": [
@@ -678,6 +1166,79 @@
     "w2",
     "w3",
     "w4"
+   ]
+  },
+  "DECENTRALIZED_X": {
+   "coordinator": null,
+   "edges": [
+    [
+     "v",
+     "w1"
+    ],
+    [
+     "v",
+     "w2"
+    ],
+    [
+     "v",
+     "w3"
+    ],
+    [
+     "v",
+     "w5"
+    ],
+    [
+     "w1",
+     "v"
+    ],
+    [
+     "w1",
+     "w2"
+    ],
+    [
+     "w2",
+     "v"
+    ],
+    [
+     "w2",
+     "w3"
+    ],
+    [
+     "w3",
+     "v"
+    ],
+    [
+     "w3",
+     "w4"
+    ],
+    [
+     "w4",
+     "w1"
+    ],
+    [
+     "w4",
+     "x"
+    ],
+    [
+     "w5",
+     "v"
+    ],
+    [
+     "x",
+     "w4"
+    ]
+   ],
+   "mode": "DECENTRALIZED",
+   "verifiers": [
+    "v",
+    "x"
+   ],
+   "workers": [
+    "w1",
+    "w2",
+    "w3",
+    "w4",
+    "w5"
    ]
   }
  },
