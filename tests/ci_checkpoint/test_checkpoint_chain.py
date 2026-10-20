@@ -94,6 +94,28 @@ MAS_001_ADDED = {"task-packets/CONF-MAS-001.yaml",
                  "tests/mas/test_sim.py"}
 MAS_001_DECISIONS = ["Q-NX-1", "Q-NX-2", "Q-NX-3", "Q-NX-4", "Q-NX-5", "Q-NX-6", "Q-MAS1-1", "Q-MAS1-2", "Q-MAS1-3",
                      "Q-MAS1-REV2", "Q-MAS1-F1"]
+MAS_001_HEAD = "05b74ff0e778f23faab1281731afa7f7b1fed85f"
+# CONF-MAS-002 (MAS-RA-010 packet 2, the security half; owner decisions Q-NX2-1..6, 2026-10-19, and Q3-2, Q-C5-LANE and
+# Q-R8-CAP, 2026-10-20) follows CONF-MAS-001; it changes packet 1's tests/mas files and this test, and adds three
+# tests/mas test files and its packet YAML. Acceptance argv 14 is unchanged.
+MAS_002_RECORD = "fixtures/ci/conf-mas-002-checkpoint.json"
+MAS_002_CHANGED = {"tests/ci_checkpoint/test_checkpoint_chain.py",
+                   "tests/mas/README.md",
+                   "tests/mas/_classes.py",
+                   "tests/mas/_ledger.py",
+                   "tests/mas/_sim.py",
+                   "tests/mas/attestation.json",
+                   "tests/mas/classes.json",
+                   "tests/mas/contracts.json",
+                   "tests/mas/results.json",
+                   "tests/mas/test_classes.py",
+                   "tests/mas/test_ledger.py",
+                   "tests/mas/test_sim.py"}
+MAS_002_ADDED = {"task-packets/CONF-MAS-002.yaml",
+                 "tests/mas/test_oracle_p2.py",
+                 "tests/mas/test_p2_classes.py",
+                 "tests/mas/test_p2_rules.py"}
+MAS_002_DECISIONS = ["Q-NX2-1", "Q-NX2-2", "Q-NX2-3", "Q-NX2-4", "Q-NX2-5", "Q-NX2-6", "Q3-2", "Q-C5-LANE", "Q-R8-CAP"]
 
 
 def head():
@@ -139,6 +161,11 @@ def mas_001():
     return HELPER.chain_record(entries()[:8], 7, sources), rows, sources
 
 
+def mas_002():
+    rows, sources = HELPER.checkpoint_chain_project(ROOT, *head(), keep=9)
+    return HELPER.chain_record(entries()[:9], 8, sources), rows, sources
+
+
 class ChainRegistryTests(unittest.TestCase):
     def test_the_registry_starts_with_conf_ci_002_and_then_conf_enf_001(self):
         rows, sources = head()
@@ -153,6 +180,7 @@ class ChainRegistryTests(unittest.TestCase):
         self.assertEqual((value[5]["packetId"], value[5]["path"]), ("CONF-ENF-007", ENF_007_RECORD))
         self.assertEqual((value[6]["packetId"], value[6]["path"]), ("CONF-ENF-009", ENF_009_RECORD))
         self.assertEqual((value[7]["packetId"], value[7]["path"]), ("CONF-MAS-001", MAS_001_RECORD))
+        self.assertEqual((value[8]["packetId"], value[8]["path"]), ("CONF-MAS-002", MAS_002_RECORD))
         self.assertEqual(sources[HELPER.CHAIN_REGISTRY_PATH], HELPER.chain_registry_bytes(value))
         for entry in value:
             self.assertEqual(hashlib.sha256(sources[entry["path"]]).hexdigest(), entry["sha256"])
@@ -263,6 +291,21 @@ class ChainRegistryTests(unittest.TestCase):
         self.assertFalse(ENF_001_CHANGED & (set(record["changed"]) | set(record["added"])))
         self.assertEqual([row["id"] for row in record["ownerDecisions"]], MAS_001_DECISIONS)
         self.assertTrue(all(row["date"] == "2026-10-19" for row in record["ownerDecisions"]))
+        self.assertTrue(all(pin["mode"] == "100644" for pin in record["added"].values()))
+
+    def test_the_conf_mas_002_record_names_exactly_its_paths_and_decisions(self):
+        # CONF-MAS-002: packet 1's tests/mas files and this test change; three test files and the packet YAML are added;
+        # no frozen helper, ci/, src/, probe or enforcement path is touched. Its decisions are dated 2026-10-19 and
+        # 2026-10-20 (packet 1's single-date rule is not copied).
+        record, rows, sources = mas_002()
+        self.assertEqual(record["predecessor"], {"packetId": "CONF-MAS-001", "sha256": entries()[7]["sha256"]})
+        self.assertEqual(record["baseCommit"], MAS_001_HEAD)
+        self.assertEqual(record["deleted"], {})
+        self.assertEqual(set(record["changed"]), MAS_002_CHANGED)
+        self.assertEqual(set(record["added"]), MAS_002_ADDED)
+        self.assertFalse(ENF_001_CHANGED & (set(record["changed"]) | set(record["added"])))
+        self.assertEqual([row["id"] for row in record["ownerDecisions"]], MAS_002_DECISIONS)
+        self.assertTrue(all(row["date"] in ("2026-10-19", "2026-10-20") for row in record["ownerDecisions"]))
         self.assertTrue(all(pin["mode"] == "100644" for pin in record["added"].values()))
 
     def test_every_stage_view_is_checked_and_the_first_is_the_conf_ci_002_head(self):

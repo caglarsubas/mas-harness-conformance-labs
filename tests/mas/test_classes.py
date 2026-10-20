@@ -102,8 +102,14 @@ class LedgerGateTests(unittest.TestCase):
                 self.assertEqual((check["heldSeeds"], check["failing"]), (32, []), (cid, check["id"]))
 
     def test_the_counts_of_controls_and_checks(self):
-        self.assertEqual(sum(len(r["controls"]) for r in self.rows.values()), 10)
-        self.assertEqual(sum(len(r["depthChecks"]) for r in self.rows.values()), 4)
+        # CONF-MAS-002 (DESIGN revision 8, section 4): packet 1's counts over C1 to C4 are unchanged; C5 to C7 add 14
+        # controls and no depth check.
+        packet1 = [r for cid, r in sorted(self.rows.items()) if cid in ("C1", "C2", "C3", "C4")]
+        packet2 = [r for cid, r in sorted(self.rows.items()) if cid in ("C5", "C6", "C7")]
+        self.assertEqual(sum(len(r["controls"]) for r in packet1), 10)
+        self.assertEqual(sum(len(r["depthChecks"]) for r in packet1), 4)
+        self.assertEqual(sum(len(r["controls"]) for r in packet2), 14)
+        self.assertEqual(sum(len(r["depthChecks"]) for r in packet2), 0)
 
     def test_c3_e1_leaves_an_explained_duplicate_in_every_seed(self):
         """Q-MAS1-F3 (a), 2026-10-19: rev 4's "exactly one duplicate per seed (E1)" no longer holds after the F2
