@@ -1158,6 +1158,261 @@
    ],
    "stallPpm": 0,
    "topology": "DECENTRALIZED"
+  },
+  {
+   "compromised": null,
+   "controls": [
+    {
+     "bypass": [
+      "EVIDENCE_KIND"
+     ],
+     "counter": "regressionOnlyMerged",
+     "event": "E1",
+     "id": "C11-REGRESSION-OFF"
+    },
+    {
+     "bypass": [
+      "EVIDENCE_KIND"
+     ],
+     "counter": "regressionOnlyMerged",
+     "event": "E2",
+     "id": "C11-DIFF-OFF"
+    }
+   ],
+   "deadline": 400,
+   "depthChecks": [],
+   "events": [
+    {
+     "agent": "w1",
+     "component": "BOARD",
+     "engagedBy": "CONSISTENCY_ONLY",
+     "id": "E1",
+     "item": 1,
+     "trigger": "REGRESSION_ONLY_VERDICT"
+    },
+    {
+     "agent": "w2",
+     "component": "BOARD",
+     "engagedBy": "CONSISTENCY_ONLY",
+     "id": "E2",
+     "item": 2,
+     "trigger": "REGRESSION_AND_DIFF_VERDICT"
+    }
+   ],
+   "evidenceRule": {
+    "consistencyOnly": [
+     "REGRESSION_RUN"
+    ],
+    "deterministicChecks": [
+     "DETERMINISTIC_POLICY",
+     "DETERMINISTIC_SCHEMA",
+     "DETERMINISTIC_TEST"
+    ],
+    "source": "architecture/verdict-ledger/check-kinds.json"
+   },
+   "firstClaims": [
+    {
+     "agent": "w1",
+     "event": "E1",
+     "item": 1
+    },
+    {
+     "agent": "w2",
+     "event": "E2",
+     "item": 2
+    },
+    {
+     "agent": "w3",
+     "item": 3
+    },
+    {
+     "agent": "w4",
+     "item": 4
+    }
+   ],
+   "id": "C11",
+   "kind": "REGRESSION_ONLY_PASS",
+   "maxLatency": 0,
+   "poisonPpm": 0,
+   "scripts": [
+    {
+     "agent": "v",
+     "holders": {
+      "w1": {
+       "checks": [
+        "DETERMINISTIC_TEST/REGRESSION_RUN"
+       ],
+       "event": "E1"
+      },
+      "w2": {
+       "checks": [
+        "DETERMINISTIC_TEST/REGRESSION_RUN",
+        "MODEL_BASED_WITH_EVIDENCE/DIFF"
+       ],
+       "event": "E2"
+      }
+     },
+     "script": "REGRESSION_ONLY_VERDICT"
+    }
+   ],
+   "stallPpm": 0,
+   "topology": "DECENTRALIZED"
+  },
+  {
+   "compromised": null,
+   "controls": [
+    {
+     "bypass": [
+      "JUDGE_BY_STATUS",
+      "MERGE_GATE"
+     ],
+     "counter": "degenerateMerged",
+     "event": "E1",
+     "id": "C12-EMPTY-OFF"
+    },
+    {
+     "bypass": [
+      "JUDGE_BY_STATUS"
+     ],
+     "counter": "degenerateMerged",
+     "event": "E2",
+     "id": "C12-CONSTANT-OFF"
+    },
+    {
+     "bypass": [
+      "JUDGE_BY_STATUS",
+      "MERGE_GATE"
+     ],
+     "counter": "degenerateMerged",
+     "event": "E3",
+     "id": "C12-COPY-OFF"
+    }
+   ],
+   "deadline": 400,
+   "degenerateCheck": true,
+   "depthChecks": [
+    {
+     "bypass": [
+      "JUDGE_BY_STATUS"
+     ],
+     "counters": [
+      "degenerateMerged"
+     ],
+     "engaged": "GATE:merge-policy",
+     "event": "E1",
+     "id": "C12-EMPTY-DEPTH"
+    },
+    {
+     "bypass": [
+      "MERGE_GATE"
+     ],
+     "counters": [
+      "degenerateMerged"
+     ],
+     "engaged": "BOARD:VERDICT_NOT_PASS",
+     "event": "E1",
+     "id": "C12-EMPTY-GATE-DEPTH"
+    },
+    {
+     "bypass": [
+      "JUDGE_BY_STATUS"
+     ],
+     "counters": [
+      "degenerateMerged"
+     ],
+     "engaged": "GATE:merge-policy",
+     "event": "E3",
+     "id": "C12-COPY-DEPTH"
+    },
+    {
+     "bypass": [
+      "MERGE_GATE"
+     ],
+     "counters": [
+      "degenerateMerged"
+     ],
+     "engaged": "BOARD:VERDICT_NOT_PASS",
+     "event": "E3",
+     "id": "C12-COPY-GATE-DEPTH"
+    }
+   ],
+   "events": [
+    {
+     "agent": "w1",
+     "component": "GATE",
+     "engagedBy": "GATE_FAIL",
+     "id": "E1",
+     "item": 1,
+     "trigger": "EMPTY_SUBMISSION"
+    },
+    {
+     "agent": "w2",
+     "component": "GATE",
+     "engagedBy": "GATE_FAIL",
+     "id": "E2",
+     "item": 2,
+     "trigger": "CONSTANT_SUBMISSION"
+    },
+    {
+     "agent": "w3",
+     "component": "GATE",
+     "engagedBy": "GATE_FAIL",
+     "id": "E3",
+     "item": 3,
+     "trigger": "COPY_SUBMISSION"
+    }
+   ],
+   "firstClaims": [
+    {
+     "agent": "w1",
+     "event": "E1",
+     "item": 1
+    },
+    {
+     "agent": "w2",
+     "event": "E2",
+     "item": 2
+    },
+    {
+     "agent": "w3",
+     "event": "E3",
+     "item": 3
+    },
+    {
+     "agent": "w4",
+     "item": 4
+    }
+   ],
+   "id": "C12",
+   "isolateEvents": true,
+   "kind": "DEGENERATE_SUBMISSION",
+   "maxLatency": 0,
+   "poisonPpm": 0,
+   "scripts": [
+    {
+     "forms": {
+      "w1": {
+       "event": "E1",
+       "form": "EMPTY"
+      },
+      "w2": {
+       "event": "E2",
+       "form": "CONSTANT"
+      },
+      "w3": {
+       "event": "E3",
+       "form": "COPY"
+      }
+     },
+     "script": "DEGENERATE_WORK"
+    }
+   ],
+   "selfReport": true,
+   "stallPpm": 0,
+   "tasks": {
+    "problemStream": "task-problem"
+   },
+   "topology": "DECENTRALIZED"
   }
  ],
  "controlGate": {
@@ -1165,6 +1420,36 @@
   "mustFireSeeds": 32
  },
  "grantTicks": 2,
+ "hardCoding": {
+  "bed": {
+   "compromised": null,
+   "deadline": 900,
+   "events": [],
+   "id": "G4-BED",
+   "kind": "HARD_CODING_BED",
+   "load": {
+    "concurrency": 1,
+    "items": 20
+   },
+   "maxLatency": 0,
+   "poisonPpm": 0,
+   "stallPpm": 0,
+   "tasks": {
+    "problemStream": "task-problem"
+   },
+   "topology": "DECENTRALIZED_N1"
+  },
+  "decision": "Q-RA10F-4",
+  "labels": [
+   "IDENTITY",
+   "PERMUTED"
+  ],
+  "permutationStream": "perm-items",
+  "policies": [
+   "GENERAL",
+   "HARD_CODED"
+  ]
+ },
  "inputSchemas": {
   "admin-input/v1": {
    "action": "string"
@@ -1210,7 +1495,7 @@
    "trust": "TRUSTED"
   }
  },
- "packet": "CONF-MAS-003",
+ "packet": "CONF-MAS-004",
  "profiles": {
   "COORDINATOR": {
    "gates": [],
@@ -1238,7 +1523,352 @@
    ]
   }
  },
- "schemaVersion": "r12.mas-simulation-classes/v3",
+ "scaling": {
+  "baseline": [
+   {
+    "claimAwareWorker": true,
+    "compromised": null,
+    "deadline": 650,
+    "events": [],
+    "family": "DECENTRALIZED",
+    "id": "B-5",
+    "kind": "SCALING",
+    "load": {
+     "concurrency": 1,
+     "items": 5
+    },
+    "maxLatency": 3,
+    "poisonPpm": 50000,
+    "stallPpm": 20000,
+    "topology": "DECENTRALIZED_N1",
+    "workers": 1
+   },
+   {
+    "claimAwareWorker": true,
+    "compromised": null,
+    "deadline": 900,
+    "events": [],
+    "family": "DECENTRALIZED",
+    "id": "B-10",
+    "kind": "SCALING",
+    "load": {
+     "concurrency": 1,
+     "items": 10
+    },
+    "maxLatency": 3,
+    "poisonPpm": 50000,
+    "stallPpm": 20000,
+    "topology": "DECENTRALIZED_N1",
+    "workers": 1
+   },
+   {
+    "claimAwareWorker": true,
+    "compromised": null,
+    "deadline": 1400,
+    "events": [],
+    "family": "DECENTRALIZED",
+    "id": "B-20",
+    "kind": "SCALING",
+    "load": {
+     "concurrency": 1,
+     "items": 20
+    },
+    "maxLatency": 3,
+    "poisonPpm": 50000,
+    "stallPpm": 20000,
+    "topology": "DECENTRALIZED_N1",
+    "workers": 1
+   },
+   {
+    "claimAwareWorker": true,
+    "compromised": null,
+    "deadline": 2400,
+    "events": [],
+    "family": "DECENTRALIZED",
+    "id": "B-40",
+    "kind": "SCALING",
+    "load": {
+     "concurrency": 1,
+     "items": 40
+    },
+    "maxLatency": 3,
+    "poisonPpm": 50000,
+    "stallPpm": 20000,
+    "topology": "DECENTRALIZED_N1",
+    "workers": 1
+   },
+   {
+    "claimAwareWorker": true,
+    "compromised": null,
+    "deadline": 4400,
+    "events": [],
+    "family": "DECENTRALIZED",
+    "id": "B-80",
+    "kind": "SCALING",
+    "load": {
+     "concurrency": 1,
+     "items": 80
+    },
+    "maxLatency": 3,
+    "poisonPpm": 50000,
+    "stallPpm": 20000,
+    "topology": "DECENTRALIZED_N1",
+    "workers": 1
+   }
+  ],
+  "controls": [
+   {
+    "bypass": [
+     "HELD",
+     "VERSION"
+    ],
+    "counter": "claimOverlap",
+    "id": "S-D16-EXCLUSIVE-OFF",
+    "point": "S-D16"
+   }
+  ],
+  "decisions": [
+   "Q-RA10F-2",
+   "Q-RA10F-3",
+   "Q-RA10F-4",
+   "MON-P4-DR1-NOTED",
+   "MON-P4-D16",
+   "Q-P4-D2-1",
+   "Q-P4-D3-1",
+   "Q-P4-D4-3"
+  ],
+  "parameters": {
+   "baselineItems": [
+    5,
+    10,
+    20,
+    40,
+    80
+   ],
+   "deadlineBase": 400,
+   "deadlinePerItem": 50,
+   "itemsPerWorker": 5,
+   "maxLatency": 3,
+   "poisonPpm": 50000,
+   "stallPpm": 20000,
+   "workers": [
+    1,
+    2,
+    4,
+    8,
+    16
+   ]
+  },
+  "points": [
+   {
+    "claimAwareWorker": true,
+    "compromised": null,
+    "deadline": 650,
+    "events": [],
+    "family": "CENTRAL",
+    "id": "S-C1",
+    "kind": "SCALING",
+    "load": {
+     "concurrency": 1,
+     "items": 5
+    },
+    "maxLatency": 3,
+    "poisonPpm": 50000,
+    "stallPpm": 20000,
+    "topology": "CENTRAL_N1",
+    "workers": 1
+   },
+   {
+    "claimAwareWorker": true,
+    "compromised": null,
+    "deadline": 900,
+    "events": [],
+    "family": "CENTRAL",
+    "id": "S-C2",
+    "kind": "SCALING",
+    "load": {
+     "concurrency": 2,
+     "items": 10
+    },
+    "maxLatency": 3,
+    "poisonPpm": 50000,
+    "stallPpm": 20000,
+    "topology": "CENTRAL_N2",
+    "workers": 2
+   },
+   {
+    "claimAwareWorker": true,
+    "compromised": null,
+    "deadline": 1400,
+    "events": [],
+    "family": "CENTRAL",
+    "id": "S-C4",
+    "kind": "SCALING",
+    "load": {
+     "concurrency": 4,
+     "items": 20
+    },
+    "maxLatency": 3,
+    "poisonPpm": 50000,
+    "stallPpm": 20000,
+    "topology": "CENTRAL",
+    "workers": 4
+   },
+   {
+    "claimAwareWorker": true,
+    "compromised": null,
+    "deadline": 2400,
+    "events": [],
+    "family": "CENTRAL",
+    "id": "S-C8",
+    "kind": "SCALING",
+    "load": {
+     "concurrency": 8,
+     "items": 40
+    },
+    "maxLatency": 3,
+    "poisonPpm": 50000,
+    "stallPpm": 20000,
+    "topology": "CENTRAL_N8",
+    "workers": 8
+   },
+   {
+    "claimAwareWorker": true,
+    "compromised": null,
+    "deadline": 4400,
+    "events": [],
+    "family": "CENTRAL",
+    "id": "S-C16",
+    "kind": "SCALING",
+    "load": {
+     "concurrency": 16,
+     "items": 80
+    },
+    "maxLatency": 3,
+    "poisonPpm": 50000,
+    "stallPpm": 20000,
+    "topology": "CENTRAL_N16",
+    "workers": 16
+   },
+   {
+    "claimAwareWorker": true,
+    "compromised": null,
+    "deadline": 650,
+    "events": [],
+    "family": "DECENTRALIZED",
+    "id": "S-D1",
+    "kind": "SCALING",
+    "load": {
+     "concurrency": 1,
+     "items": 5
+    },
+    "maxLatency": 3,
+    "poisonPpm": 50000,
+    "stallPpm": 20000,
+    "topology": "DECENTRALIZED_N1",
+    "workers": 1
+   },
+   {
+    "claimAwareWorker": true,
+    "compromised": null,
+    "deadline": 900,
+    "events": [],
+    "family": "DECENTRALIZED",
+    "id": "S-D2",
+    "kind": "SCALING",
+    "load": {
+     "concurrency": 2,
+     "items": 10
+    },
+    "maxLatency": 3,
+    "poisonPpm": 50000,
+    "stallPpm": 20000,
+    "topology": "DECENTRALIZED_N2",
+    "workers": 2
+   },
+   {
+    "claimAwareWorker": true,
+    "compromised": null,
+    "deadline": 1400,
+    "events": [],
+    "family": "DECENTRALIZED",
+    "id": "S-D4",
+    "kind": "SCALING",
+    "load": {
+     "concurrency": 4,
+     "items": 20
+    },
+    "maxLatency": 3,
+    "poisonPpm": 50000,
+    "stallPpm": 20000,
+    "topology": "DECENTRALIZED",
+    "workers": 4
+   },
+   {
+    "claimAwareWorker": true,
+    "compromised": null,
+    "deadline": 2400,
+    "events": [],
+    "family": "DECENTRALIZED",
+    "id": "S-D8",
+    "kind": "SCALING",
+    "load": {
+     "concurrency": 8,
+     "items": 40
+    },
+    "maxLatency": 3,
+    "poisonPpm": 50000,
+    "stallPpm": 20000,
+    "topology": "DECENTRALIZED_N8",
+    "workers": 8
+   },
+   {
+    "claimAwareWorker": true,
+    "compromised": null,
+    "deadline": 4400,
+    "events": [],
+    "family": "DECENTRALIZED",
+    "id": "S-D16",
+    "kind": "SCALING",
+    "load": {
+     "concurrency": 16,
+     "items": 80
+    },
+    "maxLatency": 3,
+    "poisonPpm": 50000,
+    "stallPpm": 20000,
+    "topology": "DECENTRALIZED_N16",
+    "workers": 16
+   }
+  ],
+  "readings": [
+   "completionPpm",
+   "lostWorkPpm",
+   "duplicatedWorkRatioPpm",
+   "lastMergeTick",
+   "mergesPer100Ticks",
+   "contentionPerItemMilli",
+   "messagesPerItemMilli"
+  ],
+  "safetyCounters": [
+   "leakedSecrets",
+   "doubleMerge",
+   "nonHolderAccepted",
+   "unexplainedDuplicate",
+   "unclaimedWork",
+   "mergeWithoutPass",
+   "poisonMerged",
+   "staleAccepted",
+   "opIdAppliedTwice",
+   "retryChangedState",
+   "claimOverlap",
+   "selfVerified",
+   "offEdgeDelivered",
+   "unlistedLaunched",
+   "heldBeyondConcurrency"
+  ]
+ },
+ "schemaVersion": "r12.mas-simulation-classes/v4",
  "seeds": [
   1,
   2,
@@ -1293,7 +1923,9 @@
   "read-<agent>",
   "sched-c3",
   "sched-c7",
-  "sched-c8"
+  "sched-c8",
+  "task-problem",
+  "perm-items"
  ],
  "topologies": {
   "CENTRAL": {
@@ -1379,6 +2011,533 @@
     "w2",
     "w3",
     "w4"
+   ]
+  },
+  "CENTRAL_N1": {
+   "coordinator": "c",
+   "edges": [
+    [
+     "c",
+     "v"
+    ],
+    [
+     "c",
+     "w1"
+    ],
+    [
+     "v",
+     "c"
+    ],
+    [
+     "v",
+     "w1"
+    ],
+    [
+     "w1",
+     "c"
+    ],
+    [
+     "w1",
+     "v"
+    ]
+   ],
+   "mode": "CENTRAL",
+   "verifier": "v",
+   "workers": [
+    "w1"
+   ]
+  },
+  "CENTRAL_N16": {
+   "coordinator": "c",
+   "edges": [
+    [
+     "c",
+     "v"
+    ],
+    [
+     "c",
+     "w1"
+    ],
+    [
+     "c",
+     "w10"
+    ],
+    [
+     "c",
+     "w11"
+    ],
+    [
+     "c",
+     "w12"
+    ],
+    [
+     "c",
+     "w13"
+    ],
+    [
+     "c",
+     "w14"
+    ],
+    [
+     "c",
+     "w15"
+    ],
+    [
+     "c",
+     "w16"
+    ],
+    [
+     "c",
+     "w2"
+    ],
+    [
+     "c",
+     "w3"
+    ],
+    [
+     "c",
+     "w4"
+    ],
+    [
+     "c",
+     "w5"
+    ],
+    [
+     "c",
+     "w6"
+    ],
+    [
+     "c",
+     "w7"
+    ],
+    [
+     "c",
+     "w8"
+    ],
+    [
+     "c",
+     "w9"
+    ],
+    [
+     "v",
+     "c"
+    ],
+    [
+     "v",
+     "w1"
+    ],
+    [
+     "v",
+     "w10"
+    ],
+    [
+     "v",
+     "w11"
+    ],
+    [
+     "v",
+     "w12"
+    ],
+    [
+     "v",
+     "w13"
+    ],
+    [
+     "v",
+     "w14"
+    ],
+    [
+     "v",
+     "w15"
+    ],
+    [
+     "v",
+     "w16"
+    ],
+    [
+     "v",
+     "w2"
+    ],
+    [
+     "v",
+     "w3"
+    ],
+    [
+     "v",
+     "w4"
+    ],
+    [
+     "v",
+     "w5"
+    ],
+    [
+     "v",
+     "w6"
+    ],
+    [
+     "v",
+     "w7"
+    ],
+    [
+     "v",
+     "w8"
+    ],
+    [
+     "v",
+     "w9"
+    ],
+    [
+     "w1",
+     "c"
+    ],
+    [
+     "w1",
+     "v"
+    ],
+    [
+     "w10",
+     "c"
+    ],
+    [
+     "w10",
+     "v"
+    ],
+    [
+     "w11",
+     "c"
+    ],
+    [
+     "w11",
+     "v"
+    ],
+    [
+     "w12",
+     "c"
+    ],
+    [
+     "w12",
+     "v"
+    ],
+    [
+     "w13",
+     "c"
+    ],
+    [
+     "w13",
+     "v"
+    ],
+    [
+     "w14",
+     "c"
+    ],
+    [
+     "w14",
+     "v"
+    ],
+    [
+     "w15",
+     "c"
+    ],
+    [
+     "w15",
+     "v"
+    ],
+    [
+     "w16",
+     "c"
+    ],
+    [
+     "w16",
+     "v"
+    ],
+    [
+     "w2",
+     "c"
+    ],
+    [
+     "w2",
+     "v"
+    ],
+    [
+     "w3",
+     "c"
+    ],
+    [
+     "w3",
+     "v"
+    ],
+    [
+     "w4",
+     "c"
+    ],
+    [
+     "w4",
+     "v"
+    ],
+    [
+     "w5",
+     "c"
+    ],
+    [
+     "w5",
+     "v"
+    ],
+    [
+     "w6",
+     "c"
+    ],
+    [
+     "w6",
+     "v"
+    ],
+    [
+     "w7",
+     "c"
+    ],
+    [
+     "w7",
+     "v"
+    ],
+    [
+     "w8",
+     "c"
+    ],
+    [
+     "w8",
+     "v"
+    ],
+    [
+     "w9",
+     "c"
+    ],
+    [
+     "w9",
+     "v"
+    ]
+   ],
+   "mode": "CENTRAL",
+   "verifier": "v",
+   "workers": [
+    "w1",
+    "w2",
+    "w3",
+    "w4",
+    "w5",
+    "w6",
+    "w7",
+    "w8",
+    "w9",
+    "w10",
+    "w11",
+    "w12",
+    "w13",
+    "w14",
+    "w15",
+    "w16"
+   ]
+  },
+  "CENTRAL_N2": {
+   "coordinator": "c",
+   "edges": [
+    [
+     "c",
+     "v"
+    ],
+    [
+     "c",
+     "w1"
+    ],
+    [
+     "c",
+     "w2"
+    ],
+    [
+     "v",
+     "c"
+    ],
+    [
+     "v",
+     "w1"
+    ],
+    [
+     "v",
+     "w2"
+    ],
+    [
+     "w1",
+     "c"
+    ],
+    [
+     "w1",
+     "v"
+    ],
+    [
+     "w2",
+     "c"
+    ],
+    [
+     "w2",
+     "v"
+    ]
+   ],
+   "mode": "CENTRAL",
+   "verifier": "v",
+   "workers": [
+    "w1",
+    "w2"
+   ]
+  },
+  "CENTRAL_N8": {
+   "coordinator": "c",
+   "edges": [
+    [
+     "c",
+     "v"
+    ],
+    [
+     "c",
+     "w1"
+    ],
+    [
+     "c",
+     "w2"
+    ],
+    [
+     "c",
+     "w3"
+    ],
+    [
+     "c",
+     "w4"
+    ],
+    [
+     "c",
+     "w5"
+    ],
+    [
+     "c",
+     "w6"
+    ],
+    [
+     "c",
+     "w7"
+    ],
+    [
+     "c",
+     "w8"
+    ],
+    [
+     "v",
+     "c"
+    ],
+    [
+     "v",
+     "w1"
+    ],
+    [
+     "v",
+     "w2"
+    ],
+    [
+     "v",
+     "w3"
+    ],
+    [
+     "v",
+     "w4"
+    ],
+    [
+     "v",
+     "w5"
+    ],
+    [
+     "v",
+     "w6"
+    ],
+    [
+     "v",
+     "w7"
+    ],
+    [
+     "v",
+     "w8"
+    ],
+    [
+     "w1",
+     "c"
+    ],
+    [
+     "w1",
+     "v"
+    ],
+    [
+     "w2",
+     "c"
+    ],
+    [
+     "w2",
+     "v"
+    ],
+    [
+     "w3",
+     "c"
+    ],
+    [
+     "w3",
+     "v"
+    ],
+    [
+     "w4",
+     "c"
+    ],
+    [
+     "w4",
+     "v"
+    ],
+    [
+     "w5",
+     "c"
+    ],
+    [
+     "w5",
+     "v"
+    ],
+    [
+     "w6",
+     "c"
+    ],
+    [
+     "w6",
+     "v"
+    ],
+    [
+     "w7",
+     "c"
+    ],
+    [
+     "w7",
+     "v"
+    ],
+    [
+     "w8",
+     "c"
+    ],
+    [
+     "w8",
+     "v"
+    ]
+   ],
+   "mode": "CENTRAL",
+   "verifier": "v",
+   "workers": [
+    "w1",
+    "w2",
+    "w3",
+    "w4",
+    "w5",
+    "w6",
+    "w7",
+    "w8"
    ]
   },
   "CENTRAL_W4": {
@@ -1699,6 +2858,389 @@
     "w2",
     "w3",
     "w4"
+   ]
+  },
+  "DECENTRALIZED_N1": {
+   "coordinator": null,
+   "edges": [
+    [
+     "v",
+     "w1"
+    ],
+    [
+     "w1",
+     "v"
+    ]
+   ],
+   "mode": "DECENTRALIZED",
+   "verifier": "v",
+   "workers": [
+    "w1"
+   ]
+  },
+  "DECENTRALIZED_N16": {
+   "coordinator": null,
+   "edges": [
+    [
+     "v",
+     "w1"
+    ],
+    [
+     "v",
+     "w10"
+    ],
+    [
+     "v",
+     "w11"
+    ],
+    [
+     "v",
+     "w12"
+    ],
+    [
+     "v",
+     "w13"
+    ],
+    [
+     "v",
+     "w14"
+    ],
+    [
+     "v",
+     "w15"
+    ],
+    [
+     "v",
+     "w16"
+    ],
+    [
+     "v",
+     "w2"
+    ],
+    [
+     "v",
+     "w3"
+    ],
+    [
+     "v",
+     "w4"
+    ],
+    [
+     "v",
+     "w5"
+    ],
+    [
+     "v",
+     "w6"
+    ],
+    [
+     "v",
+     "w7"
+    ],
+    [
+     "v",
+     "w8"
+    ],
+    [
+     "v",
+     "w9"
+    ],
+    [
+     "w1",
+     "v"
+    ],
+    [
+     "w1",
+     "w2"
+    ],
+    [
+     "w10",
+     "v"
+    ],
+    [
+     "w10",
+     "w11"
+    ],
+    [
+     "w11",
+     "v"
+    ],
+    [
+     "w11",
+     "w12"
+    ],
+    [
+     "w12",
+     "v"
+    ],
+    [
+     "w12",
+     "w13"
+    ],
+    [
+     "w13",
+     "v"
+    ],
+    [
+     "w13",
+     "w14"
+    ],
+    [
+     "w14",
+     "v"
+    ],
+    [
+     "w14",
+     "w15"
+    ],
+    [
+     "w15",
+     "v"
+    ],
+    [
+     "w15",
+     "w16"
+    ],
+    [
+     "w16",
+     "v"
+    ],
+    [
+     "w16",
+     "w1"
+    ],
+    [
+     "w2",
+     "v"
+    ],
+    [
+     "w2",
+     "w3"
+    ],
+    [
+     "w3",
+     "v"
+    ],
+    [
+     "w3",
+     "w4"
+    ],
+    [
+     "w4",
+     "v"
+    ],
+    [
+     "w4",
+     "w5"
+    ],
+    [
+     "w5",
+     "v"
+    ],
+    [
+     "w5",
+     "w6"
+    ],
+    [
+     "w6",
+     "v"
+    ],
+    [
+     "w6",
+     "w7"
+    ],
+    [
+     "w7",
+     "v"
+    ],
+    [
+     "w7",
+     "w8"
+    ],
+    [
+     "w8",
+     "v"
+    ],
+    [
+     "w8",
+     "w9"
+    ],
+    [
+     "w9",
+     "v"
+    ],
+    [
+     "w9",
+     "w10"
+    ]
+   ],
+   "mode": "DECENTRALIZED",
+   "verifier": "v",
+   "workers": [
+    "w1",
+    "w2",
+    "w3",
+    "w4",
+    "w5",
+    "w6",
+    "w7",
+    "w8",
+    "w9",
+    "w10",
+    "w11",
+    "w12",
+    "w13",
+    "w14",
+    "w15",
+    "w16"
+   ]
+  },
+  "DECENTRALIZED_N2": {
+   "coordinator": null,
+   "edges": [
+    [
+     "v",
+     "w1"
+    ],
+    [
+     "v",
+     "w2"
+    ],
+    [
+     "w1",
+     "v"
+    ],
+    [
+     "w1",
+     "w2"
+    ],
+    [
+     "w2",
+     "v"
+    ],
+    [
+     "w2",
+     "w1"
+    ]
+   ],
+   "mode": "DECENTRALIZED",
+   "verifier": "v",
+   "workers": [
+    "w1",
+    "w2"
+   ]
+  },
+  "DECENTRALIZED_N8": {
+   "coordinator": null,
+   "edges": [
+    [
+     "v",
+     "w1"
+    ],
+    [
+     "v",
+     "w2"
+    ],
+    [
+     "v",
+     "w3"
+    ],
+    [
+     "v",
+     "w4"
+    ],
+    [
+     "v",
+     "w5"
+    ],
+    [
+     "v",
+     "w6"
+    ],
+    [
+     "v",
+     "w7"
+    ],
+    [
+     "v",
+     "w8"
+    ],
+    [
+     "w1",
+     "v"
+    ],
+    [
+     "w1",
+     "w2"
+    ],
+    [
+     "w2",
+     "v"
+    ],
+    [
+     "w2",
+     "w3"
+    ],
+    [
+     "w3",
+     "v"
+    ],
+    [
+     "w3",
+     "w4"
+    ],
+    [
+     "w4",
+     "v"
+    ],
+    [
+     "w4",
+     "w5"
+    ],
+    [
+     "w5",
+     "v"
+    ],
+    [
+     "w5",
+     "w6"
+    ],
+    [
+     "w6",
+     "v"
+    ],
+    [
+     "w6",
+     "w7"
+    ],
+    [
+     "w7",
+     "v"
+    ],
+    [
+     "w7",
+     "w8"
+    ],
+    [
+     "w8",
+     "v"
+    ],
+    [
+     "w8",
+     "w1"
+    ]
+   ],
+   "mode": "DECENTRALIZED",
+   "verifier": "v",
+   "workers": [
+    "w1",
+    "w2",
+    "w3",
+    "w4",
+    "w5",
+    "w6",
+    "w7",
+    "w8"
    ]
   },
   "DECENTRALIZED_X": {

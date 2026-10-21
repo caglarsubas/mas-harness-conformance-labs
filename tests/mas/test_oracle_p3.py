@@ -382,11 +382,16 @@ def _check_rows(rows, measured, cfg, cls, entry, bad):
     """Rows keep packet 2's 34 fields and its twelve kinds plus FAULT (DESIGN section 4); the new bypass rows
     appear only under their bypass, carry it, and appear once per claim."""
     bypass = set(entry["bypass"]) if entry else set()
+    # CONF-MAS-004 adds verdictChecks and taskPass to every row: scoped to packet 2's 34 fields plus the two,
+    # both null in C8 to C10.
+    keys = ROW_KEYS | {"verdictChecks", "taskPass"}
     for row in rows:
-        if set(row) != ROW_KEYS:
-            bad("every row has exactly packet 2's 34 fields",
-                {"extra": sorted(set(row) - ROW_KEYS), "missing": sorted(ROW_KEYS - set(row))})
+        if set(row) != keys:
+            bad("every row has exactly packet 2's 34 fields plus verdictChecks and taskPass",
+                {"extra": sorted(set(row) - keys), "missing": sorted(keys - set(row))})
             break
+    if any(r.get("verdictChecks") is not None or r.get("taskPass") is not None for r in rows):
+        bad("verdictChecks and taskPass are null in every row of C8 to C10")
     kinds = sorted(str(k) for k in {r.get("kind") for r in rows} - ROW_KINDS)
     if kinds:
         bad("every row kind is one of packet 2's twelve or FAULT", kinds)
@@ -1182,11 +1187,12 @@ class OracleP3DataTests(unittest.TestCase):
     def test_classes_json_preregisters_packet3(self):
         cfg, sha = _ledger.load_config()
         self.assertTrue(_is_hex64(sha), sha)
-        self.assertEqual(cfg["schemaVersion"], "r12.mas-simulation-classes/v3")
-        self.assertEqual(cfg["packet"], "CONF-MAS-003")
+        # CONF-MAS-004 moves classes.json to v4 and adds C11 and C12: scoped to packet 3's content, the first ten ids.
+        self.assertEqual(cfg["schemaVersion"], "r12.mas-simulation-classes/v4")
+        self.assertEqual(cfg["packet"], "CONF-MAS-004")
         self.assertEqual(cfg["seeds"], list(range(1, 33)))
         self.assertEqual(cfg["controlGate"]["mustFireSeeds"], 32)
-        self.assertEqual([c["id"] for c in cfg["classes"]], CLASS_IDS)
+        self.assertEqual([c["id"] for c in cfg["classes"]][:10], CLASS_IDS)
         self.assertIn("sched-c8", cfg["streams"])
         self.assertEqual(set(cfg["unexercisedInvariants"]), {"nonHolderAccepted", "doubleMerge"})
         self.assertEqual(set(cfg["zeroTolerance"]), ZERO_TOLERANCE)
@@ -1262,7 +1268,8 @@ class OracleP3DataTests(unittest.TestCase):
     def test_contracts_json_repins_to_585364b(self):
         doc = json.loads((_HERE_PATH / "contracts.json").read_text(encoding="utf-8"))
         self.assertEqual(doc["commit"], REPIN_COMMIT)
-        self.assertEqual([(f["path"], f["sha256"], f["size"]) for f in doc["files"]], PINNED_FILES)
+        # CONF-MAS-004 adds an eleventh pin: packet 3's ten pins are the first ten rows.
+        self.assertEqual([(f["path"], f["sha256"], f["size"]) for f in doc["files"][:10]], PINNED_FILES)
         self.assertIn("585364b", doc["note"])
         self.assertIn("27c54605", doc["note"])
 
@@ -1272,8 +1279,9 @@ class OracleP3DataTests(unittest.TestCase):
         self.assertEqual(set(att), ATTESTATION_KEYS)
         self.assertEqual((att["schemaVersion"], att["packet"]), ("r12.mas-attestation/v1", "CONF-MAS-003"))
         inputs = att["inputs"]
-        self.assertEqual(len(inputs), len(contracts["files"]))
-        for name, entry in zip(inputs, contracts["files"]):
+        # CONF-MAS-004 adds an eleventh pin: packet 3's ten inputs are compared with contracts.json's first ten rows.
+        self.assertEqual(len(inputs), len(contracts["files"][:10]))
+        for name, entry in zip(inputs, contracts["files"][:10]):
             with self.subTest(path=entry["path"]):
                 self.assertTrue(name.endswith("/" + entry["path"] + "@585364b"), name)
                 self.assertFalse(name.startswith("/"), name)
@@ -1355,13 +1363,15 @@ class OracleP3LedgerTests(unittest.TestCase):
         cls.rows = {row["id"]: row for row in cls.doc["classes"]}
 
     def test_ledger_header_and_class_ids(self):
-        self.assertEqual(set(self.doc), LEDGER_KEYS)
-        self.assertEqual(self.doc["schemaVersion"], "r12.mas-simulation-results/v3")
-        self.assertEqual(self.doc["packet"], "CONF-MAS-003")
+        # CONF-MAS-004 moves the ledger to v4 with two new sections and C11 and C12: the first ten ids stay CLASS_IDS.
+        self.assertEqual(set(self.doc), LEDGER_KEYS | {"hardCoding", "scaling"})
+        self.assertEqual(self.doc["schemaVersion"], "r12.mas-simulation-results/v4")
+        self.assertEqual(self.doc["packet"], "CONF-MAS-004")
         self.assertEqual(self.doc["contractsCommit"], REPIN_COMMIT)
         self.assertEqual(self.doc["classesSha256"], self.sha)
         self.assertEqual(self.doc["seeds"], list(range(1, 33)))
-        self.assertEqual([row["id"] for row in self.doc["classes"]], CLASS_IDS)
+        self.assertEqual([row["id"] for row in self.doc["classes"]], CLASS_IDS + ["C11", "C12"])
+        self.assertEqual([row["id"] for row in self.doc["classes"]][:10], CLASS_IDS)
 
     def test_packets_1_and_2_rows_are_byte_identical(self):
         for cid, want in PRIOR_ROW_SHA256.items():
@@ -1393,7 +1403,8 @@ class OracleP3LedgerTests(unittest.TestCase):
                                      _holds(row["defended"]["quantiles"][metric], bound))
 
     def test_results_and_row_shapes_of_c8_to_c10(self):
-        self.assertEqual({cid: row["result"] for cid, row in self.rows.items()}, EXPECTED_RESULTS)
+        # CONF-MAS-004 adds C11 and C12: scoped to C1 to C10's rows, EXPECTED_RESULTS unchanged.
+        self.assertEqual({cid: row["result"] for cid, row in self.rows.items() if cid in CLASS_IDS}, EXPECTED_RESULTS)
         seeds = len(self.cfg["seeds"])
         for cid in P3_IDS:
             with self.subTest(cid=cid):
@@ -1509,9 +1520,12 @@ class OracleP3CampaignTests(unittest.TestCase):
 
     def test_campaign_record_key_set_and_constants(self):
         rec = self.record
-        self.assertEqual(set(rec), CAMPAIGN_KEYS)
-        self.assertEqual(rec["schemaVersion"], "r12.mas-campaign-record/v1")
-        self.assertEqual(rec["campaign"], "MAS-RA-010")
+        # CONF-MAS-004 moves the record to v2 (two new keys, the joint campaign string): packet 3's key set is read
+        # as the v1 subset of v2's keys.
+        self.assertLessEqual(CAMPAIGN_KEYS, set(rec))
+        self.assertEqual(set(rec) - CAMPAIGN_KEYS, {"hardCoding", "scaling"})
+        self.assertEqual(rec["schemaVersion"], "r12.mas-campaign-record/v2")
+        self.assertEqual(rec["campaign"], "MAS-RA-010 and MAS-RA-010-F")
         self.assertEqual(rec["consumer"], "CONF-A3-001 (input, HO-D2)")
         self.assertTrue(rec["notClaimed"])
         text = json.dumps(rec["notClaimed"]).lower()
@@ -1519,7 +1533,9 @@ class OracleP3CampaignTests(unittest.TestCase):
             self.assertIn(word, text)
 
     def test_campaign_record_packets_and_results_digests(self):
-        packets = self.record["packets"]
+        # CONF-MAS-004 appends packet 4's entry: packets 1 to 3 are the first three entries, and packet 3's digest is
+        # its own results.json at 0a479a55, a constant, no longer the worktree's results.json.
+        packets = self.record["packets"][:3]
         self.assertEqual([p.get("packetId") for p in packets], ["CONF-MAS-001", "CONF-MAS-002", "CONF-MAS-003"])
         for entry in packets:
             self.assertEqual(set(entry), {"packetId", "commit", "resultsSha256"})
@@ -1527,12 +1543,13 @@ class OracleP3CampaignTests(unittest.TestCase):
         self.assertEqual(p1["commit"], PACKET1_COMMIT)
         self.assertTrue(_is_hex64(p1["resultsSha256"]) and p1["resultsSha256"].startswith(PACKET1_RESULTS_PREFIX))
         self.assertEqual((p2["commit"], p2["resultsSha256"]), (PACKET2_COMMIT, C672AAD_RESULTS_SHA256))
-        here = hashlib.sha256((_HERE_PATH / "results.json").read_bytes()).hexdigest()
+        here = "1893118540358ccd0db0d3ad4009af97041560c2f210773cbc0805231cc40f87"
         self.assertEqual((p3["commit"], p3["resultsSha256"]), (None, here))
 
     def test_campaign_record_classes_recorded_fails_and_findings(self):
         rec = self.record
-        classes = rec["classes"]
+        # CONF-MAS-004 appends C11, C12 and four findings: scoped to the first ten entries of each.
+        classes = rec["classes"][:10]
         self.assertEqual(len(classes), 10)
         self.assertEqual({c.get("id") for c in classes}, set(CLASS_IDS))
         for entry in classes:
@@ -1549,7 +1566,7 @@ class OracleP3CampaignTests(unittest.TestCase):
         self.assertEqual(len(fails), len(got))
         self.assertEqual(got, RECORDED_FAILS)
         self.assertEqual({(c, "ratioBounds." + m) for c, m, _d in got}, EXPECTED_FALSE_GATES)
-        findings = rec["findings"]
+        findings = rec["findings"][:10]
         for entry in findings:
             self.assertEqual(set(entry), {"id", "summary"})
             self.assertTrue(isinstance(entry["summary"], str) and entry["summary"].strip(), entry["id"])

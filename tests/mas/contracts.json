@@ -60,8 +60,14 @@
    "path": "architecture/verdict-ledger/ledger.schema.json",
    "sha256": "8a570cfb26b16fb3f7fa1cf799bd564fe717fd3d356dbca890dab747b2dc9326",
    "size": 8391
+  },
+  {
+   "packet": "MET-MAS-001",
+   "path": "architecture/verdict-ledger/check-kinds.json",
+   "sha256": "d53c5fb8e125c0c6588a327433870a3e6838328e741b12865691c5c2c6e3a3ac",
+   "size": 3173
   }
  ],
- "note": "Clean-room restatement (owner decisions Q-NX-2 (a), Q-NX2-3 (a), Q-NX3-4 (a)): the rules are restated in R12's own words from these harness-onion files at 585364b (CONF-MAS-003's re-pin, MON-REPIN-585364B); all ten are byte-identical at 27c54605, where packet 2 pinned them; packet 1's nine are byte-identical at 35b733b5, and loop-trace.schema.json is new to the pin set since packet 2. No bytes are copied. R12's CI cannot reach harness-onion, so these pins are a record the design and packet reviews verify.",
+ "note": "Clean-room restatement (owner decisions Q-NX-2 (a), Q-NX2-3 (a), Q-NX3-4 (a)): the rules are restated in R12's own words from these harness-onion files at 585364b (CONF-MAS-003's re-pin, MON-REPIN-585364B); all ten are byte-identical at 27c54605, where packet 2 pinned them; packet 1's nine are byte-identical at 35b733b5, and loop-trace.schema.json is new to the pin set since packet 2. No bytes are copied. R12's CI cannot reach harness-onion, so these pins are a record the design and packet reviews verify. CONF-MAS-004 adds the eleventh row, architecture/verdict-ledger/check-kinds.json (MET-MAS-001, last changed before 585364b at c0f535b1), the source of the evidence-kind rule; the other ten rows are unchanged.",
  "schemaVersion": "r12.mas-clean-room-pins/v1"
 }

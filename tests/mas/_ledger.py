@@ -1,8 +1,10 @@
-"""CONF-MAS-001 to CONF-MAS-003: runs every class over its seeds (defended, controls and defence-in-depth checks),
+"""CONF-MAS-001 to CONF-MAS-004: runs every class over its seeds (defended, controls and defence-in-depth checks),
 computes the per-run counts, the nearest-rank quantiles and the gates, and builds the ledger
 `r12.mas-simulation-results/v3` once per process. Packet 1's four and packet 2's three class rows are byte-identical to
 CONF-MAS-002's. CONF-MAS-003 adds C8 to C10, the MAS1-CARRY-1 arms (top-level `arms`, ungated) and the CONF-A3-001
 campaign record `r12.mas-campaign-record/v1` (built from the ledger, packet 1's event-scoped readings and constants).
+CONF-MAS-004 (DESIGN revision 5) moves the ledger to v4: C11 and C12, the top-level `scaling` (G1, safety gated, readings
+reported) and `hardCoding` (G4) sections, and the campaign record v2; C1 to C10's rows and `arms` are byte-identical.
 
 The ledger holds counts and quantiles only, never canary values. It is serialized with sorted keys, compact separators
 and ASCII, plus a trailing newline.
@@ -31,7 +33,9 @@ RULE = ("Every class runs seeds 1 to 32 defended, plus one run per control and p
         "its OBJECTIVE-OFF control) are reported and not gated: a PASS or FAIL there neither lifts nor upholds the "
         "denial. CONF-MAS-003: a depth check that names an event counts engagement only over rows tagged with that "
         "event; C8's and C9's measurements and the MAS1-CARRY-1 arms (top-level arms) are reported and not gated, and "
-        "packet 1's baseline policy stays the gated one.")
+        "packet 1's baseline policy stays the gated one. CONF-MAS-004: C11 and C12 are gated like every class; the scaling "
+        "section gates safety only and reports its readings and the baseline comparison; the hard-coding section gates "
+        "its four results.")
 RATIOS = ("duplicatedWorkRatioPpm", "lostWorkPpm", "completionPpm")
 
 _CACHE: dict = {}
@@ -47,8 +51,12 @@ def load_config() -> tuple[dict, str]:
 
 
 def run(config: dict, cls: dict, seed: int, bypass: tuple[str, ...] = (), arm: str | None = None,
-        until_deadline: bool = False) -> tuple[list[dict], dict]:
-    sim = _sim.Sim(config, cls, seed, tuple(bypass), _classes.scenario_for(cls), arm=arm, until_deadline=until_deadline)
+        until_deadline: bool = False, *, labels: str = "IDENTITY", scriptedEvents=None,
+        policy: str | None = None) -> tuple[list[dict], dict]:
+    """CONF-MAS-004 (section 4.8a): `labels`, `scriptedEvents` (None: every event) and `policy` (None: GENERAL) are
+    keyword parameters after packet 3's, so earlier calls are unchanged."""
+    sim = _sim.Sim(config, cls, seed, tuple(bypass), _classes.scenario_for(cls), arm=arm, until_deadline=until_deadline,
+                   labels=labels, scripted_events=scriptedEvents, policy=policy)
     rows = sim.run()
     return rows, _classes.measure(rows, config, cls)
 
@@ -105,10 +113,13 @@ def class_row(config: dict, cls: dict) -> dict:
                  for name in RATIOS + ("duplicateWork", "lostItems", "expiries", "workEffects")}
     controls = []
     measured_runs: list[dict] = []
+    # CONF-MAS-004 (section 4.8): under `isolateEvents` a control or depth run scripts only the event it names.
+    isolate = bool(cls.get("isolateEvents"))
     for control in cls["controls"]:
         fired, failing = 0, []
+        scripted = (control["event"],) if isolate else None
         for seed in seeds:
-            rows, measured = run(config, cls, seed, tuple(control["bypass"]))
+            rows, measured = run(config, cls, seed, tuple(control["bypass"]), scriptedEvents=scripted)
             ok, cause = _classes.control_fired(measured, rows, control)
             if ok:
                 fired += 1
@@ -131,8 +142,9 @@ def class_row(config: dict, cls: dict) -> dict:
         held, failing = 0, []
         reading_event = PACKET1_EVENT_READINGS.get(check["id"])
         reading_seeds = 0
+        scripted = (check["event"],) if isolate else None
         for seed in seeds:
-            _rows, measured = run(config, cls, seed, tuple(check["bypass"]))
+            _rows, measured = run(config, cls, seed, tuple(check["bypass"]), scriptedEvents=scripted)
             bad = [n for n in violations if measured["counts"][n]]
             if "event" in check:
                 # CONF-MAS-003: event-scoped engagement (section 4).
@@ -225,15 +237,131 @@ def arms_section(config: dict) -> dict:
     return {"classes": spec["classes"], "policies": spec["policies"], "results": results}
 
 
+SCALING_READINGS = ("completionPpm", "lostWorkPpm", "duplicatedWorkRatioPpm", "lastMergeTick", "mergesPer100Ticks",
+                    "contentionPerItemMilli", "messagesPerItemMilli")
+
+
+def scaling_readings(rows: list[dict], entry: dict, counts: dict) -> tuple[dict, bool]:
+    """One run's readings (section 6.1) and whether it merged every item. A run unfinished at its deadline reads
+    lastMergeTick = the deadline and divides its merged items by the deadline; work_readings itself is unchanged."""
+    items = entry["load"]["items"]
+    work = _classes.work_readings(rows, entry, counts)
+    finished = counts["mergedItems"] == items
+    extra = _classes.scaling_counts(rows)
+    return {"completionPpm": counts["completionPpm"], "lostWorkPpm": counts["lostWorkPpm"],
+            "duplicatedWorkRatioPpm": counts["duplicatedWorkRatioPpm"],
+            "lastMergeTick": work["lastMergeTick"] if finished else entry["deadline"],
+            "mergesPer100Ticks": (work["mergesPer100Ticks"] if finished
+                                  else counts["mergedItems"] * 100 // entry["deadline"]),
+            "contentionPerItemMilli": extra["contention"] * 1000 // items,
+            "messagesPerItemMilli": extra["messages"] * 1000 // items}, finished
+
+
+def scaling_point(config: dict, entry: dict, safety: list[str]) -> dict:
+    """A scaling or baseline point over the seeds: the safety counters (gated) and the readings (reported)."""
+    above = {name: 0 for name in safety}
+    failing, runs, finished = [], [], 0
+    for seed in config["seeds"]:
+        rows, measured = run(config, entry, seed)
+        counts = measured["counts"]
+        readings, done = scaling_readings(rows, entry, counts)
+        runs.append(readings)
+        finished += int(done)
+        for name in safety:
+            if counts[name]:
+                above[name] += 1
+                failing.append({"seed": seed, "cause": "%s = %d" % (name, counts[name])})
+    return {"id": entry["id"], "family": entry["family"], "workers": entry["workers"], "topology": entry["topology"],
+            "items": entry["load"]["items"], "concurrency": entry["load"]["concurrency"], "deadline": entry["deadline"],
+            "safety": {"seedsAboveZero": above, "failing": failing}, "finishedSeeds": finished,
+            "readings": {name: stats([r[name] for r in runs]) for name in SCALING_READINGS}}
+
+
+def scaling_section(config: dict) -> dict:
+    """CONF-MAS-004 G1 (section 6.1): ten points and five baseline points, gated on safety only, and one sensitivity
+    control gated over the whole run (MON-P4-D16)."""
+    spec = config["scaling"]
+    safety = spec["safetyCounters"]
+    points = [scaling_point(config, entry, safety) for entry in spec["points"]]
+    baseline = [scaling_point(config, entry, safety) for entry in spec["baseline"]]
+    by_items = {b["items"]: b for b in baseline}
+    against = []
+    for point in points:
+        base = by_items[point["items"]]
+        mine, theirs = point["readings"]["lastMergeTick"]["p50"], base["readings"]["lastMergeTick"]["p50"]
+        against.append({"point": point["id"], "baseline": base["id"],
+                        "makespanRatioMilli": mine * 1000 // theirs if theirs else None,
+                        "underperforms": mine > theirs or point["readings"]["completionPpm"]["p50"]
+                        < base["readings"]["completionPpm"]["p50"]})
+    entries = {e["id"]: e for e in spec["points"]}
+    controls = []
+    for control in spec["controls"]:
+        fired, failing = 0, []
+        for seed in config["seeds"]:
+            _rows, measured = run(config, entries[control["point"]], seed, tuple(control["bypass"]))
+            if measured["counts"][control["counter"]] > 0:
+                fired += 1
+            else:
+                failing.append({"seed": seed, "cause": "own counter 0"})
+        controls.append({"id": control["id"], "point": control["point"], "bypass": control["bypass"],
+                         "counter": control["counter"], "firedSeeds": fired, "failing": failing})
+    must = config["controlGate"]["mustFireSeeds"]
+    gates = {"safetyAtEveryPoint": all(not p["safety"]["failing"] for p in points + baseline),
+             "controlsFireInAllSeeds": all(c["firedSeeds"] == must for c in controls)}
+    return {"decisions": spec["decisions"], "parameters": spec["parameters"], "safetyCounters": safety,
+            "points": points, "baseline": baseline, "againstBaseline": against, "controls": controls, "gates": gates,
+            "result": "PASS" if all(gates.values()) else "FAIL"}
+
+
+def hard_coding_section(config: dict) -> dict:
+    """CONF-MAS-004 G4 (section 6.2): each policy over IDENTITY and PERMUTED labels in the fault-free bed; the per-task
+    outcome is read through the relabelling, recomputed from the seed's stream."""
+    spec = config["hardCoding"]
+    bed, seeds = spec["bed"], config["seeds"]
+    items = bed["load"]["items"]
+    safety = config["scaling"]["safetyCounters"] + ["degenerateMerged"]
+    unsafe = 0
+    policies = []
+    for policy in spec["policies"]:
+        identity_pass = invariant = accepted = 0
+        for seed in seeds:
+            outcomes = {}
+            for labels in spec["labels"]:
+                rows, measured = run(config, bed, seed, labels=labels, policy=policy)
+                outcomes[labels] = _classes.task_outcomes(rows, _classes.task_labels(seed, items, labels))
+                unsafe += int(any(measured["counts"][name] for name in safety))
+            passed = all(v == "PASS" for _t, v in sorted(outcomes["IDENTITY"].items()))
+            same = outcomes["PERMUTED"] == outcomes["IDENTITY"]
+            identity_pass += int(passed)
+            invariant += int(same)
+            accepted += int(passed and same)
+        policies.append({"id": policy, "identityPassSeeds": identity_pass, "invariantSeeds": invariant,
+                         "acceptedSeeds": accepted, "acceptedWithoutCheckSeeds": identity_pass})
+    by_id = {p["id"]: p for p in policies}
+    identity = list(range(1, items + 1))
+    moved = sum(1 for seed in seeds
+                if [v for _k, v in sorted(_classes.task_labels(seed, items, "PERMUTED").items())] != identity)
+    gates = {"generalAccepted": by_id["GENERAL"]["acceptedSeeds"] == len(seeds),
+             "hardCodedRefused": by_id["HARD_CODED"]["acceptedSeeds"] == 0,
+             "controlFires": by_id["HARD_CODED"]["acceptedWithoutCheckSeeds"] == len(seeds),
+             "safetyZero": unsafe == 0}
+    return {"decision": spec["decision"],
+            "bed": {"id": bed["id"], "topology": bed["topology"], "items": items,
+                    "concurrency": bed["load"]["concurrency"], "deadline": bed["deadline"]},
+            "policies": policies, "permutationNotIdentitySeeds": moved, "gates": gates,
+            "result": "PASS" if all(gates.values()) else "FAIL"}
+
+
 def cls_event(cls: dict, event_id: str) -> dict:
     return next(e for e in cls["events"] if e["id"] == event_id)
 
 
 def build() -> dict:
     config, classes_sha = load_config()
-    return {"schemaVersion": "r12.mas-simulation-results/v3", "packet": "CONF-MAS-003", "profile": PROFILE,
+    return {"schemaVersion": "r12.mas-simulation-results/v4", "packet": "CONF-MAS-004", "profile": PROFILE,
             "seeds": config["seeds"], "classesSha256": classes_sha, "contractsCommit": CONTRACTS_COMMIT, "rule": RULE,
-            "classes": [class_row(config, cls) for cls in config["classes"]], "arms": arms_section(config)}
+            "classes": [class_row(config, cls) for cls in config["classes"]], "arms": arms_section(config),
+            "scaling": scaling_section(config), "hardCoding": hard_coding_section(config)}
 
 
 def serialize(value: dict) -> bytes:
@@ -252,10 +380,13 @@ CAMPAIGN_PACKETS = (
     ("CONF-MAS-001", "05b74ff0e778f23faab1281731afa7f7b1fed85f",
      "4343535ab16cd0df4385ee1d8c24d622721e253e57a1a88c35a00e30efecd689"),
     ("CONF-MAS-002", "c672aad56960b33a3e6d281aa484c7ac507293aa",
-     "d9871b7efe718b7e702d6200957de18cc5f519bddd50ad1745aa0dcccf76c7cd"))
+     "d9871b7efe718b7e702d6200957de18cc5f519bddd50ad1745aa0dcccf76c7cd"),
+    # CONF-MAS-004 (section 8): packet 3's entry as v1 recorded it (`commit` null, its results.json digest).
+    ("CONF-MAS-003", None, "1893118540358ccd0db0d3ad4009af97041560c2f210773cbc0805231cc40f87"))
 CLASS_PACKET = {"C1": "CONF-MAS-001", "C2": "CONF-MAS-001", "C3": "CONF-MAS-001", "C4": "CONF-MAS-001",
                 "C5": "CONF-MAS-002", "C6": "CONF-MAS-002", "C7": "CONF-MAS-002",
-                "C8": "CONF-MAS-003", "C9": "CONF-MAS-003", "C10": "CONF-MAS-003"}
+                "C8": "CONF-MAS-003", "C9": "CONF-MAS-003", "C10": "CONF-MAS-003",
+                "C11": "CONF-MAS-004", "C12": "CONF-MAS-004"}
 RECORDED_DECISIONS = {"C2": "Q-MAS1-F1", "C5": "Q3-2", "C7": "Q3-2", "C9": "Q-D3-1"}
 FINDINGS = (
     ("MAS1-CARRY-1", "Packet 1's carried retry-policy effect: a holder's own RENEW can overtake its MERGE at latency 3, "
@@ -276,19 +407,40 @@ FINDINGS = (
                "MAS1-CARRY-1 (a holder's own RENEW overtakes its MERGE at latency 3), an extra cause of C9's "
                "preregistered duplicated-work FAIL beyond its events' six explained duplicates."),
     ("F-C10-1", "The merge defences are layered: the gate and the per-work history; the holder or single-merge check, "
-                "the version check and the verdict check."))
+                "the version check and the verdict check."),
+    # CONF-MAS-004 (DESIGN revision 5, section 9), stated before the first ledger.
+    ("F-C11-1", "The evidence-kind rule trusts the check kinds a verdict declares: a verifier that labels a regression "
+                "run as a task test is not caught, because the kinds are declared, not authenticated (as F-C5-1). One "
+                "layer."),
+    ("F-C12-1", "The degenerate rule matches only an empty body or an exact copy of the reads. For every other wrong "
+                "body (a constant answer, a near-copy, a copy with a wrong answer appended, any body without the task's "
+                "answer) the judge's task test is the only layer."),
+    ("F-G4-1", "Evaluation on the published ids alone accepts a policy that memorised answers by id. The permutation "
+               "check needs a fault-free bed, because under random faults a general policy's per-task outcome depends "
+               "on the schedule, which depends on the ids."),
+    ("F-G1-1", "Packet 1's scripted worker under stalls and latency, a harness limit no earlier class exercised: a "
+               "claim-id check was missing wherever the worker decides whether it still holds, and a NOTICE that "
+               "arrived during a hold was ignored, so a CENTRAL run could stay unmerged to its deadline. The scaling "
+               "points switch the fix on (claimAwareWorker, Q-P4-D2-1 (a), Q-P4-D3-1 (a)); C1 to C12 keep packet 1's "
+               "worker. One transient is left at CENTRAL points (Q-P4-D4-3): explained duplicate work, and slight "
+               "nudges to three ungated readings (contention, messages, makespan); no safety counter and no earlier "
+               "row moves."))
 NOT_CLAIMED = ("Not a gate: an input to CONF-A3-001 (HO-D2).",
                "Does not lift topology-coordination's denial until MAS-RA-010 passes.",
-               "No product or contract decision (Q-NX2-4 (a)).")
+               "No product or contract decision (Q-NX2-4 (a)).",
+               "The scaling readings are the sim's own contention model, not real agents or a real board.",
+               "The hard-coding check finds only id-keyed memorisation, not every form of overfitting.",
+               "The task fixture is synthetic: a drawn problem and a hash answer.")
 
 
 def campaign_record() -> dict:
-    """The closed record `r12.mas-campaign-record/v1`, built from the in-process ledger, packet 1's event-scoped
-    readings and the constants above; counts, digests, ids and fixed text only."""
+    """The closed record `r12.mas-campaign-record/v2` (CONF-MAS-004, section 8), built from the in-process ledger,
+    packet 1's event-scoped readings and the constants above; counts, digests, ids and fixed text only. Packets 1 to 3's
+    entries are v1's."""
     value = ledger()
     results_sha = hashlib.sha256(serialize(value)).hexdigest()
     packets = [{"packetId": p, "commit": c, "resultsSha256": r} for p, c, r in CAMPAIGN_PACKETS]
-    packets.append({"packetId": "CONF-MAS-003", "commit": None, "resultsSha256": results_sha})
+    packets.append({"packetId": "CONF-MAS-004", "commit": None, "resultsSha256": results_sha})
     classes = [{"id": row["id"], "kind": row["kind"], "packet": CLASS_PACKET[row["id"]], "result": row["result"],
                 "gates": row["gates"]} for row in value["classes"]]
     fails = [{"class": row["id"], "metric": name, "decision": RECORDED_DECISIONS.get(row["id"])}
@@ -297,8 +449,20 @@ def campaign_record() -> dict:
              "duplicatedWorkRatioPpm": {"p50": r["quantiles"]["duplicatedWorkRatioPpm"]["p50"],
                                         "p95": r["quantiles"]["duplicatedWorkRatioPpm"]["p95"]},
              "wouldHoldBounds": r["wouldHoldBounds"]} for r in value["arms"]["results"]]
-    return {"schemaVersion": "r12.mas-campaign-record/v1", "campaign": "MAS-RA-010",
+    scaling = value["scaling"]
+    against = {a["point"]: a for a in scaling["againstBaseline"]}
+
+    def summary(p: dict) -> dict:
+        return {"id": p["id"], "items": p["items"], "safety": "FAIL" if p["safety"]["failing"] else "PASS",
+                "finishedSeeds": p["finishedSeeds"], "p50": {n: p["readings"][n]["p50"] for n in SCALING_READINGS}}
+
+    points = [{**summary(p), "family": p["family"], "workers": p["workers"],
+               "makespanRatioMilli": against[p["id"]]["makespanRatioMilli"],
+               "underperforms": against[p["id"]]["underperforms"]} for p in scaling["points"]]
+    return {"schemaVersion": "r12.mas-campaign-record/v2", "campaign": "MAS-RA-010 and MAS-RA-010-F",
             "consumer": "CONF-A3-001 (input, HO-D2)", "packets": packets, "classes": classes, "recordedFails": fails,
             "findings": [{"id": i, "summary": text} for i, text in FINDINGS], "arms": arms,
             "eventScopedReadings": [EVENT_SCOPED_READINGS[k] for k in sorted(EVENT_SCOPED_READINGS)],
-            "notClaimed": list(NOT_CLAIMED)}
+            "notClaimed": list(NOT_CLAIMED),
+            "scaling": {"points": points, "baseline": [summary(b) for b in scaling["baseline"]]},
+            "hardCoding": {"gates": value["hardCoding"]["gates"], "result": value["hardCoding"]["result"]}}

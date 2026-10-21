@@ -253,11 +253,16 @@ def _engaged(bad, measured, mins):
 # Checks applied to every run (defended and control)
 
 def _check_rows(rows, measured, cfg, cls, ctl, bad):
+    # CONF-MAS-004 adds verdictChecks and taskPass to every row: scoped to packet 2's 34 fields plus the two,
+    # both null in C5 to C7.
+    keys = ROW_KEYS | {"verdictChecks", "taskPass"}
     for row in rows:
-        if set(row) != ROW_KEYS:
+        if set(row) != keys:
             bad("every row has exactly the closed field set",
-                {"extra": sorted(set(row) - ROW_KEYS), "missing": sorted(ROW_KEYS - set(row))})
+                {"extra": sorted(set(row) - keys), "missing": sorted(keys - set(row))})
             break
+    if any(r.get("verdictChecks") is not None or r.get("taskPass") is not None for r in rows):
+        bad("verdictChecks and taskPass are null in every row of C5 to C7")
     kinds = sorted(str(k) for k in {r.get("kind") for r in rows} - ROW_KINDS)
     if kinds:
         bad("every row kind is one of the twelve", kinds)
