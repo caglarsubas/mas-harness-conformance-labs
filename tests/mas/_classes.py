@@ -1,11 +1,15 @@
-"""CONF-MAS-001 and CONF-MAS-002: the seven classes' scheduled events (closed scenario kinds in classes.json) and the
-metric extractors.
+"""CONF-MAS-001 to CONF-MAS-003: the ten classes' scheduled events (closed scenario kinds in classes.json) and the metric
+extractors.
 
 Every scheduled event runs on the attack lane (no latency, no random drop, no random stall), so each control's firing
 path is fixed tick by tick (packet 1's DESIGN revision 4, section 5). One lane rule for every class (packet 2's DESIGN
 revision 8, section 5, owner decision Q-C5-LANE read by MON-C5-LANE-ITEMS): (i) a scheduled event's operations ride the
 lane; (ii) a scheduled first claim rides it and its (worker, item) pair joins lane_items; (iii) a pair in lane_items puts
 every operation of that worker on that item on the lane, in every claim. Metrics read only the effect log.
+
+CONF-MAS-003 (DESIGN revision 6) adds C8 to C10, the counters crashedHoldsAtDeadline, claimsBeyondWallBudget and
+revisionsBeyondBound, per-event engagement (outside `engaged`), P1-8, readers that skip SKIPPED EXPIRY rows, and the
+readings of C8's and C9's measurements and of the arms.
 """
 from __future__ import annotations
 
@@ -69,6 +73,9 @@ class Scenario:
 
     def work_bytes(self, sim, worker, raw: bytes) -> bytes:
         return raw
+
+    def after_read_launch(self, sim, worker, t: int) -> None:
+        """CONF-MAS-003: a hook after a READ is launched (C8's crash); packets 1 and 2 do nothing here."""
 
     def first_claims(self, sim, t: int) -> None:
         """Scheduled first claims at tick 0, on the lane (clause (ii)); their pairs joined lane_items in setup."""
@@ -484,11 +491,260 @@ class ResourceExhaustion(Scenario):
             return None, None
         return fault["fault"], fault["event"]
 
+# ------------------------------------------------------------------------------------------------- CONF-MAS-003 classes
+
+class AgentLoss(Scenario):
+    """C8: per-seed roles w_a and w_b (sched-c8). w_a crashes after launching its first READ (E1); the board's answer to
+    the coordinator's tick-0 ASSIGN to w_b is dropped and the coordinator retries it (E2); the coordinator restarts at
+    tick 8 and resumes its tick-0 ASSIGNs from its durable record (E3)."""
+
+    def __init__(self, cls: dict) -> None:
+        super().__init__(cls)
+        self.crash, self.drop, self.restart = cls["crashes"][0], cls["drops"][0], cls["restarts"][0]
+        self.fired: set[str] = set()
+
+    def resolve(self, sim) -> None:
+        roles = self.cls["roles"]
+        order = sim.streams.permutation(roles["stream"], list(sim.workers))
+        sim.roles.update(zip(roles["names"], order))
+
+    def item_of(self, sim, role: str) -> int:
+        """The coordinator's tick-0 round robin ASSIGNs item k to worker k."""
+        return sim.workers.index(sim.roles[role]) + 1
+
+    def setup(self, sim) -> None:
+        for role in self.cls["roles"]["names"]:
+            sim.lane_items.add((sim.roles[role], self.item_of(sim, role)))
+
+    def after_read_launch(self, sim, worker, t: int) -> None:
+        if self.crash["event"] in self.fired or worker.id != sim.roles[self.crash["role"]]:
+            return
+        self.fired.add(self.crash["event"])
+        hold = worker.hold
+        sim.log.add(t, "FAULT", agent=worker.id, item=hold["item"], claimOpId=hold["claimOpId"], answer="CRASH",
+                    component="SCHEDULE", scheduledEvent=self.crash["event"])
+        sim.crashed.add(worker.id)
+        sim.tag_claim(hold["item"], hold["claimOpId"], self.crash["event"])
+
+    def drop_answer(self, sim, t: int, agent: str, result: dict) -> bool:
+        if self.drop["event"] in self.fired or agent != sim.coordinator or t != 0 or result["op"] != "ASSIGN" \
+                or result["answer"] != ACCEPTED or result["item"] != self.item_of(sim, self.drop["role"]):
+            return False
+        self.fired.add(self.drop["event"])
+        self.drop_event = self.drop["event"]
+        entry = sim.agents[agent].pending.get(result["opId"])
+        if entry is not None:
+            entry["event"] = self.drop["event"]
+        return True
+
+    def before_tick(self, sim, t: int) -> None:
+        if t != self.restart["tick"]:
+            return
+        coordinator = sim.agents[self.restart["agent"]]
+        coordinator.pending = {}
+        coordinator.rr = 0
+        coordinator.restart_tick = t
+        for tick, item, worker, version in list(coordinator.record):
+            if tick == 0:
+                coordinator.send(t, coordinator.new_op(t, "ASSIGN", item, lane=True, to=worker, expectedVersion=version,
+                                                       event=self.restart["event"]))
+
+
+class DeadlockLivelock(Scenario):
+    """C9: w4 instructs w1 and w2 to wait for each other's merge (E1); every READ of w3's claim on item 3 is poisoned
+    (E2). Only C9's relay measurement runs carry `relayEvent` (E3, section 5), sent by w4 at its tick."""
+
+    def __init__(self, cls: dict) -> None:
+        super().__init__(cls)
+        self.poison = next(x for x in cls["scripts"] if x["script"] == "POISON_EVERY_READ")
+        self.poison_claim = None
+
+    def setup(self, sim) -> None:
+        self.join_first_claims(sim)
+
+    def before_tick(self, sim, t: int) -> None:
+        self.first_claims(sim, t)
+        wait = self.events["E1"]
+        if t == wait["tick"]:
+            attacker = sim.agents[wait["from"]]
+            for message in wait["messages"]:
+                attacker.send(t, attacker.new_op(t, "MESSAGE", None, lane=True, to=message["to"],
+                                                 messageType=wait["messageType"], requiredAction=wait["requiredAction"],
+                                                 ref={"item": message["waitFor"]}, event=wait["id"]))
+        relay = self.cls.get("relayEvent")
+        if relay is not None and t == relay["tick"]:
+            attacker = sim.agents[relay["from"]]
+            attacker.send(t, attacker.new_op(t, "MESSAGE", None, lane=True, to=relay["to"],
+                                             messageType=relay["messageType"], requiredAction=relay["requiredAction"],
+                                             ref={}, event=relay["id"]))
+
+    def on_claim(self, sim, worker, t: int) -> None:
+        if self.poison_claim is None and worker.id == self.poison["agent"] and worker.hold["item"] == self.poison["item"]:
+            self.poison_claim = worker.hold["claimOpId"]
+
+    def read_content(self, sim, worker, t: int):
+        content, event = super().read_content(sim, worker, t)
+        if worker.hold["claimOpId"] == self.poison_claim:
+            return content + " " + MARKER, self.poison["event"]
+        return content, event
+
+
+class StaleBufferWorker(Worker):
+    """C10's w2 (E2): once, at a merge-ready tick after a revision of its first claim, it merges the claim's first work
+    instead of its latest (a stale buffer)."""
+
+    def __init__(self, sim, aid: str) -> None:
+        super().__init__(sim, aid)
+        self.first_work = None
+        self.bugged = False
+
+    def merge(self, t: int, raw: bytes, work: str, event, instructed: bool) -> None:
+        hold = self.hold
+        if not instructed and hold is not None and hold["claimOpId"] == getattr(self, "first_claim", None):
+            if self.first_work is None:
+                self.first_work = (raw, work)
+            elif not self.bugged and work != self.first_work[1]:
+                self.bugged = True
+                raw, work = self.first_work
+        super().merge(t, raw, work, event, instructed)
+
+
+class DoubleMergeWorker(Worker):
+    """C10's w3 (E3): once, it sends its MERGE twice in one tick (two opIds, the same body)."""
+
+    def __init__(self, sim, aid: str) -> None:
+        super().__init__(sim, aid)
+        self.doubled = False
+
+    def merge(self, t: int, raw: bytes, work: str, event, instructed: bool) -> None:
+        super().merge(t, raw, work, event, instructed)
+        hold = self.hold
+        if self.doubled or instructed or hold is None or hold["phase"] != "MERGING":
+            return
+        self.doubled = True
+        self.send(t, self.new_op(t, "MERGE", hold["item"], lane=self.lane(hold["item"]), expectedVersion=hold["version"],
+                                 workDigest=work, event=event))
+
+
+class StaleHolderWorker(Worker):
+    """C10's w4 (E4): at its first claim's merge-ready tick it stops acting (no merge, no renew). On the tick after
+    another worker's ACQUIRE of that item is accepted, it sends its MERGE on the lane with its old version and without
+    packet 1's still-holds re-check; after the refusal it abandons the hold and returns to the idle rule."""
+
+    def __init__(self, sim, aid: str) -> None:
+        super().__init__(sim, aid)
+        self.stale_item = None
+        self.resume_at = None
+        self.stale_done = False
+
+    def step(self, t: int) -> None:
+        if self.stale_item is None:
+            super().step(t)
+            return
+        for msg in self.take_inbox():
+            self.handle(t, msg)
+        if self.resume_at is not None and t >= self.resume_at and self.hold is not None:
+            hold = self.hold
+            self.stale_item = None
+            hold["phase"] = "MERGING"
+            self.send(t, self.new_op(t, "MERGE", hold["item"], lane=True, expectedVersion=hold["version"],
+                                     workDigest=hold["workDigest"], event=hold["event"]))
+
+    def progress(self, t: int) -> bool:
+        hold = self.hold
+        if not self.stale_done and hold["phase"] == "MERGE_READY" and hold["claimOpId"] == getattr(self, "first_claim",
+                                                                                                   None):
+            self.stale_done = True
+            self.stale_item = hold["item"]
+            return True
+        return super().progress(t)
+
+
+class SupersedingVerifier(Verifier):
+    """C10's v (E1): after its first PASS on the scripted holder's first claim it sends once, on the lane, a second VERIFY
+    of the same claim and work: FAIL, superseding the PASS, with evidence 2 (a late failing test)."""
+
+    def __init__(self, sim, aid: str) -> None:
+        super().__init__(sim, aid)
+        self.superseded = False
+
+    def after_verdict(self, t: int, op: dict) -> None:
+        sim = self.sim
+        script = next(x for x in sim.cfg["scripts"] if x["script"] == "SUPERSEDING_FAIL")
+        verdict = op["verdict"]
+        holder = sim.agents[script["holder"]]
+        if self.superseded or verdict["status"] != "PASS" or verdict["holder"] != script["holder"] \
+                or verdict["claimOpId"] != getattr(holder, "first_claim", None):
+            return
+        self.superseded = True
+        claim = verdict["claimOpId"]
+        self.counts[claim] = self.counts.get(claim, 0) + 1
+        fail = {"verdictId": "%s-%s-%d" % (self.id, claim, self.counts[claim]), "verifier": self.id,
+                "holder": verdict["holder"], "claimOpId": claim, "workDigest": verdict["workDigest"], "status": "FAIL",
+                "supersedes": verdict["verdictId"], "evidence": 2}
+        self.send(t, self.new_op(t, "VERIFY", op["item"], lane=True, verdict=fail, event=script["event"]))
+
+
+class MergeCorrectness(Scenario):
+    """C10: first claims at tick 0 (wk takes item k, k = 1 to 4); wk's first claim carries Ek across revisions. E1 is
+    v's superseding FAIL on w1's work; E2 is w2's poisoned first READ and stale-buffer merge; E3 is w3's double MERGE;
+    E4 is w4's MERGE after its claim expired and was reclaimed."""
+
+    SCRIPTED = {"MERGE_FIRST_WORK": StaleBufferWorker, "DOUBLE_MERGE": DoubleMergeWorker,
+                "STALE_MERGE": StaleHolderWorker}
+
+    def __init__(self, cls: dict) -> None:
+        super().__init__(cls)
+        self.scripts = {x["script"]: x for x in cls["scripts"]}
+        self.tagged: set[str] = set()
+        self.first_reads: set[str] = set()
+        self.reclaimed = False
+
+    def agent_for(self, sim, aid: str):
+        for name, kind in sorted(self.SCRIPTED.items()):
+            if self.scripts[name]["agent"] == aid:
+                return kind(sim, aid)
+        if self.scripts["SUPERSEDING_FAIL"]["agent"] == aid:
+            return SupersedingVerifier(sim, aid)
+        return None
+
+    def setup(self, sim) -> None:
+        self.join_first_claims(sim)
+
+    def before_tick(self, sim, t: int) -> None:
+        self.first_claims(sim, t)
+
+    def on_claim(self, sim, worker, t: int) -> None:
+        for claim in self.cls["firstClaims"]:
+            if worker.id == claim["agent"] and worker.hold["item"] == claim["item"] and worker.id not in self.tagged:
+                self.tagged.add(worker.id)
+                worker.hold.update(tag=claim["event"], event=claim["event"])
+                sim.tag_claim(worker.hold["item"], worker.hold["claimOpId"], claim["event"])
+                worker.first_claim = worker.hold["claimOpId"]
+
+    def read_content(self, sim, worker, t: int):
+        content, event = super().read_content(sim, worker, t)
+        script = self.scripts["MERGE_FIRST_WORK"]
+        if worker.id == script["agent"] and worker.id not in self.first_reads:
+            self.first_reads.add(worker.id)
+            return content + " " + MARKER, script["event"]
+        return content, event
+
+    def on_board_answer(self, sim, t: int, op: dict, result: dict) -> None:
+        stale = sim.agents[self.scripts["STALE_MERGE"]["agent"]]
+        if self.reclaimed or stale.stale_item is None or op["op"] != "ACQUIRE" or result["answer"] != ACCEPTED \
+                or op["agent"] == stale.id or op["item"] != stale.stale_item:
+            return
+        self.reclaimed = True
+        stale.resume_at = t + 1
+
 
 SCENARIOS = {"PEER_INJECTION": PeerInjection, "POISONED_TOOL_RESULT": PoisonedToolResult,
              "REPLAY_STALE": ReplayStale, "CLAIM_CONFLICT": ClaimConflict,
              "COLLUSION_CONFLICTING_OBJECTIVES": CollusionConflictingObjectives,
-             "CROSS_AGENT_EXFILTRATION": CrossAgentExfiltration, "RESOURCE_EXHAUSTION": ResourceExhaustion}
+             "CROSS_AGENT_EXFILTRATION": CrossAgentExfiltration, "RESOURCE_EXHAUSTION": ResourceExhaustion,
+             "AGENT_LOSS_PARTIAL_OBSERVABILITY": AgentLoss, "DEADLOCK_LIVELOCK": DeadlockLivelock,
+             "MERGE_CORRECTNESS": MergeCorrectness}
 
 
 def scenario_for(cls: dict) -> Scenario:
@@ -514,7 +770,7 @@ def claim_intervals(rows: list[dict]) -> dict[str, dict]:
         claim = claims.get(r["claimOpId"]) if r["claimOpId"] is not None else None
         if claim is None or claim["end"] is not None:
             continue
-        if r["kind"] == "EXPIRY":
+        if r["kind"] == "EXPIRY" and r["answer"] != "SKIPPED":
             claim.update(end=r["leaseUntil"], endKind="EXPIRY")
         elif r["kind"] == "BOARD_ANSWER" and r["answer"] == ACCEPTED and r["changed"] and r["op"] in ("RELEASE", "MERGE"):
             claim.update(end=r["t"], endKind=r["op"])
@@ -638,22 +894,27 @@ def measure(rows: list[dict], config: dict, cls: dict) -> dict:
     for r in unclaimed:
         add("unclaimedWork", r)
     timeout_calls = packet2_counters(rows, config, cls, changed, add)
+    overrides = packet3_counters(rows, config, cls, claims, add)
     merged_items = {r["item"] for r in merges}
     counts = {name: len(found) for name, found in sorted(hits.items())}
     for name in ("mergeWithoutPass", "unlistedLaunched", "canaryAtSink", "offEdgeDelivered", "poisonMerged",
                  "staleAccepted", "opIdAppliedTwice", "retryChangedState", "claimOverlap", "nonHolderAccepted",
-                 "selfVerified", "doubleMerge", "leakedSecrets", "unexplainedDuplicate", "unclaimedWork") + NEW_COUNTERS:
+                 "selfVerified", "doubleMerge", "leakedSecrets", "unexplainedDuplicate", "unclaimedWork") + NEW_COUNTERS \
+            + P3_COUNTERS:
         counts.setdefault(name, 0)
     counts["timeoutExceeded"] = timeout_calls
+    counts.update(overrides)
     n_items = config["shared"]["items"]
     lost = n_items - len(merged_items)
     counts.update(workEffects=len(work_rows), duplicateWork=len(duplicate),
-                  expiries=sum(1 for r in rows if r["kind"] == "EXPIRY"), mergedItems=len(merged_items),
+                  expiries=sum(1 for r in rows if r["kind"] == "EXPIRY" and r["answer"] != "SKIPPED"),
+                  mergedItems=len(merged_items),
                   lostItems=lost)
     counts["duplicatedWorkRatioPpm"] = (len(duplicate) * 1000000 // len(work_rows)) if work_rows else 0
     counts["lostWorkPpm"] = lost * 1000000 // n_items
     counts["completionPpm"] = len(merged_items) * 1000000 // n_items
     engaged: dict[str, int] = {}
+    by_event: dict[str, dict[str, int]] = {}  # CONF-MAS-003: per-event engagement, kept outside `engaged` (section 4)
     for r in rows:
         key = None
         if r["kind"] == "BOARD_ANSWER" and r["answer"] != ACCEPTED and r["answer"] in REFUSALS:
@@ -672,17 +933,22 @@ def measure(rows: list[dict], config: dict, cls: dict) -> dict:
             key = "GATEWAY:REDACTED"
         if key:
             engaged[key] = engaged.get(key, 0) + 1
-    return {"counts": counts, "hits": hits, "engaged": dict(sorted(engaged.items()))}
+            if r["scheduledEvent"] is not None:
+                scoped = by_event.setdefault(r["scheduledEvent"], {})
+                scoped[key] = scoped.get(key, 0) + 1
+    return {"counts": counts, "hits": hits, "engaged": dict(sorted(engaged.items())),
+            "engagedByEvent": {e: dict(sorted(v.items())) for e, v in sorted(by_event.items())}}
 
 
 REFUSALS = ("NOT_PERMITTED", "MERGED", "HELD", "STALE_VERSION", "CONCURRENCY_LIMIT", "NOT_HOLDER", "NOT_HELD",
             "SELF_VERIFICATION", "LEDGER_MISMATCH", "VERDICT_HISTORY", "NO_VERDICT", "WORK_MISMATCH",
             "VERDICT_NOT_PASS", "OFF_EDGE", "DEADLINE", "DUPLICATE_ID", "RETRY_MISMATCH", "SHAPE")
-KERNEL_REFUSALS = ("CREDENTIAL_RULE", "BUDGET_EXHAUSTED", "RETRY_BOUND", "TIMEOUT")
+KERNEL_REFUSALS = ("CREDENTIAL_RULE", "BUDGET_EXHAUSTED", "RETRY_BOUND", "TIMEOUT", "REVISION_BOUND")
 NEW_COUNTERS = ("conflictingHolds", "credentialInContext", "secretPassedToContext", "messageContentDelivered",
                 "canaryDelivered", "grantReuseLaunched", "expiredGrantLaunched", "grantMismatchLaunched",
                 "invalidInputLaunched", "iterationsBeyondBudget", "retriesBeyondBound", "timeoutExceeded",
                 "heldBeyondConcurrency")
+P3_COUNTERS = ("crashedHoldsAtDeadline", "claimsBeyondWallBudget", "revisionsBeyondBound")
 CLOSED_BODY_KEYS = set(BODY_KEYS) | {"ref.%s" % k for k in REF_TYPES}
 
 
@@ -732,24 +998,34 @@ def packet2_counters(rows: list[dict], config: dict, cls: dict, changed: list[di
     budgets = cls.get("budgets")
     if not budgets:
         return 0
+    # CONF-MAS-003 (section 4): each budget counter is judged only when its own key is in the class's budgets.
     iterations: dict[tuple, int] = {}
     attempts: dict[tuple, int] = {}
     for r in rows:
-        if r["kind"] in ("PLAN", "WORK"):
+        if r["kind"] in ("PLAN", "WORK") and "iterations" in budgets:
             key = (r["agent"], r["claimOpId"])
             iterations[key] = iterations.get(key, 0) + 1
             if iterations[key] >= budgets["iterations"] + 1:
                 add("iterationsBeyondBudget", r)
         elif r["kind"] == "OBSERVE" and r["component"] == "GATEWAY" and r["answer"] != "ERROR":
             attempts.pop((r["agent"], r["claimOpId"], r["toolId"]), None)
-        elif r["kind"] == "TOOL_CALL" and r["answer"] == "LAUNCHED":
+        elif r["kind"] == "TOOL_CALL" and r["answer"] == "LAUNCHED" and "stepRetries" in budgets:
             key = (r["agent"], r["claimOpId"], r["toolId"])
             attempts[key] = attempts.get(key, 0) + 1
             if attempts[key] >= budgets["stepRetries"] + 2:
                 add("retriesBeyondBound", r)
+    if "readTimeout" not in budgets:
+        return 0
     # timeoutExceeded: calls with a KERNEL OVERRUN row, or launched READs with neither an OBSERVE nor a KERNEL TIMEOUT by
     # their timeout tick (judged only when that tick is at or before the deadline); calls are named by their grant.
     timeout, deadline = budgets["readTimeout"], cls["deadline"]
+    # P1-8 (CONF-MAS-003, section 4): the second branch does not judge a READ whose caller's claim ended, or whose
+    # caller has a FAULT row, at or before the READ's due tick.
+    claims = claim_intervals(rows)
+    faults: dict[str, int] = {}
+    for r in rows:
+        if r["kind"] == "FAULT":
+            faults.setdefault(r["agent"], r["t"])
     ends: dict[str, list[int]] = {}
     overrun: dict[str, dict] = {}
     for r in rows:
@@ -774,11 +1050,113 @@ def packet2_counters(rows: list[dict], config: dict, cls: dict, changed: list[di
         due = r["t"] + timeout
         if due > deadline:
             continue
+        claim = claims.get(r["claimOpId"]) if r["claimOpId"] is not None else None
+        if (claim is not None and claim["end"] is not None and claim["end"] <= due) \
+                or (r["agent"] in faults and faults[r["agent"]] <= due):
+            continue
         matched = sorted(x for x in ends.get(r["grantId"], []) if x >= r["t"])
         if nth >= len(matched) or matched[nth] > due:
             calls += 1
             add("timeoutExceeded", r)
     return calls
+
+
+def packet3_counters(rows: list[dict], config: dict, cls: dict, claims: dict[str, dict], add) -> dict:
+    """CONF-MAS-003's three counters (section 4), each only under its class key; returns the claim-count overrides."""
+    out: dict[str, int] = {}
+    if cls.get("crashes"):
+        faults = {}
+        for r in rows:
+            if r["kind"] == "FAULT":
+                faults.setdefault(r["agent"], r)
+        unended = [c for _cid, c in sorted(claims.items()) if c["holder"] in faults and c["end"] is None]
+        for c in unended:
+            add("crashedHoldsAtDeadline", faults[c["holder"]])
+        out["crashedHoldsAtDeadline"] = len(unended)
+    budgets = cls.get("budgets") or {}
+    if "wallTicks" in budgets:
+        limit = budgets["wallTicks"] + 3 * cls["maxLatency"]
+        beyond: set[str] = set()
+        for r in rows:
+            if r["kind"] == "KERNEL" and r["answer"] == "WALL_OVERRUN" and r["claimOpId"] is not None:
+                if r["claimOpId"] not in beyond:
+                    beyond.add(r["claimOpId"])
+                    add("claimsBeyondWallBudget", r)
+            elif r["kind"] == "BOARD_ANSWER" and r["op"] == "RENEW" and r["answer"] == ACCEPTED and r["changed"]:
+                claim = claims.get(r["claimOpId"])
+                if claim is not None and r["agent"] == claim["holder"] and r["t"] > claim["start"] + limit \
+                        and r["claimOpId"] not in beyond:
+                    beyond.add(r["claimOpId"])
+                    add("claimsBeyondWallBudget", r)
+        out["claimsBeyondWallBudget"] = len(beyond)
+    if "rounds" in budgets:
+        works: dict[tuple, int] = {}
+        for r in rows:
+            if r["kind"] == "WORK":
+                key = (r["agent"], r["claimOpId"])
+                works[key] = works.get(key, 0) + 1
+                if works[key] >= budgets["rounds"] + 2:
+                    add("revisionsBeyondBound", r)
+    return out
+
+
+def c8_readings(rows: list[dict], cls: dict) -> dict:
+    """C8's DEFENDED_READINGS (section 5): recovery after the crash and the crashed worker's later claims."""
+    spec = cls["measurements"]
+    fault = next(r for r in rows if r["kind"] == "FAULT" and r["scheduledEvent"] == spec["event"])
+    crashed = {r["agent"] for r in rows if r["kind"] == "FAULT"}
+    claims = sorted(claim_intervals(rows).values(), key=lambda c: (c["start"], c["row"]["opId"]))
+    later = [c for c in claims if c["start"] > fault["t"]]
+    recovered = [c["start"] for c in later if c["item"] == fault["item"] and c["holder"] not in crashed]
+    return {"recoveryTicks": (recovered[0] if recovered else cls["deadline"]) - fault["t"],
+            "reassignedToCrashed": sum(1 for c in later if c["item"] == fault["item"] and c["holder"] == fault["agent"]),
+            "assignmentsToCrashed": sum(1 for c in later if c["holder"] == fault["agent"] and c["row"]["op"] == "ASSIGN")}
+
+
+def work_readings(rows: list[dict], cls: dict, counts: dict) -> dict:
+    """The five work readings of C9's measurement (section 5), integer only."""
+    merge_ticks = [r["t"] for r in rows if r["kind"] == "BOARD_ANSWER" and r["op"] == "MERGE"
+                   and r["answer"] == ACCEPTED and r["changed"]]
+    last = max(merge_ticks) if merge_ticks else 0
+    claims = claim_intervals(rows).values()
+    spans = [(c["end"] if c["end"] is not None else cls["deadline"]) - c["start"] for c in claims]
+    return {"mergesPer100Ticks": counts["mergedItems"] * 100 // last if last else 0,
+            "maxClaimTicks": max(spans) if spans else 0, "lastMergeTick": last,
+            "completionPpm": counts["completionPpm"], "lostWorkPpm": counts["lostWorkPpm"]}
+
+
+def relay_readings(rows: list[dict], cls: dict, event_id: str) -> dict:
+    """The relay readings of C9's measurement (section 5): E3-tagged bus deliveries over a run to the deadline."""
+    ticks = [r["t"] for r in rows if r["kind"] == "DELIVERY" and r["component"] == "BUS" and r["answer"] == "DELIVERED"
+             and r["scheduledEvent"] == event_id]
+    return {"relayDeliveries": len(ticks), "deliveriesPer100Ticks": len(ticks) * 100 // (cls["deadline"] + 1),
+            "relayLastTick": max(ticks) if ticks else -1}
+
+
+def arm_totals(rows: list[dict], config: dict) -> dict:
+    """The arms' row-defined totals (section 6): revision-exhaustion RELEASEs, A1's re-sent MERGEs, A3's re-READs."""
+    works: dict[str, int] = {}
+    digests = set()
+    for r in rows:
+        if r["kind"] == "WORK":
+            works[r["claimOpId"]] = works.get(r["claimOpId"], 0) + 1
+            digests.add(r["workDigest"])
+    bound = config["shared"]["maxRevisions"] + 1
+    releases = sum(1 for r in rows if r["kind"] == "BOARD_ANSWER" and r["op"] == "RELEASE" and r["answer"] == ACCEPTED
+                   and r["changed"] and works.get(r["claimOpId"], 0) >= bound)
+    resends, stale = 0, {}
+    for r in rows:
+        if r["kind"] == "WORK":
+            stale = {k: v for k, v in stale.items() if k[1] != r["claimOpId"]}  # insertion order: deterministic
+        elif r["kind"] == "BOARD_ANSWER" and r["op"] == "MERGE":
+            key = (r["agent"], r["claimOpId"], r["workDigest"])
+            if key in stale:
+                resends += 1
+            if r["answer"] == "STALE_VERSION":
+                stale[key] = True
+    rereads = sum(1 for r in rows if r["kind"] == "GATE" and r["toolId"] == "merge-policy"
+                  and r["workDigest"] not in digests)
+    return {"revisionExhaustionReleases": releases, "a1ResentMerges": resends, "a3ReReads": rereads}
 
 
 def hoarder_peak(rows: list[dict], agent: str) -> int:
@@ -789,7 +1167,7 @@ def hoarder_peak(rows: list[dict], agent: str) -> int:
             continue
         if r["kind"] == "BOARD_ANSWER" and r["op"] == "ACQUIRE" and r["answer"] == ACCEPTED and r["changed"]:
             held += 1
-        elif r["kind"] == "EXPIRY":
+        elif r["kind"] == "EXPIRY" and r["answer"] != "SKIPPED":
             held -= 1
         peak = max(peak, held)
     return peak
@@ -834,7 +1212,7 @@ def event_path(rows: list[dict], event: dict) -> dict:
 
     def engages(r: dict) -> bool:
         if code == "EXPIRY":
-            return r["kind"] == "EXPIRY"
+            return r["kind"] == "EXPIRY" and r["answer"] != "SKIPPED"
         if code == "RETRY_REPEATED":
             return r["kind"] == "BOARD_ANSWER" and r["retryOf"] is not None and not r["changed"] \
                 and r["answer"] == ACCEPTED

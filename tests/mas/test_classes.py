@@ -110,6 +110,10 @@ class LedgerGateTests(unittest.TestCase):
         self.assertEqual(sum(len(r["depthChecks"]) for r in packet1), 4)
         self.assertEqual(sum(len(r["controls"]) for r in packet2), 14)
         self.assertEqual(sum(len(r["depthChecks"]) for r in packet2), 0)
+        # CONF-MAS-003 (DESIGN revision 6, section 4): C8 to C10 add 10 controls and 6 depth checks.
+        packet3 = [r for cid, r in sorted(self.rows.items()) if cid in ("C8", "C9", "C10")]
+        self.assertEqual(sum(len(r["controls"]) for r in packet3), 10)
+        self.assertEqual(sum(len(r["depthChecks"]) for r in packet3), 6)
 
     def test_c3_e1_leaves_an_explained_duplicate_in_every_seed(self):
         """Q-MAS1-F3 (a), 2026-10-19: rev 4's "exactly one duplicate per seed (E1)" no longer holds after the F2

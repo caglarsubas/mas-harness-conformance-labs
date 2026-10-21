@@ -1,4 +1,31 @@
 {
+ "arms": {
+  "classes": [
+   "C2",
+   "C3",
+   "C4",
+   "C5",
+   "C7"
+  ],
+  "decision": "Q-NX3-2",
+  "policies": [
+   {
+    "id": "A1",
+    "maxResends": 2,
+    "name": "RENEW_AWARE_MERGE"
+   },
+   {
+    "id": "A2",
+    "name": "RENEW_HEADROOM",
+    "renewAtRemaining": 6
+   },
+   {
+    "id": "A3",
+    "maxReReads": 2,
+    "name": "POISON_BACKOFF"
+   }
+  ]
+ },
  "bounds": {
   "completionPpm": {
    "decision": "Q-MAS1-2",
@@ -695,6 +722,442 @@
    },
    "stallPpm": 0,
    "topology": "DECENTRALIZED"
+  },
+  {
+   "budgets": {
+    "iterations": 6,
+    "readTimeout": 3,
+    "stepRetries": 1
+   },
+   "compromised": null,
+   "controls": [
+    {
+     "bypass": [
+      "EXPIRY"
+     ],
+     "counter": "crashedHoldsAtDeadline",
+     "event": "E1",
+     "id": "C8-EXPIRY-OFF"
+    },
+    {
+     "bypass": [
+      "RETRY",
+      "HELD",
+      "VERSION",
+      "CONCURRENCY"
+     ],
+     "counter": "retryChangedState",
+     "event": "E2",
+     "id": "C8-RETRY-OFF"
+    },
+    {
+     "bypass": [
+      "VERSION"
+     ],
+     "counter": "staleAccepted",
+     "event": "E3",
+     "id": "C8-VERSION-OFF"
+    }
+   ],
+   "crashes": [
+    {
+     "at": "FIRST_READ_LAUNCH",
+     "event": "E1",
+     "role": "w_a"
+    }
+   ],
+   "deadline": 600,
+   "depthChecks": [
+    {
+     "bypass": [
+      "RETRY"
+     ],
+     "counters": [
+      "retryChangedState"
+     ],
+     "engaged": "BOARD:HELD",
+     "event": "E2",
+     "id": "C8-RETRY-DEPTH"
+    },
+    {
+     "bypass": [
+      "RETRY",
+      "HELD"
+     ],
+     "counters": [
+      "retryChangedState"
+     ],
+     "engaged": "BOARD:STALE_VERSION",
+     "event": "E2",
+     "id": "C8-RETRY-HELD-DEPTH"
+    }
+   ],
+   "drops": [
+    {
+     "event": "E2",
+     "of": "TICK0_ASSIGN_ANSWER",
+     "role": "w_b"
+    }
+   ],
+   "events": [
+    {
+     "component": "BOARD",
+     "engagedBy": "EXPIRY",
+     "id": "E1",
+     "role": "w_a",
+     "trigger": "HOLDER_CRASH"
+    },
+    {
+     "component": "BOARD",
+     "engagedBy": "RETRY_REPEATED",
+     "id": "E2",
+     "role": "w_b",
+     "trigger": "LOST_ANSWER"
+    },
+    {
+     "component": "BOARD",
+     "engagedBy": "STALE_VERSION",
+     "id": "E3",
+     "tick": 8,
+     "trigger": "COORDINATOR_RESTART"
+    }
+   ],
+   "id": "C8",
+   "kind": "AGENT_LOSS_PARTIAL_OBSERVABILITY",
+   "maxLatency": 0,
+   "measurements": {
+    "event": "E1",
+    "kind": "DEFENDED_READINGS",
+    "readings": [
+     "recoveryTicks",
+     "reassignedToCrashed",
+     "assignmentsToCrashed"
+    ],
+    "role": "w_a"
+   },
+   "poisonPpm": 0,
+   "restarts": [
+    {
+     "agent": "c",
+     "event": "E3",
+     "resume": "TICK0_ASSIGNS",
+     "tick": 8
+    }
+   ],
+   "roles": {
+    "names": [
+     "w_a",
+     "w_b"
+    ],
+    "stream": "sched-c8"
+   },
+   "stallPpm": 0,
+   "topology": "CENTRAL"
+  },
+  {
+   "budgets": {
+    "iterations": 6,
+    "rounds": 3,
+    "wallTicks": 100
+   },
+   "compromised": "w4",
+   "controls": [
+    {
+     "bypass": [
+      "WALL_CLOCK"
+     ],
+     "counter": "claimsBeyondWallBudget",
+     "event": "E1",
+     "id": "C9-WALL-OFF"
+    },
+    {
+     "bypass": [
+      "REVISION_BOUND"
+     ],
+     "counter": "revisionsBeyondBound",
+     "event": "E2",
+     "id": "C9-REVISION-OFF"
+    },
+    {
+     "bypass": [
+      "REVISION_BOUND",
+      "BUDGET"
+     ],
+     "counter": "iterationsBeyondBudget",
+     "event": "E2",
+     "id": "C9-REVISION+BUDGET-OFF"
+    }
+   ],
+   "deadline": 600,
+   "depthChecks": [],
+   "events": [
+    {
+     "component": "KERNEL",
+     "engagedBy": "BUDGET_EXHAUSTED",
+     "from": "w4",
+     "id": "E1",
+     "messageType": "DEPENDENCY",
+     "messages": [
+      {
+       "to": "w1",
+       "waitFor": 2
+      },
+      {
+       "to": "w2",
+       "waitFor": 1
+      }
+     ],
+     "requiredAction": "ACKNOWLEDGE",
+     "tick": 0,
+     "trigger": "WAIT_CYCLE"
+    },
+    {
+     "agent": "w3",
+     "component": "KERNEL",
+     "engagedBy": "REVISION_BOUND",
+     "id": "E2",
+     "item": 3,
+     "trigger": "REVISION_LIVELOCK"
+    }
+   ],
+   "firstClaims": [
+    {
+     "agent": "w1",
+     "item": 1
+    },
+    {
+     "agent": "w2",
+     "item": 2
+    },
+    {
+     "agent": "w3",
+     "item": 3
+    }
+   ],
+   "id": "C9",
+   "instructions": {
+    "DEPENDENCY/ACKNOWLEDGE": "WAIT_FOR_MERGE",
+    "TEST/CHANGE": "RELAY_ON"
+   },
+   "kind": "DEADLOCK_LIVELOCK",
+   "maxLatency": 3,
+   "measurements": {
+    "event": {
+     "from": "w4",
+     "id": "E3",
+     "messageType": "TEST",
+     "requiredAction": "CHANGE",
+     "tick": 0,
+     "to": "w1",
+     "trigger": "AT_TICK"
+    },
+    "kind": "RELAY_RUNS",
+    "readings": [
+     "relayDeliveries",
+     "deliveriesPer100Ticks",
+     "relayLastTick",
+     "mergesPer100Ticks",
+     "maxClaimTicks",
+     "lastMergeTick",
+     "completionPpm",
+     "lostWorkPpm"
+    ],
+    "untilDeadline": true
+   },
+   "poisonPpm": 0,
+   "relayRing": {
+    "w1": "w2",
+    "w2": "w3",
+    "w3": "w1"
+   },
+   "scripts": [
+    {
+     "agent": "w3",
+     "event": "E2",
+     "item": 3,
+     "script": "POISON_EVERY_READ"
+    }
+   ],
+   "stallPpm": 0,
+   "topology": "DECENTRALIZED_C9"
+  },
+  {
+   "compromised": null,
+   "controls": [
+    {
+     "bypass": [
+      "SUPERSESSION"
+     ],
+     "counter": "mergeWithoutPass",
+     "event": "E1",
+     "id": "C10-SUPERSEDE-OFF"
+    },
+    {
+     "bypass": [
+      "MERGE_GATE",
+      "WORK_VERDICT"
+     ],
+     "counter": "poisonMerged",
+     "event": "E2",
+     "id": "C10-WORK-OFF"
+    },
+    {
+     "bypass": [
+      "SINGLE_MERGE",
+      "VERSION"
+     ],
+     "counter": "doubleMerge",
+     "event": "E3",
+     "id": "C10-RACE-OFF"
+    },
+    {
+     "bypass": [
+      "HOLDER",
+      "VERSION",
+      "MERGE_VERDICT"
+     ],
+     "counter": "nonHolderAccepted",
+     "event": "E4",
+     "id": "C10-HOLDER-OFF"
+    }
+   ],
+   "deadline": 600,
+   "depthChecks": [
+    {
+     "bypass": [
+      "MERGE_GATE"
+     ],
+     "counters": [
+      "poisonMerged"
+     ],
+     "engaged": "BOARD:VERDICT_NOT_PASS",
+     "event": "E2",
+     "id": "C10-WORK-DEPTH"
+    },
+    {
+     "bypass": [
+      "SINGLE_MERGE"
+     ],
+     "counters": [
+      "doubleMerge"
+     ],
+     "engaged": "BOARD:STALE_VERSION",
+     "event": "E3",
+     "id": "C10-RACE-DEPTH"
+    },
+    {
+     "bypass": [
+      "HOLDER"
+     ],
+     "counters": [
+      "nonHolderAccepted"
+     ],
+     "engaged": "BOARD:STALE_VERSION",
+     "event": "E4",
+     "id": "C10-HOLDER-DEPTH"
+    },
+    {
+     "bypass": [
+      "HOLDER",
+      "VERSION"
+     ],
+     "counters": [
+      "nonHolderAccepted"
+     ],
+     "engaged": "BOARD:NO_VERDICT",
+     "event": "E4",
+     "id": "C10-HOLDER-VERSION-DEPTH"
+    }
+   ],
+   "events": [
+    {
+     "agent": "w1",
+     "component": "BOARD",
+     "engagedBy": "VERDICT_NOT_PASS",
+     "id": "E1",
+     "item": 1,
+     "trigger": "SUPERSEDED_VERDICT"
+    },
+    {
+     "agent": "w2",
+     "component": "GATE",
+     "engagedBy": "GATE_FAIL",
+     "id": "E2",
+     "item": 2,
+     "trigger": "STALE_BYTES_AFTER_REVISION"
+    },
+    {
+     "agent": "w3",
+     "component": "BOARD",
+     "engagedBy": "NOT_HOLDER",
+     "id": "E3",
+     "item": 3,
+     "trigger": "RACING_MERGES"
+    },
+    {
+     "agent": "w4",
+     "component": "BOARD",
+     "engagedBy": "NOT_HOLDER",
+     "id": "E4",
+     "item": 4,
+     "trigger": "MERGE_AFTER_EXPIRY"
+    }
+   ],
+   "exercises": [
+    "doubleMerge",
+    "nonHolderAccepted"
+   ],
+   "firstClaims": [
+    {
+     "agent": "w1",
+     "event": "E1",
+     "item": 1
+    },
+    {
+     "agent": "w2",
+     "event": "E2",
+     "item": 2
+    },
+    {
+     "agent": "w3",
+     "event": "E3",
+     "item": 3
+    },
+    {
+     "agent": "w4",
+     "event": "E4",
+     "item": 4
+    }
+   ],
+   "id": "C10",
+   "kind": "MERGE_CORRECTNESS",
+   "maxLatency": 3,
+   "poisonPpm": 0,
+   "scripts": [
+    {
+     "agent": "v",
+     "event": "E1",
+     "holder": "w1",
+     "script": "SUPERSEDING_FAIL"
+    },
+    {
+     "agent": "w2",
+     "event": "E2",
+     "script": "MERGE_FIRST_WORK"
+    },
+    {
+     "agent": "w3",
+     "event": "E3",
+     "script": "DOUBLE_MERGE"
+    },
+    {
+     "agent": "w4",
+     "event": "E4",
+     "script": "STALE_MERGE"
+    }
+   ],
+   "stallPpm": 0,
+   "topology": "DECENTRALIZED"
   }
  ],
  "controlGate": {
@@ -747,7 +1210,7 @@
    "trust": "TRUSTED"
   }
  },
- "packet": "CONF-MAS-002",
+ "packet": "CONF-MAS-003",
  "profiles": {
   "COORDINATOR": {
    "gates": [],
@@ -775,7 +1238,7 @@
    ]
   }
  },
- "schemaVersion": "r12.mas-simulation-classes/v2",
+ "schemaVersion": "r12.mas-simulation-classes/v3",
  "seeds": [
   1,
   2,
@@ -829,7 +1292,8 @@
   "poison-<agent>",
   "read-<agent>",
   "sched-c3",
-  "sched-c7"
+  "sched-c7",
+  "sched-c8"
  ],
  "topologies": {
   "CENTRAL": {
@@ -1156,6 +1620,75 @@
     ],
     [
      "w4",
+     "w1"
+    ]
+   ],
+   "mode": "DECENTRALIZED",
+   "verifier": "v",
+   "workers": [
+    "w1",
+    "w2",
+    "w3",
+    "w4"
+   ]
+  },
+  "DECENTRALIZED_C9": {
+   "coordinator": null,
+   "edges": [
+    [
+     "v",
+     "w1"
+    ],
+    [
+     "v",
+     "w2"
+    ],
+    [
+     "v",
+     "w3"
+    ],
+    [
+     "v",
+     "w4"
+    ],
+    [
+     "w1",
+     "v"
+    ],
+    [
+     "w1",
+     "w2"
+    ],
+    [
+     "w2",
+     "v"
+    ],
+    [
+     "w2",
+     "w3"
+    ],
+    [
+     "w3",
+     "v"
+    ],
+    [
+     "w3",
+     "w4"
+    ],
+    [
+     "w4",
+     "v"
+    ],
+    [
+     "w4",
+     "w1"
+    ],
+    [
+     "w4",
+     "w2"
+    ],
+    [
+     "w3",
      "w1"
     ]
    ],

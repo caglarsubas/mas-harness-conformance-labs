@@ -1,9 +1,12 @@
-# MAS adversarial and resilience simulation suite, packets 1 and 2 (CONF-MAS-001, CONF-MAS-002)
+# MAS adversarial and resilience simulation suite, packets 1 to 3 (CONF-MAS-001, CONF-MAS-002, CONF-MAS-003)
 
-This suite is roadmap item MAS-RA-010, packets 1 and 2. It runs offline and uses only the Python 3.12 standard library.
+This suite is roadmap item MAS-RA-010, packets 1 to 3. It runs offline and uses only the Python 3.12 standard library.
 Packet 1 (CONF-MAS-001) built the harness and classes C1 to C4. Packet 2 (CONF-MAS-002), the security half, adds C5 to C7
 and the rules they need; see [Packet 2](#packet-2-conf-mas-002-the-security-half). Packet 1's four ledger rows are
 byte-identical to CONF-MAS-001's.
+Packet 3 (CONF-MAS-003), the resilience half, adds C8 to C10, the MAS1-CARRY-1 worker-policy arms and the CONF-A3-001
+campaign record; see [Packet 3](#packet-3-conf-mas-003-the-resilience-half). Packets 1 and 2's seven ledger rows are
+byte-identical to CONF-MAS-002's.
 
 It is an independent test campaign in the owner's sense (HO-D2), but it is **not** an R12 campaign definition (AGENTS
 rules 11 and 17). It feeds CONF-A3-001 as an input, not as a gate, and it makes no product or scope decision.
@@ -39,6 +42,8 @@ The Q-MAS1-* ids belong to this packet. They are not MAS-RA-001's Q-MAS1-A..C.
 The rules are restated, in R12's own words, from harness-onion main `27c54605a3dcdbe86522a6bd18a5e19faa5cb40b`
 (packet 2's re-pin, owner decision Q-NX2-3 (a)). Packet 1's nine files are byte-identical at its own pin `35b733b5`. No
 bytes were copied.
+Packet 3 (CONF-MAS-003) re-pins to harness-onion main `585364b94e3e4a8bf1418ef750ce3d71cd38f95a` (owner decision Q-NX3-4
+(a)): the ten files below are byte-identical at `27c54605` and `585364b`, and `contracts.json` records `585364b`.
 
 `contracts.json` pins the source files:
 
@@ -367,3 +372,83 @@ arms on the same seeds. The bounds and the parameters are unchanged; any FAIL is
 **Not claimed (packet 2):** the probe readings behind the expected FAILs were approximations of C5 and C7 on packet 1's
 engine, made in design review; they are not results. C5's measurement is one adversary script, a lower bound on harm.
 Redaction is H11's duty as agent-loop cites it, not a rule of a pinned file.
+
+## Packet 3 (CONF-MAS-003): the resilience half
+
+- **Owner decisions** (2026-10-20, via the lane monitor; recorded verbatim in the packet's YAML):
+  - Q-NX3-1..6 (a): one packet; the arms ungated and preregistered; the campaign record an R12 data record; the re-pin
+    at harness-onion main; the full set of events; argv 14 one command.
+  - Q-D3-1 (a): C9's duplicated-work bound is an expected FAIL, by construction.
+  - Q-R5-CAP (a): design review closed after round 5, with its findings folded into binding build rules.
+- **Pins.** `contracts.json` records harness-onion `585364b`. The ten files are byte-identical at `27c54605`.
+- **Attestation.** Packet 3's own clean-room attestation is `attestation-p3.json`. Packet 2's `attestation.json` is
+  unchanged.
+- **C8 AGENT_LOSS_PARTIAL_OBSERVABILITY** (CENTRAL, latency 0; roles w_a and w_b per seed from `sched-c8`):
+  - E1, a holder crash: w_a crashes after launching its first READ (a FAULT row). Defence: lease expiry.
+  - E2, a lost answer: the coordinator retries a dropped ASSIGN answer and gets the historical answer. Defence: retry
+    repetition, then HELD, then the version check.
+  - E3, a coordinator restart: the coordinator resumes its tick-0 ASSIGNs with stale versions. Defence: the version
+    check.
+  - Readings: recovery time and assignments to the crashed worker (F-C8-1).
+- **C9 DEADLOCK_LIVELOCK** (DECENTRALIZED_C9, latency 3):
+  - E1, an instructed wait cycle: ended by the loop's wall-clock budget (`wallTicks` 100).
+  - E2, a revision livelock: every READ of one claim is poisoned. Ended by the revision bound (`rounds` 3), with the
+    iterations budget behind it.
+  - The relay cycle E3 is an ungated measurement in runs to the deadline (F-C9-1, F-C9-2).
+- **C10 MERGE_CORRECTNESS** (DECENTRALIZED, latency 3; scripted faults):
+  - a MERGE on a superseded verdict;
+  - a MERGE of stale bytes after a revision;
+  - two merges racing;
+  - a MERGE after the claim expired.
+  C10 exercises packet 1's unexercised invariants `doubleMerge` and `nonHolderAccepted` (F-C10-1).
+- **Arms** (MAS1-CARRY-1; ungated; top-level `arms` in the ledger). These run on C2, C3, C4, C5 and C7 beside packet 1's
+  baseline, which stays the gated one:
+  - A1, renew-aware merge (`maxResends` 2);
+  - A2, renew headroom (`renewAtRemaining` 6);
+  - A3, poison back-off (`maxReReads` 2).
+- **Depth engagement.** Packet 3's depth checks count engagement only over rows tagged with their event. Packet 1's
+  depth checks are unchanged, and their event-scoped engagement is a reading in the campaign record. `event_path`
+  still counts any tagged JUDGE row as reached (P2-3); no result rests on that.
+- **P1-8.** `timeoutExceeded` no longer judges a READ whose caller's claim ended, or whose caller crashed, by its due
+  tick.
+- **Campaign record.** `campaign-record.json` (`r12.mas-campaign-record/v1`) is the CONF-A3-001 input. It holds the
+  three packets' ledger digests, class results and gates, recorded FAILs, findings, the arms' duplicated-work
+  quantiles and the event-scoped readings. It is not a gate.
+- **Results** (the first ledger, regenerated byte for byte by argv 14):
+  - Packets 1 and 2's seven class rows are byte-identical to CONF-MAS-002's.
+  - C8 and C10 PASS every gate.
+  - C9 FAILs only `ratioBounds.duplicatedWorkRatioPpm`, preregistered as expected (Q-D3-1 (a)): p50 200,000, p95
+    285,714, max 303,030, against 50,000, 100,000 and 250,000. Lost work is 0 and completion is 1,000,000 in every seed.
+    - The p50 and p95 sub-bounds fail on the events' stated cause alone: every seed is at least 6/37 = 162,162.
+    - The max sub-bound breach comes from F-C9-3 alone (below). The stated cause gives at most about 230,769, and
+      F-C9-3's four seeds read 270,270 to 303,030.
+  - The false gates of the whole ledger are exactly C2's, C5's, C7's and C9's duplicated-work bounds.
+  - Each of the 10 new controls fires through its event in all 32 seeds, and each of the 6 new depth checks holds,
+    event-scoped, in all 32.
+  - C10's duplicated work: p50 35,714, p95 40,000, max 161,290.
+
+  | Reading (ungated) | p50 | p95 | min / max |
+  |---|---|---|---|
+  | C8 `recoveryTicks` | 8 | 56 | min 8 |
+  | C8 `assignmentsToCrashed` (F-C8-1) | 5 | 6 | max 6 |
+  | C9 relay `relayDeliveries` (601 ticks) | 601 | 601 | 601 |
+  | C9 relay `relayLastTick` | 600 | 600 | 600 |
+
+  - C9's relay runs have the same five work readings as its defended runs, seed for seed (F-C9-1).
+  - Packet 1's depth checks, read event-scoped, each engage through their event in 32 of 32 seeds: C2-GATE-OFF and
+    C2-VERIFIER-OFF through E1, C3-DEDUPE-OFF through E3, C3-RETRY-OFF through E4.
+  - **Arms** (ungated; duplicated-work p95, arm against baseline):
+    - A1 brings C5 (47,619 against 178,571) and C7 (0 against 142,857) within packet 1's three duplicated-work bounds.
+      C3 and C4 were already within them and stay within, at a slightly higher p95 (47,619 against 45,454 and 41,666).
+      C2 is unchanged at latency 0.
+    - A2 raises the duplicated-work p95 in C3 (156,250), C4 (191,489) and C7 (210,526), past the 100,000 bound. In C5
+      its quantiles fall slightly (p95 166,666 against 178,571), though its duplicate-WORK total rises (80 against 44).
+      C2 is unchanged.
+    - A3 brings C2 to 0 (against 133,333), within all three bounds. It never triggers in the unpoisoned classes, which
+      stay identical to the baseline.
+- **Finding at build time (F-C9-3, for the packet review).**
+  - In seeds 1, 8, 16 and 27, a clean C9 claim also reaches the revision bound through packet 1's carried
+    MAS1-CARRY-1 (a holder's own RENEW overtakes its MERGE at latency 3), logging an untagged REVISION_BOUND.
+  - That adds duplicated work beyond the six explained duplicates of C9's events that DESIGN section 5 states (E2's
+    four and E1's two). In those four seeds it alone takes C9 past the 250,000 max sub-bound.
+  - C9's expected FAIL stays preregistered for that metric only. No parameter changes, and the owner is told.

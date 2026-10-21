@@ -20,7 +20,10 @@ RATIOS = ("duplicatedWorkRatioPpm", "lostWorkPpm", "completionPpm")
 # Q3-2 (a), owner, 2026-10-20: C5's and C7's duplicated-work bound is preregistered as an expected FAIL (packet 1's carried
 # revision exhaustion, MAS1-CARRY-1). Any other or missing FAIL is recorded as it reads and reported to the lane monitor;
 # this dict changes only with a recorded disposition.
-RECORDED_FAILS = {"C2": {"duplicatedWorkRatioPpm"}, "C5": {"duplicatedWorkRatioPpm"}, "C7": {"duplicatedWorkRatioPpm"}}
+# Q-D3-1 (a), owner, 2026-10-20: C9's duplicated-work bound is preregistered as an expected FAIL, by construction (its
+# events' explained duplicates: E2's four and E1's two; CONF-MAS-003 DESIGN revision 6, section 5).
+RECORDED_FAILS = {"C2": {"duplicatedWorkRatioPpm"}, "C5": {"duplicatedWorkRatioPpm"}, "C7": {"duplicatedWorkRatioPpm"},
+                  "C9": {"duplicatedWorkRatioPpm"}}
 
 
 class LedgerTests(unittest.TestCase):
@@ -42,13 +45,14 @@ class LedgerTests(unittest.TestCase):
 
     def test_the_ledger_is_closed_and_bound_to_its_parameters(self):
         value = _ledger.ledger()
-        self.assertEqual(sorted(value), ["classes", "classesSha256", "contractsCommit", "packet", "profile", "rule",
-                                         "schemaVersion", "seeds"])
+        self.assertEqual(sorted(value), ["arms", "classes", "classesSha256", "contractsCommit", "packet", "profile",
+                                         "rule", "schemaVersion", "seeds"])
         self.assertEqual((value["schemaVersion"], value["packet"], value["classesSha256"], value["seeds"]),
-                         ("r12.mas-simulation-results/v2", "CONF-MAS-002", CLASSES_SHA, list(range(1, 33))))
-        self.assertEqual([row["id"] for row in value["classes"]], ["C1", "C2", "C3", "C4", "C5", "C6", "C7"])
+                         ("r12.mas-simulation-results/v3", "CONF-MAS-003", CLASSES_SHA, list(range(1, 33))))
+        self.assertEqual([row["id"] for row in value["classes"]],
+                         ["C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8", "C9", "C10"])
         for row in value["classes"]:
-            extra = ["measurements"] if row["id"] == "C5" else []
+            extra = ["measurements"] if row["id"] in ("C5", "C8", "C9") else []
             self.assertEqual(sorted(row), sorted(["controls", "defended", "depthChecks", "gates", "id", "kind",
                                                   "parameters", "result", "unexercisedInvariants"] + extra))
             self.assertIn(row["result"], ("PASS", "FAIL"))
@@ -61,7 +65,7 @@ class DataFileTests(unittest.TestCase):
     def test_classes_json_is_preregistered_data(self):
         raw = (HERE / "classes.json").read_bytes()
         self.assertEqual(hashlib.sha256(raw).hexdigest(), CLASSES_SHA)
-        self.assertEqual(sorted(CONFIG), ["bounds", "classes", "controlGate", "grantTicks", "inputSchemas",
+        self.assertEqual(sorted(CONFIG), ["arms", "bounds", "classes", "controlGate", "grantTicks", "inputSchemas",
                                           "instructions", "manifest", "packet", "profiles", "schemaVersion", "seeds",
                                           "shared", "streams", "topologies", "unexercisedInvariants", "zeroTolerance"])
         self.assertEqual(CONFIG["seeds"], list(range(1, 33)))
@@ -71,7 +75,8 @@ class DataFileTests(unittest.TestCase):
         self.assertEqual(CONFIG["shared"]["items"], 20)
         kinds = {c["kind"] for c in CONFIG["classes"]}
         self.assertEqual(kinds, {"PEER_INJECTION", "POISONED_TOOL_RESULT", "REPLAY_STALE", "CLAIM_CONFLICT",
-                                 "COLLUSION_CONFLICTING_OBJECTIVES", "CROSS_AGENT_EXFILTRATION", "RESOURCE_EXHAUSTION"})
+                                 "COLLUSION_CONFLICTING_OBJECTIVES", "CROSS_AGENT_EXFILTRATION", "RESOURCE_EXHAUSTION",
+                                 "AGENT_LOSS_PARTIAL_OBSERVABILITY", "DEADLOCK_LIVELOCK", "MERGE_CORRECTNESS"})
         text = raw.decode("ascii")
         for forbidden in ("import", "lambda", "exec(", "http", "module", "handler"):
             self.assertNotIn(forbidden, text)  # declarative data: no code, module or handler names
