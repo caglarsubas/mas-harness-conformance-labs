@@ -952,7 +952,8 @@ class OracleDataTests(unittest.TestCase):
                                                "admin-input/v1": {"action": "string"}})
         self.assertIn("sched-c7", cfg["streams"])
         self.assertEqual(cfg["shared"]["concurrency"], 4)
-        self.assertEqual([c["id"] for c in cfg["classes"]], ["C1", "C2", "C3", "C4", "C5", "C6", "C7"])
+        # CONF-MAS-003 adds C8 to C10: scoped to packet 2's oracle classes, the config's first seven.
+        self.assertEqual([c["id"] for c in cfg["classes"]][:7], ["C1", "C2", "C3", "C4", "C5", "C6", "C7"])
         by_id = {c["id"]: c for c in cfg["classes"]}
         for cid, want in DESIGN_CLASSES.items():
             with self.subTest(cid=cid):
@@ -1053,7 +1054,8 @@ class OracleLedgerTests(unittest.TestCase):
 
     def test_exactly_the_three_preregistered_ratio_gates_are_false(self):
         false = set()
-        for row in self.doc["classes"]:
+        # CONF-MAS-003 adds C8 to C10 (C9 has its own expected FAIL): scoped to packet 2's oracle classes, C1 to C7.
+        for row in [r for r in self.doc["classes"] if r["id"] in ("C1", "C2", "C3", "C4", "C5", "C6", "C7")]:
             gates = row["gates"]
             self.assertEqual(set(gates), GATE_KEYS, row["id"])
             self.assertEqual(set(gates["ratioBounds"]), set(self.cfg["bounds"]), row["id"])
@@ -1067,8 +1069,10 @@ class OracleLedgerTests(unittest.TestCase):
         self.assertEqual(false, EXPECTED_FALSE_GATES)
 
     def test_results_controls_and_row_shapes(self):
-        self.assertEqual([row["id"] for row in self.doc["classes"]], ["C1", "C2", "C3", "C4", "C5", "C6", "C7"])
-        self.assertEqual({cid: row["result"] for cid, row in self.rows.items()}, EXPECTED_RESULTS)
+        # CONF-MAS-003 adds C8 to C10: scoped to packet 2's oracle classes, the ledger's first seven and their results.
+        self.assertEqual([row["id"] for row in self.doc["classes"]][:7], ["C1", "C2", "C3", "C4", "C5", "C6", "C7"])
+        self.assertEqual({cid: row["result"] for cid, row in self.rows.items()
+                          if cid in ("C1", "C2", "C3", "C4", "C5", "C6", "C7")}, EXPECTED_RESULTS)
         by_id = {c["id"]: c for c in self.cfg["classes"]}
         seeds = len(self.cfg["seeds"])
         for cid in ("C5", "C6", "C7"):

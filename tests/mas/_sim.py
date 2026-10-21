@@ -1,7 +1,8 @@
-"""CONF-MAS-001 and CONF-MAS-002: the deterministic multi-agent simulation harness (Python 3.12 standard library only).
+"""CONF-MAS-001 to CONF-MAS-003: the deterministic multi-agent simulation harness (Python 3.12 standard library only).
 
 The harness restates, in R12's own words, rules of four merged harness-onion contracts at
-27c54605a3dcdbe86522a6bd18a5e19faa5cb40b (ten pins in contracts.json; packet 1's nine are byte-identical at 35b733b5):
+585364b94e3e4a8bf1418ef750ce3d71cd38f95a (ten pins in contracts.json, byte-identical at 27c54605, packet 2's pin; packet
+1's nine are byte-identical at 35b733b5):
 topology and coordination v1 (A1, A2), the agent loop and tool gateway (A1 to A3), run manifest v1 and the verdict
 ledger. No contract bytes are copied. [sim mapping] marks this suite's own mapping of a contract rule onto the
 simulation. Nothing here reads a file, opens a network or a process, or reads a clock: a run is a pure function of its
@@ -10,6 +11,12 @@ class parameters, its seed and its control.
 Packet 2 adds, always on and inert for packet 1: issued grants with reuse, match and expiry checks, input validity, the
 closed message body and DELIVERY canary hits. Switched on only by class keys packet 1's classes lack: budgets, retries and
 timeouts (the kernel), scheduled tool faults, per-node objectives and admission, redaction and the credential rule.
+
+Packet 3 adds, switched on only by class keys or run parameters packets 1 and 2 lack (DESIGN revision 6, section 4):
+crashes (FAULT rows), dropped answers to the coordinator and its gated overdue retry, coordinator restart and
+resumption, the wall-clock budget and the revision bound (each kernel check under its own `budgets` key), the bypasses
+EXPIRY, WALL_CLOCK, REVISION_BOUND, SINGLE_MERGE, HOLDER, WORK_VERDICT and SUPERSESSION, the run parameter
+`until_deadline`, and the arms' worker policies (run parameter `arm`).
 
 The agents are scripted and susceptible: they try what an attack directs. The defences live only in the harness
 components (the board, the gateway and its grant issuer, the gates and the verifier), never in the agents.
@@ -25,7 +32,7 @@ FIELDS = ("t", "kind", "agent", "from", "to", "item", "op", "opId", "retryOf", "
           "grantId", "grantToolId", "grantManifestDigest", "grantScope", "grantExpiresAt", "inputKeys", "attempt",
           "iteration", "objectiveId", "heldBefore", "bodyKeys")
 KINDS = ("BOARD_ANSWER", "EXPIRY", "DELIVERY", "OBSERVE", "TOOL_CALL", "GATE", "VERDICT", "SINK", "WORK", "ADMISSION",
-         "KERNEL", "PLAN")
+         "KERNEL", "PLAN", "FAULT")
 # The closed message body (section 2.3): the envelope keys are the sim's; everything else is the checked body.
 ENVELOPE = ("opId", "agent", "op", "item", "lane", "event", "retryOf")
 BODY_KEYS = ("to", "messageType", "requiredAction", "ref")
@@ -160,7 +167,15 @@ class Board:
                 continue
             live = []
             for claim in rec["claims"]:
-                if claim["leaseUntil"] <= t:
+                if claim["leaseUntil"] <= t and "EXPIRY" in self.sim.bypass:
+                    # CONF-MAS-003: leases do not expire; one SKIPPED row per claim at its lease end (section 4).
+                    if not claim.get("expirySkipped"):
+                        claim["expirySkipped"] = True
+                        self.sim.log.add(t, "EXPIRY", agent=claim["holder"], item=item, claimOpId=claim["claimOpId"],
+                                         leaseUntil=claim["leaseUntil"], component="BOARD", answer="SKIPPED",
+                                         controlBypass="EXPIRY", scheduledEvent=claim.get("event"))
+                    live.append(claim)
+                elif claim["leaseUntil"] <= t:
                     rec["version"] += 1
                     self.sim.log.add(t, "EXPIRY", agent=claim["holder"], item=item, claimOpId=claim["claimOpId"],
                                      leaseUntil=claim["leaseUntil"], component="BOARD",
@@ -299,6 +314,16 @@ class Board:
         if claim is None and op["op"] == "RELEASE" and sim.mode == "CENTRAL" and op["agent"] == sim.coordinator \
                 and rec["claims"]:
             claim = rec["claims"][0]
+        if claim is None and op["op"] == "MERGE":
+            # CONF-MAS-003 (section 4): HOLDER acts only on a HELD record with a live claim; SINGLE_MERGE only on a
+            # MERGED record, for the merged claim's holder.
+            if rec["state"] == "HELD" and rec["claims"] and "HOLDER" in sim.bypass:
+                claim = rec["claims"][0]
+                bypassed.append("HOLDER")
+            elif rec["state"] == "MERGED" and "SINGLE_MERGE" in sim.bypass and rec.get("mergedClaimObj") is not None \
+                    and rec["mergedClaimObj"]["holder"] == op["agent"]:
+                claim = rec["mergedClaimObj"]
+                bypassed.append("SINGLE_MERGE")
         if claim is None:
             return finish("NOT_HOLDER")
         info["claimOpId"] = claim["claimOpId"]
@@ -320,13 +345,18 @@ class Board:
         work = op.get("workDigest")
         on_work = [v for v in claim["verdicts"] if v["workDigest"] == work]
         info["verdictStatus"] = on_work[-1]["status"] if on_work else None
-        refusal = None
-        if not claim["verdicts"]:
-            refusal = "NO_VERDICT"
-        elif not on_work:
-            refusal = "WORK_MISMATCH"
-        elif on_work[-1]["status"] != "PASS":
-            refusal = "VERDICT_NOT_PASS"
+        refusal = verdict_refusal(claim["verdicts"], on_work, first=False)
+        # CONF-MAS-003 (section 4): WORK_VERDICT reads the claim's latest verdict across all works; SUPERSESSION reads the
+        # first verdict on the named work. Each is named only when it turns a refusal into an acceptance; the row's
+        # verdictStatus stays the latest status on the named work.
+        if refusal is not None and "WORK_VERDICT" in sim.bypass \
+                and verdict_refusal(claim["verdicts"], claim["verdicts"], first=False) is None:
+            bypassed.append("WORK_VERDICT")
+            refusal = None
+        if refusal is not None and "SUPERSESSION" in sim.bypass \
+                and verdict_refusal(claim["verdicts"], on_work, first=True) is None:
+            bypassed.append("SUPERSESSION")
+            refusal = None
         if refusal is not None:
             if "MERGE_VERDICT" in sim.bypass:
                 bypassed.append("MERGE_VERDICT")
@@ -334,6 +364,7 @@ class Board:
                 return finish(refusal)
         raw = sim.artefacts.get(work, b"")
         rec["state"], rec["mergedClaim"], rec["claims"] = "MERGED", claim["claimOpId"], []
+        rec["mergedClaimObj"] = claim
         rec["version"] += 1
         info.update(changed=True, markerPresent=MARKER.encode("ascii") in raw, canaryHits=sim.canary_hits(raw))
         return finish(ACCEPTED)
@@ -390,6 +421,17 @@ class Board:
         answer = finish(ACCEPTED)
         sim.deliver_message(t, op, bypassed)
         return answer
+
+
+def verdict_refusal(verdicts: list[dict], on_work: list[dict], first: bool) -> str | None:
+    """MERGE's verdict refusals in packet 1's order: NO_VERDICT, WORK_MISMATCH, VERDICT_NOT_PASS (None when it passes).
+    `first` reads the first verdict on the work instead of the latest (the SUPERSESSION bypass only)."""
+    if not verdicts:
+        return "NO_VERDICT"
+    if not on_work:
+        return "WORK_MISMATCH"
+    status = (on_work[0] if first else on_work[-1])["status"]
+    return None if status == "PASS" else "VERDICT_NOT_PASS"
 
 
 def body_of(op: dict) -> tuple:
@@ -492,8 +534,15 @@ class Gateway:
 class Sim:
     """One run: a class, a seed and a control (the bypassed checks, or none for the defended run)."""
 
-    def __init__(self, config: dict, cls: dict, seed: int, bypass: tuple[str, ...], scenario) -> None:
+    def __init__(self, config: dict, cls: dict, seed: int, bypass: tuple[str, ...], scenario, *, arm: str | None = None,
+                 until_deadline: bool = False) -> None:
         self.config, self.cfg, self.seed = config, cls, seed
+        # CONF-MAS-003 run parameters (section 4): an arm's worker policy (section 6) and the relay measurement's run
+        # to the deadline. Both default to packet 1's behaviour.
+        self.arm = arm
+        self.arm_policy = next((p for p in config.get("arms", {}).get("policies", []) if p["id"] == arm), None)
+        self.until_deadline = until_deadline
+        self.crashed: set[str] = set()
         self.shared = config["shared"]
         topo = config["topologies"][cls["topology"]]
         self.mode, self.coordinator, self.workers = topo["mode"], topo["coordinator"], list(topo["workers"])
@@ -572,6 +621,12 @@ class Sim:
                              objectiveId=objective, scheduledEvent=event)
                 self.admitted.discard(agent)
 
+    def tag_claim(self, item: int, claim_op_id: str, event: str | None) -> None:
+        """Tag a board claim with an event, so its EXPIRY row carries it (C3 E1's pattern; CONF-MAS-003)."""
+        for claim in self.board.records[item]["claims"]:
+            if claim["claimOpId"] == claim_op_id:
+                claim["event"] = event
+
     def canary_hits(self, raw: bytes) -> list[str]:
         return sorted(a for a, value in self.canaries.items() if value.encode("ascii") in raw)
 
@@ -635,7 +690,7 @@ class Sim:
         for t in range(self.cfg["deadline"] + 1):
             self.scenario.before_tick(self, t)
             for agent in self.order:
-                if agent in self.admitted:
+                if agent in self.admitted and agent not in self.crashed:
                     self.agents[agent].step(t)
             arriving = sorted((x for x in self.inflight_ops if x[0] <= t), key=lambda x: (x[0], x[1], x[2], x[3]))
             self.inflight_ops = [x for x in self.inflight_ops if x[0] > t]
@@ -647,7 +702,7 @@ class Sim:
             self.inflight_in = [x for x in self.inflight_in if x[0] > t]
             for _arrival, _seq, agent, payload in due:
                 self.agents[agent].inbox.append(payload)
-            if self.done():
+            if self.done() and not self.until_deadline:
                 break
         return self.log.rows
 
@@ -698,12 +753,23 @@ class Coordinator(Agent):
     def __init__(self, sim: Sim, aid: str) -> None:
         super().__init__(sim, aid)
         self.rr = 0
+        # CONF-MAS-003: the durable record of the ASSIGNs sent (tick, item, worker, expectedVersion), from which a
+        # restarted coordinator resumes, and the tick of a restart, at which it takes no other step (section 4).
+        self.record: list[tuple] = []
+        self.restart_tick = None
 
     def step(self, t: int) -> None:
+        if self.restart_tick == t:
+            return
         for msg in self.take_inbox():
             if msg["type"] == "ANSWER":
-                self.pending.pop(msg["opId"], None)
+                entry = self.pending.pop(msg["opId"], None)
+                if entry is not None and "retryOfPending" in entry:
+                    self.pending.pop(entry["retryOfPending"], None)
         sim = self.sim
+        if sim.cfg.get("drops"):
+            # CONF-MAS-003 (section 4): only in a class with `drops`, packet 1's overdue retry for the coordinator.
+            self.retry_overdue(t)
         snap = sim.board.read(t)
         holders = {h for _state, _version, hs in snap.values() for h in hs}
         pending_items = {e["op"]["item"] for e in self.pending.values()}
@@ -726,6 +792,7 @@ class Coordinator(Agent):
             self.rr = (sim.workers.index(choice) + 1) % len(sim.workers)
             lane = (choice, item) in sim.lane_items
             self.send(t, self.new_op(t, "ASSIGN", item, lane=lane, to=choice, expectedVersion=version))
+            self.record.append((t, item, choice, version))
             pending_workers.add(choice)
             held += 1
 
@@ -752,8 +819,12 @@ class Verifier(Agent):
                 self.send(t, self.new_op(t, "MESSAGE", None, lane=entry["op"].get("lane", False), to=verdict["holder"],
                                          messageType="DEPENDENCY", requiredAction="NONE", ref=ref,
                                          event=entry["op"].get("event")))
+                self.after_verdict(t, entry["op"])
             elif msg["type"] == "MESSAGE" and msg["messageType"] == "TEST" and msg["from"] in sim.workers:
                 self.judge(t, msg)
+
+    def after_verdict(self, t: int, op: dict) -> None:
+        """A hook after an accepted verdict's notice is sent; packet 1's verifier does nothing (C10's scripted one does)."""
 
     def judge(self, t: int, msg: dict) -> None:
         sim, ref = self.sim, msg["ref"]
@@ -804,7 +875,10 @@ class Worker(Agent):
     def take_claim(self, t: int, item: int, claim: str, version: int, lease: int) -> None:
         self.hold = {"item": item, "claimOpId": claim, "version": version, "leaseUntil": lease, "phase": "START",
                      "until": None, "reads": [], "artefact": None, "revisions": 0, "works": 0, "event": None,
-                     "verdict": None, "context": [], "iterations": 0, "attempt": 0}
+                     "verdict": None, "context": [], "iterations": 0, "attempt": 0,
+                     # CONF-MAS-003: the take tick (the wall-clock budget) and a claim-wide event tag kept across
+                     # revisions (None in packets 1 and 2).
+                     "takenAt": t, "tag": None}
         self.sim.scenario.on_claim(self.sim, self, t)
 
     def abandon(self) -> None:
@@ -826,8 +900,12 @@ class Worker(Agent):
         if self.compromised:
             self.retry_overdue(t)
             return
+        if self.hold is not None:
+            self.wall_clock(t)
         if self.hold is not None and self.progress(t):
             return
+        if self.id in sim.crashed:
+            return  # CONF-MAS-003: a crash ends the agent's step and every later one (section 4)
         self.renew(t)
         self.run_todo(t)
         self.retry_overdue(t)
@@ -845,6 +923,22 @@ class Worker(Agent):
         snap = self.sim.board.read(t)
         state, _version, holders = snap[self.hold["item"]]
         return state == "HELD" and self.id in holders
+
+    def wall_clock(self, t: int) -> None:
+        """CONF-MAS-003 (section 2.2) [sim mapping of wallClockSeconds]: with `wallTicks` in the class's budgets, the
+        loop's step at or after take tick + wallTicks is refused BUDGET_EXHAUSTED and the loop ends; the rest of the
+        worker's step still runs. WALL_CLOCK bypasses it: one WALL_OVERRUN row, and the loop goes on."""
+        sim, hold = self.sim, self.hold
+        budgets = sim.budgets()
+        if not budgets or "wallTicks" not in budgets or t < hold["takenAt"] + budgets["wallTicks"]:
+            return
+        if "WALL_CLOCK" in sim.bypass:
+            if not hold.get("wallOverrun"):
+                hold["wallOverrun"] = True
+                self.kernel_row(t, "WALL_OVERRUN", hold["event"], bypass="WALL_CLOCK")
+            return
+        self.kernel_row(t, "BUDGET_EXHAUSTED", hold["event"])
+        self.end_loop()
 
     def handle(self, t: int, msg: dict) -> None:
         sim = self.sim
@@ -885,6 +979,7 @@ class Worker(Agent):
         if kind == "RENEW":
             if answer == ACCEPTED:
                 self.hold["version"], self.hold["leaseUntil"] = msg["version"], msg["leaseUntil"]
+                self.hold.setdefault("renewedFrom", []).append(op["expectedVersion"])  # A1's evidence (section 6)
             elif answer == "NOT_HOLDER":
                 self.abandon()
             elif answer == "STALE_VERSION":
@@ -897,10 +992,31 @@ class Worker(Agent):
             else:
                 if answer == "STALE_VERSION":
                     self.resync(t)  # re-read the record's version, then revise like any other refusal (rev 4)
+                    if self.hold is not None and self.renew_aware_resend(t, op):
+                        return
                 if self.hold is not None:
                     self.revise(t)
         elif kind == "RELEASE":
             self.hold = None
+
+    def renew_aware_resend(self, t: int, op: dict) -> bool:
+        """Arm A1 only (section 6): a MERGE sent with version v and refused STALE_VERSION is re-sent with v + 1, without a
+        revision, when the worker has read an ACCEPTED answer to its own RENEW sent with v, still holds at v + 1 after
+        its resync, and the MERGE's work is the hold's current work; at most maxResends per work."""
+        sim, hold = self.sim, self.hold
+        if sim.arm != "A1":
+            return False
+        v = op["expectedVersion"]
+        resends = hold.setdefault("resends", {})
+        if v not in hold.get("renewedFrom", []) or hold["version"] != v + 1 \
+                or op["workDigest"] != hold.get("workDigest") \
+                or resends.get(op["workDigest"], 0) >= sim.arm_policy["maxResends"]:
+            return False
+        resends[op["workDigest"]] = resends.get(op["workDigest"], 0) + 1
+        hold["phase"] = "MERGING"
+        self.send(t, self.new_op(t, "MERGE", hold["item"], lane=self.lane(hold["item"]), expectedVersion=hold["version"],
+                                 workDigest=op["workDigest"], event=op.get("event")))
+        return True
 
     def resync(self, t: int) -> None:
         state, version, holders = self.sim.board.read(t)[self.hold["item"]]
@@ -909,15 +1025,30 @@ class Worker(Agent):
         else:
             self.abandon()
 
-    def revise(self, t: int) -> None:
-        """After a gate FAIL or a refused MERGE: revise (a new READ and WORK) at most maxRevisions times, then RELEASE."""
-        hold = self.hold
-        if hold["revisions"] >= self.sim.shared["maxRevisions"]:
-            hold["phase"] = "RELEASE_READY"
-            self.release_when_ready(t)
-            return
+    def revise(self, t: int, gate_fail: bool = False) -> None:
+        """After a gate FAIL or a refused MERGE: revise (a new READ and WORK) at most maxRevisions times, then RELEASE.
+        CONF-MAS-003: with `rounds` in the class's budgets the bound is `rounds` and the kernel logs REVISION_BOUND before
+        the RELEASE (REVISION_BOUND bypasses it: one REVISION_OVERRUN row, and revisions go on); a claim tag survives the
+        revision; arm A3 checks the revision's READ after a merge-policy FAIL (section 6)."""
+        sim, hold = self.sim, self.hold
+        budgets = sim.budgets() or {}
+        rounds = "rounds" in budgets
+        bound = budgets["rounds"] if rounds else sim.shared["maxRevisions"]
+        if hold["revisions"] >= bound:
+            if rounds and "REVISION_BOUND" in sim.bypass:
+                if not hold.get("revisionOverrun"):
+                    hold["revisionOverrun"] = True
+                    self.kernel_row(t, "REVISION_OVERRUN", hold["event"], bypass="REVISION_BOUND")
+            else:
+                if rounds:
+                    self.kernel_row(t, "REVISION_BOUND", hold["event"])
+                hold["phase"] = "RELEASE_READY"
+                self.release_when_ready(t)
+                return
         hold["revisions"] += 1
-        hold.update(phase="START", reads=[], artefact=None, verdict=None, event=None, workDigest=None)
+        hold.update(phase="START", reads=[], artefact=None, verdict=None, event=hold.get("tag"), workDigest=None)
+        if gate_fail and sim.arm == "A3":
+            hold["backoff"] = {"reReads": 0}
 
     def release_when_ready(self, t: int) -> None:
         """RELEASE, once no RENEW on the item is unanswered (Q-MAS1-F2)."""
@@ -948,7 +1079,8 @@ class Worker(Agent):
             hold["works"] += 1
             sim.log.add(t, "WORK", agent=self.id, item=hold["item"], claimOpId=hold["claimOpId"], workDigest=work,
                         markerPresent=MARKER.encode("ascii") in raw, canaryHits=sim.canary_hits(raw), component="WORK",
-                        scheduledEvent=hold["event"], iteration=hold["iterations"])
+                        scheduledEvent=hold["event"], iteration=hold["iterations"],
+                        controlBypass="BUDGET" if self.over_budget else None)
             stall = sim.scenario.stall_after_work(sim, self, t)
             if stall:
                 self.stalled_until = t + shared["stallTicks"]
@@ -957,11 +1089,20 @@ class Worker(Agent):
             self.send(t, self.new_op(t, "MESSAGE", None, lane=self.lane(hold["item"]), to=sim.verifier_of(self.id),
                                      messageType="TEST", requiredAction="ACKNOWLEDGE", ref=ref, event=hold["event"]))
             hold["phase"] = "AWAIT_VERDICT"
-        elif hold["phase"] == "MERGE_READY" and not self.item_pending(exclude_renew=False):
+        elif hold["phase"] == "MERGE_READY" and not self.item_pending(exclude_renew=False) and not self.waiting(t):
             self.merge(t, hold["artefact"], hold["workDigest"], hold["event"], instructed=False)
         elif hold["phase"] == "RELEASE_READY":
             self.release_when_ready(t)
         return False
+
+    def waiting(self, t: int) -> bool:
+        """C9's WAIT_FOR_MERGE (section 5): the claim held when the instruction was obeyed is not merged until the named
+        item's record is MERGED. Packets 1 and 2 never set it."""
+        wait_for = self.hold.get("waitFor")
+        if wait_for is None:
+            return False
+        state, _version, _holders = self.sim.board.read(t)[wait_for]
+        return state != "MERGED"
 
     # ------------------------------------------------------------------ the kernel [sim mapping], classes with budgets
     def start_read(self, t: int, attempt: int, kernel_bypass: tuple[str, ...] = ()) -> None:
@@ -977,6 +1118,7 @@ class Worker(Agent):
         hold.update(phase="READING", until=t + sim.shared["toolTicks"], attempt=attempt,
                     pending_read={"content": content, "event": event, "fault": fault, "launchedAt": t,
                                   "grantId": grant["grantId"] if grant else None, "overrun": False})
+        sim.scenario.after_read_launch(sim, self, t)
 
     def kernel_row(self, t: int, answer: str, event, grant_id=None, bypass: str | None = None) -> None:
         hold = self.hold
@@ -1032,6 +1174,20 @@ class Worker(Agent):
         if fault == "LOOP_DIRECTIVE":
             hold["phase"] = "LOOPING"  # this tick's progress ends with the OBSERVE
             return
+        backoff = hold.get("backoff")
+        if backoff is not None:
+            # Arm A3 (section 6): the merge-policy check on the re-READ's output; a marked re-READ is read again, at
+            # most maxReReads re-READs per revision, after which the revision goes ahead from the last one.
+            backoff["reReads"] += 1
+            raw_read = content.encode("utf-8")
+            marked = MARKER.encode("ascii") in raw_read
+            sim.log.add(t, "GATE", agent=self.id, item=hold["item"], workDigest=digest(raw_read),
+                        answer="FAIL" if marked else "PASS", component="GATE", toolId="merge-policy",
+                        markerPresent=marked, scheduledEvent=hold["event"])
+            if marked and backoff["reReads"] < sim.arm_policy["maxReReads"]:
+                hold.update(phase="START", reads=[])
+                return
+            hold.pop("backoff")
         long = (self.id, hold["item"]) in sim.long_items and hold["revisions"] == 0
         hold.update(phase="WORKING", until=t + (sim.shared["longWorkTicks"] if long else sim.shared["workTicks"]))
 
@@ -1055,7 +1211,7 @@ class Worker(Agent):
         budgets = sim.budgets()
         hold["iterations"] += 1
         self.over_budget = False
-        if budgets is None or hold["iterations"] <= budgets["iterations"]:
+        if budgets is None or "iterations" not in budgets or hold["iterations"] <= budgets["iterations"]:
             return True
         if "BUDGET" in sim.bypass:
             self.over_budget = True
@@ -1099,7 +1255,7 @@ class Worker(Agent):
         hold = self.hold
         if not self.merge_gate(t, raw, work, event):
             if not instructed:
-                self.revise(t)
+                self.revise(t, gate_fail=True)
             return
         op = self.new_op(t, "MERGE", hold["item"], lane=self.lane(hold["item"]) or instructed,
                          expectedVersion=hold["version"], workDigest=work, event=event)
@@ -1114,7 +1270,10 @@ class Worker(Agent):
         hold = self.hold
         if hold is None or hold["phase"] in ("RELEASE_READY", "RELEASING"):
             return
-        if hold["leaseUntil"] - t > self.sim.shared["renewAtRemaining"]:
+        remaining = self.sim.shared["renewAtRemaining"]
+        if self.sim.arm == "A2":
+            remaining = self.sim.arm_policy["renewAtRemaining"]  # arm A2 (section 6)
+        if hold["leaseUntil"] - t > remaining:
             return
         if any(e["op"]["op"] == "RENEW" and e["op"]["item"] == hold["item"] for e in self.pending.values()):
             return
@@ -1161,6 +1320,18 @@ class Worker(Agent):
                                 controlBypass="CREDENTIAL_RULE" if sim.cfg.get("credentialRule") else None, **fields)
                     if hold is not None:
                         hold["context"].append(sim.canaries[self.id])
+            elif instruction == "WAIT_FOR_MERGE":
+                # C9 E1 (section 5): bind the wait to the claim held now; the claim and its board record carry the event.
+                hold = self.hold
+                if hold is not None and msg["ref"].get("item") is not None:
+                    hold.update(waitFor=msg["ref"]["item"], tag=event, event=event)
+                    sim.tag_claim(hold["item"], hold["claimOpId"], event)
+            elif instruction == "RELAY_ON":
+                # C9's relay measurement (section 5): the same message to the ring successor, on the lane.
+                target = sim.cfg["relayRing"].get(self.id)
+                if target:
+                    self.send(t, self.new_op(t, "MESSAGE", None, lane=True, to=target, messageType=msg["messageType"],
+                                             requiredAction=msg["requiredAction"], ref={}, event=event))
             elif instruction == "RELAY_CONTENT":
                 # A susceptible agent sends the sender its current artefact bytes as ref.content (the board's closed
                 # body refuses it SHAPE).
