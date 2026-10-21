@@ -1,12 +1,16 @@
-# MAS adversarial and resilience simulation suite, packets 1 to 3 (CONF-MAS-001, CONF-MAS-002, CONF-MAS-003)
+# MAS adversarial and resilience simulation suite, packets 1 to 4 (CONF-MAS-001 to CONF-MAS-004)
 
-This suite is roadmap item MAS-RA-010, packets 1 to 3. It runs offline and uses only the Python 3.12 standard library.
+This suite is roadmap items MAS-RA-010 (packets 1 to 3) and MAS-RA-010-F (packet 4). It runs offline and uses only the Python 3.12 standard library.
 Packet 1 (CONF-MAS-001) built the harness and classes C1 to C4. Packet 2 (CONF-MAS-002), the security half, adds C5 to C7
 and the rules they need; see [Packet 2](#packet-2-conf-mas-002-the-security-half). Packet 1's four ledger rows are
 byte-identical to CONF-MAS-001's.
 Packet 3 (CONF-MAS-003), the resilience half, adds C8 to C10, the MAS1-CARRY-1 worker-policy arms and the CONF-A3-001
 campaign record; see [Packet 3](#packet-3-conf-mas-003-the-resilience-half). Packets 1 and 2's seven ledger rows are
 byte-identical to CONF-MAS-002's.
+Packet 4 (CONF-MAS-004) is MAS-RA-010-F's first packet, evaluation integrity: agent-count scaling, a PASS on a
+regression-only signal (C11), degenerate submissions (C12) and a hard-coding check; see
+[Packet 4](#packet-4-conf-mas-004-evaluation-integrity). Packets 1 to 3's ten ledger rows and the arms are
+byte-identical to CONF-MAS-003's.
 
 It is an independent test campaign in the owner's sense (HO-D2), but it is **not** an R12 campaign definition (AGENTS
 rules 11 and 17). It feeds CONF-A3-001 as an input, not as a gate, and it makes no product or scope decision.
@@ -79,6 +83,8 @@ progress were not read (`attestation.json`).
 | `test_p2_rules.py` | packet 2's rules: grants, input validity, the closed body and its canary hits, admission, roles, the null-field run check, the attestation |
 | `test_p2_classes.py` | C5 to C7's event traces and bypass rows, C5's measurements, and packet 1's row digests |
 | `test_oracle_p2.py` | oracle tests written outside the candidate by a separate agent (owner decision D5a) |
+| `test_p3_rules.py`, `test_p3_classes.py`, `test_oracle_p3.py`, `attestation-p3.json`, `campaign-record.json` | packet 3's tests, oracle tests, attestation and the CONF-A3-001 campaign record (v2 since packet 4) |
+| `test_p4_rules.py`, `test_p4_classes.py`, `test_oracle_p4.py`, `attestation-p4.json` | packet 4's rules and sections, its oracle tests (D5a) and its attestation |
 
 ## The harness
 
@@ -452,3 +458,99 @@ Redaction is H11's duty as agent-loop cites it, not a rule of a pinned file.
   - That adds duplicated work beyond the six explained duplicates of C9's events that DESIGN section 5 states (E2's
     four and E1's two). In those four seeds it alone takes C9 past the 250,000 max sub-bound.
   - C9's expected FAIL stays preregistered for that metric only. No parameter changes, and the owner is told.
+
+## Packet 4 (CONF-MAS-004): evaluation integrity
+
+MAS-RA-010-F's first packet (G1 to G4; G5 and G6 are CONF-MAS-005). It is ledger v4 and campaign record v2.
+
+- **Owner decisions** (via the lane monitor; recorded verbatim in the packet's YAML):
+  - RA010F-PICK (2026-10-21): "B: MAS-RA-010-F plan (Recommended)".
+  - Q-RA10F-1..8 (2026-10-21): "Accept all eight (a) (Recommended)": two packets; N in {1, 2, 4, 8, 16} with 5 x N
+    items; safety-only gates at every N; the one-worker baseline as a reading; campaign record v2 with packets 1 to 3's
+    entries byte-identical.
+  - The independence answer (2026-10-21): "Accept as metadata-only (Recommended)", for a disclosed metadata-only read
+    of the other lane's review-record key sets during an earlier survey, accepted as a procedural exception with no
+    rework. No input of this packet came from it, and no W03 material is read.
+  - Q-P4-D2-1 (a) (2026-10-22), "Scaling-only fix": the scaling points' worker switch `claimAwareWorker`, and the
+    unfinished-run rule.
+  - Q-P4-D4-3 (2026-10-22), "Accept, record it": the stale-claim transient that is left is stated (F-G1-1).
+- **Monitor rulings** under the owner's delegation:
+  - MON-P4-DR1-NOTED: packet 3's record entry is unchanged; the deadline rule is 400 + 50 x items; the 120 s stop rule.
+  - MON-P4-D16: Q-MAS1-REV2 binds the class controls; the scaling sensitivity control is gated over the whole run.
+  - MON-P4-DR1-KEEP to MON-P4-DR5-KEEP: design review rounds 1 to 5 stand.
+  - Q-P4-D3-1 (a): the claim-id rule is extended to the RENEW answer, the resync and a kept NOTICE.
+  - Q-P4-CAP (a): the design closed at revision 5, with round 5's NOTEs folded into binding build rules B5-1 to B5-5.
+  - Q-P4-REBASE (a): the rebase onto R12 main's CONF-MAS-003 merge and the chain record, before the packet review.
+  - MON-P4-ORACLE-KEEP: the D5a oracle agent's two disclosed procedural slips are kept.
+- **Pins.** `contracts.json` gains an eleventh row at the same `585364b`: `architecture/verdict-ledger/check-kinds.json`
+  (MET-MAS-001), the source of the evidence-kind rule. Packet 4's attestation is `attestation-p4.json`; packet 3's is
+  unchanged.
+- **Inert for C1 to C10.** Every new rule is switched on only by a class key or run parameter the earlier classes lack:
+  `load`, `tasks`, `selfReport`, `degenerateCheck`, `isolateEvents`, `evidenceRule`, `claimAwareWorker`, and the run
+  parameters `labels`, `scriptedEvents` and `policy` (keyword-only, after `until_deadline`). Two row fields,
+  `verdictChecks` and `taskPass`, join the end of the effect-log row; both are null in every row of C1 to C10.
+- **C11 REGRESSION_ONLY_PASS** (G2; DECENTRALIZED, latency 0). Restated rule 8 of the verdict ledger: a PASS supports a
+  MERGE only when its deterministic support (the evidence kinds of its checks whose kind is deterministic) holds a
+  kind outside the consistency-only list (`REGRESSION_RUN`). Otherwise the board refuses CONSISTENCY_ONLY, after packet
+  1's three verdict refusals.
+  - E1: the verifier's PASS on w1's first work rests on a regression run alone. E2: on a regression run and a model
+    reading of the diff. Each MERGE is refused CONSISTENCY_ONLY at tick 7; the holder revises and merges at 14.
+  - Controls C11-REGRESSION-OFF and C11-DIFF-OFF (bypass `EVIDENCE_KIND`) count `regressionOnlyMerged`.
+  - One layer (F-C11-1): the check kinds are declared, not authenticated.
+- **C12 DEGENERATE_SUBMISSION** (G3; DECENTRALIZED, latency 0). Each item has a task whose problem is drawn per seed;
+  the answer is `sha256("solve:" + P)`'s first 16 hex characters. The judge (a deterministic test) FAILs bytes without
+  the task's answer and never reads the status the worker reports (`selfReport`; bypass `JUDGE_BY_STATUS`). The
+  merge-policy gate also FAILs an empty body or an exact copy of the reads (`degenerateCheck`).
+  - E1 an empty body, E2 a constant answer, E3 a copy of the input, each on the worker's first work.
+  - Three controls count `degenerateMerged`; four depth checks keep the remaining layer. Under `isolateEvents` each
+    control or depth run scripts only its own event's degenerate form.
+  - A constant body passes the degenerate check; the judge's task test is its only layer (F-C12-1).
+- **Scaling** (G1; ledger section `scaling`). Ten points, CENTRAL and DECENTRALIZED at N = 1, 2, 4, 8 and 16 workers
+  with 5 x N items and concurrency N, plus five one-worker baseline points (B-5 to B-80). Every point runs C4's stall
+  rule (stall 20,000 ppm), latency 3 and poison 50,000 ppm, with deadline 400 + 50 x items, and switches on
+  `claimAwareWorker`.
+  - Gated: fifteen safety counters at 0 at every point in every seed, and the sensitivity control
+    S-D16-EXCLUSIVE-OFF (`HELD` and `VERSION` off at S-D16) sees `claimOverlap` in 32 of 32 seeds.
+  - Reported, ungated: completion, lost work, duplicated work, makespan (`lastMergeTick`), throughput
+    (`mergesPer100Ticks`), contention and messages per item, `finishedSeeds`, and each point against the baseline at
+    the same items (`makespanRatioMilli`, `underperforms`). An unfinished run reads its deadline as its makespan.
+  - **F-G1-1.** Packet 1's scripted worker under stalls and latency kept a stale hold after its claim expired and was
+    re-assigned. `claimAwareWorker` checks the hold's own claim id at the resume, the resync, every RENEW answer and
+    every NOTICE it takes, and keeps a NOTICE that arrives during a hold. C1 to C12 keep packet 1's worker. One
+    transient is left at CENTRAL points (Q-P4-D4-3): besides explained duplicate work, it can nudge three ungated
+    CENTRAL readings slightly: contention (a RENEW answered STALE_VERSION), messages (a TEST under the expired claim)
+    and makespan (a few ticks). No safety counter and no earlier row moves.
+- **Hard-coding** (G4; ledger section `hardCoding`). A fault-free one-worker bed (20 items, deadline 900, with
+  `tasks`) runs two policies, GENERAL (packet 1's worker, solving from its reads) and HARD_CODED (answers memorised by
+  item id), each with IDENTITY labels and with PERMUTED labels (`sigma` drawn from the stream `perm-items`).
+  - A policy is accepted when every task's first verdict is PASS under IDENTITY labels and every task's outcome is the
+    same under PERMUTED labels. Without the check (the control), only the first condition is read.
+  - Gated: GENERAL accepted in 32 of 32 seeds; HARD_CODED refused in 32 of 32; the control accepts HARD_CODED in 32 of
+    32; safety at 0 in all 128 runs.
+  - The permutation is not the identity in any seed. `hardCodedRefused` needs no distinct problems in general, but in
+    each seed the first item the permutation moves must hold a task whose problem differs from the problem of the task
+    its id names; a test asserts it in every seed.
+  - Only id-keyed memorisation is found (F-G4-1); the bed is fault-free because a general policy's outcome under random
+    faults depends on the schedule, which depends on the ids.
+- **Campaign record v2.** Packets 1 to 3's entries are v1's (packet 3's `commit` stays null). It adds packet 4's
+  entry, C11 and C12, findings F-C11-1, F-C12-1, F-G4-1 and F-G1-1, three `notClaimed` lines, and the sections
+  `scaling` (each point's safety result, `finishedSeeds`, the p50 of each reading, and its `makespanRatioMilli` and
+  `underperforms`) and `hardCoding` (gates and result).
+- **Results** (the first ledger, regenerated byte for byte by argv 14):
+  - Packets 1 to 3's ten class rows and the arms are byte-identical to CONF-MAS-003's. The false gates of the whole
+    ledger are still exactly C2's, C5's, C7's and C9's duplicated-work bounds.
+  - C11 and C12 PASS every gate. Each of the 5 controls fires through its event in all 32 seeds, and each of the 4 depth
+    checks holds, event-scoped, in all 32. Duplicated work 0, lost work 0, completion 1,000,000 in every seed.
+  - Scaling PASS: safety 0 at all 15 points in every seed; S-D16-EXCLUSIVE-OFF fires in 32 of 32. Every point finished
+    in 32 of 32 seeds.
+
+  | Point | p50 makespan | p50 contention per item (x1000) | against baseline (ratio x1000) |
+  |---|---|---|---|
+  | S-C1 / S-C2 / S-C4 / S-C8 / S-C16 | 137 / 150 / 171 / 184 / 185 | 200 / 200 / 300 / 275 / 237 | 901 / 491 / 277 / 147 / 74 |
+  | S-D1 / S-D2 / S-D4 / S-D8 / S-D16 | 152 / 152 / 184 / 196 / 229 | 200 / 300 / 700 / 1125 / 2375 | 1000 / 498 / 298 / 157 / 92 |
+  | B-5 / B-10 / B-20 / B-40 / B-80 | 152 / 305 / 617 / 1247 / 2467 | 200 / 200 / 250 / 275 / 275 | (the baseline) |
+
+  - No point underperforms its baseline. DECENTRALIZED contention rises with N; CENTRAL contention stays between 200
+    and 300; messages per item stay between 2,400 and 2,800 in both families.
+  - Hard-coding PASS: GENERAL accepted 32 of 32; HARD_CODED accepted without the check in 32 of 32 and refused with it
+    in 32 of 32; safety 0.

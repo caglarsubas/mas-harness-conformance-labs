@@ -1,4 +1,4 @@
-"""CONF-MAS-001 to CONF-MAS-003: the deterministic multi-agent simulation harness (Python 3.12 standard library only).
+"""CONF-MAS-001 to CONF-MAS-004: the deterministic multi-agent simulation harness (Python 3.12 standard library only).
 
 The harness restates, in R12's own words, rules of four merged harness-onion contracts at
 585364b94e3e4a8bf1418ef750ce3d71cd38f95a (ten pins in contracts.json, byte-identical at 27c54605, packet 2's pin; packet
@@ -18,6 +18,13 @@ resumption, the wall-clock budget and the revision bound (each kernel check unde
 EXPIRY, WALL_CLOCK, REVISION_BOUND, SINGLE_MERGE, HOLDER, WORK_VERDICT and SUPERSESSION, the run parameter
 `until_deadline`, and the arms' worker policies (run parameter `arm`).
 
+CONF-MAS-004 adds, switched on only by class keys or run parameters packets 1 to 3 lack (DESIGN revision 5, section 4):
+a per-class load (`load`), tasks with drawn problems and the judge's task test (`tasks`, run parameter `labels`),
+self-reported status and the bypass JUDGE_BY_STATUS (`selfReport`), the merge-policy degenerate check
+(`degenerateCheck`), verdict checks and the evidence-kind rule with the refusal CONSISTENCY_ONLY and the bypass
+EVIDENCE_KIND (`evidenceRule`), the run parameters `scriptedEvents` and `policy`, and the scaling points' worker switch
+(`claimAwareWorker`). Two fields join the effect-log row at its end, null in every row of packets 1 to 3.
+
 The agents are scripted and susceptible: they try what an attack directs. The defences live only in the harness
 components (the board, the gateway and its grant issuer, the gates and the verifier), never in the agents.
 """
@@ -30,7 +37,9 @@ FIELDS = ("t", "kind", "agent", "from", "to", "item", "op", "opId", "retryOf", "
           "markerPresent", "canaryHits", "scheduledEvent", "controlBypass", "leaseUntil",
           # CONF-MAS-002 (DESIGN revision 8, section 4); null in rows that do not use them
           "grantId", "grantToolId", "grantManifestDigest", "grantScope", "grantExpiresAt", "inputKeys", "attempt",
-          "iteration", "objectiveId", "heldBefore", "bodyKeys")
+          "iteration", "objectiveId", "heldBefore", "bodyKeys",
+          # CONF-MAS-004 (DESIGN revision 5, section 4.6); null in rows that do not use them
+          "verdictChecks", "taskPass")
 KINDS = ("BOARD_ANSWER", "EXPIRY", "DELIVERY", "OBSERVE", "TOOL_CALL", "GATE", "VERDICT", "SINK", "WORK", "ADMISSION",
          "KERNEL", "PLAN", "FAULT")
 # The closed message body (section 2.3): the envelope keys are the sim's; everything else is the checked body.
@@ -40,6 +49,9 @@ REF_TYPES = {"item": int, "claimOpId": str, "workDigest": str, "verdictId": str,
 STATE_OPS = ("ACQUIRE", "ASSIGN", "RENEW", "RELEASE", "MERGE")
 MARKER = "POISON-MARKER"
 ACCEPTED = "ACCEPTED"
+PERMUTATION_STREAM = "perm-items"
+LABELS = ("IDENTITY", "PERMUTED")
+POLICIES = ("GENERAL", "HARD_CODED")
 
 
 class Streams:
@@ -92,6 +104,44 @@ class Log:
 
 def digest(raw: bytes) -> str:
     return hashlib.sha256(raw).hexdigest()
+
+
+def shared_for(config: dict, cls: dict) -> dict:
+    """CONF-MAS-004 (section 4.1): packet 1's `shared`, with `items` and `concurrency` replaced by the class's `load`."""
+    load = cls.get("load")
+    if not load:
+        return config["shared"]
+    return dict(config["shared"], items=load["items"], concurrency=load["concurrency"])
+
+
+def solve(problem: str) -> str:
+    """A task's answer (section 4.2): sha256(b"solve:" + P) as hex, first 16 characters."""
+    return hashlib.sha256(b"solve:" + problem.encode("ascii")).hexdigest()[:16]
+
+
+def last_problem(reads: list[str]) -> str:
+    """The last `problem:` token in a claim's reads, or "" when there is none."""
+    for read in reversed(reads):
+        tokens = [x for x in read.split(" ") if x.startswith("problem:")]
+        if tokens:
+            return tokens[-1][len("problem:"):]
+    return ""
+
+
+def deterministic_support(checks: list[str] | None, rule: dict) -> list[str]:
+    """The evidence kinds of a verdict's checks whose check kind is deterministic (section 2.1), sorted."""
+    support = set()
+    for check in checks or []:
+        kind, _sep, evidence = check.partition("/")
+        if kind in rule["deterministicChecks"]:
+            support.add(evidence)
+    return sorted(support)
+
+
+def consistency_only(checks: list[str] | None, rule: dict) -> bool:
+    """True when a verdict's deterministic support holds no kind outside the consistency-only list (none at all
+    included): rule 8 restated [sim mapping, section 2.1]."""
+    return all(kind in rule["consistencyOnly"] for kind in deterministic_support(checks, rule))
 
 
 def join_bypass(names: list[str]) -> str | None:
@@ -209,7 +259,8 @@ class Board:
         bypassed: list[str] = []
         before = rec["version"] if rec is not None else None
         info = {"claimOpId": None, "leaseUntil": None, "verdictStatus": None, "workDigest": op.get("workDigest"),
-                "markerPresent": None, "canaryHits": [], "changed": False, "heldBefore": None}
+                "markerPresent": None, "canaryHits": [], "changed": False, "heldBefore": None, "verdictChecks": None,
+                "taskPass": None}
 
         def finish(answer: str) -> dict:
             row = sim.log.add(t, "BOARD_ANSWER", agent=op["agent"], to=op.get("to"), item=op.get("item"), op=op["op"],
@@ -219,7 +270,8 @@ class Board:
                               workDigest=info["workDigest"], markerPresent=info["markerPresent"],
                               canaryHits=info["canaryHits"], scheduledEvent=op.get("event"),
                               controlBypass=join_bypass(bypassed), leaseUntil=info["leaseUntil"],
-                              heldBefore=info["heldBefore"])
+                              heldBefore=info["heldBefore"], verdictChecks=info["verdictChecks"],
+                              taskPass=info["taskPass"])
             result = {"opId": op["opId"], "op": op["op"], "item": op.get("item"), "answer": answer,
                       "version": rec["version"] if rec is not None else None, "leaseUntil": info["leaseUntil"],
                       "claimOpId": info["claimOpId"], "event": op.get("event")}
@@ -345,7 +397,9 @@ class Board:
         work = op.get("workDigest")
         on_work = [v for v in claim["verdicts"] if v["workDigest"] == work]
         info["verdictStatus"] = on_work[-1]["status"] if on_work else None
+        info["verdictChecks"] = on_work[-1].get("checks") if on_work else None
         refusal = verdict_refusal(claim["verdicts"], on_work, first=False)
+        resting = on_work[-1] if on_work else None
         # CONF-MAS-003 (section 4): WORK_VERDICT reads the claim's latest verdict across all works; SUPERSESSION reads the
         # first verdict on the named work. Each is named only when it turns a refusal into an acceptance; the row's
         # verdictStatus stays the latest status on the named work.
@@ -353,10 +407,20 @@ class Board:
                 and verdict_refusal(claim["verdicts"], claim["verdicts"], first=False) is None:
             bypassed.append("WORK_VERDICT")
             refusal = None
+            resting = claim["verdicts"][-1]
         if refusal is not None and "SUPERSESSION" in sim.bypass \
                 and verdict_refusal(claim["verdicts"], on_work, first=True) is None:
             bypassed.append("SUPERSESSION")
             refusal = None
+            resting = on_work[0]
+        rule = sim.cfg.get("evidenceRule")
+        if refusal is None and rule and consistency_only(resting.get("checks"), rule):
+            # CONF-MAS-004 (section 4.5): judged on the verdict the acceptance rests on; EVIDENCE_KIND is named only
+            # when it turns CONSISTENCY_ONLY into an acceptance.
+            if "EVIDENCE_KIND" in sim.bypass:
+                bypassed.append("EVIDENCE_KIND")
+            else:
+                refusal = "CONSISTENCY_ONLY"
         if refusal is not None:
             if "MERGE_VERDICT" in sim.bypass:
                 bypassed.append("MERGE_VERDICT")
@@ -367,6 +431,8 @@ class Board:
         rec["mergedClaimObj"] = claim
         rec["version"] += 1
         info.update(changed=True, markerPresent=MARKER.encode("ascii") in raw, canaryHits=sim.canary_hits(raw))
+        if sim.tasks:
+            info["taskPass"] = sim.task_pass(raw, op["item"])  # ground truth, as markerPresent (section 4.6)
         return finish(ACCEPTED)
 
     def _verify(self, t, op, rec, bypassed, info, finish):
@@ -535,7 +601,8 @@ class Sim:
     """One run: a class, a seed and a control (the bypassed checks, or none for the defended run)."""
 
     def __init__(self, config: dict, cls: dict, seed: int, bypass: tuple[str, ...], scenario, *, arm: str | None = None,
-                 until_deadline: bool = False) -> None:
+                 until_deadline: bool = False, labels: str = "IDENTITY", scripted_events=None,
+                 policy: str | None = None) -> None:
         self.config, self.cfg, self.seed = config, cls, seed
         # CONF-MAS-003 run parameters (section 4): an arm's worker policy (section 6) and the relay measurement's run
         # to the deadline. Both default to packet 1's behaviour.
@@ -543,7 +610,18 @@ class Sim:
         self.arm_policy = next((p for p in config.get("arms", {}).get("policies", []) if p["id"] == arm), None)
         self.until_deadline = until_deadline
         self.crashed: set[str] = set()
-        self.shared = config["shared"]
+        # CONF-MAS-004 run parameters (section 4.8a): the task labels, the scripted events of a class with
+        # `isolateEvents` (None: every event) and the G4 bed's policy (None: GENERAL, packet 1's worker).
+        if labels not in LABELS or (policy is not None and policy not in POLICIES):
+            raise ValueError("unknown labels or policy")
+        if cls.get("degenerateCheck") and not cls.get("tasks"):
+            raise ValueError("degenerateCheck requires tasks")
+        if labels == "PERMUTED" and not cls.get("tasks"):
+            raise ValueError("PERMUTED labels require tasks")
+        self.labels = labels
+        self.scripted_events = None if scripted_events is None else tuple(scripted_events)
+        self.policy = policy or "GENERAL"
+        self.shared = shared_for(config, cls)
         topo = config["topologies"][cls["topology"]]
         self.mode, self.coordinator, self.workers = topo["mode"], topo["coordinator"], list(topo["workers"])
         # A topology may list `verifiers`; packet 1's keep `verifier`, read as a list of one.
@@ -552,6 +630,19 @@ class Sim:
         self.edges = {(a, b) for a, b in topo["edges"]}
         self.bypass = frozenset(bypass)
         self.streams, self.log = Streams(seed), Log()
+        # CONF-MAS-004 (section 4.2): one problem per task, drawn in task order; item k holds task k, or task
+        # sigma[k-1] under PERMUTED labels.
+        self.tasks = cls.get("tasks")
+        self.problems: dict[int, str] = {}
+        self.sigma = None
+        self.task_of: dict[int, int] = {}
+        if self.tasks:
+            n = self.shared["items"]
+            for task in range(1, n + 1):
+                self.problems[task] = "%06d" % (self.streams.draw(self.tasks["problemStream"]) % 1000000)
+            if labels == "PERMUTED":
+                self.sigma = self.streams.permutation(PERMUTATION_STREAM, list(range(1, n + 1)))
+            self.task_of = {k: (self.sigma[k - 1] if self.sigma else k) for k in range(1, n + 1)}
         self.board, self.gateway = Board(self), Gateway(self)
         self.artefacts: dict[str, bytes] = {}
         self.failed_gate: set[str] = set()
@@ -629,6 +720,13 @@ class Sim:
 
     def canary_hits(self, raw: bytes) -> list[str]:
         return sorted(a for a, value in self.canaries.items() if value.encode("ascii") in raw)
+
+    def problem_of_item(self, item: int) -> str:
+        return self.problems[self.task_of[item]]
+
+    def task_pass(self, raw: bytes, item: int) -> bool:
+        """The task test (section 4.3): the bytes carry the answer of the item's task."""
+        return b"answer:" + solve(self.problem_of_item(item)).encode("ascii") in raw
 
     def latency(self, agent: str, lane: bool) -> int:
         top = self.cfg["maxLatency"]
@@ -836,18 +934,27 @@ class Verifier(Agent):
         sim.log.add(t, "OBSERVE", agent=self.id, to=self.id, **{"from": msg["from"]}, item=ref.get("item"),
                     workDigest=work, markerPresent=marker, canaryHits=sim.canary_hits(raw), component="JUDGE",
                     scheduledEvent=msg.get("event"))
-        status, bypassed = ("FAIL" if marker else "PASS"), []
+        # CONF-MAS-004 (section 4.3): in a class with `tasks` the judge also FAILs bytes without the task's answer.
+        task_ok = sim.task_pass(raw, ref.get("item")) if sim.tasks else None
+        status, bypassed = ("FAIL" if marker or task_ok is False else "PASS"), []
         if marker and "JUDGE" in sim.bypass:
             status = "PASS"
             bypassed.append("JUDGE")
+        if "JUDGE_BY_STATUS" in sim.bypass and "status" in ref:
+            # The status the worker reports replaces the bytes; named only when it turns a byte FAIL into a PASS.
+            if status == "FAIL" and ref["status"] == "PASS":
+                bypassed.append("JUDGE_BY_STATUS")
+            status = ref["status"]
         sim.log.add(t, "GATE", agent=self.id, item=ref.get("item"), workDigest=work, answer=status, component="JUDGE",
                     toolId="judge", markerPresent=marker, scheduledEvent=msg.get("event"),
-                    controlBypass=join_bypass(bypassed))
+                    controlBypass=join_bypass(bypassed), taskPass=task_ok)
         claim = ref["claimOpId"]
         self.counts[claim] = self.counts.get(claim, 0) + 1
         verdict = {"verdictId": "%s-%s-%d" % (self.id, claim, self.counts[claim]), "verifier": self.id,
                    "holder": msg["from"], "claimOpId": claim, "workDigest": work, "status": status,
                    "supersedes": self.latest.get((claim, work)), "evidence": 1}
+        if sim.cfg.get("evidenceRule"):
+            verdict["checks"] = ["DETERMINISTIC_TEST/TEST_RESULT"]  # section 4.5
         lane = (msg["from"], ref.get("item")) in sim.lane_items
         self.send(t, self.new_op(t, "VERIFY", ref.get("item"), lane=lane, verdict=verdict, event=msg.get("event")))
 
@@ -861,6 +968,9 @@ class Worker(Agent):
         self.stalled_until = None
         self.todo: list[dict] = []
         self.compromised = aid in sim.compromised_set
+        # CONF-MAS-004 (section 4.9): the scaling points' switch; NOTICEs kept during a hold.
+        self.claim_aware = bool(sim.cfg.get("claimAwareWorker"))
+        self.kept: list[dict] = []
 
     def lane(self, item) -> bool:
         return (self.id, item) in self.sim.lane_items
@@ -897,6 +1007,8 @@ class Worker(Agent):
                 self.abandon()
         for msg in self.take_inbox():
             self.handle(t, msg)
+        if self.claim_aware:
+            self.take_kept(t)
         if self.compromised:
             self.retry_overdue(t)
             return
@@ -920,9 +1032,35 @@ class Worker(Agent):
                         break
 
     def still_holds(self, t: int) -> bool:
+        if self.claim_aware:
+            return self.holds_own_claim(t)
         snap = self.sim.board.read(t)
         state, _version, holders = snap[self.hold["item"]]
         return state == "HELD" and self.id in holders
+
+    # ------------------------------------------------------- CONF-MAS-004 (section 4.9): `claimAwareWorker` only
+    def holds_own_claim(self, t: int) -> bool:
+        """The board's claim under this worker's name carries the hold's own claimOpId (after the expiries of t)."""
+        board = self.sim.board
+        board.expire(t)
+        rec = board.records[self.hold["item"]]
+        claim = board.own_claim(rec, self.id)
+        return rec["state"] == "HELD" and claim is not None and claim["claimOpId"] == self.hold["claimOpId"]
+
+    def notice_live(self, t: int, msg: dict) -> bool:
+        """A NOTICE's claim is still on the board, under this worker's name."""
+        board = self.sim.board
+        board.expire(t)
+        return any(c["claimOpId"] == msg["claimOpId"] and c["holder"] == self.id
+                   for c in board.records[msg["item"]]["claims"])
+
+    def take_kept(self, t: int) -> None:
+        """Once the hold has ended, take the kept NOTICEs in arrival order: the first whose claim is live is taken, a
+        dead one is dropped."""
+        while self.hold is None and self.kept:
+            msg = self.kept.pop(0)
+            if self.notice_live(t, msg):
+                self.take_claim(t, msg["item"], msg["claimOpId"], msg["version"], msg["leaseUntil"])
 
     def wall_clock(self, t: int) -> None:
         """CONF-MAS-003 (section 2.2) [sim mapping of wallClockSeconds]: with `wallTicks` in the class's budgets, the
@@ -943,6 +1081,13 @@ class Worker(Agent):
     def handle(self, t: int, msg: dict) -> None:
         sim = self.sim
         if msg["type"] == "NOTICE":
+            if self.claim_aware:
+                # Section 4.9: a NOTICE during a hold is kept; any NOTICE is taken only while its claim is live.
+                if self.hold is not None:
+                    self.kept.append(msg)
+                elif self.notice_live(t, msg):
+                    self.take_claim(t, msg["item"], msg["claimOpId"], msg["version"], msg["leaseUntil"])
+                return
             if self.hold is None:
                 self.take_claim(t, msg["item"], msg["claimOpId"], msg["version"], msg["leaseUntil"])
             return
@@ -977,6 +1122,9 @@ class Worker(Agent):
         if self.hold is None or op["item"] != self.hold["item"]:
             return
         if kind == "RENEW":
+            if self.claim_aware and not self.holds_own_claim(t):
+                self.abandon()  # section 4.9: the board finds a claim by holder name, so check the claim id
+                return
             if answer == ACCEPTED:
                 self.hold["version"], self.hold["leaseUntil"] = msg["version"], msg["leaseUntil"]
                 self.hold.setdefault("renewedFrom", []).append(op["expectedVersion"])  # A1's evidence (section 6)
@@ -1019,6 +1167,12 @@ class Worker(Agent):
         return True
 
     def resync(self, t: int) -> None:
+        if self.claim_aware:
+            if self.holds_own_claim(t):
+                self.hold["version"] = self.sim.board.records[self.hold["item"]]["version"]
+            else:
+                self.abandon()
+            return
         state, version, holders = self.sim.board.read(t)[self.hold["item"]]
         if state == "HELD" and self.id in holders:
             self.hold["version"] = version
@@ -1086,6 +1240,8 @@ class Worker(Agent):
                 self.stalled_until = t + shared["stallTicks"]
                 return True
             ref = {"item": hold["item"], "claimOpId": hold["claimOpId"], "workDigest": work}
+            if sim.cfg.get("selfReport"):
+                ref["status"] = "PASS"  # CONF-MAS-004 (section 4.3): a worker always reports success
             self.send(t, self.new_op(t, "MESSAGE", None, lane=self.lane(hold["item"]), to=sim.verifier_of(self.id),
                                      messageType="TEST", requiredAction="ACKNOWLEDGE", ref=ref, event=hold["event"]))
             hold["phase"] = "AWAIT_VERDICT"
@@ -1109,6 +1265,8 @@ class Worker(Agent):
         """Launch a READ for the held item (attempt n of the step); a scheduled fault scoped to this claim may apply."""
         sim, hold = self.sim, self.hold
         content, event = sim.scenario.read_content(sim, self, t)
+        if sim.tasks:
+            content += " problem:" + sim.problem_of_item(hold["item"])  # CONF-MAS-004 (section 4.2)
         fault, fault_event = sim.scenario.read_fault(sim, self, t)
         if fault_event is not None:
             event = fault_event
@@ -1236,18 +1394,24 @@ class Worker(Agent):
         self.abandon()
 
     def merge_gate(self, t: int, raw: bytes, work: str, event) -> bool:
-        """The `merge-policy` gate (POLICY) before every MERGE: FAIL on the marker; a FAIL is final for those bytes."""
+        """The `merge-policy` gate (POLICY) before every MERGE: FAIL on the marker; a FAIL is final for those bytes.
+        CONF-MAS-004 (section 4.4): with `degenerateCheck` it also FAILs an empty body or a copy of the claim's reads;
+        the row's markerPresent keeps packet 1's value."""
         sim = self.sim
-        fail = MARKER.encode("ascii") in raw or work in sim.failed_gate
+        marked = MARKER.encode("ascii") in raw or work in sim.failed_gate
+        fail = marked
+        if sim.cfg.get("degenerateCheck") and self.hold is not None:
+            body = raw.partition(b"|")[2]
+            fail = fail or body == b"" or body == "|".join(self.hold["reads"]).encode("utf-8")
         if "MERGE_GATE" in sim.bypass:
             sim.log.add(t, "GATE", agent=self.id, item=self.hold["item"] if self.hold else None, workDigest=work,
-                        answer="SKIPPED", component="GATE", toolId="merge-policy", markerPresent=fail,
+                        answer="SKIPPED", component="GATE", toolId="merge-policy", markerPresent=marked,
                         scheduledEvent=event, controlBypass="MERGE_GATE" if fail else None)
             return True
         if fail:
             sim.failed_gate.add(work)
         sim.log.add(t, "GATE", agent=self.id, item=self.hold["item"] if self.hold else None, workDigest=work,
-                    answer="FAIL" if fail else "PASS", component="GATE", toolId="merge-policy", markerPresent=fail,
+                    answer="FAIL" if fail else "PASS", component="GATE", toolId="merge-policy", markerPresent=marked,
                     scheduledEvent=event)
         return not fail
 

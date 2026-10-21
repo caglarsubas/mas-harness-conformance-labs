@@ -45,12 +45,13 @@ class LedgerTests(unittest.TestCase):
 
     def test_the_ledger_is_closed_and_bound_to_its_parameters(self):
         value = _ledger.ledger()
-        self.assertEqual(sorted(value), ["arms", "classes", "classesSha256", "contractsCommit", "packet", "profile",
-                                         "rule", "schemaVersion", "seeds"])
+        # CONF-MAS-004 (DESIGN revision 5, section 10): the ledger v4 adds `scaling`, `hardCoding`, C11 and C12.
+        self.assertEqual(sorted(value), ["arms", "classes", "classesSha256", "contractsCommit", "hardCoding", "packet",
+                                         "profile", "rule", "scaling", "schemaVersion", "seeds"])
         self.assertEqual((value["schemaVersion"], value["packet"], value["classesSha256"], value["seeds"]),
-                         ("r12.mas-simulation-results/v3", "CONF-MAS-003", CLASSES_SHA, list(range(1, 33))))
+                         ("r12.mas-simulation-results/v4", "CONF-MAS-004", CLASSES_SHA, list(range(1, 33))))
         self.assertEqual([row["id"] for row in value["classes"]],
-                         ["C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8", "C9", "C10"])
+                         ["C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8", "C9", "C10", "C11", "C12"])
         for row in value["classes"]:
             extra = ["measurements"] if row["id"] in ("C5", "C8", "C9") else []
             self.assertEqual(sorted(row), sorted(["controls", "defended", "depthChecks", "gates", "id", "kind",
@@ -65,9 +66,10 @@ class DataFileTests(unittest.TestCase):
     def test_classes_json_is_preregistered_data(self):
         raw = (HERE / "classes.json").read_bytes()
         self.assertEqual(hashlib.sha256(raw).hexdigest(), CLASSES_SHA)
-        self.assertEqual(sorted(CONFIG), ["arms", "bounds", "classes", "controlGate", "grantTicks", "inputSchemas",
-                                          "instructions", "manifest", "packet", "profiles", "schemaVersion", "seeds",
-                                          "shared", "streams", "topologies", "unexercisedInvariants", "zeroTolerance"])
+        self.assertEqual(sorted(CONFIG), ["arms", "bounds", "classes", "controlGate", "grantTicks", "hardCoding",
+                                          "inputSchemas", "instructions", "manifest", "packet", "profiles", "scaling",
+                                          "schemaVersion", "seeds", "shared", "streams", "topologies",
+                                          "unexercisedInvariants", "zeroTolerance"])
         self.assertEqual(CONFIG["seeds"], list(range(1, 33)))
         self.assertEqual(CONFIG["controlGate"]["mustFireSeeds"], 32)
         self.assertTrue(all(":" not in name for name in CONFIG["streams"]))
@@ -76,16 +78,18 @@ class DataFileTests(unittest.TestCase):
         kinds = {c["kind"] for c in CONFIG["classes"]}
         self.assertEqual(kinds, {"PEER_INJECTION", "POISONED_TOOL_RESULT", "REPLAY_STALE", "CLAIM_CONFLICT",
                                  "COLLUSION_CONFLICTING_OBJECTIVES", "CROSS_AGENT_EXFILTRATION", "RESOURCE_EXHAUSTION",
-                                 "AGENT_LOSS_PARTIAL_OBSERVABILITY", "DEADLOCK_LIVELOCK", "MERGE_CORRECTNESS"})
+                                 "AGENT_LOSS_PARTIAL_OBSERVABILITY", "DEADLOCK_LIVELOCK", "MERGE_CORRECTNESS",
+                                 "REGRESSION_ONLY_PASS", "DEGENERATE_SUBMISSION"})
         text = raw.decode("ascii")
         for forbidden in ("import", "lambda", "exec(", "http", "module", "handler"):
             self.assertNotIn(forbidden, text)  # declarative data: no code, module or handler names
 
     def test_contracts_json_pins_the_ten_files(self):
+        # The name is packet 1's; CONF-MAS-004 (section 2) adds an eleventh row, check-kinds.json, at the same commit.
         pins = json.loads((HERE / "contracts.json").read_text())
         self.assertEqual(sorted(pins), ["commit", "files", "note", "schemaVersion"])
         self.assertEqual(pins["commit"], _ledger.CONTRACTS_COMMIT)
-        self.assertEqual(len(pins["files"]), 10)
+        self.assertEqual(len(pins["files"]), 11)
         for row in pins["files"]:
             self.assertEqual(sorted(row), ["packet", "path", "sha256", "size"])
             self.assertTrue(row["path"].startswith("architecture/"))

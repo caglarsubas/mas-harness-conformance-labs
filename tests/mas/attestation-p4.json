@@ -1,0 +1,35 @@
+{
+ "implementationReadOrRunForExpectedResults": false,
+ "inputDigests": {
+  "<harness-onion>/architecture/agent-loop/README.md@585364b": "666c4221d3edbdd5187c17db9c43c122b1f7900a9fa0b3ddc430db3bee2b8e5a",
+  "<harness-onion>/architecture/agent-loop/loop-profile.schema.json@585364b": "d75a5b943929f7678c8e8c8cacf2e937312bcc06caf15018de73ae9b9abac0bb",
+  "<harness-onion>/architecture/agent-loop/loop-trace.schema.json@585364b": "3be32ceee16c2bbbeaf945ee8231a16e4a74fc2ddce46ebafdf7bee9d7868b6e",
+  "<harness-onion>/architecture/run-manifest/README.md@585364b": "279d374e5ddd1b6305611f3565a7af14046b305e59cf9634a88bd358818ce826",
+  "<harness-onion>/architecture/run-manifest/distribution-gate.schema.json@585364b": "f521fc6691984959473ef4f184e863193c060acc0b2ed1012dcf1d2c9d3a1683",
+  "<harness-onion>/architecture/topology-coordination/README.md@585364b": "890af54aa39c6fbec35615bec8cadb5ffa62c33a5ccce0e21b7af5fcd3fb9c90",
+  "<harness-onion>/architecture/topology-coordination/board-transcript.schema.json@585364b": "8a3cc5b87953e97a4b42362df382f9b101931be1d55de84f441b16020b405b7c",
+  "<harness-onion>/architecture/topology-coordination/topology-spec.schema.json@585364b": "a326f70fd56d4300aa1bfaa3838a888c90347a75fc84164188e4af42052e82d0",
+  "<harness-onion>/architecture/verdict-ledger/README.md@585364b": "dde6efc45fc2e1ad675635d0a18a1d6a82b49c960616af239f47071e2914e3f7",
+  "<harness-onion>/architecture/verdict-ledger/check-kinds.json@585364b": "d53c5fb8e125c0c6588a327433870a3e6838328e741b12865691c5c2c6e3a3ac",
+  "<harness-onion>/architecture/verdict-ledger/ledger.schema.json@585364b": "8a570cfb26b16fb3f7fa1cf799bd564fe717fd3d356dbca890dab747b2dc9326"
+ },
+ "inputs": [
+  "<harness-onion>/architecture/topology-coordination/README.md@585364b",
+  "<harness-onion>/architecture/topology-coordination/board-transcript.schema.json@585364b",
+  "<harness-onion>/architecture/topology-coordination/topology-spec.schema.json@585364b",
+  "<harness-onion>/architecture/agent-loop/README.md@585364b",
+  "<harness-onion>/architecture/agent-loop/loop-profile.schema.json@585364b",
+  "<harness-onion>/architecture/agent-loop/loop-trace.schema.json@585364b",
+  "<harness-onion>/architecture/run-manifest/README.md@585364b",
+  "<harness-onion>/architecture/run-manifest/distribution-gate.schema.json@585364b",
+  "<harness-onion>/architecture/verdict-ledger/README.md@585364b",
+  "<harness-onion>/architecture/verdict-ledger/ledger.schema.json@585364b",
+  "<harness-onion>/architecture/verdict-ledger/check-kinds.json@585364b"
+ ],
+ "note": "Designed from the roadmap text of MAS-RA-010-F (its plan, groups G1 to G4), the merged harness-onion contracts at 585364b (packet 3's ten pins and check-kinds.json, new to the pin set) and packet 3's merged R12 code at dbc45c7, the base it extends (as local squash 0a479a55, tree c80b4d67). Owner decisions RA010F-PICK, Q-RA10F-1..8, Q-P4-D2-1 and Q-P4-D4-3; monitor rulings under the owner's delegation MON-P4-DR1-NOTED, MON-P4-D16, MON-P4-DR1-KEEP to MON-P4-DR5-KEEP, Q-P4-D3-1 (a) and Q-P4-CAP (a). The owner's warm-start repositories, R10 source and W03 work in progress were not read. The w03WorkInProgressRead flag reads with the owner's independence answer, 'Accept as metadata-only (Recommended)': during an earlier programme-process survey this lane and one of its design reviewers read the key sets of a few of the other lane's review records, a disclosed metadata-only read that the owner accepted as a procedural exception with no rework. No input of this packet came from it, and no W03 material, metadata included, was read after it. The implementationReadOrRunForExpectedResults flag's scope is the candidate, packet 4's own implementation: no expected result was set by reading or running it. The base code was read by role, as each review record states: the designer read packet 3's tests/mas code, data, tests and README to trace tick paths, and ran two timing-only probes built in memory from packet 3's engine (seeds 1 to 3; each printed wall time and whether each run ended before its deadline, and no reading); design-review rounds 1 to 5 read the same code, data and records to trace or check tick paths, and each checked check-kinds.json and the verdict-ledger README at 585364b against the pins. Probes, all on packet 3's engine as it is, on stream draws or on hand-built logs, never on candidate code: round 1 ran 4 single simulations, round 2 ran 2, round 3 ran 32, round 4 ran 40 and round 5 none. Packet review rounds are added here from their records before the packet's final squash. Packet review round 1 (on 230a9fa) read the worktree, its base at dbc45c7, the design, the build records and the decisions record, and the eleven pinned harness-onion files at 585364b; it regenerated the ledger and the campaign record once in-process, made no probe simulation and ran tests/mas and tests/ci_checkpoint once each. Packet review round 2 (a delta, on 7475c1d) read the fix diff, the records, the design-review sidecars and, by keyword, this lane's own top-level notes; it made no probe and ran tests/mas and tests/ci_checkpoint once each. Later monitor rulings under the owner's delegation: Q-P4-REBASE (a), MON-P4-ORACLE-KEEP and MON-P4-PR1-KEEP.",
+ "packet": "CONF-MAS-004",
+ "r10SourceRead": false,
+ "schemaVersion": "r12.mas-attestation/v1",
+ "w03WorkInProgressRead": false,
+ "warmSourceRead": false
+}
