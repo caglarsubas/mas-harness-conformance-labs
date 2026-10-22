@@ -66,8 +66,20 @@
    "path": "architecture/verdict-ledger/check-kinds.json",
    "sha256": "d53c5fb8e125c0c6588a327433870a3e6838328e741b12865691c5c2c6e3a3ac",
    "size": 3173
+  },
+  {
+   "packet": "H11",
+   "path": "docs/harnesses/execution.tool-skill-sandbox.md",
+   "sha256": "894ef8182df30896ef713d2e46be5601feab234703752eb8243786d419d4556b",
+   "size": 11554
+  },
+  {
+   "packet": "H13",
+   "path": "docs/harnesses/trust.security-safety.md",
+   "sha256": "736f7184d124cdf7804efbe1d5768830662e649b7588b5e8c2d22c82c617323e",
+   "size": 15221
   }
  ],
- "note": "Clean-room restatement (owner decisions Q-NX-2 (a), Q-NX2-3 (a), Q-NX3-4 (a)): the rules are restated in R12's own words from these harness-onion files at 585364b (CONF-MAS-003's re-pin, MON-REPIN-585364B); all ten are byte-identical at 27c54605, where packet 2 pinned them; packet 1's nine are byte-identical at 35b733b5, and loop-trace.schema.json is new to the pin set since packet 2. No bytes are copied. R12's CI cannot reach harness-onion, so these pins are a record the design and packet reviews verify. CONF-MAS-004 adds the eleventh row, architecture/verdict-ledger/check-kinds.json (MET-MAS-001, last changed before 585364b at c0f535b1), the source of the evidence-kind rule; the other ten rows are unchanged.",
+ "note": "Clean-room restatement (owner decisions Q-NX-2 (a), Q-NX2-3 (a), Q-NX3-4 (a)): the rules are restated in R12's own words from these harness-onion files at 585364b (CONF-MAS-003's re-pin, MON-REPIN-585364B); all ten are byte-identical at 27c54605, where packet 2 pinned them; packet 1's nine are byte-identical at 35b733b5, and loop-trace.schema.json is new to the pin set since packet 2. No bytes are copied. R12's CI cannot reach harness-onion, so these pins are a record the design and packet reviews verify. CONF-MAS-004 adds the eleventh row, architecture/verdict-ledger/check-kinds.json (MET-MAS-001, last changed before 585364b at c0f535b1), the source of the evidence-kind rule; the other ten rows are unchanged. CONF-MAS-005 adds the twelfth and thirteenth rows, the harness documents docs/harnesses/execution.tool-skill-sandbox.md (H11) and docs/harnesses/trust.security-safety.md (H13), both last changed before 585364b at b2705835; their rows name the harness, not a packet (Q-P5-2 (a)); they are the sources of the trust-boundary rules R1 to R6; the other eleven rows are unchanged.",
  "schemaVersion": "r12.mas-clean-room-pins/v1"
 }

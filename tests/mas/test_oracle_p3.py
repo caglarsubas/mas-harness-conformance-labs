@@ -1188,8 +1188,9 @@ class OracleP3DataTests(unittest.TestCase):
         cfg, sha = _ledger.load_config()
         self.assertTrue(_is_hex64(sha), sha)
         # CONF-MAS-004 moves classes.json to v4 and adds C11 and C12: scoped to packet 3's content, the first ten ids.
-        self.assertEqual(cfg["schemaVersion"], "r12.mas-simulation-classes/v4")
-        self.assertEqual(cfg["packet"], "CONF-MAS-004")
+        # CONF-MAS-005 moves the header to v5 (C13 and overRevision added); packet 3's checks below are unchanged.
+        self.assertEqual(cfg["schemaVersion"], "r12.mas-simulation-classes/v5")
+        self.assertEqual(cfg["packet"], "CONF-MAS-005")
         self.assertEqual(cfg["seeds"], list(range(1, 33)))
         self.assertEqual(cfg["controlGate"]["mustFireSeeds"], 32)
         self.assertEqual([c["id"] for c in cfg["classes"]][:10], CLASS_IDS)
@@ -1364,13 +1365,14 @@ class OracleP3LedgerTests(unittest.TestCase):
 
     def test_ledger_header_and_class_ids(self):
         # CONF-MAS-004 moves the ledger to v4 with two new sections and C11 and C12: the first ten ids stay CLASS_IDS.
-        self.assertEqual(set(self.doc), LEDGER_KEYS | {"hardCoding", "scaling"})
-        self.assertEqual(self.doc["schemaVersion"], "r12.mas-simulation-results/v4")
-        self.assertEqual(self.doc["packet"], "CONF-MAS-004")
+        # CONF-MAS-005: v5 adds overRevision and C13; packets 1 to 4's keys as a subset, C1 to C12 the first twelve.
+        self.assertLessEqual(LEDGER_KEYS | {"hardCoding", "scaling"}, set(self.doc))
+        self.assertEqual(self.doc["schemaVersion"], "r12.mas-simulation-results/v5")
+        self.assertEqual(self.doc["packet"], "CONF-MAS-005")
         self.assertEqual(self.doc["contractsCommit"], REPIN_COMMIT)
         self.assertEqual(self.doc["classesSha256"], self.sha)
         self.assertEqual(self.doc["seeds"], list(range(1, 33)))
-        self.assertEqual([row["id"] for row in self.doc["classes"]], CLASS_IDS + ["C11", "C12"])
+        self.assertEqual([row["id"] for row in self.doc["classes"]][:12], CLASS_IDS + ["C11", "C12"])
         self.assertEqual([row["id"] for row in self.doc["classes"]][:10], CLASS_IDS)
 
     def test_packets_1_and_2_rows_are_byte_identical(self):
@@ -1523,7 +1525,8 @@ class OracleP3CampaignTests(unittest.TestCase):
         # CONF-MAS-004 moves the record to v2 (two new keys, the joint campaign string): packet 3's key set is read
         # as the v1 subset of v2's keys.
         self.assertLessEqual(CAMPAIGN_KEYS, set(rec))
-        self.assertEqual(set(rec) - CAMPAIGN_KEYS, {"hardCoding", "scaling"})
+        # CONF-MAS-005 adds overRevision to v2: packet 4's two keys are read as a subset of the extra keys.
+        self.assertLessEqual({"hardCoding", "scaling"}, set(rec) - CAMPAIGN_KEYS)
         self.assertEqual(rec["schemaVersion"], "r12.mas-campaign-record/v2")
         self.assertEqual(rec["campaign"], "MAS-RA-010 and MAS-RA-010-F")
         self.assertEqual(rec["consumer"], "CONF-A3-001 (input, HO-D2)")

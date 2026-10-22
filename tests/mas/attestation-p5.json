@@ -1,0 +1,39 @@
+{
+ "implementationReadOrRunForExpectedResults": false,
+ "inputDigests": {
+  "<harness-onion>/architecture/agent-loop/README.md@585364b": "666c4221d3edbdd5187c17db9c43c122b1f7900a9fa0b3ddc430db3bee2b8e5a",
+  "<harness-onion>/architecture/agent-loop/loop-profile.schema.json@585364b": "d75a5b943929f7678c8e8c8cacf2e937312bcc06caf15018de73ae9b9abac0bb",
+  "<harness-onion>/architecture/agent-loop/loop-trace.schema.json@585364b": "3be32ceee16c2bbbeaf945ee8231a16e4a74fc2ddce46ebafdf7bee9d7868b6e",
+  "<harness-onion>/architecture/run-manifest/README.md@585364b": "279d374e5ddd1b6305611f3565a7af14046b305e59cf9634a88bd358818ce826",
+  "<harness-onion>/architecture/run-manifest/distribution-gate.schema.json@585364b": "f521fc6691984959473ef4f184e863193c060acc0b2ed1012dcf1d2c9d3a1683",
+  "<harness-onion>/architecture/topology-coordination/README.md@585364b": "890af54aa39c6fbec35615bec8cadb5ffa62c33a5ccce0e21b7af5fcd3fb9c90",
+  "<harness-onion>/architecture/topology-coordination/board-transcript.schema.json@585364b": "8a3cc5b87953e97a4b42362df382f9b101931be1d55de84f441b16020b405b7c",
+  "<harness-onion>/architecture/topology-coordination/topology-spec.schema.json@585364b": "a326f70fd56d4300aa1bfaa3838a888c90347a75fc84164188e4af42052e82d0",
+  "<harness-onion>/architecture/verdict-ledger/README.md@585364b": "dde6efc45fc2e1ad675635d0a18a1d6a82b49c960616af239f47071e2914e3f7",
+  "<harness-onion>/architecture/verdict-ledger/check-kinds.json@585364b": "d53c5fb8e125c0c6588a327433870a3e6838328e741b12865691c5c2c6e3a3ac",
+  "<harness-onion>/architecture/verdict-ledger/ledger.schema.json@585364b": "8a570cfb26b16fb3f7fa1cf799bd564fe717fd3d356dbca890dab747b2dc9326",
+  "<harness-onion>/docs/harnesses/execution.tool-skill-sandbox.md@585364b": "894ef8182df30896ef713d2e46be5601feab234703752eb8243786d419d4556b",
+  "<harness-onion>/docs/harnesses/trust.security-safety.md@585364b": "736f7184d124cdf7804efbe1d5768830662e649b7588b5e8c2d22c82c617323e"
+ },
+ "inputs": [
+  "<harness-onion>/architecture/topology-coordination/README.md@585364b",
+  "<harness-onion>/architecture/topology-coordination/board-transcript.schema.json@585364b",
+  "<harness-onion>/architecture/topology-coordination/topology-spec.schema.json@585364b",
+  "<harness-onion>/architecture/agent-loop/README.md@585364b",
+  "<harness-onion>/architecture/agent-loop/loop-profile.schema.json@585364b",
+  "<harness-onion>/architecture/agent-loop/loop-trace.schema.json@585364b",
+  "<harness-onion>/architecture/run-manifest/README.md@585364b",
+  "<harness-onion>/architecture/run-manifest/distribution-gate.schema.json@585364b",
+  "<harness-onion>/architecture/verdict-ledger/README.md@585364b",
+  "<harness-onion>/architecture/verdict-ledger/ledger.schema.json@585364b",
+  "<harness-onion>/architecture/verdict-ledger/check-kinds.json@585364b",
+  "<harness-onion>/docs/harnesses/execution.tool-skill-sandbox.md@585364b",
+  "<harness-onion>/docs/harnesses/trust.security-safety.md@585364b"
+ ],
+ "note": "Designed from the roadmap text of MAS-RA-010-F (its plan, groups G5 and G6), the merged harness-onion contracts at 585364b (packet 4's eleven pins) and the two harness documents H11 and H13, new to the pin set, and packet 4's merged R12 code at e038772d, the base it extends (as local squash 2d7130a, the same tree 7b2190ef). Owner decisions RA010F-PICK and Q-RA10F-1..8; monitor rulings under the owner's delegation GO-P5-DESIGN, MON-P5-Q1-3 (Q-P5-1 to Q-P5-3 (a)), GO-P5-DR1, MON-P5-DR1-ADDENDUM, MON-P5-DR1-BASE, MON-P5-DR1-KEEP, Q-P5-4 (a), MON-P5-R2-COPY-KEEP, GO-P5-DR2, MON-P5-DR2-KEEP, Q-P5-CAP (a), GO-P5-DR3, MON-P5-DR3-KEEP and GO-P5-BUILD. The owner's warm-start repositories, R10 source and W03 work in progress were not read. The w03WorkInProgressRead flag reads with the owner's independence answer, 'Accept as metadata-only (Recommended)', given for an earlier, disclosed metadata-only read that predates this packet; during this packet's design period, two plain directory listings made by this lane for another packet showed W03 names only (a file name and worktree directory names), nothing was opened or read, and the monitor kept it as MON-257-LS-KEEP. No input of this packet came from either. The implementationReadOrRunForExpectedResults flag's scope is the candidate, packet 5's own implementation: every expected result was preregistered in DESIGN revision 3 before the candidate ran. The base code was read by role, as each review record states: the designer read packet 4's tests/mas code, data, tests and README to trace tick paths and ran no simulation; design-review rounds 1 to 3 read the same code, data and records and checked the two harness documents at 585364b against the pins. Probes, all on packet 4's engine as it is or on hand-built logs, never on candidate code, and never on C13 or the G6 bed: round 1 ran 2 single simulations, round 2 ran 13 and round 3 ran 10 (timing only). Rounds 1 and 2 also hashed 34 objects of results.json and classes.json against 2d7130a (all equal). Later monitor rulings under the owner's delegation: GO-P5-FETCH, GO-P5-PR, MON-P5-ORACLE-KEEP, MON-P5-PR1-KEEP and Q-PR1-FIX (a). The D5a oracle agent read the design, the build rules, the data files and packet 4's committed records at 2d7130a, never the candidate's code; besides its three test files it ran scratch checks on exported records and, through the interface only, one planted-fault check. Packet review round 1 (on 1218d04) read the worktree, its base at e038772d, the design and build records, the decisions record and the thirteen pinned harness-onion files at 585364b (and the two harness documents at b2705835); it regenerated the ledger and the campaign record once in-process, made 5 probe simulations and ran tests/mas and tests/ci_checkpoint once each. Round 2, a delta limited to the fix commit that adds this sentence (Q-PR1-FIX (a)), reviews that commit before the packet's final squash; its record is kept with the lane's records, and this note is not edited after it.",
+ "packet": "CONF-MAS-005",
+ "r10SourceRead": false,
+ "schemaVersion": "r12.mas-attestation/v1",
+ "w03WorkInProgressRead": false,
+ "warmSourceRead": false
+}

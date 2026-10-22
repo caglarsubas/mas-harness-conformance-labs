@@ -1,10 +1,13 @@
-"""CONF-MAS-001 to CONF-MAS-004: runs every class over its seeds (defended, controls and defence-in-depth checks),
+"""CONF-MAS-001 to CONF-MAS-005: runs every class over its seeds (defended, controls and defence-in-depth checks),
 computes the per-run counts, the nearest-rank quantiles and the gates, and builds the ledger
 `r12.mas-simulation-results/v3` once per process. Packet 1's four and packet 2's three class rows are byte-identical to
 CONF-MAS-002's. CONF-MAS-003 adds C8 to C10, the MAS1-CARRY-1 arms (top-level `arms`, ungated) and the CONF-A3-001
 campaign record `r12.mas-campaign-record/v1` (built from the ledger, packet 1's event-scoped readings and constants).
 CONF-MAS-004 (DESIGN revision 5) moves the ledger to v4: C11 and C12, the top-level `scaling` (G1, safety gated, readings
 reported) and `hardCoding` (G4) sections, and the campaign record v2; C1 to C10's rows and `arms` are byte-identical.
+CONF-MAS-005 (DESIGN revision 3) moves the ledger to v5: C13 and the top-level, ungated `overRevision` section (G6); the
+campaign record stays v2 and gains packet 5's entries; C1 to C12's rows, `arms`, `scaling` and `hardCoding` are
+byte-identical.
 
 The ledger holds counts and quantiles only, never canary values. It is serialized with sorted keys, compact separators
 and ASCII, plus a trailing newline.
@@ -35,7 +38,8 @@ RULE = ("Every class runs seeds 1 to 32 defended, plus one run per control and p
         "event; C8's and C9's measurements and the MAS1-CARRY-1 arms (top-level arms) are reported and not gated, and "
         "packet 1's baseline policy stays the gated one. CONF-MAS-004: C11 and C12 are gated like every class; the scaling "
         "section gates safety only and reports its readings and the baseline comparison; the hard-coding section gates "
-        "its four results.")
+        "its four results. CONF-MAS-005: C13 is gated like every class; the over-revision section reports its readings "
+        "and gates nothing.")
 RATIOS = ("duplicatedWorkRatioPpm", "lostWorkPpm", "completionPpm")
 
 _CACHE: dict = {}
@@ -352,16 +356,52 @@ def hard_coding_section(config: dict) -> dict:
             "result": "PASS" if all(gates.values()) else "FAIL"}
 
 
+OVER_REVISION_READINGS = ("revisions", "overRevisions", "overRevisionPpm", "wastedWorks", "downgrades", "completionPpm",
+                          "lastMergeTick")
+
+
+def over_revision_section(config: dict) -> dict:
+    """CONF-MAS-005 G6 (section 6): the bed at each downgrade rate over the pinned seeds; readings only, gated on nothing.
+    An unfinished run reads lastMergeTick = the deadline; makespanRatioMilli is against the 0 point's p50."""
+    spec = config["overRevision"]
+    bed, seeds = spec["bed"], config["seeds"]
+    shared = _sim.shared_for(config, bed)
+    if spec["points"][0] != 0:
+        raise ValueError("the first point is the 0 point")
+    points = []
+    for ppm in spec["points"]:
+        entry = dict(bed, downgradePpm=ppm)
+        runs = []
+        for seed in seeds:
+            rows, measured = run(config, entry, seed)
+            counts = measured["counts"]
+            finished = counts["mergedItems"] == shared["items"]
+            last = _classes.work_readings(rows, entry, counts)["lastMergeTick"] if finished else entry["deadline"]
+            runs.append(dict(_classes.over_revision_counts(rows, bed["challenger"]),
+                             completionPpm=counts["completionPpm"], lastMergeTick=last))
+        points.append({"downgradePpm": ppm, "seeds": len(runs),
+                       "readings": {name: stats([r[name] for r in runs]) for name in OVER_REVISION_READINGS},
+                       "overRevisionsTotal": sum(r["overRevisions"] for r in runs)})
+    base = points[0]["readings"]["lastMergeTick"]["p50"]
+    for point in points:
+        point["makespanRatioMilli"] = point["readings"]["lastMergeTick"]["p50"] * 1000 // base if base else None
+    summary = {"topology": bed["topology"], "items": shared["items"], "concurrency": shared["concurrency"],
+               "maxLatency": bed["maxLatency"], "poisonPpm": bed["poisonPpm"], "deadline": bed["deadline"],
+               "challenger": bed["challenger"], "downgradeStream": bed["downgradeStream"]}
+    return {"decision": spec["decision"], "seeds": list(seeds), "bed": summary, "points": points, "gated": False}
+
+
 def cls_event(cls: dict, event_id: str) -> dict:
     return next(e for e in cls["events"] if e["id"] == event_id)
 
 
 def build() -> dict:
     config, classes_sha = load_config()
-    return {"schemaVersion": "r12.mas-simulation-results/v4", "packet": "CONF-MAS-004", "profile": PROFILE,
+    return {"schemaVersion": "r12.mas-simulation-results/v5", "packet": "CONF-MAS-005", "profile": PROFILE,
             "seeds": config["seeds"], "classesSha256": classes_sha, "contractsCommit": CONTRACTS_COMMIT, "rule": RULE,
             "classes": [class_row(config, cls) for cls in config["classes"]], "arms": arms_section(config),
-            "scaling": scaling_section(config), "hardCoding": hard_coding_section(config)}
+            "scaling": scaling_section(config), "hardCoding": hard_coding_section(config),
+            "overRevision": over_revision_section(config)}
 
 
 def serialize(value: dict) -> bytes:
@@ -382,11 +422,13 @@ CAMPAIGN_PACKETS = (
     ("CONF-MAS-002", "c672aad56960b33a3e6d281aa484c7ac507293aa",
      "d9871b7efe718b7e702d6200957de18cc5f519bddd50ad1745aa0dcccf76c7cd"),
     # CONF-MAS-004 (section 8): packet 3's entry as v1 recorded it (`commit` null, its results.json digest).
-    ("CONF-MAS-003", None, "1893118540358ccd0db0d3ad4009af97041560c2f210773cbc0805231cc40f87"))
+    ("CONF-MAS-003", None, "1893118540358ccd0db0d3ad4009af97041560c2f210773cbc0805231cc40f87"),
+    # CONF-MAS-005 (section 8): packet 4's entry as the record holds it (results.json at 2d7130a).
+    ("CONF-MAS-004", None, "7149f09d3585bd8c9a8cbf4ab075abd09e75a74b110fddbfdef5b8125470bb77"))
 CLASS_PACKET = {"C1": "CONF-MAS-001", "C2": "CONF-MAS-001", "C3": "CONF-MAS-001", "C4": "CONF-MAS-001",
                 "C5": "CONF-MAS-002", "C6": "CONF-MAS-002", "C7": "CONF-MAS-002",
                 "C8": "CONF-MAS-003", "C9": "CONF-MAS-003", "C10": "CONF-MAS-003",
-                "C11": "CONF-MAS-004", "C12": "CONF-MAS-004"}
+                "C11": "CONF-MAS-004", "C12": "CONF-MAS-004", "C13": "CONF-MAS-005"}
 RECORDED_DECISIONS = {"C2": "Q-MAS1-F1", "C5": "Q3-2", "C7": "Q3-2", "C9": "Q-D3-1"}
 FINDINGS = (
     ("MAS1-CARRY-1", "Packet 1's carried retry-policy effect: a holder's own RENEW can overtake its MERGE at latency 3, "
@@ -424,23 +466,47 @@ FINDINGS = (
                "points switch the fix on (claimAwareWorker, Q-P4-D2-1 (a), Q-P4-D3-1 (a)); C1 to C12 keep packet 1's "
                "worker. One transient is left at CENTRAL points (Q-P4-D4-3): explained duplicate work, and slight "
                "nudges to three ungated readings (contention, messages, makespan); no safety counter and no earlier "
-               "row moves."))
+               "row moves."),
+    # CONF-MAS-005 (DESIGN revision 3, section 9), stated before the first ledger.
+    ("F-C13-1", "The kernel's data rule and the gateway's listing are two layers only for a directive that names a tool "
+                "the caller's profile does not list; a directive that names a listed tool meets the data rule alone. A "
+                "typed MESSAGE stays the one instruction channel on the bus."),
+    ("F-C13-2", "The pinned view is the one layer against a self-registering extension: once the run-time registry is "
+                "read, it supplies the entry, the listing, the schema and the grant."),
+    ("F-C13-3", "The trust gate is the one layer against a tool call before the trust decision; a late decision leaves "
+                "earlier calls refused, not undone, and board operations are not gated."),
+    ("F-C13-4", "The lifecycle-script gate is the one layer; the allowlist's justification is declared, not verified."),
+    ("F-C13-5", "The fetch denial and the digest pin are two layers against an unverified binary; each holds when the "
+                "other is bypassed."),
+    ("F-C13-6", "The closed tool environment is the one layer, modelled only for tools that declare their variables; "
+                "it records that the closure ran, not which variables it withheld, and a canary in a child environment "
+                "is kept apart from leakedSecrets."),
+    ("F-G6-1", "A worse verdict needs no new evidence (verdict-ledger rule 10; topology-coordination's history rule), so "
+               "a challenger can force revisions of correct work; the over-revision section measures the cost. A "
+               "successor rule that asks for new evidence before a downgrade is proposed to harness-onion, not adopted "
+               "here."))
 NOT_CLAIMED = ("Not a gate: an input to CONF-A3-001 (HO-D2).",
                "Does not lift topology-coordination's denial until MAS-RA-010 passes.",
                "No product or contract decision (Q-NX2-4 (a)).",
                "The scaling readings are the sim's own contention model, not real agents or a real board.",
                "The hard-coding check finds only id-keyed memorisation, not every form of overfitting.",
-               "The task fixture is synthetic: a drawn problem and a hash answer.")
+               "The task fixture is synthetic: a drawn problem and a hash answer.",
+               "The six trust-boundary vectors are scripted fixtures, not real files, packages, binaries or processes.",
+               "The harness documents H11 and H13 are restated as rules for the simulation, not as their packets' "
+               "implementations.",
+               "The over-revision readings are the simulation's challenger model, not a measured rate of real "
+               "verifiers.")
 
 
 def campaign_record() -> dict:
     """The closed record `r12.mas-campaign-record/v2` (CONF-MAS-004, section 8), built from the in-process ledger,
     packet 1's event-scoped readings and the constants above; counts, digests, ids and fixed text only. Packets 1 to 3's
-    entries are v1's."""
+    entries are v1's. CONF-MAS-005 (section 8): packet 4's entry is held as a constant, packet 5's carries the live
+    digest, and the key `overRevision` holds G6's p50s."""
     value = ledger()
     results_sha = hashlib.sha256(serialize(value)).hexdigest()
     packets = [{"packetId": p, "commit": c, "resultsSha256": r} for p, c, r in CAMPAIGN_PACKETS]
-    packets.append({"packetId": "CONF-MAS-004", "commit": None, "resultsSha256": results_sha})
+    packets.append({"packetId": "CONF-MAS-005", "commit": None, "resultsSha256": results_sha})
     classes = [{"id": row["id"], "kind": row["kind"], "packet": CLASS_PACKET[row["id"]], "result": row["result"],
                 "gates": row["gates"]} for row in value["classes"]]
     fails = [{"class": row["id"], "metric": name, "decision": RECORDED_DECISIONS.get(row["id"])}
@@ -465,4 +531,10 @@ def campaign_record() -> dict:
             "eventScopedReadings": [EVENT_SCOPED_READINGS[k] for k in sorted(EVENT_SCOPED_READINGS)],
             "notClaimed": list(NOT_CLAIMED),
             "scaling": {"points": points, "baseline": [summary(b) for b in scaling["baseline"]]},
-            "hardCoding": {"gates": value["hardCoding"]["gates"], "result": value["hardCoding"]["result"]}}
+            "hardCoding": {"gates": value["hardCoding"]["gates"], "result": value["hardCoding"]["result"]},
+            "overRevision": {"points": [{"downgradePpm": p["downgradePpm"],
+                                         "p50": {n: p["readings"][n]["p50"] for n in OVER_REVISION_READINGS},
+                                         "overRevisionsTotal": p["overRevisionsTotal"],
+                                         "makespanRatioMilli": p["makespanRatioMilli"]}
+                                        for p in value["overRevision"]["points"]],
+                             "finding": "F-G6-1"}}

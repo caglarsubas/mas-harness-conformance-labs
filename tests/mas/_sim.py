@@ -25,6 +25,14 @@ self-reported status and the bypass JUDGE_BY_STATUS (`selfReport`), the merge-po
 EVIDENCE_KIND (`evidenceRule`), the run parameters `scriptedEvents` and `policy`, and the scaling points' worker switch
 (`claimAwareWorker`). Two fields join the effect-log row at its end, null in every row of packets 1 to 3.
 
+CONF-MAS-005 adds, switched on only by class keys packets 1 to 4 lack (DESIGN revision 3, section 4): the pinned view of
+the tool configuration (`pinned_view`; the global objects themselves without `toolOverlay`), the run-time registry an
+extension writes and the bypass MANIFEST_PIN, the trust gate (`trustTick`, refusal BEFORE_TRUST, bypass TRUST_ORDER),
+the overlay tools' effects (the kernel's data rule for a fixture directive, refusal INSTRUCTION_FROM_DATA, bypass
+CONTEXT_AS_DATA; the loader's lifecycle-script gate, SCRIPT_SKIPPED, bypass INSTALL_SCRIPTS; the fetch denial NO_FETCH
+and the digest pin DIGEST_MISMATCH, bypasses FETCH and ARTIFACT_PIN; the closed tool environment, ENV_CLOSED, bypass
+ENV_CLOSURE). No row field and no row kind is added.
+
 The agents are scripted and susceptible: they try what an attack directs. The defences live only in the harness
 components (the board, the gateway and its grant issuer, the gates and the verifier), never in the agents.
 """
@@ -112,6 +120,24 @@ def shared_for(config: dict, cls: dict) -> dict:
     if not load:
         return config["shared"]
     return dict(config["shared"], items=load["items"], concurrency=load["concurrency"])
+
+
+def pinned_view(config: dict, cls: dict) -> dict:
+    """CONF-MAS-005 (section 4.1): the tool configuration fixed at construction. Without `toolOverlay` it is the global
+    objects themselves; with one, copies with the overlay's manifest entries and input schemas added and its tools
+    appended to the WORKER listing. An overlay never replaces a global entry."""
+    overlay = cls.get("toolOverlay")
+    if not overlay:
+        return {"manifest": config["manifest"], "profiles": config["profiles"],
+                "inputSchemas": config.get("inputSchemas", {})}
+    manifest, schemas = dict(config["manifest"]), dict(config.get("inputSchemas", {}))
+    if set(overlay["manifest"]) & set(manifest) or set(overlay["inputSchemas"]) & set(schemas):
+        raise ValueError("an overlay adds entries and never replaces one")
+    manifest.update(overlay["manifest"])
+    schemas.update(overlay["inputSchemas"])
+    profiles = {role: dict(profile) for role, profile in config["profiles"].items()}
+    profiles["WORKER"]["tools"] = list(profiles["WORKER"]["tools"]) + list(overlay["workerTools"])
+    return {"manifest": manifest, "profiles": profiles, "inputSchemas": schemas}
 
 
 def solve(problem: str) -> str:
@@ -517,10 +543,12 @@ class Gateway:
         self.grants = 0
         self.used: set[str] = set()
 
-    def issue(self, t: int, agent: str, tool: str) -> dict:
-        """A grant for one call, copied from the tool's manifest entry; expires grantTicks after issue."""
+    def issue(self, t: int, agent: str, tool: str, entry: dict | None = None) -> dict:
+        """A grant for one call, copied from the tool's manifest entry; expires grantTicks after issue. CONF-MAS-005
+        (section 4.1): the entry the caller resolved, or by default the pinned view's (the global entry for C1 to C12)."""
         sim = self.sim
-        entry = sim.config["manifest"][tool]
+        if entry is None:
+            entry = sim.pinned["manifest"][tool]
         self.grants += 1
         return {"grantId": "g-%d" % self.grants, "toolId": tool, "manifestDigest": entry["manifestDigest"],
                 "scope": entry["grantScope"], "expiresAt": t + sim.config["grantTicks"]}
@@ -530,12 +558,14 @@ class Gateway:
         """One call. grant=None is the honest path: a fresh grant is issued in the call's tick and presented. The result
         carries the grant it used, so a caller can present it again."""
         sim = self.sim
-        entry = sim.config["manifest"].get(tool)
-        listed = sim.config["profiles"][sim.role_of(agent)]["tools"]
+        # CONF-MAS-005 (section 4.1): the pinned view, or under MANIFEST_PIN the pinned view merged with the registry.
+        view = sim.tool_view()
+        entry = view["manifest"].get(tool)
+        listed = view["profiles"][sim.role_of(agent)]["tools"]
         bypassed: list[str] = list(kernel_bypass)
         hits = sim.canary_hits(repr(sorted(inp.items())).encode("utf-8"))
         keys = input_keys(inp, entry) if entry is not None else None
-        used = {"grant": None}
+        used = {"grant": None, "work": None}
 
         def row(answer: str) -> dict:
             g = used["grant"] or {}
@@ -543,13 +573,21 @@ class Gateway:
                                canaryHits=hits, scheduledEvent=event, controlBypass=join_bypass(bypassed),
                                claimOpId=claim, attempt=attempt, inputKeys=keys, grantId=g.get("grantId"),
                                grantToolId=g.get("toolId"), grantManifestDigest=g.get("manifestDigest"),
-                               grantScope=g.get("scope"), grantExpiresAt=g.get("expiresAt"))
+                               grantScope=g.get("scope"), grantExpiresAt=g.get("expiresAt"), workDigest=used["work"])
 
         def refused(answer: str) -> dict:
             return {"launched": False, "row": row(answer), "grant": used["grant"]}
 
         if entry is None:
             return refused("UNKNOWN_TOOL")
+        if tool not in sim.pinned["manifest"]:
+            bypassed.append("MANIFEST_PIN")  # only the registry knows it, so MANIFEST_PIN is on (section 4.3)
+        # CONF-MAS-005 (section 4.5): no tool call before the run's trust decision.
+        if sim.cfg.get("trustTick") is not None and not sim.trusted:
+            if "TRUST_ORDER" in sim.bypass:
+                bypassed.append("TRUST_ORDER")
+            else:
+                return refused("BEFORE_TRUST")
         # The grant issuer issues a grant only for a tool the caller's profile lists (removed together with the
         # gateway's listing condition under C1-TOOLS-OFF; ADMIN's grant then comes from ADMIN's manifest entry, D4-5).
         if tool not in listed:
@@ -557,10 +595,16 @@ class Gateway:
                 bypassed.append("PROFILE_LISTING")
             else:
                 return refused("NOT_LISTED")
+        if entry.get("network"):
+            # CONF-MAS-005 (section 4.7): the air gap; no fetch.
+            if "FETCH" in sim.bypass:
+                bypassed.append("FETCH")
+            else:
+                return refused("NO_FETCH")
         if grant is None:
-            grant = self.issue(t, agent, tool)
+            grant = self.issue(t, agent, tool, entry)
         used["grant"] = grant
-        schema = sim.config["inputSchemas"][entry["inputSchema"]]
+        schema = view["inputSchemas"][entry["inputSchema"]]
         if sorted(keys) != sorted("%s:%s" % (k, v) for k, v in schema.items()):
             if "INPUT_SCHEMA" in sim.bypass:
                 bypassed.append("INPUT_SCHEMA")
@@ -589,11 +633,22 @@ class Gateway:
                     bypassed.append("CREDENTIAL_REF")
                 else:
                     return refused("CREDENTIAL_VALUE")
+        if entry.get("artifactPin"):
+            # CONF-MAS-005 (section 4.7): a binary runs only when its stored bytes' digest equals its pin.
+            name = inp.get("name")
+            used["work"] = digest(sim.store.get(name, b""))
+            if used["work"] != sim.pins.get(name):
+                if "ARTIFACT_PIN" in sim.bypass:
+                    bypassed.append("ARTIFACT_PIN")
+                else:
+                    return refused("DIGEST_MISMATCH")
         self.used.add(grant["grantId"])
         launched = row("LAUNCHED")
         if tool == "SEND_REPORT":
             sim.log.add(t, "SINK", agent=agent, toolId=tool, component="GATEWAY", canaryHits=hits,
                         scheduledEvent=event, controlBypass=join_bypass(bypassed))
+        if sim.cfg.get("toolOverlay"):
+            sim.tool_effect(t, agent, tool, inp, entry, event, grant["grantId"])
         return {"launched": True, "row": launched, "grant": grant}
 
 
@@ -604,6 +659,15 @@ class Sim:
                  until_deadline: bool = False, labels: str = "IDENTITY", scripted_events=None,
                  policy: str | None = None) -> None:
         self.config, self.cfg, self.seed = config, cls, seed
+        # CONF-MAS-005 (section 4.1, build rule D3-3): the pinned view, built once here, before the board, the gateway
+        # and the scenario's resolve and setup, and never rebuilt in a run; the registry an extension writes; the trust
+        # flag; the binary store and its pins (section 4.7). All empty or the global objects for C1 to C12.
+        self.pinned = pinned_view(config, cls)
+        self.registry: dict = {"manifest": {}, "inputSchemas": {}, "workerTools": []}
+        self.trusted = False
+        store = cls.get("binaryStore") or {}
+        self.store = {name: store[name]["bytes"].encode("ascii") for name in sorted(store)}
+        self.pins = {name: store[name]["pin"] for name in sorted(store)}
         # CONF-MAS-003 run parameters (section 4): an arm's worker policy (section 6) and the relay measurement's run
         # to the deadline. Both default to packet 1's behaviour.
         self.arm = arm
@@ -693,6 +757,67 @@ class Sim:
 
     def budgets(self) -> dict | None:
         return self.cfg.get("budgets")
+
+    # ------------------------------------------------------------------------ CONF-MAS-005 (section 4): C13 only
+    def tool_view(self) -> dict:
+        """The gateway's view: the pinned view, or under MANIFEST_PIN the pinned view merged with the run-time registry,
+        which then supplies the entry, the WORKER listing and the input schema of a tool only it knows (section 4.3)."""
+        if "MANIFEST_PIN" not in self.bypass or not self.registry["manifest"]:
+            return self.pinned
+        profiles = {role: dict(profile) for role, profile in self.pinned["profiles"].items()}
+        profiles["WORKER"]["tools"] = list(profiles["WORKER"]["tools"]) + list(self.registry["workerTools"])
+        return {"manifest": dict(self.pinned["manifest"], **self.registry["manifest"]), "profiles": profiles,
+                "inputSchemas": dict(self.pinned["inputSchemas"], **self.registry["inputSchemas"])}
+
+    def load_extension(self, extension: dict) -> None:
+        """An extension registers its own tool in the run-time registry: its manifest entry, its input schema and a
+        WORKER listing. The registry is sim state, and the load writes no row."""
+        self.registry["manifest"][extension["tool"]] = dict(extension["entry"])
+        self.registry["inputSchemas"][extension["entry"]["inputSchema"]] = dict(extension["inputSchema"])
+        if extension["tool"] not in self.registry["workerTools"]:
+            self.registry["workerTools"].append(extension["tool"])
+
+    def tool_effect(self, t: int, agent: str, tool: str, inp: dict, entry: dict, event, grant_id: str) -> None:
+        """A launched overlay tool's effect, by the kernel and the loader [sim mapping, sections 4.4 to 4.8]: the
+        environment closure for a tool that declares `env`; READ_CONTEXT's output and the data rule; INSTALL's
+        lifecycle-script gate; FETCH replacing the stored bytes."""
+        if entry.get("env") is not None:
+            self.env_row(t, agent, tool, entry, event)
+        if tool == "READ_CONTEXT":
+            context = self.cfg["contextFiles"][inp["path"]]
+            raw = context["text"].encode("ascii")
+            self.log.add(t, "OBSERVE", agent=agent, to=agent, component="GATEWAY", toolId=tool,
+                         markerPresent=MARKER.encode("ascii") in raw, canaryHits=self.canary_hits(raw), grantId=grant_id,
+                         scheduledEvent=event)
+            if context.get("directive"):
+                self.agents[agent].data_directive(t, tool, context["directive"], event)
+        elif tool == "INSTALL":
+            package = self.cfg["packages"][inp["package"]]
+            if package.get("script") is None:
+                return
+            fields = {"agent": agent, "toolId": tool, "component": "KERNEL", "workDigest": package["digest"],
+                      "scheduledEvent": event}
+            if package["allowlist"]["allowed"]:
+                self.log.add(t, "KERNEL", answer="SCRIPT_RUN", **fields)
+            elif "INSTALL_SCRIPTS" in self.bypass:
+                self.log.add(t, "KERNEL", answer="SCRIPT_RUN", controlBypass="INSTALL_SCRIPTS", **fields)
+            else:
+                self.log.add(t, "KERNEL", answer="SCRIPT_SKIPPED", **fields)
+        elif tool == "FETCH":
+            self.store[inp["name"]] = self.cfg["fetchFixture"][inp["name"]].encode("ascii")
+
+    def env_row(self, t: int, agent: str, tool: str, entry: dict, event) -> None:
+        """The child environment (section 4.8): only the declared variables, or under ENV_CLOSURE the caller's whole
+        environment, whose canary variable holds the caller's own canary. The row carries the scan of what was passed."""
+        spec = self.cfg["callerEnvironment"]
+        caller = dict(spec["variables"], **{spec["canaryVariable"]: self.canaries[agent]})
+        if "ENV_CLOSURE" in self.bypass:
+            child, answer, bypass = caller, "ENV_INHERITED", "ENV_CLOSURE"
+        else:
+            child, answer, bypass = {k: caller[k] for k in entry["env"] if k in caller}, "ENV_CLOSED", None
+        hits = self.canary_hits(repr(sorted(child.items())).encode("utf-8"))
+        self.log.add(t, "KERNEL", agent=agent, toolId=tool, answer=answer, component="KERNEL", canaryHits=hits,
+                     scheduledEvent=event, controlBypass=bypass)
 
     def admit(self, t: int) -> None:
         """Admission at tick 0, before any operation [sim mapping beyond A1]: a node whose declared objective differs
@@ -1443,6 +1568,24 @@ class Worker(Agent):
             return
         self.send(t, self.new_op(t, "RENEW", hold["item"], lane=self.lane(hold["item"]),
                                  expectedVersion=hold["version"]))
+
+    def data_directive(self, t: int, tool: str, directive: str, event) -> None:
+        """CONF-MAS-005 R1 (section 4.4) [sim mapping]: a directive in the output of a tool whose pinned entry is
+        UNTRUSTED is data, refused INSTRUCTION_FROM_DATA; CONTEXT_AS_DATA lets the kernel accept it, and its instruction
+        (the class's or the global instruction map) joins the todo list as a typed message's instruction does."""
+        sim = self.sim
+        fields = {"agent": self.id, "toolId": tool, "component": "KERNEL", "scheduledEvent": event}
+        if sim.pinned["manifest"][tool].get("trust") == "UNTRUSTED":
+            if "CONTEXT_AS_DATA" not in sim.bypass:
+                sim.log.add(t, "KERNEL", answer="INSTRUCTION_FROM_DATA", **fields)
+                return
+            sim.log.add(t, "KERNEL", answer="INSTRUCTION_ACCEPTED", controlBypass="CONTEXT_AS_DATA", **fields)
+        else:
+            sim.log.add(t, "KERNEL", answer="INSTRUCTION_ACCEPTED", **fields)
+        instruction = sim.instructions().get(directive)
+        if instruction is not None:
+            self.todo.append({"instruction": instruction,
+                              "msg": {"type": "MESSAGE", "from": self.id, "ref": {}, "event": event}})
 
     def run_todo(self, t: int) -> None:
         """A susceptible agent obeys every instruction a message carries (section 5, C1)."""

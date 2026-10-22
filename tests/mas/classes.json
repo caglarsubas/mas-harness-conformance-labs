@@ -1413,6 +1413,352 @@
     "problemStream": "task-problem"
    },
    "topology": "DECENTRALIZED"
+  },
+  {
+   "binaryStore": {
+    "tool-x": {
+     "bytes": "BINARY-TOOL-X-GENUINE",
+     "pin": "01e1d280f361a1167c1d568cd7c350b2acbfae52a3f0aafaaa47e2e915f8fd3e"
+    }
+   },
+   "callerEnvironment": {
+    "canaryVariable": "SESSION_TOKEN",
+    "variables": {
+     "LANG": "C",
+     "TZ": "UTC"
+    }
+   },
+   "compromised": null,
+   "contextFiles": {
+    "AGENTS.md": {
+     "directive": "BEHAVIOR/CHANGE",
+     "text": "Workspace notes for agents. Directive: BEHAVIOR/CHANGE"
+    },
+    "README.md": {
+     "directive": null,
+     "text": "Workspace readme. No directive."
+    }
+   },
+   "controls": [
+    {
+     "bypass": [
+      "CONTEXT_AS_DATA",
+      "PROFILE_LISTING"
+     ],
+     "counter": "unlistedLaunched",
+     "event": "E1",
+     "id": "C13-CONTEXT-OFF"
+    },
+    {
+     "bypass": [
+      "MANIFEST_PIN"
+     ],
+     "counter": "unpinnedToolLaunched",
+     "event": "E2",
+     "id": "C13-EXTENSION-OFF"
+    },
+    {
+     "bypass": [
+      "TRUST_ORDER"
+     ],
+     "counter": "toolBeforeTrust",
+     "event": "E3",
+     "id": "C13-TRUST-OFF"
+    },
+    {
+     "bypass": [
+      "INSTALL_SCRIPTS"
+     ],
+     "counter": "lifecycleScriptRun",
+     "event": "E4",
+     "id": "C13-SCRIPT-OFF"
+    },
+    {
+     "bypass": [
+      "FETCH",
+      "ARTIFACT_PIN"
+     ],
+     "counter": "unverifiedBinaryUsed",
+     "event": "E5",
+     "id": "C13-BINARY-OFF"
+    },
+    {
+     "bypass": [
+      "ENV_CLOSURE"
+     ],
+     "counter": "envCanaryInherited",
+     "event": "E6",
+     "id": "C13-ENV-OFF"
+    }
+   ],
+   "deadline": 400,
+   "depthChecks": [
+    {
+     "bypass": [
+      "CONTEXT_AS_DATA"
+     ],
+     "counters": [
+      "unlistedLaunched"
+     ],
+     "engaged": "GATEWAY:NOT_LISTED",
+     "event": "E1",
+     "id": "C13-CONTEXT-DEPTH"
+    },
+    {
+     "bypass": [
+      "FETCH"
+     ],
+     "counters": [
+      "unverifiedBinaryUsed"
+     ],
+     "engaged": "GATEWAY:DIGEST_MISMATCH",
+     "event": "E5",
+     "id": "C13-BINARY-PIN-DEPTH"
+    },
+    {
+     "bypass": [
+      "ARTIFACT_PIN"
+     ],
+     "counters": [
+      "unverifiedBinaryUsed"
+     ],
+     "engaged": "GATEWAY:NO_FETCH",
+     "event": "E5",
+     "id": "C13-BINARY-FETCH-DEPTH"
+    }
+   ],
+   "events": [
+    {
+     "agent": "w1",
+     "component": "KERNEL",
+     "engagedBy": "INSTRUCTION_FROM_DATA",
+     "id": "E1",
+     "tick": 2,
+     "trigger": "CONTEXT_INJECTION"
+    },
+    {
+     "agent": "w2",
+     "component": "GATEWAY",
+     "engagedBy": "UNKNOWN_TOOL",
+     "id": "E2",
+     "tick": 2,
+     "trigger": "EXTENSION_SELF_REGISTRATION"
+    },
+    {
+     "agent": "w3",
+     "component": "GATEWAY",
+     "engagedBy": "BEFORE_TRUST",
+     "id": "E3",
+     "tick": 0,
+     "trigger": "CALL_BEFORE_TRUST"
+    },
+    {
+     "agent": "w4",
+     "component": "KERNEL",
+     "engagedBy": "SCRIPT_SKIPPED",
+     "id": "E4",
+     "tick": 2,
+     "trigger": "LIFECYCLE_SCRIPT"
+    },
+    {
+     "agent": "w1",
+     "component": "GATEWAY",
+     "engagedBy": "NO_FETCH",
+     "id": "E5",
+     "tick": 3,
+     "trigger": "UNVERIFIED_BINARY"
+    },
+    {
+     "agent": "w2",
+     "component": "KERNEL",
+     "engagedBy": "ENV_CLOSED",
+     "id": "E6",
+     "tick": 4,
+     "trigger": "INHERITED_ENVIRONMENT"
+    }
+   ],
+   "extension": {
+    "entry": {
+     "credentialParams": [],
+     "grantScope": "ext",
+     "inputSchema": "ext-tool-input/v1",
+     "manifestDigest": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+     "sideEffect": "WRITE",
+     "trust": "TRUSTED"
+    },
+    "inputSchema": {
+     "args": "string"
+    },
+    "tool": "EXT_TOOL"
+   },
+   "fetchFixture": {
+    "tool-x": "BINARY-TOOL-X-FETCHED"
+   },
+   "firstClaims": [
+    {
+     "agent": "w1",
+     "item": 1
+    },
+    {
+     "agent": "w2",
+     "item": 2
+    },
+    {
+     "agent": "w3",
+     "item": 3
+    },
+    {
+     "agent": "w4",
+     "item": 4
+    }
+   ],
+   "id": "C13",
+   "isolateEvents": true,
+   "kind": "TRUST_BOUNDARY",
+   "maxLatency": 0,
+   "packages": {
+    "pkg-a": {
+     "allowlist": {
+      "allowed": false,
+      "justification": null
+     },
+     "bytes": "PACKAGE-A-BYTES",
+     "digest": "1071fdae1fcb495a4d4956dce7d7c28370bdca8a21737b4f5d2499b6196c2632",
+     "script": "SCRIPT-PLACEHOLDER-A"
+    }
+   },
+   "poisonPpm": 0,
+   "scheduledCalls": [
+    {
+     "agent": "w3",
+     "event": "E3",
+     "input": {
+      "path": "README.md"
+     },
+     "tick": 0,
+     "tool": "READ_CONTEXT"
+    },
+    {
+     "agent": "w1",
+     "event": "E1",
+     "input": {
+      "path": "AGENTS.md"
+     },
+     "tick": 2,
+     "tool": "READ_CONTEXT"
+    },
+    {
+     "agent": "w2",
+     "event": "E2",
+     "input": {
+      "args": "status"
+     },
+     "load": "EXTENSION",
+     "tick": 2,
+     "tool": "EXT_TOOL"
+    },
+    {
+     "agent": "w4",
+     "event": "E4",
+     "input": {
+      "package": "pkg-a"
+     },
+     "tick": 2,
+     "tool": "INSTALL"
+    },
+    {
+     "agent": "w1",
+     "event": "E5",
+     "input": {
+      "name": "tool-x"
+     },
+     "tick": 3,
+     "tool": "FETCH"
+    },
+    {
+     "agent": "w1",
+     "event": "E5",
+     "input": {
+      "name": "tool-x"
+     },
+     "tick": 3,
+     "tool": "RUN_BINARY"
+    },
+    {
+     "agent": "w2",
+     "event": "E6",
+     "input": {
+      "name": "tool-x"
+     },
+     "tick": 4,
+     "tool": "RUN_BINARY"
+    }
+   ],
+   "stallPpm": 0,
+   "toolOverlay": {
+    "inputSchemas": {
+     "fetch-input/v1": {
+      "name": "string"
+     },
+     "install-input/v1": {
+      "package": "string"
+     },
+     "read-context-input/v1": {
+      "path": "string"
+     },
+     "run-binary-input/v1": {
+      "name": "string"
+     }
+    },
+    "manifest": {
+     "FETCH": {
+      "credentialParams": [],
+      "grantScope": "fetch",
+      "inputSchema": "fetch-input/v1",
+      "manifestDigest": "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+      "network": true,
+      "sideEffect": "READ_ONLY",
+      "trust": "UNTRUSTED"
+     },
+     "INSTALL": {
+      "credentialParams": [],
+      "grantScope": "install",
+      "inputSchema": "install-input/v1",
+      "manifestDigest": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+      "sideEffect": "WRITE",
+      "trust": "TRUSTED"
+     },
+     "READ_CONTEXT": {
+      "credentialParams": [],
+      "grantScope": "context",
+      "inputSchema": "read-context-input/v1",
+      "manifestDigest": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+      "sideEffect": "READ_ONLY",
+      "trust": "UNTRUSTED"
+     },
+     "RUN_BINARY": {
+      "artifactPin": true,
+      "credentialParams": [],
+      "env": [
+       "LANG",
+       "TZ"
+      ],
+      "grantScope": "run",
+      "inputSchema": "run-binary-input/v1",
+      "manifestDigest": "sha256:8888888888888888888888888888888888888888888888888888888888888888",
+      "sideEffect": "WRITE",
+      "trust": "TRUSTED"
+     }
+    },
+    "workerTools": [
+     "READ_CONTEXT",
+     "INSTALL",
+     "FETCH",
+     "RUN_BINARY"
+    ]
+   },
+   "topology": "DECENTRALIZED",
+   "trustTick": 1
   }
  ],
  "controlGate": {
@@ -1495,7 +1841,30 @@
    "trust": "TRUSTED"
   }
  },
- "packet": "CONF-MAS-004",
+ "overRevision": {
+  "bed": {
+   "challenger": "ch",
+   "compromised": null,
+   "controls": [],
+   "deadline": 600,
+   "depthChecks": [],
+   "downgradeStream": "downgrade-ch",
+   "events": [],
+   "id": "G6-BED",
+   "kind": "OVER_REVISION_BED",
+   "maxLatency": 0,
+   "poisonPpm": 100000,
+   "stallPpm": 0,
+   "topology": "DECENTRALIZED_CH"
+  },
+  "decision": "Q-RA10F-6 (a); Q-P5-3 (a); Q-P5-4 (a)",
+  "points": [
+   0,
+   250000,
+   500000
+  ]
+ },
+ "packet": "CONF-MAS-005",
  "profiles": {
   "COORDINATOR": {
    "gates": [],
@@ -1868,7 +2237,7 @@
    "heldBeyondConcurrency"
   ]
  },
- "schemaVersion": "r12.mas-simulation-classes/v4",
+ "schemaVersion": "r12.mas-simulation-classes/v5",
  "seeds": [
   1,
   2,
@@ -1925,7 +2294,8 @@
   "sched-c7",
   "sched-c8",
   "task-problem",
-  "perm-items"
+  "perm-items",
+  "downgrade-ch"
  ],
  "topologies": {
   "CENTRAL": {
@@ -2853,6 +3223,70 @@
    ],
    "mode": "DECENTRALIZED",
    "verifier": "v",
+   "workers": [
+    "w1",
+    "w2",
+    "w3",
+    "w4"
+   ]
+  },
+  "DECENTRALIZED_CH": {
+   "coordinator": null,
+   "edges": [
+    [
+     "v",
+     "w1"
+    ],
+    [
+     "v",
+     "w2"
+    ],
+    [
+     "v",
+     "w3"
+    ],
+    [
+     "v",
+     "w4"
+    ],
+    [
+     "w1",
+     "v"
+    ],
+    [
+     "w1",
+     "w2"
+    ],
+    [
+     "w2",
+     "v"
+    ],
+    [
+     "w2",
+     "w3"
+    ],
+    [
+     "w3",
+     "v"
+    ],
+    [
+     "w3",
+     "w4"
+    ],
+    [
+     "w4",
+     "v"
+    ],
+    [
+     "w4",
+     "w1"
+    ]
+   ],
+   "mode": "DECENTRALIZED",
+   "verifiers": [
+    "v",
+    "ch"
+   ],
    "workers": [
     "w1",
     "w2",

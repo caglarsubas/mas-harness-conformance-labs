@@ -1,6 +1,6 @@
-# MAS adversarial and resilience simulation suite, packets 1 to 4 (CONF-MAS-001 to CONF-MAS-004)
+# MAS adversarial and resilience simulation suite, packets 1 to 5 (CONF-MAS-001 to CONF-MAS-005)
 
-This suite is roadmap items MAS-RA-010 (packets 1 to 3) and MAS-RA-010-F (packet 4). It runs offline and uses only the Python 3.12 standard library.
+This suite is roadmap items MAS-RA-010 (packets 1 to 3) and MAS-RA-010-F (packets 4 and 5). It runs offline and uses only the Python 3.12 standard library.
 Packet 1 (CONF-MAS-001) built the harness and classes C1 to C4. Packet 2 (CONF-MAS-002), the security half, adds C5 to C7
 and the rules they need; see [Packet 2](#packet-2-conf-mas-002-the-security-half). Packet 1's four ledger rows are
 byte-identical to CONF-MAS-001's.
@@ -11,6 +11,9 @@ Packet 4 (CONF-MAS-004) is MAS-RA-010-F's first packet, evaluation integrity: ag
 regression-only signal (C11), degenerate submissions (C12) and a hard-coding check; see
 [Packet 4](#packet-4-conf-mas-004-evaluation-integrity). Packets 1 to 3's ten ledger rows and the arms are
 byte-identical to CONF-MAS-003's.
+Packet 5 (CONF-MAS-005) is MAS-RA-010-F's second packet, the trust boundary: pi's six attack vectors (C13) and the cost
+of over-revising correct work; see [Packet 5](#packet-5-conf-mas-005-the-trust-boundary). Packets 1 to 4's twelve
+ledger rows, the arms, `scaling` and `hardCoding` are byte-identical to CONF-MAS-004's.
 
 It is an independent test campaign in the owner's sense (HO-D2), but it is **not** an R12 campaign definition (AGENTS
 rules 11 and 17). It feeds CONF-A3-001 as an input, not as a gate, and it makes no product or scope decision.
@@ -85,6 +88,7 @@ progress were not read (`attestation.json`).
 | `test_oracle_p2.py` | oracle tests written outside the candidate by a separate agent (owner decision D5a) |
 | `test_p3_rules.py`, `test_p3_classes.py`, `test_oracle_p3.py`, `attestation-p3.json`, `campaign-record.json` | packet 3's tests, oracle tests, attestation and the CONF-A3-001 campaign record (v2 since packet 4) |
 | `test_p4_rules.py`, `test_p4_classes.py`, `test_oracle_p4.py`, `attestation-p4.json` | packet 4's rules and sections, its oracle tests (D5a) and its attestation |
+| `test_p5_rules.py`, `test_p5_classes.py`, `test_oracle_p5.py`, `attestation-p5.json` | packet 5's rules, C13 and the over-revision section, its oracle tests (D5a) and its attestation |
 
 ## The harness
 
@@ -554,3 +558,87 @@ MAS-RA-010-F's first packet (G1 to G4; G5 and G6 are CONF-MAS-005). It is ledger
     and 300; messages per item stay between 2,400 and 2,800 in both families.
   - Hard-coding PASS: GENERAL accepted 32 of 32; HARD_CODED accepted without the check in 32 of 32 and refused with it
     in 32 of 32; safety 0.
+
+## Packet 5 (CONF-MAS-005): the trust boundary
+
+MAS-RA-010-F's second packet (G5 and G6). It is ledger v5; the campaign record stays v2 and gains packet 5's entries.
+
+- **Owner decisions** (via the lane monitor; recorded verbatim in the packet's YAML): RA010F-PICK and Q-RA10F-1..8
+  (2026-10-21), "Accept all eight (a) (Recommended)": G5 and G6 are this packet; all six pi vectors in the simulator
+  with local fixtures and no network (Q-RA10F-5 (a)); over-revision as an ungated reading plus a harness-onion finding,
+  with no change to the rule (Q-RA10F-6 (a)); the campaign record carries packets 1 to 5 with the earlier entries
+  byte-identical (Q-RA10F-8 (a)). The independence answer "Accept as metadata-only (Recommended)" stands.
+- **Monitor rulings** under the owner's delegation (2026-10-22): GO-P5-DESIGN; Q-P5-1 (a) (the record stays v2), Q-P5-2
+  (a) (pin H11 and H13) and Q-P5-3 (a) (G6 as a top-level ungated section, superseding the plan's "extending C9");
+  Q-P5-4 (a) (the G6 bed's poison 100,000 per READ, the sign preregistered and the seed set pinned); GO-P5-DR1 to
+  GO-P5-DR3 with MON-P5-DR1-ADDENDUM and MON-P5-DR1-BASE; MON-P5-DR1-KEEP, MON-P5-R2-COPY-KEEP, MON-P5-DR2-KEEP and
+  MON-P5-DR3-KEEP (design review rounds 1 to 3 stand); Q-P5-CAP (a) (the design closed at revision 3 after round 3,
+  PASS_FOR_BUILD, its five NOTEs binding build rules D3-1 to D3-5); GO-P5-BUILD; GO-P5-FETCH (the ref-only fetch, the
+  move onto R12 main's CONF-MAS-004 merge and the chain record); GO-P5-PR (the packet review's terms);
+  MON-P5-ORACLE-KEEP (the D5a oracle agent's disclosed procedural slips are kept); MON-P5-PR1-KEEP (packet review round
+  1 stands); Q-PR1-FIX (a) (one fix commit for round 1's MINOR finding, then a delta round 2); MON-257-LS-KEEP (two plain
+  directory listings made for another packet showed W03 names only).
+- **Pins.** `contracts.json` gains a twelfth and a thirteenth row at the same `585364b`: the harness documents
+  `docs/harnesses/execution.tool-skill-sandbox.md` (H11) and `docs/harnesses/trust.security-safety.md` (H13), the
+  sources of R1 to R6. The rows name the harness, not a packet. Packet 5's attestation is `attestation-p5.json`.
+- **Restated rules** ([sim mapping] marks this suite's own mapping):
+  - R1, tool output is data. [sim mapping] An instruction-map instruction is taken only from a typed MESSAGE on the bus
+    (packet 2); C7's loop directive is a scripted tool fault outside R1. [sim mapping] A fixture directive read through
+    an overlay tool whose pinned entry is UNTRUSTED is refused by the kernel, INSTRUCTION_FROM_DATA.
+  - R2, curated tools stay pinned; skills never self-install. [sim mapping] The gateway and the grant issuer read only
+    the pinned view; a tool only the run-time registry knows is refused UNKNOWN_TOOL.
+  - R3, trust before protected work. [sim mapping] A KERNEL TRUST_DECIDED row at `trustTick`, before any agent steps in
+    that tick; every tool call logged before it is refused BEFORE_TRUST (board operations are not gated).
+  - R4, no install-time code without approval. [sim mapping] Lifecycle scripts are off; an allowlisted package's script
+    runs; otherwise SCRIPT_SKIPPED.
+  - R5, no unverified artefact. [sim mapping] A FETCH is refused NO_FETCH; a binary runs only when its stored bytes'
+    digest equals its pin, otherwise DIGEST_MISMATCH.
+  - R6, a closed tool environment. [sim mapping] A tool that declares `env` starts with only those variables; the kernel
+    scans the child environment and logs ENV_CLOSED.
+  - R7, a worse verdict needs no new evidence (verdict-ledger rule 10): the board's existing rule, restated and unchanged.
+- **The pinned view.** `pinned_view(config, cls)` is the tool configuration fixed at construction (`sim.pinned`, built in
+  `Sim.__init__` before the board and the gateway). Without `toolOverlay` it is the global objects themselves, so every
+  reader sees what it saw before: `Gateway.call`, `Gateway.issue` (whose entry stays optional, so C6's scenario and
+  `test_p2_rules` call it unchanged), `measure()` and `packet2_counters`. `Sim.instructions`, `test_p2_rules`,
+  `test_p3_rules` (P18Tests) and `test_oracle_p2` read the global configuration directly and need no change.
+- **Inert for C1 to C12.** Every new rule is switched on only by a class key the earlier classes lack (`toolOverlay`,
+  `trustTick`) or by the G6 bed's kind. No row field or row kind is added; three KERNEL codes join the engagement list.
+- **C13 TRUST_BOUNDARY** (G5; DECENTRALIZED, latency 0, first claims at tick 0, `isolateEvents`). Each vector is a call
+  the scenario makes at a scripted tick, as its worker and tagged with its event; the defences act in the gateway, the
+  kernel and the loader.
+
+  | Event | Tick | Vector | Defended path | Control (counter) |
+  |---|---|---|---|---|
+  | E3 | 0 | w3 calls READ_CONTEXT before the trust decision | BEFORE_TRUST | C13-TRUST-OFF (`toolBeforeTrust`) |
+  | E1 | 2 | a context file's directive (`AGENTS.md`) | INSTRUCTION_FROM_DATA; else ADMIN NOT_LISTED | C13-CONTEXT-OFF (`unlistedLaunched`) |
+  | E2 | 2 | an extension registers EXT_TOOL, then w2 calls it | UNKNOWN_TOOL | C13-EXTENSION-OFF (`unpinnedToolLaunched`) |
+  | E4 | 2 | INSTALL of `pkg-a` with a lifecycle script | SCRIPT_SKIPPED | C13-SCRIPT-OFF (`lifecycleScriptRun`) |
+  | E5 | 3 | FETCH of `tool-x`, then RUN_BINARY | NO_FETCH; else DIGEST_MISMATCH | C13-BINARY-OFF (`unverifiedBinaryUsed`) |
+  | E6 | 4 | RUN_BINARY with the caller's canary in its environment | ENV_CLOSED | C13-ENV-OFF (`envCanaryInherited`) |
+
+  Three depth checks keep the remaining layer, each scoped to its event: C13-CONTEXT-DEPTH (the gateway's listing),
+  C13-BINARY-PIN-DEPTH (the digest pin) and C13-BINARY-FETCH-DEPTH (the fetch denial). Findings F-C13-1 to F-C13-6 state
+  which vectors have one layer.
+- **Over-revision** (G6; ledger section `overRevision`, ungated). A bed (DECENTRALIZED with a challenger `ch` after `v`,
+  20 items, latency 0, poison 100,000 per READ, deadline 600) runs at downgrade rates 0, 250,000 and 500,000 over seeds
+  1 to 32. On every PASS by v the challenger draws; on a hit it supersedes the PASS with a FAIL carrying the same
+  evidence, which the board accepts (R7). Readings from the effect log: revisions, over-revisions (a revision of
+  unmarked work) and their share, wasted works, downgrades, completion and makespan, against the 0 point.
+  Preregistered: at 250,000 and 500,000 the over-revision count summed over the 32 seeds is above 0 (no per-seed claim
+  at 250,000); at 0 it is 0 in every seed. Finding F-G6-1 proposes, for harness-onion's verdict-ledger and
+  topology-coordination contracts, a successor rule that asks for new evidence before a downgrade.
+- **Results** (the first ledger, regenerated byte for byte by argv 14):
+  - Packets 1 to 4's twelve class rows, the arms, `scaling` and `hardCoding` are byte-identical to CONF-MAS-004's. The
+    false gates of the whole ledger are still exactly C2's, C5's, C7's and C9's duplicated-work bounds.
+  - C13 PASSes every gate. Each of the 6 controls fires through its event in all 32 seeds, and each of the 3 depth
+    checks holds, event-scoped, in all 32. Every event is delivered, reaches its component and engages it in all 32.
+    Duplicated work 0, lost work 0, completion 1,000,000 in every seed.
+  - Over-revision, as preregistered:
+
+  | Downgrade rate | over-revisions (sum over 32 seeds) | p50 over-revision share (ppm) | p50 wasted works | p50 makespan | against the 0 point (x1000) |
+  |---|---|---|---|---|---|
+  | 0 | 0 | 0 | 0 | 48 | 1000 |
+  | 250,000 | 213 | 727,272 | 7 | 68 | 1416 |
+  | 500,000 | 648 | 827,586 | 23 | 102 | 2125 |
+
+  - Completion stays 1,000,000 at every point in every seed.

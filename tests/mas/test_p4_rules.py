@@ -193,7 +193,9 @@ class TopologyAndPointTests(unittest.TestCase):
         self.assertEqual((bed["maxLatency"], bed["poisonPpm"], bed["stallPpm"], bed["tasks"]), (0, 0, 0, TASKS))
         self.assertEqual((spec["policies"], spec["labels"], spec["permutationStream"]),
                          (["GENERAL", "HARD_CODED"], ["IDENTITY", "PERMUTED"], _sim.PERMUTATION_STREAM))
-        self.assertEqual(CONFIG["streams"][7:], ["task-problem", "perm-items"])
+        # CONF-MAS-005 (DESIGN revision 3, section 10): packet 5 appends `downgrade-ch`.
+        self.assertEqual(CONFIG["streams"][7:9], ["task-problem", "perm-items"])
+        self.assertEqual(CONFIG["streams"][9:], ["downgrade-ch"])
 
 
 class TaskTests(unittest.TestCase):
@@ -572,7 +574,7 @@ class DataFileTests(unittest.TestCase):
     def test_contracts_json_adds_the_eleventh_row(self):
         pins = json.loads((HERE / "contracts.json").read_text())
         self.assertEqual(pins["commit"], PIN)
-        self.assertEqual(len(pins["files"]), 11)
+        self.assertEqual(len(pins["files"]), 13)  # CONF-MAS-005 (section 10): the twelfth and thirteenth rows
         self.assertEqual(pins["files"][10], {
             "packet": "MET-MAS-001", "path": "architecture/verdict-ledger/check-kinds.json",
             "sha256": "d53c5fb8e125c0c6588a327433870a3e6838328e741b12865691c5c2c6e3a3ac", "size": 3173})
@@ -584,9 +586,10 @@ class DataFileTests(unittest.TestCase):
         pins = json.loads((HERE / "contracts.json").read_text())
         self.assertEqual(sorted(att), sorted(old))
         self.assertEqual((att["schemaVersion"], att["packet"]), ("r12.mas-attestation/v1", "CONF-MAS-004"))
-        self.assertEqual(att["inputs"], ["<harness-onion>/%s@585364b" % f["path"] for f in pins["files"]])
+        # CONF-MAS-005 (section 10): packet 4's attestation has the first eleven pins; the last two are packet 5's.
+        self.assertEqual(att["inputs"], ["<harness-onion>/%s@585364b" % f["path"] for f in pins["files"][:11]])
         self.assertEqual(att["inputDigests"], {"<harness-onion>/%s@585364b" % f["path"]: f["sha256"]
-                                               for f in pins["files"]})
+                                               for f in pins["files"][:11]})
         for flag in ("warmSourceRead", "r10SourceRead", "w03WorkInProgressRead",
                      "implementationReadOrRunForExpectedResults"):
             self.assertIs(att[flag], False, flag)
@@ -607,11 +610,13 @@ class RecordTests(unittest.TestCase):
         self.assertEqual(rec["packets"][2], {"packetId": "CONF-MAS-003", "commit": None,
                                              "resultsSha256": P3_RESULTS_SHA256})
         self.assertEqual(rec["packets"][3]["commit"], None)
-        self.assertEqual([(c["id"], c["packet"]) for c in rec["classes"][10:]],
+        # CONF-MAS-005 (DESIGN revision 3, section 10): packet 4's additions, scoped to their positions.
+        self.assertEqual([(c["id"], c["packet"]) for c in rec["classes"][10:12]],
                          [("C11", "CONF-MAS-004"), ("C12", "CONF-MAS-004")])
-        self.assertEqual([f["id"] for f in rec["findings"][-4:]], ["F-C11-1", "F-C12-1", "F-G4-1", "F-G1-1"])
-        self.assertEqual(len(rec["findings"]), 14)
-        self.assertEqual(len(rec["notClaimed"]), 6)
+        self.assertEqual([f["id"] for f in rec["findings"][10:14]], ["F-C11-1", "F-C12-1", "F-G4-1", "F-G1-1"])
+        self.assertEqual(len(rec["findings"]), 21)
+        self.assertEqual(len(rec["notClaimed"][:6]), 6)
+        self.assertEqual(len(rec["notClaimed"]), 9)
         self.assertEqual(sorted(rec["scaling"]), ["baseline", "points"])
         self.assertEqual([p["id"] for p in rec["scaling"]["points"]], [p["id"] for p in value["scaling"]["points"]])
         self.assertEqual([b["id"] for b in rec["scaling"]["baseline"]], ["B-5", "B-10", "B-20", "B-40", "B-80"])
