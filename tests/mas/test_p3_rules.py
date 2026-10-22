@@ -72,15 +72,18 @@ class ByteIdentityTests(unittest.TestCase):
     def test_existing_classes_json_entries_are_unchanged(self):
         self.assertEqual(canonical(CONFIG["classes"][:7]), CLASSES_1_TO_7_SHA256)
         # CONF-MAS-004 (DESIGN revision 5, section 10): its eight topologies, two streams and two sections are excluded.
+        # CONF-MAS-005 (DESIGN revision 3, section 10): so are DECENTRALIZED_CH and the section `overRevision`.
         new = ["%s_N%d" % (family, n) for family in ("CENTRAL", "DECENTRALIZED") for n in (1, 2, 8, 16)]
+        new.append("DECENTRALIZED_CH")
         old_topologies = {k: v for k, v in CONFIG["topologies"].items() if k != "DECENTRALIZED_C9" and k not in new}
         self.assertEqual(canonical(old_topologies), TOPOLOGIES_SHA256)
         self.assertEqual(canonical(CONFIG["streams"][:6]), STREAMS_SHA256)
         self.assertEqual(CONFIG["streams"][6], "sched-c8")
         rest = {k: v for k, v in CONFIG.items() if k not in ("classes", "topologies", "streams", "schemaVersion",
-                                                              "packet", "arms", "scaling", "hardCoding")}
+                                                              "packet", "arms", "scaling", "hardCoding",
+                                                              "overRevision")}
         self.assertEqual(canonical(rest), REST_SHA256)
-        self.assertEqual((CONFIG["schemaVersion"], CONFIG["packet"]), ("r12.mas-simulation-classes/v4", "CONF-MAS-004"))
+        self.assertEqual((CONFIG["schemaVersion"], CONFIG["packet"]), ("r12.mas-simulation-classes/v5", "CONF-MAS-005"))
 
     def test_the_new_switches_are_absent_from_packets_1_and_2(self):
         for cls in CONFIG["classes"][:7]:
@@ -272,15 +275,18 @@ class RecordTests(unittest.TestCase):
     def test_the_campaign_record_is_closed(self):
         rec = _ledger.campaign_record()
         # CONF-MAS-004 (DESIGN revision 5, section 10): v2's keys; packet 3's entry keeps v1's digest, packet 4's
-        # entry carries results.json's.
+        # entry carries results.json's. CONF-MAS-005 (DESIGN revision 3, section 10): the key `overRevision`; packet
+        # 4's entry is held at its digest, and packet 5's carries results.json's.
         self.assertEqual(sorted(rec), ["arms", "campaign", "classes", "consumer", "eventScopedReadings", "findings",
-                                       "hardCoding", "notClaimed", "packets", "recordedFails", "scaling",
-                                       "schemaVersion"])
+                                       "hardCoding", "notClaimed", "overRevision", "packets", "recordedFails",
+                                       "scaling", "schemaVersion"])
         self.assertEqual([p["packetId"] for p in rec["packets"]],
-                         ["CONF-MAS-001", "CONF-MAS-002", "CONF-MAS-003", "CONF-MAS-004"])
+                         ["CONF-MAS-001", "CONF-MAS-002", "CONF-MAS-003", "CONF-MAS-004", "CONF-MAS-005"])
         self.assertEqual(rec["packets"][2]["resultsSha256"],
                          "1893118540358ccd0db0d3ad4009af97041560c2f210773cbc0805231cc40f87")
         self.assertEqual(rec["packets"][3]["resultsSha256"],
+                         "7149f09d3585bd8c9a8cbf4ab075abd09e75a74b110fddbfdef5b8125470bb77")
+        self.assertEqual(rec["packets"][4]["resultsSha256"],
                          hashlib.sha256((HERE / "results.json").read_bytes()).hexdigest())
         self.assertEqual([c["id"] for c in rec["classes"]], [c["id"] for c in CONFIG["classes"]])
         self.assertEqual(sorted(r["check"] for r in rec["eventScopedReadings"]),
