@@ -341,3 +341,124 @@ def verify_linux_authority(envelope_bytes: bytes, capacity_bytes: bytes,
         raise
     except (TypeError, ValueError, KeyError, OverflowError, RecursionError) as exc:
         raise ConformanceError("LINUX_AUTHORITY_MALFORMED", "malformed Linux authority") from exc
+
+
+# CONF-LINUX-002 (owner Q-LHA-1 (a) and Q-SG-6; design rev 4 section 3): the v1alpha2 `signers` disclosure on the
+# CONF-LINUX-001 path only. These lines are additions. Every validator, schema and domain above keeps its bytes, so a
+# v1alpha2 document stays refused on every shared path: UNKNOWN_FIELD, or UNSUPPORTED_* without `signers`.
+ENVELOPE_SCHEMA_V2 = "harness.planeon.ai/live-campaign-execution-envelope/v1alpha2"
+CAPACITY_SCHEMA_V2 = "harness.planeon.ai/live-capacity-authorization/v1alpha2"
+ENVELOPE_DOMAIN_V2 = "planeon.harness-live-execution-envelope/v1alpha2"
+CAPACITY_DOMAIN_V2 = "planeon.harness-live-capacity-authorization/v1alpha2"
+SIGNERS = ("INDEPENDENT_PRINCIPALS", "SINGLE_PRINCIPAL_SEPARATED_KEYS")
+SINGLE_PRINCIPAL_OWNER = "single-principal"
+
+
+def validate_envelope_v2(document: Any, *, now: datetime) -> dict[str, Any]:
+    """Closed v1alpha2 check first; validate_envelope on a v1alpha1 copy for its refusals only; the original returned."""
+    original = require_object(document, "live execution envelope")
+    closed(original, ENVELOPE_FIELDS | {"signers"})
+    if original["schemaVersion"] != ENVELOPE_SCHEMA_V2:
+        raise ConformanceError("UNSUPPORTED_ENVELOPE", "unsupported execution-envelope schema")
+    if original["signers"] not in SIGNERS:
+        raise ConformanceError("LINUX_SIGNERS_INVALID", "signers disclosure is not one of its closed values")
+    legacy = {key: value for key, value in original.items() if key != "signers"}
+    legacy["schemaVersion"] = ENVELOPE_SCHEMA
+    validate_envelope(legacy, now=now)
+    return original
+
+
+def validate_capacity_v2(document: Any, envelope_v2: dict[str, Any], *, now: datetime) -> dict[str, Any]:
+    """The same pattern: validate_capacity on v1alpha1 copies of the capacity and the envelope; the original returned."""
+    original = require_object(document, "capacity authorization")
+    closed(original, CAPACITY_FIELDS | {"signers"})
+    if original["schemaVersion"] != CAPACITY_SCHEMA_V2:
+        raise ConformanceError("UNSUPPORTED_CAPACITY", "unsupported capacity schema")
+    if original["signers"] not in SIGNERS:
+        raise ConformanceError("LINUX_SIGNERS_INVALID", "signers disclosure is not one of its closed values")
+    legacy = {key: value for key, value in original.items() if key != "signers"}
+    legacy["schemaVersion"] = CAPACITY_SCHEMA
+    legacy_envelope = {key: value for key, value in envelope_v2.items() if key != "signers"}
+    legacy_envelope["schemaVersion"] = ENVELOPE_SCHEMA
+    validate_capacity(legacy, legacy_envelope, now=now)
+    return original
+
+
+def verify_live_signatures_v2(envelope_v2: dict[str, Any], capacity_v2: dict[str, Any], release_trust: dict[str, Any], tenant_trust: dict[str, Any], *, now: datetime) -> None:
+    """verify_live_signatures' key selection and distinct-key rule. Every payload is over the original v1alpha2 document,
+    so it covers `signers` and `schemaVersion`, under the v2 domains."""
+    platform_key = _trust_key(release_trust, envelope_v2["platformSignerKeyId"], "PLATFORM_RELEASE", None, None, now)
+    tenant_key = _trust_key(tenant_trust, envelope_v2["tenantSignerKeyId"], "TENANT_LIVE_EXECUTION", envelope_v2["tenantId"], envelope_v2["environmentId"], now)
+    capacity_key = _trust_key(tenant_trust, capacity_v2["signerKeyId"], "CAPACITY_OPERATOR", envelope_v2["tenantId"], envelope_v2["environmentId"], now)
+    if len({platform_key, tenant_key, capacity_key}) != 3:
+        raise ConformanceError("SIGNER_ROLES_NOT_INDEPENDENT", "all live signer keys must be distinct")
+    envelope_payload = signature_payload(ENVELOPE_DOMAIN_V2, envelope_v2, ("platformSignature", "tenantSignature"))
+    if not verify(platform_key, envelope_payload, b64url_decode(envelope_v2["platformSignature"], expected_length=64)):
+        raise ConformanceError("PLATFORM_SIGNATURE_INVALID", "platform signature is invalid")
+    if not verify(tenant_key, envelope_payload, b64url_decode(envelope_v2["tenantSignature"], expected_length=64)):
+        raise ConformanceError("TENANT_SIGNATURE_INVALID", "tenant signature is invalid")
+    capacity_payload = signature_payload(CAPACITY_DOMAIN_V2, capacity_v2, ("signature",))
+    if not verify(capacity_key, capacity_payload, b64url_decode(capacity_v2["signature"], expected_length=64)):
+        raise ConformanceError("CAPACITY_SIGNATURE_INVALID", "capacity signature is invalid")
+
+
+def verify_linux_authority_v2(envelope_bytes: bytes, capacity_bytes: bytes,
+                              release_trust_bytes: bytes, tenant_trust_bytes: bytes,
+                              *, now: datetime) -> tuple[Any, ...]:
+    """verify_linux_authority's steps on the v1alpha2 documents, in its order, then the `signers` agreement and the
+    disclosed owner rule. Returns the original envelope and capacity, both trust bundles and the agreed `signers`."""
+    from .canonical import require_canonical_document
+    from .linux_readiness import AXES, COMMANDS, PACKET_DIGEST, require, require_time
+    from .schema import require_id
+
+    try:
+        envelope = validate_envelope_v2(require_canonical_document(envelope_bytes), now=now)
+        require_time(envelope["issuedAt"], "issuedAt")
+        require(envelope["packetId"] == "CONF-LINUX-001" and envelope["packetDigest"] == PACKET_DIGEST
+                and envelope["campaignId"] == "linux-baseline" and envelope["commands"] == COMMANDS
+                and envelope["allowedEvidenceAxes"] == list(AXES), "LINUX_ENVELOPE_SCOPE_MISMATCH")
+        require(now < require_time(envelope["expiresAt"], "expiresAt"), "LINUX_ENVELOPE_EXPIRED")
+        for name in ("tenantId", "environmentId", "nonce", "capacityAuthorizationId"):
+            require_id(envelope[name], name)
+        for raw, field in ((capacity_bytes, "capacityAuthorizationDigest"),
+                           (release_trust_bytes, "releaseTrustStoreDigest"),
+                           (tenant_trust_bytes, "tenantTrustStoreDigest")):
+            require(byte_digest(raw) == envelope[field], "LINUX_AUTHORITY_DIGEST_MISMATCH")
+        capacity = validate_capacity_v2(require_canonical_document(capacity_bytes), envelope, now=now)
+        require_time(capacity["validFrom"], "validFrom")
+        require(now < require_time(capacity["expiresAt"], "expiresAt"), "LINUX_CAPACITY_EXPIRED")
+        for name in ("nonce", "namespace", "operatorId"):
+            require_id(capacity[name], name)
+        require(len(capacity["permittedEndpointIds"]) == len(set(capacity["permittedEndpointIds"])), "LINUX_DUPLICATE_ENDPOINT")
+        release_trust = require_canonical_document(release_trust_bytes)
+        tenant_trust = require_canonical_document(tenant_trust_bytes)
+        for trust in (release_trust, tenant_trust):
+            closed(require_object(trust, "Linux trust"), ("schemaVersion", "keys", "revocationsDigest"))
+            require(isinstance(trust["keys"], list) and 0 < len(trust["keys"]) <= 128, "LINUX_TRUST_INVALID")
+            seen = set()
+            for key in trust["keys"]:
+                closed(require_object(key, "Linux key"), ("keyId", "purpose", "publicKey", "owner", "tenantId", "environmentId", "validFrom", "validUntil", "revoked"))
+                require_key_id(key["keyId"], "keyId")
+                require(key["keyId"] not in seen and type(key["revoked"]) is bool, "LINUX_TRUST_INVALID")
+                seen.add(key["keyId"])
+                require_id(key["owner"], "owner")
+                require_time(key["validFrom"], "validFrom")
+                require_time(key["validUntil"], "validUntil")
+                b64url_decode(key["publicKey"], expected_length=32)
+        verify_live_signatures_v2(envelope, capacity, release_trust, tenant_trust, now=now)
+        require(envelope["signers"] == capacity["signers"], "LINUX_SIGNERS_DISCLOSURE_MISMATCH")
+        owners = [next(item["owner"] for item in trust["keys"] if item["keyId"] == key_id) for trust, key_id in (
+            (release_trust, envelope["platformSignerKeyId"]), (tenant_trust, envelope["tenantSignerKeyId"]),
+            (tenant_trust, capacity["signerKeyId"]))]
+        if envelope["signers"] == SIGNERS[0]:
+            # INDEPENDENT_PRINCIPALS: today's pairwise-distinct rule first, then the reserved label.
+            require(len(set(owners)) == 3, "LINUX_SIGNER_OWNERS_NOT_INDEPENDENT")
+            require(SINGLE_PRINCIPAL_OWNER not in owners, "LINUX_RESERVED_OWNER_LABEL")
+        else:
+            # SINGLE_PRINCIPAL_SEPARATED_KEYS, the only other value validate_envelope_v2 admits: one fixed label.
+            require(all(owner == SINGLE_PRINCIPAL_OWNER for owner in owners), "LINUX_SIGNER_OWNERS_NOT_SINGLE_PRINCIPAL")
+        return envelope, capacity, release_trust, tenant_trust, envelope["signers"]
+    except ConformanceError:
+        raise
+    except (TypeError, ValueError, KeyError, OverflowError, RecursionError) as exc:
+        raise ConformanceError("LINUX_AUTHORITY_MALFORMED", "malformed Linux authority") from exc

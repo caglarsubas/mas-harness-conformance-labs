@@ -43,6 +43,10 @@ BUILD_FIELDS = ("recipeDigest", "toolchainDigest", "cacheDigest", "sbomDigest", 
 SIGNATURES = ("platformSignature", "tenantSignature", "capacitySignature")
 AUTHORITY_FIELDS = ("packetDigest", "envelopeDigest", "capacityDigest", "releaseDigest", "planDigest", "tenantId", "environmentId", "runNonce", "endpointId", "endpointDigest", "namespace", "serviceAccountSubject", "admissionPolicyDigest", "resourceQuotaDigest")
 RECORD_FIELDS = ("schemaVersion", "authority", "target", "sources", "images", "build", "preflightDigest", "observedAt", "validUntil", "cases", "platformSignerKeyId", "tenantSignerKeyId", "capacitySignerKeyId", *SIGNATURES)
+# CONF-LINUX-002 (Q-SG-6): the v1alpha2 record adds `signers`; only verify_linux_evidence's dispatch reaches it.
+SCHEMA_V2 = "harness.planeon.ai/linux-readiness-evidence/v1alpha2"
+DOMAIN_V2 = "planeon.harness-linux-readiness-evidence/v1alpha2"
+RECORD_FIELDS_V2 = (*RECORD_FIELDS, "signers")
 STATUSES = ("PASS", "FAIL", "NOT_RUN_ENV_UNAVAILABLE")
 COMMANDS = [["python3", "-m", "unittest", "discover", "-s", root, "-p", "test_*.py"] for root in
             ("tests/meta", "tests/parity", "tests/alpha1", "tests/fixes/runner_boundary", "tests/platform/linux_baseline")]
@@ -204,6 +208,25 @@ def validate_linux_evidence(value: Any) -> dict[str, Any]:
     return value
 
 
+def _validate_linux_evidence_v2(value: Any) -> dict[str, Any]:
+    """CONF-LINUX-002: the v1alpha2 record's shape, with the v1alpha2 envelope's copy pattern (SG1-3 (a), SG2-3).
+
+    Closed over RECORD_FIELDS_V2 first. validate_linux_evidence then runs on a copy without `signers` and with the
+    v1alpha1 schemaVersion, for its refusals only, and the original is returned. Only verify_linux_evidence's v1alpha2
+    branch calls it, so schema.validate and the CLI never reach it.
+    """
+    from .live import SIGNERS
+
+    original = obj(value, RECORD_FIELDS_V2, "Linux evidence")
+    # Defensive: the dispatch sends only SCHEMA_V2 records here (SG3-2); a direct-call vector pins this check.
+    require(original["schemaVersion"] == SCHEMA_V2, "LINUX_EVIDENCE_SCHEMA_INVALID")
+    require(original["signers"] in SIGNERS, "LINUX_SIGNERS_INVALID")
+    legacy = {key: item for key, item in original.items() if key != "signers"}
+    legacy["schemaVersion"] = SCHEMA
+    validate_linux_evidence(legacy)
+    return original
+
+
 def _release_plan(release: Any, plan_bytes: bytes, envelope: dict[str, Any], architecture: str) -> dict[str, Any]:
     obj(release, ("schemaVersion", "campaignId", "campaignDefinitionDigest", "kitDigest", "bundleDigest", "endpointPolicyDigests", "tree"), "campaign release")
     require(release["schemaVersion"] == "harness.planeon.ai/campaign-release/v1alpha1", "LINUX_RELEASE_INVALID")
@@ -241,11 +264,78 @@ def verify_linux_evidence(record_bytes: bytes, *, envelope_bytes: bytes, capacit
     a live consumer, never from the record being verified. This function does
     not provide that custody or claim a durable nonce reservation.
     """
-    from .live import _trust_key, verify_linux_authority
+    from .live import _trust_key, verify_linux_authority, verify_linux_authority_v2
 
     require(all(type(raw) is bytes for raw in (record_bytes, envelope_bytes, capacity_bytes, release_bytes, plan_bytes, release_trust_bytes, tenant_trust_bytes)), "LINUX_BYTES_REQUIRED")
+    doc = require_canonical_document(record_bytes)
+    if type(doc) is dict and doc.get("schemaVersion") == SCHEMA_V2:
+        # CONF-LINUX-002 (SG1-4): the v1alpha2 branch. It runs today's steps below, in today's order, with three
+        # changes: the v1alpha2 authority, the DOMAIN_V2 record signatures and the record's `signers` agreement.
+        # Every other document takes today's body, unchanged from validate_linux_evidence(doc) onward.
+        record = _validate_linux_evidence_v2(doc)
+        require(type(replayed_nonces) is frozenset and all(isinstance(item, str) for item in replayed_nonces), "LINUX_REPLAY_HISTORY_INVALID")
+        require_id(expected_nonce, "expected nonce")
+        require(expected_nonce not in replayed_nonces, "LINUX_NONCE_REPLAYED")
+        instant = require_time(now, "now")
+        envelope, capacity, release_trust, tenant_trust, signers = verify_linux_authority_v2(
+            envelope_bytes, capacity_bytes, release_trust_bytes, tenant_trust_bytes, now=instant)
+        require(envelope["nonce"] == expected_nonce and envelope["tenantId"] == expected_tenant
+                and envelope["environmentId"] == expected_environment
+                and envelope["campaignReleaseDigest"] == expected_release, "LINUX_EXPECTED_SUBJECT_MISMATCH")
+        require(byte_digest(release_bytes) == expected_release, "LINUX_RELEASE_DIGEST_MISMATCH")
+        plan = _release_plan(require_canonical_document(release_bytes), plan_bytes, envelope, record["target"]["architecture"])
+        for name in ("target", "sources", "images", "build", "preflightDigest"):
+            require(canonical_bytes(record[name]) == canonical_bytes(plan[name]), "LINUX_BASELINE_CHANGED")
+        endpoints = [endpoint for endpoint in envelope["endpoints"] if endpoint["endpointId"] == plan["endpointId"]]
+        require(len(endpoints) == 1, "LINUX_ENDPOINT_UNAVAILABLE")
+        endpoint = endpoints[0]
+        require(endpoint["kind"] == "CAMPAIGN_PROXY", "LINUX_PROXY_BACKEND_UNAVAILABLE")
+        policies = require_canonical_document(release_bytes)["endpointPolicyDigests"]
+        require(isinstance(policies, list) and policies == sorted(set(item["authorizationPolicyDigest"] for item in envelope["endpoints"])), "LINUX_ENDPOINT_POLICY_MISMATCH")
+        expected_authority = {
+            "packetDigest": PACKET_DIGEST, "envelopeDigest": byte_digest(envelope_bytes),
+            "capacityDigest": byte_digest(capacity_bytes), "releaseDigest": expected_release,
+            "planDigest": byte_digest(plan_bytes), "tenantId": expected_tenant, "environmentId": expected_environment,
+            "runNonce": expected_nonce, "endpointId": endpoint["endpointId"], "endpointDigest": canonical_digest(endpoint),
+            "namespace": capacity["namespace"], "serviceAccountSubject": capacity["serviceAccountSubject"],
+            "admissionPolicyDigest": envelope["admissionPolicyDigest"], "resourceQuotaDigest": envelope["resourceQuotaDigest"],
+        }
+        require(record["authority"] == expected_authority and plan["namespace"] == capacity["namespace"]
+                and plan["serviceAccountSubject"] == capacity["serviceAccountSubject"], "LINUX_AUTHORITY_BINDING_MISMATCH")
+        observed = require_time(record["observedAt"], "observedAt")
+        until = require_time(record["validUntil"], "validUntil")
+        require(max(require_time(capacity["validFrom"], "validFrom"), require_time(envelope["issuedAt"], "issuedAt")) <= observed <= instant < until
+                <= min(require_time(capacity["expiresAt"], "expiresAt"), require_time(envelope["expiresAt"], "expiresAt"))
+                and until - observed <= timedelta(hours=168), "LINUX_EVIDENCE_NOT_CURRENT")
+        keys = []
+        for role, trust, purpose, tenant, environment, expected_key in (
+            ("platform", release_trust, "PLATFORM_RELEASE", None, None, envelope["platformSignerKeyId"]),
+            ("tenant", tenant_trust, "TENANT_LIVE_EXECUTION", expected_tenant, expected_environment, envelope["tenantSignerKeyId"]),
+            ("capacity", tenant_trust, "CAPACITY_OPERATOR", expected_tenant, expected_environment, capacity["signerKeyId"]),
+        ):
+            require(record[role + "SignerKeyId"] == expected_key, "LINUX_SIGNER_BINDING_MISMATCH")
+            key = _trust_key(trust, expected_key, purpose, tenant, environment, instant)
+            _trust_key(trust, expected_key, purpose, tenant, environment, observed)
+            _trust_key(trust, expected_key, purpose, tenant, environment, until)
+            keys.append(key)
+            require(verify(key, signature_payload(DOMAIN_V2, record, SIGNATURES), b64url_decode(record[role + "Signature"], expected_length=64)), "LINUX_EVIDENCE_SIGNATURE_INVALID")
+        require(len(set(keys)) == 3, "LINUX_SIGNERS_NOT_INDEPENDENT")
+        require(record["signers"] == signers, "LINUX_SIGNERS_DISCLOSURE_MISMATCH")
+        for case in record["cases"]:
+            require(observed <= require_time(case["observedAt"], "case time") <= instant
+                    and case["runNonce"] == expected_nonce, "LINUX_CASE_REPLAYED_OR_STALE")
+            for key in ("probeDigest", "commandDigest"):
+                require(case[key] == plan["probes"][case["caseId"]][key], "LINUX_PROBE_DIGEST_MISMATCH")
+            for name, result in case["output"]["regressions"].items():
+                expected = plan["regressions"][name]
+                require(result["inventoryDigest"] == expected["inventoryDigest"] and result["collected"] == expected["testCount"], "LINUX_REGRESSION_INVENTORY_MISMATCH")
+            build_probe_request(envelope, capacity, plan, case["caseId"])
+        return {"verificationStatus": _overall([item["status"] for item in record["cases"]]),
+                "evidenceDigest": byte_digest(record_bytes), "architecture": plan["target"]["architecture"],
+                "caseResults": {item["caseId"]: item["status"] for item in record["cases"]},
+                "evidenceClass": "UNIT_VERIFICATION_ONLY", "nativeAcceptance": False}
     # Reject malformed records before doing any expensive signature work.
-    record = validate_linux_evidence(require_canonical_document(record_bytes))
+    record = validate_linux_evidence(doc)
     require(type(replayed_nonces) is frozenset and all(isinstance(item, str) for item in replayed_nonces), "LINUX_REPLAY_HISTORY_INVALID")
     require_id(expected_nonce, "expected nonce")
     require(expected_nonce not in replayed_nonces, "LINUX_NONCE_REPLAYED")

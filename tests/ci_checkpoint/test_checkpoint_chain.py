@@ -188,6 +188,26 @@ MAS_005_ADDED = {"task-packets/CONF-MAS-005.yaml",
                  "tests/mas/test_p5_classes.py",
                  "tests/mas/test_p5_rules.py"}
 MAS_005_DECISIONS = ["RA010F-PICK"] + ["Q-RA10F-%d" % n for n in range(1, 9)]
+MAS_005_HEAD = "c17bcfe32df26eab13844b73f65666bb0fa4e0a0"
+# CONF-LINUX-002 (the signers disclosure on the CONF-LINUX-001 path; owner decisions Q-LHA-1 (a), 2026-10-23, and Q-SG-6,
+# Q-SG-7/8 and Q-SG-9, 2026-10-24) follows CONF-MAS-005. Under Q-SG-6's scoped exception to Q-T3 it changes live.py
+# (additions only), linux_readiness.py and this test, and adds the three schemas/v1alpha2 files (gate material, Q-SG-7/8),
+# the tests/linux_signers root with its D5a oracle (MON-CL2-ORACLE-PATH), the signers doc and its packet YAML.
+LINUX_002_RECORD = "fixtures/ci/conf-linux-002-checkpoint.json"
+LINUX_002_CHANGED = {"src/harness_conformance/linux_readiness.py",
+                     "src/harness_conformance/live.py",
+                     "tests/ci_checkpoint/test_checkpoint_chain.py"}
+LINUX_002_ADDED = {"docs/live-backend/signers.md",
+                   "schemas/v1alpha2/linux-readiness-evidence.schema.json",
+                   "schemas/v1alpha2/live-campaign-execution-envelope.schema.json",
+                   "schemas/v1alpha2/live-capacity-authorization.schema.json",
+                   "task-packets/CONF-LINUX-002.yaml",
+                   "tests/linux_signers/__init__.py",
+                   "tests/linux_signers/_fixtures.py",
+                   "tests/linux_signers/test_oracle.py",
+                   "tests/linux_signers/test_signers.py"}
+# Each decision with its own date (the single-date pattern of the earlier record tests, widened).
+LINUX_002_DECISION_DATES = {"Q-LHA-1": "2026-10-23", "Q-SG-6": "2026-10-24", "Q-SG-7/8": "2026-10-24", "Q-SG-9": "2026-10-24"}
 
 
 def head():
@@ -253,6 +273,11 @@ def mas_005():
     return HELPER.chain_record(entries()[:12], 11, sources), rows, sources
 
 
+def conf_linux_002():
+    rows, sources = HELPER.checkpoint_chain_project(ROOT, *head(), keep=13)
+    return HELPER.chain_record(entries()[:13], 12, sources), rows, sources
+
+
 class ChainRegistryTests(unittest.TestCase):
     def test_the_registry_starts_with_conf_ci_002_and_then_conf_enf_001(self):
         rows, sources = head()
@@ -271,6 +296,7 @@ class ChainRegistryTests(unittest.TestCase):
         self.assertEqual((value[9]["packetId"], value[9]["path"]), ("CONF-MAS-003", MAS_003_RECORD))
         self.assertEqual((value[10]["packetId"], value[10]["path"]), ("CONF-MAS-004", MAS_004_RECORD))
         self.assertEqual((value[11]["packetId"], value[11]["path"]), ("CONF-MAS-005", MAS_005_RECORD))
+        self.assertEqual((value[12]["packetId"], value[12]["path"]), ("CONF-LINUX-002", LINUX_002_RECORD))
         self.assertEqual(sources[HELPER.CHAIN_REGISTRY_PATH], HELPER.chain_registry_bytes(value))
         for entry in value:
             self.assertEqual(hashlib.sha256(sources[entry["path"]]).hexdigest(), entry["sha256"])
@@ -441,6 +467,26 @@ class ChainRegistryTests(unittest.TestCase):
         self.assertFalse(ENF_001_CHANGED & (set(record["changed"]) | set(record["added"])))
         self.assertEqual([row["id"] for row in record["ownerDecisions"]], MAS_005_DECISIONS)
         self.assertTrue(all(row["date"] == "2026-10-21" for row in record["ownerDecisions"]))
+        self.assertTrue(all(pin["mode"] == "100644" for pin in record["added"].values()))
+
+    def test_the_conf_linux_002_record_names_exactly_its_paths_and_decisions(self):
+        # CONF-LINUX-002: live.py (additions only), linux_readiness.py and this test change under Q-SG-6's scoped exception;
+        # the three schemas/v1alpha2 files, the tests/linux_signers root with its D5a oracle, the signers doc and the packet
+        # YAML are added; the record names neither itself nor the registry; there is no deletion and no ci/, probes/ or
+        # tests/enforcement/ path. Each decision carries its own date, 2026-10-23 or 2026-10-24.
+        record, rows, sources = conf_linux_002()
+        self.assertEqual(record["predecessor"], {"packetId": "CONF-MAS-005", "sha256": entries()[11]["sha256"]})
+        self.assertEqual(record["baseCommit"], MAS_005_HEAD)
+        self.assertEqual(record["deleted"], {})
+        self.assertEqual(set(record["changed"]), LINUX_002_CHANGED)
+        self.assertEqual(set(record["added"]), LINUX_002_ADDED)
+        self.assertFalse(ENF_001_CHANGED & (set(record["changed"]) | set(record["added"])))
+        self.assertFalse([path for path in (*record["changed"], *record["added"])
+                          if path.startswith(("ci/", "probes/", "tests/enforcement/"))])
+        self.assertEqual([row["id"] for row in record["ownerDecisions"]], list(LINUX_002_DECISION_DATES))
+        for row in record["ownerDecisions"]:
+            with self.subTest(decision=row["id"]):
+                self.assertEqual(row["date"], LINUX_002_DECISION_DATES[row["id"]])
         self.assertTrue(all(pin["mode"] == "100644" for pin in record["added"].values()))
 
     def test_every_stage_view_is_checked_and_the_first_is_the_conf_ci_002_head(self):
