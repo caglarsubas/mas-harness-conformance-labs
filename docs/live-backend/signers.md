@@ -9,8 +9,8 @@ backend, or turn unit verification into native evidence: every result stays `UNI
 The owner's answer Q-LHA-1 (a), "Separated keys, disclosed (Recommended)", lets one principal hold the three separated
 keys of PLATFORM_RELEASE, TENANT_LIVE_EXECUTION and CAPACITY_OPERATOR. Today's `live.verify_linux_authority` requires
 the three selected trust keys to have three distinct `owner`s (`LINUX_SIGNER_OWNERS_NOT_INDEPENDENT`), so it refuses
-every such record. This packet adds a disclosed, signed alternative on the CONF-LINUX-001 path only. It removes no
-check and no signature.
+every such record. This packet adds a disclosed, signed alternative on the CONF-LINUX-001 path only. Apart from the
+owner rule, which the disclosure selects, it removes no check and no signature.
 
 ## The disclosure and its two values
 
@@ -22,8 +22,9 @@ keys; nothing else changes.
 | `INDEPENDENT_PRINCIPALS` | the three owners are pairwise distinct, then none equals the reserved label `single-principal` | `LINUX_SIGNER_OWNERS_NOT_INDEPENDENT`, then `LINUX_RESERVED_OWNER_LABEL` |
 | `SINGLE_PRINCIPAL_SEPARATED_KEYS` | all three owners equal the fixed label `single-principal` | `LINUX_SIGNER_OWNERS_NOT_SINGLE_PRINCIPAL` (two plus one, or any other shared value) |
 
-A missing owner stays `MISSING_FIELD` and a non-identifier owner stays `INVALID_IDENTIFIER`, from the existing
-trust-key checks. The label passes `require_id`; it is role-free and carries no person's or account's name.
+A missing owner stays `MISSING_FIELD` and a non-identifier owner stays `INVALID_IDENTIFIER`, from the trust-key
+checks that `verify_linux_authority_v2` repeats from `verify_linux_authority`. The label passes `require_id`; it is
+role-free and carries no person's or account's name.
 
 Unchanged under both values: the three distinct public keys, the distinct platform and tenant key ids, the key
 purposes, tenant and environment scopes, revocation and validity windows, every signature, the evidence class and
@@ -46,13 +47,23 @@ So every authority signs the disclosure before the run, and the evidence restate
   `live-capacity-authorization.schema.json` and `linux-readiness-evidence.schema.json`. Each is its v1alpha1 file with
   the `$id` and the `schemaVersion` const moved to v1alpha2 and `signers` added to `required` and `properties`. The
   evidence schema's nested plan const stays `linux-readiness-plan/v1alpha1`. The v1alpha1 files are byte-identical.
-- **Domains:** the v1alpha2 envelope, capacity and record are signed over their own `/v1alpha2` domains, so a
-  v1alpha1 signature never verifies over a v1alpha2 document, and the reverse.
-- **Code** (Q-SG-6, the scoped exception): `live.py` only adds `validate_envelope_v2`, `validate_capacity_v2`,
-  `verify_live_signatures_v2` and `verify_linux_authority_v2`. Each checks the closed v1alpha2 original first, runs the
-  unchanged v1alpha1 validator on a copy for its refusals only, and signs and verifies over the original.
-  `linux_readiness.verify_linux_evidence` dispatches on the parsed record: only an object whose `schemaVersion` is the
-  v1alpha2 one takes the new branch; every other record takes today's body, so every v1alpha1 refusal keeps its code.
+- **Domains:** the v1alpha2 envelope, capacity and record signatures are verified over their own `/v1alpha2`
+  domains, so a v1alpha1 signature never verifies over a v1alpha2 document, and the reverse.
+- **Code** (Q-SG-6, the scoped exception): `live.py` only adds lines: six constants (`ENVELOPE_SCHEMA_V2`,
+  `CAPACITY_SCHEMA_V2`, `ENVELOPE_DOMAIN_V2`, `CAPACITY_DOMAIN_V2`, `SIGNERS` and `SINGLE_PRINCIPAL_OWNER`) and four
+  functions. `validate_envelope_v2` and `validate_capacity_v2`, like `linux_readiness`'s private
+  `_validate_linux_evidence_v2`, check the closed v1alpha2 original first, run the unchanged v1alpha1 validator on a
+  copy for its refusals only, and return the original. `verify_live_signatures_v2` and `verify_linux_authority_v2`
+  repeat the steps of `verify_live_signatures` and `verify_linux_authority` inline, in the same order, over the
+  original v1alpha2 documents and the v2 domains (`verify_linux_authority_v2` calls the v2 validators and
+  `verify_live_signatures_v2` where its original calls the v1alpha1 ones, then adds the `signers` agreement and the
+  disclosed owner rule). `live.py` verifies signatures and signs nothing. `linux_readiness.py` adds `SCHEMA_V2`,
+  `DOMAIN_V2`, `RECORD_FIELDS_V2` and the private validator, and `verify_linux_evidence` dispatches on the parsed
+  record: only an object whose `schemaVersion` is the v1alpha2 one takes the new branch, which repeats today's body
+  inline with three substitutions (the v1alpha2 authority, the `DOMAIN_V2` record signatures and the record's
+  `signers` agreement); every other record takes today's body, so every v1alpha1 refusal keeps its code. The drift
+  tests in `tests/linux_signers/test_signers.py` hold each inline copy equal to its original under exactly the stated
+  substitutions, with the originals pinned by the sha256 of their base bytes.
 - **The packet id:** a v1alpha2 envelope keeps `packetId` CONF-LINUX-001 and its packet digest (MON-SG-PKTID). The
   documents' schema versions distinguish the path.
 - **Isolation:** the shared validators are unchanged, so a v1alpha2 envelope or capacity is refused as
@@ -63,7 +74,8 @@ So every authority signs the disclosure before the run, and the evidence restate
 
 ## The binding order
 
-Unchanged on the v1alpha2 path:
+Today's order, kept on the v1alpha2 path, with the disclosure's checks added (the agreement in step 3 and the
+restatement at the end of step 4):
 
 1. the envelope binds the capacity and both trust bundles by digest (`LINUX_AUTHORITY_DIGEST_MISMATCH`);
 2. then the envelope and capacity signatures are checked;
@@ -71,10 +83,10 @@ Unchanged on the v1alpha2 path:
 4. the evidence record binds the envelope and the capacity by digest in its `authority` member
    (`LINUX_AUTHORITY_BINDING_MISMATCH`), before its own three signatures, then restates `signers`.
 
-So a capacity or trust bundle changed after signing first fails `LINUX_AUTHORITY_DIGEST_MISMATCH`, unless the
-envelope's digest of it is re-bound. A changed envelope fails its own signature, `PLATFORM_SIGNATURE_INVALID`, before
-the record's `envelopeDigest` is compared. A changed record is bound by no digest and fails
-`LINUX_EVIDENCE_SIGNATURE_INVALID`.
+So, for a change that every earlier check still admits: a capacity or trust bundle changed after signing first fails
+`LINUX_AUTHORITY_DIGEST_MISMATCH`, unless the envelope's digest of it is re-bound. A changed envelope fails its own
+signature, `PLATFORM_SIGNATURE_INVALID`, before the record's `envelopeDigest` is compared. A changed record is bound by
+no digest and fails `LINUX_EVIDENCE_SIGNATURE_INVALID`.
 
 ## The custody reading and its limits
 

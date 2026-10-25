@@ -2,8 +2,8 @@
  "added": {
   "docs/live-backend/signers.md": {
    "mode": "100644",
-   "sha256": "5e7539ecfe6c574a8804167648906e948b7e8a42a4f863a81689bdddb7848254",
-   "size": 6089
+   "sha256": "3a1041d4593bcb200fedeefa1cbdc5be8eaa45023ba5496d3c471d26bef96787",
+   "size": 7464
   },
   "schemas/v1alpha2/linux-readiness-evidence.schema.json": {
    "mode": "100644",
