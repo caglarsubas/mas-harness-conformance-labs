@@ -42,8 +42,8 @@
   },
   "tests/linux_signers/test_signers.py": {
    "mode": "100644",
-   "sha256": "fded8b78d29eda0c2805acdff9a97b6e5bb5ab4f0f84e12b68a3fdec376cc44d",
-   "size": 48287
+   "sha256": "a8ddf0aed2532f6141a554230edaa9bef88e73c14e32189e2be668805cef8620",
+   "size": 79403
   }
  },
  "baseCommit": "c17bcfe32df26eab13844b73f65666bb0fa4e0a0",

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import ast
 import contextlib
+import hashlib
 import importlib.util
 import io
 import json
@@ -32,7 +33,7 @@ F = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(F)
 
 from harness_conformance import cli, linux_readiness, live  # noqa: E402
-from harness_conformance.canonical import canonical_bytes, load_json  # noqa: E402
+from harness_conformance.canonical import byte_digest, canonical_bytes, canonical_digest, load_json  # noqa: E402
 from harness_conformance.crypto import b64url_encode  # noqa: E402
 from harness_conformance.errors import ConformanceError  # noqa: E402
 from harness_conformance.schema import require_id, require_time, validate  # noqa: E402
@@ -875,6 +876,532 @@ class SignaturesStillRequired(SignersCase):
                     fixture.envelope[field] = zero
                     fixture.keep_record()
                 self.refused(code, self.verify, fixture)
+
+
+# CL2-C1-1 (CONTRACT r1, MON-CL2-CR1): committed drift tests for every v1alpha2 inline copy of v1alpha1 code. Both sides
+# are read at run time from src/ by ast and exact source lines; the v1alpha1 originals are pinned by the sha256 of their
+# base bytes, and each v2 copy must equal its original under exactly the stated substitutions, nothing else.
+SRC = ROOT / "src/harness_conformance"
+V1_PINS = {("live.py", "validate_envelope"): "88f5e88c47bcd4fab1136ac18408301f0cdfb320d5c205a11d891ab941e15a61",
+           ("live.py", "validate_capacity"): "66975e7972c24c27243050505d8c326052dfffb3218c01e92574050f15fd6b40",
+           ("live.py", "verify_live_signatures"): "815b5ccc51032f0bf143de3f40d1ae8fab88c2416b073110739fbfd1639b2599",
+           ("live.py", "verify_linux_authority"): "61bd3063c4d551eebacc4a1ed25b0471a0b5dfa36ccc50ceeafefbaa82b93331",
+           ("linux_readiness.py", "validate_linux_evidence"): "0953bf4daca1df4d5fb3e31754ad6099634509bfd9dc7ab10b2f02900dff46ed"}
+# Today's verify_linux_evidence body after the record line (base lines 249-308), by the sha256 of its base bytes.
+TODAYS_BODY_SHA256 = "317b891ac02fa9a3488bba657ae49234edcc40649473b97d9f1b5981a6b7d48b"
+# The v2 functions that are not wholly derived, by the sha256 of their c1 bytes.
+V2_PINS = {("live.py", "validate_envelope_v2"): "775eb1ef69091218da7aded733bc5cb2f29ea27e7893e9a6bb8cae11ed8f91eb",
+           ("live.py", "validate_capacity_v2"): "5d41496f90b269b744454a0b2e7295996c31e3d61315091f6244bd70aecbee2a",
+           ("linux_readiness.py", "_validate_linux_evidence_v2"): "f0b038d286c947432fca7ec067761d46b1e71b4734ceaaec439f982ba0d03892",
+           ("linux_readiness.py", "verify_linux_evidence"): "a519fbe1814591d6fa1cba7a467ca92175c53a244cc2cba2f9d9eb36a7b85170"}
+BRANCH_SUBSTITUTIONS = (
+    ("        envelope, capacity, release_trust, tenant_trust = verify_linux_authority(\n",
+     "        envelope, capacity, release_trust, tenant_trust, signers = verify_linux_authority_v2(\n", 1),
+    ("signature_payload(DOMAIN, record, SIGNATURES)", "signature_payload(DOMAIN_V2, record, SIGNATURES)", 1),
+    ('        require(len(set(keys)) == 3, "LINUX_SIGNERS_NOT_INDEPENDENT")\n',
+     '        require(len(set(keys)) == 3, "LINUX_SIGNERS_NOT_INDEPENDENT")\n'
+     '        require(record["signers"] == signers, "LINUX_SIGNERS_DISCLOSURE_MISMATCH")\n', 1),
+)
+AUTHORITY_SUBSTITUTIONS = (
+    ("def verify_linux_authority(envelope_bytes: bytes, capacity_bytes: bytes,\n"
+     "                           release_trust_bytes: bytes, tenant_trust_bytes: bytes,\n"
+     "                           *, now: datetime) -> tuple[dict[str, Any], ...]:\n"
+     '    """Verify data bindings only; no filesystem custody or live session grant."""\n',
+     "def verify_linux_authority_v2(envelope_bytes: bytes, capacity_bytes: bytes,\n"
+     "                              release_trust_bytes: bytes, tenant_trust_bytes: bytes,\n"
+     "                              *, now: datetime) -> tuple[Any, ...]:\n"
+     '    """verify_linux_authority\'s steps on the v1alpha2 documents, in its order, then the `signers` agreement and the\n'
+     '    disclosed owner rule. Returns the original envelope and capacity, both trust bundles and the agreed `signers`."""\n', 1),
+    ("validate_envelope(require_canonical_document(envelope_bytes), now=now)",
+     "validate_envelope_v2(require_canonical_document(envelope_bytes), now=now)", 1),
+    ("validate_capacity(require_canonical_document(capacity_bytes), envelope, now=now)",
+     "validate_capacity_v2(require_canonical_document(capacity_bytes), envelope, now=now)", 1),
+    ("        verify_live_signatures(envelope, capacity, release_trust, tenant_trust, now=now)\n",
+     "        verify_live_signatures_v2(envelope, capacity, release_trust, tenant_trust, now=now)\n"
+     '        require(envelope["signers"] == capacity["signers"], "LINUX_SIGNERS_DISCLOSURE_MISMATCH")\n', 1),
+    ('        require(len(set(owners)) == 3, "LINUX_SIGNER_OWNERS_NOT_INDEPENDENT")\n'
+     "        return envelope, capacity, release_trust, tenant_trust\n",
+     '        if envelope["signers"] == SIGNERS[0]:\n'
+     "            # INDEPENDENT_PRINCIPALS: today's pairwise-distinct rule first, then the reserved label.\n"
+     '            require(len(set(owners)) == 3, "LINUX_SIGNER_OWNERS_NOT_INDEPENDENT")\n'
+     '            require(SINGLE_PRINCIPAL_OWNER not in owners, "LINUX_RESERVED_OWNER_LABEL")\n'
+     "        else:\n"
+     "            # SINGLE_PRINCIPAL_SEPARATED_KEYS, the only other value validate_envelope_v2 admits: one fixed label.\n"
+     '            require(all(owner == SINGLE_PRINCIPAL_OWNER for owner in owners), "LINUX_SIGNER_OWNERS_NOT_SINGLE_PRINCIPAL")\n'
+     '        return envelope, capacity, release_trust, tenant_trust, envelope["signers"]\n', 1),
+)
+SIGNATURES_SUBSTITUTIONS = (
+    ("def verify_live_signatures(envelope: dict[str, Any], capacity: dict[str, Any], release_trust: dict[str, Any], tenant_trust: dict[str, Any], *, now: datetime) -> None:\n",
+     "def verify_live_signatures_v2(envelope_v2: dict[str, Any], capacity_v2: dict[str, Any], release_trust: dict[str, Any], tenant_trust: dict[str, Any], *, now: datetime) -> None:\n"
+     '    """verify_live_signatures\' key selection and distinct-key rule. Every payload is over the original v1alpha2 document,\n'
+     '    so it covers `signers` and `schemaVersion`, under the v2 domains."""\n', 1),
+    ('envelope["', 'envelope_v2["', 8),
+    ('capacity["', 'capacity_v2["', 2),
+    ("signature_payload(ENVELOPE_DOMAIN, envelope, (", "signature_payload(ENVELOPE_DOMAIN_V2, envelope_v2, (", 1),
+    ("signature_payload(CAPACITY_DOMAIN, capacity, (", "signature_payload(CAPACITY_DOMAIN_V2, capacity_v2, (", 1),
+)
+# The v2 validators' opening statements mirror their v1alpha1 originals'; the rest of each is v2-own and pinned in V2_PINS.
+MIRRORS = (
+    ("live.py", "validate_envelope", slice(0, 3), "validate_envelope_v2", slice(1, 4), (
+        ("    envelope = require_object(", "    original = require_object(", 1),
+        ("closed(envelope, ENVELOPE_FIELDS)", 'closed(original, ENVELOPE_FIELDS | {"signers"})', 1),
+        ('envelope["schemaVersion"] != ENVELOPE_SCHEMA:', 'original["schemaVersion"] != ENVELOPE_SCHEMA_V2:', 1))),
+    ("live.py", "validate_capacity", slice(0, 3), "validate_capacity_v2", slice(1, 4), (
+        ("    capacity = require_object(", "    original = require_object(", 1),
+        ("closed(capacity, CAPACITY_FIELDS)", 'closed(original, CAPACITY_FIELDS | {"signers"})', 1),
+        ('capacity["schemaVersion"] != CAPACITY_SCHEMA:', 'original["schemaVersion"] != CAPACITY_SCHEMA_V2:', 1))),
+    ("linux_readiness.py", "validate_linux_evidence", slice(2, 4), "_validate_linux_evidence_v2", slice(2, 4), (
+        ("    obj(value, RECORD_FIELDS, ", "    original = obj(value, RECORD_FIELDS_V2, ", 1),
+        ('require(value["schemaVersion"] == SCHEMA, ', 'require(original["schemaVersion"] == SCHEMA_V2, ', 1))),
+)
+
+
+def function_source(module, name):
+    """A top-level function's ast node and its file's exact lines, read from src/ at run time (no git)."""
+    text = (SRC / module).read_text(encoding="utf-8")
+    nodes = [node for node in ast.parse(text).body if isinstance(node, ast.FunctionDef) and node.name == name]
+    if len(nodes) != 1:
+        raise AssertionError(f"{module}: {name} must be defined once at top level")
+    return text.splitlines(keepends=True), nodes[0]
+
+
+def lines_of(lines, first, last):
+    return "".join(lines[first - 1:last])
+
+
+def function_text(module, name):
+    lines, node = function_source(module, name)
+    return lines_of(lines, node.lineno, node.end_lineno)
+
+
+def statement_text(lines, nodes):
+    return "".join(lines_of(lines, node.lineno, node.end_lineno) for node in nodes)
+
+
+def substituted(text, substitutions):
+    for old, new, count in substitutions:
+        if text.count(old) != count:
+            raise AssertionError(f"substitution anchor {old[:70]!r} occurs {text.count(old)} times, not {count}")
+        text = text.replace(old, new)
+    return text
+
+
+def text_sha256(text):
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+class DriftAgainstV1alpha1(SignersCase):
+    """CL2-C1-1: each v1alpha2 inline copy equals its v1alpha1 original under exactly the stated substitutions."""
+
+    def test_the_v1alpha1_originals_keep_their_base_bytes(self):
+        for (module, name), pin in V1_PINS.items():
+            with self.subTest(function=name):
+                self.assertEqual(text_sha256(function_text(module, name)), pin)
+
+    def test_the_v2_branch_is_todays_body_with_its_three_substitutions(self):
+        """verify_linux_evidence: the v2 branch after `record = _validate_linux_evidence_v2(doc)` equals today's body
+        after `record = validate_linux_evidence(doc)`, indented one level, with BRANCH_SUBSTITUTIONS only."""
+        lines, node = function_source("linux_readiness.py", "verify_linux_evidence")
+        self.assertEqual([ast.unparse(item) for item in node.decorator_list], ["malformed_boundary"])
+        branches = [index for index, item in enumerate(node.body) if isinstance(item, ast.If)]
+        self.assertEqual(len(branches), 1)
+        index = branches[0]
+        branch = node.body[index]
+        self.assertEqual(lines_of(lines, node.body[index - 1].lineno, node.body[index - 1].end_lineno),
+                         "    doc = require_canonical_document(record_bytes)\n")
+        self.assertEqual(lines_of(lines, branch.lineno, branch.lineno),
+                         '    if type(doc) is dict and doc.get("schemaVersion") == SCHEMA_V2:\n')
+        self.assertEqual(statement_text(lines, branch.body[:1]), "        record = _validate_linux_evidence_v2(doc)\n")
+        self.assertEqual(branch.orelse, [])
+        self.assertEqual(statement_text(lines, node.body[index + 1:index + 2]), "    record = validate_linux_evidence(doc)\n")
+        today = lines_of(lines, node.body[index + 2].lineno, node.end_lineno)
+        self.assertEqual(text_sha256(today), TODAYS_BODY_SHA256)
+        self.assertEqual(len(today.splitlines()), 60)
+        indented = "".join("    " + line for line in today.splitlines(keepends=True))
+        self.assertEqual(lines_of(lines, branch.body[1].lineno, branch.end_lineno), substituted(indented, BRANCH_SUBSTITUTIONS))
+        self.assertEqual(text_sha256(function_text("linux_readiness.py", "verify_linux_evidence")),
+                         V2_PINS[("linux_readiness.py", "verify_linux_evidence")])
+
+    def test_verify_linux_authority_v2_is_the_original_with_its_stated_substitutions(self):
+        self.assertEqual(function_text("live.py", "verify_linux_authority_v2"),
+                         substituted(function_text("live.py", "verify_linux_authority"), AUTHORITY_SUBSTITUTIONS))
+
+    def test_verify_live_signatures_v2_is_the_original_with_its_stated_substitutions(self):
+        self.assertEqual(function_text("live.py", "verify_live_signatures_v2"),
+                         substituted(function_text("live.py", "verify_live_signatures"), SIGNATURES_SUBSTITUTIONS))
+
+    def test_the_v2_validators_open_with_their_originals_mirrored(self):
+        for module, original, first, copy, second, substitutions in MIRRORS:
+            with self.subTest(function=copy):
+                lines, node = function_source(module, original)
+                copy_lines, copy_node = function_source(module, copy)
+                self.assertEqual(statement_text(copy_lines, copy_node.body[second]),
+                                 substituted(statement_text(lines, node.body[first]), substitutions))
+                self.assertEqual(text_sha256(function_text(module, copy)), V2_PINS[(module, copy)])
+
+    def test_the_substitutions_fail_on_any_other_difference(self):
+        """The checks are not vacuous: one changed character on either side breaks the equality or an anchor count."""
+        original = function_text("live.py", "verify_linux_authority")
+        copy = function_text("live.py", "verify_linux_authority_v2")
+        self.assertNotEqual(copy.replace("LINUX_DUPLICATE_ENDPOINT", "LINUX_DUPLICATE_ENDPOINTS"), substituted(original, AUTHORITY_SUBSTITUTIONS))
+        with self.assertRaises(AssertionError):
+            substituted(original.replace("validate_capacity(", "validate_capacity_renamed("), AUTHORITY_SUBSTITUTIONS)
+        self.assertNotEqual(text_sha256(original + " "), V1_PINS[("live.py", "verify_linux_authority")])
+
+
+def rebind_release(fixture):
+    """After a release change: re-bind the envelope's kit and release digests and re-sign it over ENVELOPE_DOMAIN_V2;
+    re-bind and re-sign the record."""
+    fixture.envelope["conformanceKitDigest"] = fixture.release["kitDigest"]
+    fixture.envelope["campaignReleaseDigest"] = byte_digest(canonical_bytes(fixture.release))
+    fixture.sign_envelope()
+    fixture.keep_record()
+
+
+def rebind_plan(fixture):
+    """After a plan change: re-pin its release-tree entry and the kit digest, then rebind_release."""
+    plan_bytes = canonical_bytes(fixture.plan)
+    entry = fixture.release["tree"][0]
+    entry["size"], entry["sha256"] = len(plan_bytes), byte_digest(plan_bytes)
+    fixture.release["kitDigest"] = canonical_digest(fixture.release["tree"], "planeon.harness-live-tree/v1alpha1")
+    rebind_release(fixture)
+
+
+def spaced(value):
+    """A UTC time with a space for the T: schema.require_time accepts it, linux_readiness.require_time refuses it."""
+    return value.replace("T", " ")
+
+
+class CopiedAuthorityRefusals(SignersCase):
+    """CL2-C1-1: the refusals of verify_linux_authority_v2's and verify_live_signatures_v2's copied v1alpha1 lines
+    (live.py lines 300-343 and 203-220 at the base) that no other vector here pinned on the v2 path. Unless a docstring
+    says otherwise, a changed document is re-signed, every digest that binds it is re-bound, and each re-bound document
+    is re-signed over its v2 domain (so the vector meets exactly the refusal it names)."""
+
+    def bundle(self, fixture, name):
+        return {"release_trust": fixture.release_trust, "tenant_trust": fixture.tenant_trust}[name]
+
+    def test_non_canonical_document_bytes(self):
+        """Each document's bytes as indented JSON; the envelope re-bound to the capacity or trust bytes and re-signed."""
+        inputs = {"envelope": "envelope_bytes", "capacity": "capacity_bytes", "release_trust": "release_trust_bytes",
+                  "tenant_trust": "tenant_trust_bytes"}
+        fields = {"capacity": "capacityAuthorizationDigest", "release_trust": "releaseTrustStoreDigest",
+                  "tenant_trust": "tenantTrustStoreDigest"}
+        for name, key in inputs.items():
+            with self.subTest(document=name):
+                fixture = fresh("single")
+                document = {"envelope": fixture.envelope, "capacity": fixture.capacity,
+                            "release_trust": fixture.release_trust, "tenant_trust": fixture.tenant_trust}[name]
+                raw = json.dumps(document, indent=1).encode()
+                if name in fields:
+                    fixture.envelope[fields[name]] = byte_digest(raw)
+                    fixture.sign_envelope()
+                    fixture.keep_record()
+                self.refused("NON_CANONICAL_JSON", self.verify, fixture, **{key: raw})
+
+    def test_invalid_json_envelope_bytes(self):
+        self.refused("INVALID_JSON", self.verify, fresh("single"), envelope_bytes=b"{")
+
+    def test_time_fields_outside_the_strict_form(self):
+        for document, field in (("envelope", "issuedAt"), ("envelope", "expiresAt"), ("capacity", "validFrom"),
+                                ("capacity", "expiresAt"), ("trust key", "validFrom"), ("trust key", "validUntil")):
+            with self.subTest(document=document, field=field):
+                fixture = fresh("single")
+                if document == "envelope":
+                    fixture.envelope[field] = spaced(fixture.envelope[field])
+                    fixture.sign_envelope()
+                    fixture.keep_record()
+                elif document == "capacity":
+                    fixture.capacity[field] = spaced(fixture.capacity[field])
+                    fixture.sign_capacity()
+                    fixture.keep_envelope_and_record()
+                else:
+                    fixture.tenant_trust["keys"][1][field] = spaced(fixture.tenant_trust["keys"][1][field])
+                    fixture.keep_envelope_and_record()
+                self.refused("LINUX_TIME_INVALID", self.verify, fixture)
+
+    def test_envelope_expiring_at_now(self):
+        """validate_envelope admits now == expiresAt; the copied line requires now < expiresAt."""
+        fixture = fresh("single")
+        fixture.envelope["expiresAt"] = F.NOW
+        fixture.sign_envelope()
+        fixture.keep_record()
+        self.refused("LINUX_ENVELOPE_EXPIRED", self.verify, fixture)
+
+    def test_capacity_expiring_at_now(self):
+        fixture = fresh("single")
+        fixture.capacity["expiresAt"] = F.NOW
+        fixture.sign_capacity()
+        fixture.keep_envelope_and_record()
+        self.refused("LINUX_CAPACITY_EXPIRED", self.verify, fixture)
+
+    def test_envelope_and_capacity_identifier_fields(self):
+        for document, field in (("envelope", "tenantId"), ("envelope", "environmentId"), ("envelope", "nonce"),
+                                ("envelope", "capacityAuthorizationId"), ("capacity", "nonce"), ("capacity", "namespace"),
+                                ("capacity", "operatorId")):
+            with self.subTest(document=document, field=field):
+                fixture = fresh("single")
+                fixture.document(document)[field] = "Not An Identifier"
+                if document == "envelope":
+                    fixture.sign_envelope()
+                    fixture.keep_record()
+                else:
+                    fixture.sign_capacity()
+                    fixture.keep_envelope_and_record()
+                self.refused("INVALID_IDENTIFIER", self.verify, fixture)
+
+    def test_envelope_campaign_commands_and_axes_scope(self):
+        commands = deepcopy(linux_readiness.COMMANDS[:-1])
+        for field, value in (("campaignId", "other-campaign"), ("allowedEvidenceAxes", ["DEPLOYMENT"]), ("commands", commands)):
+            with self.subTest(field=field):
+                fixture = fresh("single")
+                fixture.envelope[field] = value
+                if field == "commands":
+                    fixture.envelope["commandSetDigest"] = live.command_set_digest(commands)
+                fixture.sign_envelope()
+                fixture.keep_record()
+                self.refused("LINUX_ENVELOPE_SCOPE_MISMATCH", self.verify, fixture)
+
+    def test_duplicate_permitted_endpoint(self):
+        """validate_capacity compares the endpoint ids as a set; the copied line refuses the duplicate."""
+        fixture = fresh("single")
+        fixture.capacity["permittedEndpointIds"] = ["unit-proxy", "unit-proxy"]
+        fixture.sign_capacity()
+        fixture.keep_envelope_and_record()
+        self.refused("LINUX_DUPLICATE_ENDPOINT", self.verify, fixture)
+
+    def test_trust_bundle_or_key_not_an_object(self):
+        for case in ("bundle", "key"):
+            with self.subTest(case=case):
+                fixture = fresh("single")
+                if case == "bundle":
+                    fixture.release_trust = []
+                else:
+                    fixture.tenant_trust["keys"][1] = "capacity.unit"
+                fixture.keep_envelope_and_record()
+                self.refused("TYPE_MISMATCH", self.verify, fixture)
+
+    def test_trust_bundle_or_key_with_an_extra_member(self):
+        for case in ("bundle", "key"):
+            with self.subTest(case=case):
+                fixture = fresh("single")
+                target = fixture.release_trust if case == "bundle" else fixture.tenant_trust["keys"][0]
+                target["signatureVerified"] = True
+                fixture.keep_envelope_and_record()
+                self.refused("UNKNOWN_FIELD", self.verify, fixture)
+
+    def test_trust_bundle_without_a_member(self):
+        fixture = fresh("single")
+        del fixture.release_trust["revocationsDigest"]
+        fixture.keep_envelope_and_record()
+        self.refused("MISSING_FIELD", self.verify, fixture)
+
+    def test_trust_keys_list_ids_and_revocation_flags(self):
+        for case in ("empty keys", "keys not a list", "duplicate key id", "non-boolean revoked"):
+            with self.subTest(case=case):
+                fixture = fresh("single")
+                if case == "empty keys":
+                    fixture.release_trust["keys"] = []
+                elif case == "keys not a list":
+                    fixture.release_trust["keys"] = {"platform.unit": fixture.release_trust["keys"][0]}
+                elif case == "duplicate key id":
+                    fixture.tenant_trust["keys"].append(deepcopy(fixture.tenant_trust["keys"][0]))
+                else:
+                    fixture.tenant_trust["keys"][1]["revoked"] = 0
+                fixture.keep_envelope_and_record()
+                self.refused("LINUX_TRUST_INVALID", self.verify, fixture)
+
+    def test_trust_key_id_not_a_key_identifier(self):
+        fixture = fresh("single")
+        fixture.tenant_trust["keys"][1]["keyId"] = "capacity unit"
+        fixture.keep_envelope_and_record()
+        self.refused("INVALID_KEY_ID", self.verify, fixture)
+
+    def test_trust_public_key_not_base64url(self):
+        fixture = fresh("single")
+        fixture.tenant_trust["keys"][1]["publicKey"] = "not base64url"
+        fixture.keep_envelope_and_record()
+        self.refused("INVALID_BASE64URL", self.verify, fixture)
+
+    def test_trust_bundle_schema_unsupported(self):
+        """verify_live_signatures_v2's copied _trust_key lines: the loop does not read schemaVersion; _trust_key does."""
+        fixture = fresh("single")
+        fixture.release_trust["schemaVersion"] = "harness.planeon.ai/live-trust-bundle/v1alpha2"
+        fixture.keep_envelope_and_record()
+        self.refused("UNSUPPORTED_TRUST_BUNDLE", self.verify, fixture)
+
+    def test_trust_revocations_digest_invalid(self):
+        fixture = fresh("single")
+        fixture.release_trust["revocationsDigest"] = "sha256:not-a-digest"
+        fixture.keep_envelope_and_record()
+        self.refused("INVALID_DIGEST", self.verify, fixture)
+
+    def test_selected_trust_key_absent(self):
+        for document in ("envelope", "capacity"):
+            with self.subTest(document=document):
+                fixture = fresh("single")
+                if document == "envelope":
+                    fixture.envelope["tenantSignerKeyId"] = "absent.unit"
+                    fixture.sign_envelope()
+                    fixture.keep_record()
+                else:
+                    fixture.capacity["signerKeyId"] = "absent.unit"
+                    fixture.sign_capacity()
+                    fixture.keep_envelope_and_record()
+                self.refused("AMBIGUOUS_TRUST_KEY", self.verify, fixture)
+
+    def test_selected_trust_key_purpose_or_scope(self):
+        for field, value in (("purpose", "TECHNICAL_EVIDENCE"), ("tenantId", "other-tenant"), ("environmentId", "other-environment")):
+            with self.subTest(field=field):
+                fixture = fresh("single")
+                fixture.tenant_trust["keys"][1][field] = value
+                fixture.keep_envelope_and_record()
+                self.refused("TRUST_SCOPE_MISMATCH", self.verify, fixture)
+
+    def test_selected_trust_key_revoked(self):
+        fixture = fresh("single")
+        fixture.tenant_trust["keys"][1]["revoked"] = True
+        fixture.keep_envelope_and_record()
+        self.refused("TRUST_KEY_REVOKED", self.verify, fixture)
+
+    def test_selected_trust_key_not_current_at_now(self):
+        for field, value in (("validUntil", "2026-09-07T00:59:00Z"), ("validFrom", "2027-01-01T00:00:00Z")):
+            with self.subTest(field=field):
+                fixture = fresh("single")
+                fixture.tenant_trust["keys"][1][field] = value
+                fixture.keep_envelope_and_record()
+                self.refused("TRUST_KEY_NOT_CURRENT", self.verify, fixture)
+
+    def test_v2_documents_that_are_not_objects(self):
+        """The mirrored opening lines: a non-object envelope or capacity on the v2 path (the capacity bytes re-bound),
+        and a non-object record at _validate_linux_evidence_v2 directly (the dispatch never sends one there)."""
+        self.refused("TYPE_MISMATCH", self.verify, fresh("single"), envelope_bytes=b"[]")
+        fixture = fresh("single")
+        fixture.envelope["capacityAuthorizationDigest"] = byte_digest(b"[]")
+        fixture.sign_envelope()
+        fixture.keep_record()
+        self.refused("TYPE_MISMATCH", self.verify, fixture, capacity_bytes=b"[]")
+        self.refused("TYPE_MISMATCH", linux_readiness._validate_linux_evidence_v2, [])
+
+
+class CopiedEvidenceRefusals(SignersCase):
+    """CL2-C1-1: the refusals of the v2 branch's copied lines (verify_linux_evidence's body, base lines 249-308) that no
+    other vector here pinned on the v2 path. LINUX_SIGNERS_NOT_INDEPENDENT stays unreachable on both paths: the record's
+    three keys are the authority's, whose distinctness verify_live_signatures_v2 already refuses
+    (SIGNER_ROLES_NOT_INDEPENDENT)."""
+
+    def test_replay_history_not_a_frozenset_of_strings(self):
+        for history in (set(), frozenset({1})):
+            with self.subTest(history=history):
+                self.refused("LINUX_REPLAY_HISTORY_INVALID", self.verify, fresh("single"), replayed_nonces=history)
+
+    def test_expected_nonce_not_an_identifier(self):
+        self.refused("INVALID_IDENTIFIER", self.verify, fresh("single"), expected_nonce="Not A Nonce")
+
+    def test_nonce_replayed(self):
+        self.refused("LINUX_NONCE_REPLAYED", self.verify, fresh("single"), replayed_nonces=frozenset({"unit-run-nonce"}))
+
+    def test_now_outside_the_strict_form(self):
+        self.refused("LINUX_TIME_INVALID", self.verify, fresh("single"), now=spaced(F.NOW))
+
+    def test_expected_subject_mismatch(self):
+        for field, value in (("expected_nonce", "another-run"), ("expected_tenant", "another-tenant"),
+                             ("expected_environment", "another-environment"), ("expected_release", F.digest("wrong"))):
+            with self.subTest(field=field):
+                self.refused("LINUX_EXPECTED_SUBJECT_MISMATCH", self.verify, fresh("single"), **{field: value})
+
+    def test_release_bytes_not_the_expected_release(self):
+        """The release bytes with a trailing newline: still canonical, a different digest."""
+        fixture = fresh("single")
+        self.refused("LINUX_RELEASE_DIGEST_MISMATCH", self.verify, fixture, release_bytes=canonical_bytes(fixture.release) + b"\n")
+
+    def test_release_plan_is_reached_on_the_v2_path(self):
+        """The shared _release_plan, reached from the copied line with the v2 envelope: the release's campaignId
+        changed, the envelope's release digest re-bound and re-signed, the record re-bound and re-signed."""
+        fixture = fresh("single")
+        fixture.release["campaignId"] = "other-campaign"
+        rebind_release(fixture)
+        self.refused("LINUX_RELEASE_BINDING_MISMATCH", self.verify, fixture)
+
+    def test_record_baseline_changed(self):
+        fixture = fresh("single")
+        fixture.record["target"]["kernel"] = "6.13.fixture"
+        fixture.sign_record()
+        self.refused("LINUX_BASELINE_CHANGED", self.verify, fixture)
+
+    def test_plan_endpoint_absent_from_the_envelope(self):
+        """The plan's endpointId changed and its release-tree entry, kit and release digests re-bound."""
+        fixture = fresh("single")
+        fixture.plan["endpointId"] = "other-proxy"
+        rebind_plan(fixture)
+        self.refused("LINUX_ENDPOINT_UNAVAILABLE", self.verify, fixture)
+
+    def test_plan_endpoint_not_a_campaign_proxy(self):
+        fixture = fresh("single")
+        fixture.endpoint["kind"] = "KUBERNETES_API_PROXY"
+        fixture.sign_envelope()
+        fixture.keep_record()
+        self.refused("LINUX_PROXY_BACKEND_UNAVAILABLE", self.verify, fixture)
+
+    def test_release_endpoint_policies_mismatch(self):
+        fixture = fresh("single")
+        fixture.release["endpointPolicyDigests"] = [F.digest("other-policy")]
+        rebind_release(fixture)
+        self.refused("LINUX_ENDPOINT_POLICY_MISMATCH", self.verify, fixture)
+
+    def test_record_authority_binding_mismatch(self):
+        fixture = fresh("single")
+        fixture.record["authority"]["runNonce"] = "other-run"
+        fixture.sign_record()
+        self.refused("LINUX_AUTHORITY_BINDING_MISMATCH", self.verify, fixture)
+
+    def test_record_observed_after_now(self):
+        fixture = fresh("single")
+        fixture.record["observedAt"] = "2026-09-07T01:01:00Z"
+        fixture.sign_record()
+        self.refused("LINUX_EVIDENCE_NOT_CURRENT", self.verify, fixture)
+
+    def test_record_signer_key_id_not_the_envelopes(self):
+        fixture = fresh("single")
+        fixture.record["tenantSignerKeyId"] = fixture.record["platformSignerKeyId"]
+        fixture.sign_record()
+        self.refused("LINUX_SIGNER_BINDING_MISMATCH", self.verify, fixture)
+
+    def test_record_trust_key_not_current_at_the_records_valid_until(self):
+        """The copied record loop's _trust_key at validUntil: the capacity key is current now, not at 02:00."""
+        fixture = fresh("single")
+        fixture.tenant_trust["keys"][1]["validUntil"] = "2026-09-07T01:30:00Z"
+        fixture.keep_envelope_and_record()
+        self.refused("TRUST_KEY_NOT_CURRENT", self.verify, fixture)
+
+    def test_case_run_nonce_replayed(self):
+        fixture = fresh("single")
+        fixture.record["cases"][0]["runNonce"] = "old-run"
+        fixture.sign_record()
+        self.refused("LINUX_CASE_REPLAYED_OR_STALE", self.verify, fixture)
+
+    def test_case_probe_digest_mismatch(self):
+        fixture = fresh("single")
+        fixture.record["cases"][0]["probeDigest"] = F.digest("wrong")
+        fixture.sign_record()
+        self.refused("LINUX_PROBE_DIGEST_MISMATCH", self.verify, fixture)
+
+    def test_case_regression_inventory_mismatch(self):
+        """The FULL_PREDECESSOR_REGRESSION case's inventory digest changed, its output digest recomputed."""
+        fixture = fresh("single")
+        case = fixture.record["cases"][linux_readiness.CASES.index("FULL_PREDECESSOR_REGRESSION")]
+        case["output"]["regressions"]["control"]["inventoryDigest"] = F.digest("wrong")
+        case["outputDigest"] = canonical_digest(case["output"], "planeon.linux-probe-output/v1alpha1")
+        fixture.sign_record()
+        self.refused("LINUX_REGRESSION_INVENTORY_MISMATCH", self.verify, fixture)
+
+    def test_probe_request_is_reached_on_the_v2_path(self):
+        """The shared build_probe_request, reached from the copied case loop with the v2 envelope and capacity."""
+        fixture = fresh("single")
+        fixture.capacity["campaignProxyRules"][0]["port"] = 443
+        fixture.sign_capacity()
+        fixture.keep_envelope_and_record()
+        self.refused("LINUX_PROXY_RULES_INVALID", self.verify, fixture)
 
 
 if __name__ == "__main__":
