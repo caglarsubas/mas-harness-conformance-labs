@@ -51,19 +51,35 @@ So every authority signs the disclosure before the run, and the evidence restate
   domains, so a v1alpha1 signature never verifies over a v1alpha2 document, and the reverse.
 - **Code** (Q-SG-6, the scoped exception): `live.py` only adds lines: six constants (`ENVELOPE_SCHEMA_V2`,
   `CAPACITY_SCHEMA_V2`, `ENVELOPE_DOMAIN_V2`, `CAPACITY_DOMAIN_V2`, `SIGNERS` and `SINGLE_PRINCIPAL_OWNER`) and four
-  functions. `validate_envelope_v2` and `validate_capacity_v2`, like `linux_readiness`'s private
-  `_validate_linux_evidence_v2`, check the closed v1alpha2 original first, run the unchanged v1alpha1 validator on a
-  copy for its refusals only, and return the original. `verify_live_signatures_v2` and `verify_linux_authority_v2`
-  repeat the steps of `verify_live_signatures` and `verify_linux_authority` inline, in the same order, over the
-  original v1alpha2 documents and the v2 domains (`verify_linux_authority_v2` calls the v2 validators and
-  `verify_live_signatures_v2` where its original calls the v1alpha1 ones, then adds the `signers` agreement and the
-  disclosed owner rule). `live.py` verifies signatures and signs nothing. `linux_readiness.py` adds `SCHEMA_V2`,
-  `DOMAIN_V2`, `RECORD_FIELDS_V2` and the private validator, and `verify_linux_evidence` dispatches on the parsed
-  record: only an object whose `schemaVersion` is the v1alpha2 one takes the new branch, which repeats today's body
-  inline with three substitutions (the v1alpha2 authority, the `DOMAIN_V2` record signatures and the record's
-  `signers` agreement); every other record takes today's body, so every v1alpha1 refusal keeps its code. The drift
-  tests in `tests/linux_signers/test_signers.py` hold each inline copy equal to its original under exactly the stated
-  substitutions, with the originals pinned by the sha256 of their base bytes.
+  functions. `linux_readiness.py` adds three constants (`SCHEMA_V2`, `DOMAIN_V2` and `RECORD_FIELDS_V2`) and one
+  private function (`_validate_linux_evidence_v2`), and in `verify_linux_evidence` it extends the local import and
+  adds the dispatch. Neither file signs anything; both verify signatures.
+  - `validate_envelope_v2` and `validate_capacity_v2`, like `linux_readiness`'s private `_validate_linux_evidence_v2`,
+    check the closed v1alpha2 original first, run the unchanged v1alpha1 validator on a copy for its refusals only,
+    and return the original.
+  - `verify_live_signatures_v2` is `verify_live_signatures` under five substitutions: its def line (the name and the
+    parameters `envelope_v2` and `capacity_v2`) and docstring; `envelope_v2[` for `envelope[` (8 times);
+    `capacity_v2[` for `capacity[` (2 times); and the envelope and capacity payloads over `ENVELOPE_DOMAIN_V2` and
+    `CAPACITY_DOMAIN_V2`. So it repeats its original's steps inline, in the same order, over the original v1alpha2
+    documents and the v2 domains.
+  - `verify_linux_authority_v2` is `verify_linux_authority` under five substitutions: its def lines (the name, their
+    alignment and the return annotation `tuple[Any, ...]`) and docstring; `validate_envelope_v2` for
+    `validate_envelope`; `validate_capacity_v2` for `validate_capacity`; `verify_live_signatures_v2` for
+    `verify_live_signatures`, followed by the `signers` agreement (`LINUX_SIGNERS_DISCLOSURE_MISMATCH`); and today's
+    owner check, now under `INDEPENDENT_PRINCIPALS` and followed by the reserved-label check, with the single-label
+    check for `SINGLE_PRINCIPAL_SEPARATED_KEYS` beside it and the agreed `signers` returned as a fifth item.
+  - `verify_linux_evidence` sends only an object whose `schemaVersion` is `SCHEMA_V2` to the new branch. The branch
+    validates the record with `_validate_linux_evidence_v2(doc)` where today's body uses
+    `validate_linux_evidence(doc)`, then repeats the rest of today's body inline, indented one level, under three
+    substitutions: `verify_linux_authority_v2` for `verify_linux_authority`, with its fifth item unpacked as
+    `signers`; the record signatures over `DOMAIN_V2`; and the record's `signers` agreement after its distinct-key
+    check. Every other document takes today's body: today's `validate_linux_evidence` on the same parsed document,
+    then today's remaining lines byte for byte, so it meets today's refusals with today's codes.
+  - The drift tests (`DriftAgainstV1alpha1` in `tests/linux_signers/test_signers.py`) hold each of the three inline
+    copies equal to its original under its substitution table there (`SIGNATURES_SUBSTITUTIONS`,
+    `AUTHORITY_SUBSTITUTIONS` and `BRANCH_SUBSTITUTIONS`; for the branch, after its record-validation line and with
+    today's body indented one level), and pin the originals by the sha256 of their base bytes. Those tables, not
+    this summary, are the exact statement of the differences.
 - **The packet id:** a v1alpha2 envelope keeps `packetId` CONF-LINUX-001 and its packet digest (MON-SG-PKTID). The
   documents' schema versions distinguish the path.
 - **Isolation:** the shared validators are unchanged, so a v1alpha2 envelope or capacity is refused as
