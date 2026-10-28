@@ -920,6 +920,21 @@ class CredentialBoundaryTests(unittest.TestCase):
                 self.assertEqual(flags, [9, 9])
                 self.assertNotIn(3, flags)
                 self.assertFalse(any(value & 2 for value in flags))
+        # CONF-LIVE-004A (MON-R12-MEMFD-PKT1): the descriptor check re-reads the stored F_SEAL_EXEC.
+        with self.subTest(case="memfd-stored-exec-seal"), _credential_rig() as rig:
+            def strip_exec_seal():
+                resources = rig.owner._context._late_resources
+                fd = resources.tls_memfd()
+                self.assertEqual(rig.seals[fd], 47)
+                rig.seals[fd] &= ~32
+                resources.close_memfd()
+            rig.after_io = strip_exec_seal
+            handle = rig.open()
+            with self.assertRaises(ConformanceError) as caught:
+                rig.owner.execute_fixed(handle, rig.module.CASES[0], "amd64")
+            self.assertEqual(caught.exception.reason, "CREDENTIAL_MEMFD_CHANGED")
+            self.assertIsNone(rig.owner._active)
+        self.assertFalse(rig.fs.fds)
 
     def test_missing_policy_or_fixed_module_identity_opens_no_credential(self):
         for fault in ("policy", "missing-guard", "boolean", "loader"):
@@ -1000,6 +1015,8 @@ class CredentialBoundaryTests(unittest.TestCase):
                 reason = getattr(caught.exception, "reason", None)
                 if fault == "memfd-other-errno":
                     self.assertNotEqual(reason, "CREDENTIAL_MEMFD_NOEXEC_UNSUPPORTED")
+                    self.assertIs(type(caught.exception), OSError)
+                    self.assertEqual(caught.exception.errno, errno.EMFILE)
                 else:
                     self.assertEqual(reason, "CREDENTIAL_MEMFD_NOEXEC_UNSUPPORTED")
                 if fault.endswith("-constant"):
