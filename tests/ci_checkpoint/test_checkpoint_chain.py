@@ -208,6 +208,17 @@ LINUX_002_ADDED = {"docs/live-backend/signers.md",
                    "tests/linux_signers/test_signers.py"}
 # Each decision with its own date (the single-date pattern of the earlier record tests, widened).
 LINUX_002_DECISION_DATES = {"Q-LHA-1": "2026-10-23", "Q-SG-6": "2026-10-24", "Q-SG-7/8": "2026-10-24", "Q-SG-9": "2026-10-24"}
+LINUX_002_HEAD = "bee5ad4f3d673aef496f1fd83956658a095dec8a"
+# CONF-LIVE-004A (O-SERVER-MEMFD, CONF-LIVE-004's prerequisite; owner decision Q-MEMFD-5, 2026-10-28, closing
+# W01-AMEND-QW3 = M-a, 2026-10-10) follows CONF-LINUX-002. Under Q-MEMFD-5's scoped exception to Q-T3 it changes
+# live_linux_boundary.py (the memfd flags, the coded refusal and the F_SEAL_EXEC assertion only), its unit rig and this
+# test, and adds its packet YAML.
+LIVE_004A_RECORD = "fixtures/ci/conf-live-004a-checkpoint.json"
+LIVE_004A_CHANGED = {"src/harness_conformance/live_linux_boundary.py",
+                     "tests/ci_checkpoint/test_checkpoint_chain.py",
+                     "tests/live_backend/test_linux_boundary.py"}
+LIVE_004A_ADDED = {"task-packets/CONF-LIVE-004A.yaml"}
+LIVE_004A_DECISION_DATES = {"Q-MEMFD-5": "2026-10-28", "W01-AMEND-QW3": "2026-10-10"}
 
 
 def head():
@@ -278,6 +289,11 @@ def conf_linux_002():
     return HELPER.chain_record(entries()[:13], 12, sources), rows, sources
 
 
+def conf_live_004a():
+    rows, sources = HELPER.checkpoint_chain_project(ROOT, *head(), keep=14)
+    return HELPER.chain_record(entries()[:14], 13, sources), rows, sources
+
+
 class ChainRegistryTests(unittest.TestCase):
     def test_the_registry_starts_with_conf_ci_002_and_then_conf_enf_001(self):
         rows, sources = head()
@@ -297,6 +313,7 @@ class ChainRegistryTests(unittest.TestCase):
         self.assertEqual((value[10]["packetId"], value[10]["path"]), ("CONF-MAS-004", MAS_004_RECORD))
         self.assertEqual((value[11]["packetId"], value[11]["path"]), ("CONF-MAS-005", MAS_005_RECORD))
         self.assertEqual((value[12]["packetId"], value[12]["path"]), ("CONF-LINUX-002", LINUX_002_RECORD))
+        self.assertEqual((value[13]["packetId"], value[13]["path"]), ("CONF-LIVE-004A", LIVE_004A_RECORD))
         self.assertEqual(sources[HELPER.CHAIN_REGISTRY_PATH], HELPER.chain_registry_bytes(value))
         for entry in value:
             self.assertEqual(hashlib.sha256(sources[entry["path"]]).hexdigest(), entry["sha256"])
@@ -487,6 +504,25 @@ class ChainRegistryTests(unittest.TestCase):
         for row in record["ownerDecisions"]:
             with self.subTest(decision=row["id"]):
                 self.assertEqual(row["date"], LINUX_002_DECISION_DATES[row["id"]])
+        self.assertTrue(all(pin["mode"] == "100644" for pin in record["added"].values()))
+
+    def test_the_conf_live_004a_record_names_exactly_its_paths_and_decisions(self):
+        # CONF-LIVE-004A: live_linux_boundary.py (three changes only), its unit rig and this test change under Q-MEMFD-5's
+        # scoped exception; the packet YAML is added; the record names neither itself nor the registry; there is no
+        # deletion and no ci/, probes/, tests/enforcement/ or schemas/ path. Each decision carries its own date.
+        record, rows, sources = conf_live_004a()
+        self.assertEqual(record["predecessor"], {"packetId": "CONF-LINUX-002", "sha256": entries()[12]["sha256"]})
+        self.assertEqual(record["baseCommit"], LINUX_002_HEAD)
+        self.assertEqual(record["deleted"], {})
+        self.assertEqual(set(record["changed"]), LIVE_004A_CHANGED)
+        self.assertEqual(set(record["added"]), LIVE_004A_ADDED)
+        self.assertFalse(ENF_001_CHANGED & (set(record["changed"]) | set(record["added"])))
+        self.assertFalse([path for path in (*record["changed"], *record["added"])
+                          if path.startswith(("ci/", "probes/", "tests/enforcement/", "schemas/"))])
+        self.assertEqual([row["id"] for row in record["ownerDecisions"]], list(LIVE_004A_DECISION_DATES))
+        for row in record["ownerDecisions"]:
+            with self.subTest(decision=row["id"]):
+                self.assertEqual(row["date"], LIVE_004A_DECISION_DATES[row["id"]])
         self.assertTrue(all(pin["mode"] == "100644" for pin in record["added"].values()))
 
     def test_every_stage_view_is_checked_and_the_first_is_the_conf_ci_002_head(self):
