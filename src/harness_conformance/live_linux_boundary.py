@@ -31,6 +31,8 @@ CLONE_NEWUSER, CLONE_NEWNS, CLONE_NEWPID, CLONE_NEWNET = 0x10000000, 0x20000, 0x
 PR_SET_PDEATHSIG, PR_SET_DUMPABLE, PR_SET_NO_NEW_PRIVS = 1, 4, 38
 PR_SET_CHILD_SUBREAPER, PR_CAPBSET_DROP, PR_SET_SECCOMP = 36, 24, 22
 MS_PRIVATE, MS_REC, MS_BIND = 1 << 18, 16384, 4096
+MFD_NOEXEC_SEAL = 0x0008  # linux v6.12 include/uapi/linux/memfd.h
+F_SEAL_EXEC = 0x0020  # linux v6.12 include/uapi/linux/fcntl.h
 ARCHES = {"x86_64": (0xC000003E, 56, (41, 42, 49, 50, 101, 165, 166, 272, 308, 321, 323, 425, 426, 427, 435, 438)),
           "aarch64": (0xC00000B7, 220, (198, 203, 200, 201, 117, 40, 39, 97, 268, 280, 282, 425, 426, 427, 435, 438))}
 NAMESPACE_MASK = CLONE_NEWUSER | CLONE_NEWNS | CLONE_NEWPID | CLONE_NEWNET | 0x04000000 | 0x08000000 | 0x02000000
@@ -973,10 +975,19 @@ class _LateResources:
             self._guard()
             require(self.raw is not None and "memfd" not in self.io, "CREDENTIAL_MEMFD_LIMIT")
             import fcntl
-            fd = os.memfd_create("planeon-client-credential", os.MFD_CLOEXEC | os.MFD_ALLOW_SEALING)
+            require(getattr(os, "MFD_NOEXEC_SEAL", MFD_NOEXEC_SEAL) == MFD_NOEXEC_SEAL
+                    and getattr(fcntl, "F_SEAL_EXEC", F_SEAL_EXEC) == F_SEAL_EXEC, "CREDENTIAL_MEMFD_NOEXEC_UNSUPPORTED")
+            try:
+                fd = os.memfd_create("planeon-client-credential", os.MFD_CLOEXEC | MFD_NOEXEC_SEAL)
+            except OSError as exc:
+                # No fallback flags: a kernel without MFD_NOEXEC_SEAL refuses.
+                require(exc.errno != errno.EINVAL, "CREDENTIAL_MEMFD_NOEXEC_UNSUPPORTED")
+                raise
             row = dict(fd=fd, identity=None, seals=0, ready=False)
             self.io["memfd"] = row
             require(2 < fd < 1048576, "CREDENTIAL_DESCRIPTOR_RANGE")
+            require(fcntl.fcntl(fd, fcntl.F_GET_SEALS) & F_SEAL_EXEC == F_SEAL_EXEC,
+                    "CREDENTIAL_MEMFD_NOEXEC_UNSUPPORTED")
             row["identity"] = _custody_identity(os.fstat(fd))
             self._guard()
             offset = 0
@@ -988,7 +999,7 @@ class _LateResources:
                 self._guard()
             seals = fcntl.F_SEAL_SEAL | fcntl.F_SEAL_SHRINK | fcntl.F_SEAL_GROW | fcntl.F_SEAL_WRITE
             fcntl.fcntl(fd, fcntl.F_ADD_SEALS, seals)
-            row["seals"] = seals
+            row["seals"] = F_SEAL_EXEC | seals
             row["ready"] = True
             row["identity"] = _custody_identity(os.fstat(fd))
             self._guard()

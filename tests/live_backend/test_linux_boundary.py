@@ -834,10 +834,10 @@ def _credential_rig():
         return sock
 
     def memfd(name, flags):
-        if name != "planeon-client-credential" or flags != 3:
+        if name != "planeon-client-credential" or flags != 9:
             raise AssertionError("unbounded memfd selection")
         fd = rig.fs.kernel_fd("/unit-memfd-" + str(len(rig.seals)))
-        rig.seals[fd] = 0
+        rig.seals[fd] = 32  # the kernel sets F_SEAL_EXEC on an MFD_NOEXEC_SEAL memfd
         return fd
 
     def write(fd, raw):
@@ -867,12 +867,12 @@ def _credential_rig():
                         patch.object(socket, "socket", side_effect=transport),
                         patch.object(os, "memfd_create", side_effect=memfd, create=True),
                         patch.object(os, "MFD_CLOEXEC", 1, create=True),
-                        patch.object(os, "MFD_ALLOW_SEALING", 2, create=True),
+                        patch.object(os, "MFD_NOEXEC_SEAL", 8, create=True),
                         patch.object(os, "write", side_effect=write),
                         patch.object(rig.module.fcntl, "fcntl", side_effect=seal)):
                     stack.enter_context(patcher)
                 for name, value in dict(F_ADD_SEALS=1033, F_GET_SEALS=1034, F_SEAL_SEAL=1,
-                                        F_SEAL_SHRINK=2, F_SEAL_GROW=4, F_SEAL_WRITE=8).items():
+                                        F_SEAL_SHRINK=2, F_SEAL_GROW=4, F_SEAL_WRITE=8, F_SEAL_EXEC=32).items():
                     stack.enter_context(patch.object(rig.module.fcntl, name, value, create=True))
                 try:
                     yield rig
@@ -913,7 +913,28 @@ class CredentialBoundaryTests(unittest.TestCase):
                 self.assertFalse(rig.owner._context._late_resources.io)
                 self.assertFalse(any(p.startswith(("/unit-transport-", "/unit-memfd-")) for p, n in rig.fs.fds.values()))
             self.assertEqual(rig.transports, [(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP)] * 2)
-            self.assertTrue(all(value == 15 for value in rig.seals.values()))
+            self.assertTrue(all(value == 47 for value in rig.seals.values()))
+            # CONF-LIVE-004A (MON-R12-MEMFD-A): only MFD_CLOEXEC | MFD_NOEXEC_SEAL (9), never the old flags (3).
+            with self.subTest(case="memfd-flags"):
+                flags = [call.args[1] for call in os.memfd_create.call_args_list]
+                self.assertEqual(flags, [9, 9])
+                self.assertNotIn(3, flags)
+                self.assertFalse(any(value & 2 for value in flags))
+        # CONF-LIVE-004A (MON-R12-MEMFD-PKT1): the descriptor check re-reads the stored F_SEAL_EXEC.
+        with self.subTest(case="memfd-stored-exec-seal"), _credential_rig() as rig:
+            def strip_exec_seal():
+                resources = rig.owner._context._late_resources
+                fd = resources.tls_memfd()
+                self.assertEqual(rig.seals[fd], 47)
+                rig.seals[fd] &= ~32
+                resources.close_memfd()
+            rig.after_io = strip_exec_seal
+            handle = rig.open()
+            with self.assertRaises(ConformanceError) as caught:
+                rig.owner.execute_fixed(handle, rig.module.CASES[0], "amd64")
+            self.assertEqual(caught.exception.reason, "CREDENTIAL_MEMFD_CHANGED")
+            self.assertIsNone(rig.owner._active)
+        self.assertFalse(rig.fs.fds)
 
     def test_missing_policy_or_fixed_module_identity_opens_no_credential(self):
         for fault in ("policy", "missing-guard", "boolean", "loader"):
@@ -969,6 +990,41 @@ class CredentialBoundaryTests(unittest.TestCase):
                 with self.assertRaises((OSError, ConformanceError)):
                     rig.owner.execute_fixed(handle, rig.module.CASES[0], "amd64")
                 self.assertIsNone(rig.owner._active)
+            self.assertFalse(rig.fs.fds)
+        # CONF-LIVE-004A (MON-R12-MEMFD-A): memfd creation faults; each is refused and releases every descriptor.
+        def failing(code):
+            def create(name, flags):
+                raise OSError(code, "unit memfd_create failure")
+            return create
+        for fault in ("memfd-einval", "memfd-other-errno", "memfd-unsealed", "memfd-os-constant", "memfd-fcntl-constant"):
+            with self.subTest(fault=fault), _credential_rig() as rig:
+                rig.io_enabled = True
+                handle = rig.open()
+                kernel = os.memfd_create.side_effect
+                def unsealed(name, flags):
+                    fd = kernel(name, flags)
+                    rig.seals[fd] = 0
+                    return fd
+                patcher = {"memfd-einval": lambda: patch.object(os, "memfd_create", side_effect=failing(errno.EINVAL)),
+                           "memfd-other-errno": lambda: patch.object(os, "memfd_create", side_effect=failing(errno.EMFILE)),
+                           "memfd-unsealed": lambda: patch.object(os, "memfd_create", side_effect=unsealed),
+                           "memfd-os-constant": lambda: patch.object(os, "MFD_NOEXEC_SEAL", 4, create=True),
+                           "memfd-fcntl-constant": lambda: patch.object(rig.module.fcntl, "F_SEAL_EXEC", 4, create=True)}[fault]
+                with patcher() as created, self.assertRaises((OSError, ConformanceError)) as caught:
+                    rig.owner.execute_fixed(handle, rig.module.CASES[0], "amd64")
+                reason = getattr(caught.exception, "reason", None)
+                if fault == "memfd-other-errno":
+                    self.assertNotEqual(reason, "CREDENTIAL_MEMFD_NOEXEC_UNSUPPORTED")
+                    self.assertIs(type(caught.exception), OSError)
+                    self.assertEqual(caught.exception.errno, errno.EMFILE)
+                else:
+                    self.assertEqual(reason, "CREDENTIAL_MEMFD_NOEXEC_UNSUPPORTED")
+                if fault.endswith("-constant"):
+                    self.assertFalse(os.memfd_create.called)
+                else:
+                    self.assertEqual([call.args[1] for call in created.call_args_list], [9])
+                self.assertIsNone(rig.owner._active)
+                self.assertFalse(any(p.startswith(("/unit-transport-", "/unit-memfd-")) for p, n in rig.fs.fds.values()))
             self.assertFalse(rig.fs.fds)
 
     def test_retained_credential_and_ancestry_mutation_refuse_without_reopening(self):
