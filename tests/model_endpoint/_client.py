@@ -88,6 +88,8 @@ ERROR_CODES = _FrozenCodes((
     # PI-D1 class: mapped when MEQ-CAMPAIGN-CONTRACT lands.
     ("MEQ_GUARD_LINK_LOCAL", "the base URL's address is link-local (169.254.0.0/16 or fe80::/10)"),
     # PI-D1 class: mapped when MEQ-CAMPAIGN-CONTRACT lands.
+    ("MEQ_GUARD_METADATA", "the base URL's address is one of the two named IPv6 cloud metadata addresses"),
+    # PI-D1 class: mapped when MEQ-CAMPAIGN-CONTRACT lands.
     ("MEQ_GUARD_HOST_CLASS", "the base URL's address is neither loopback nor in a private range"),
     # PI-D1 class: mapped when MEQ-CAMPAIGN-CONTRACT lands.
     ("MEQ_CONFIG_INVALID", "an unknown profile, a timeout above the profile's, a bad request path, payload or cancel hook"),
@@ -146,6 +148,10 @@ _SCHEME_PORTS = {"http": 80, "https": 443}
 _ADMITTED = tuple(ipaddress.ip_network(net) for net in ("127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16",
                                                         "::1/128", "fc00::/7"))
 _LINK_LOCAL = tuple(ipaddress.ip_network(net) for net in ("169.254.0.0/16", "fe80::/10"))
+# Q-MEQA-1 (a), lane-monitor ruling MON-R12-MEQA-PKT1: two /128s inside fc00::/7, refused before its admission. Provenance:
+# named by the r1 reviewer from its own knowledge as AWS and GCP IPv6 metadata endpoints; unverified; refusing only
+# narrows the guard.
+_METADATA = tuple(ipaddress.ip_network(net) for net in ("fd00:ec2::254/128", "fd20:ce::254/128"))
 _DIGITS = frozenset("0123456789")
 _PATH_CHARS = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~/")
 
@@ -218,6 +224,10 @@ def guard_base_url(base_url):
             raise MeqError("MEQ_GUARD_NAME") from None
     if any(address in network for network in _LINK_LOCAL):
         raise MeqError("MEQ_GUARD_LINK_LOCAL")
+    if any(address in network for network in _METADATA):
+        raise MeqError("MEQ_GUARD_METADATA")
+    # Exactly the listed ranges, never ipaddress's is_private: the shared address space 100.64.0.0/10, 192.0.0.0/24 and
+    # 198.18.0.0/15 stay refused (pinned in test_guard.py).
     if not any(address in network for network in _ADMITTED):
         raise MeqError("MEQ_GUARD_HOST_CLASS")
     base_path = tail.rstrip("/")

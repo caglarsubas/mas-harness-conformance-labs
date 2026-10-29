@@ -4,9 +4,9 @@ This root is the contract-independent core of roadmap item MODEL-EXIST-QUAL-001'
 revision 3 fixes whatever MEQ-CAMPAIGN-CONTRACT says. It is data and tests only, under the lane monitor's ruling
 MON-R12-MEQC (Q-MEQC-1 to Q-MEQC-6, all (a)). It uses only the Python 3.12 standard library.
 
-**No endpoint is contacted.** Nothing here runs against any server: every test drives the client over
-`socket.socketpair()` with an in-thread fake responder, and the default connection factory is patched to fail in every
-test. It runs as acceptance argv 16: `python3 -m unittest discover -s tests/model_endpoint -p test_*.py`.
+**No endpoint is contacted.** Nothing here runs against any server: `test_client.py` drives the client over
+`socket.socketpair()` with an in-thread fake responder and patches the default connection factory to fail in every one
+of its tests; `test_guard.py` and `test_evidence.py` never reach the factory. It runs as acceptance argv 16: `python3 -m unittest discover -s tests/model_endpoint -p test_*.py`.
 
 ## What is here
 
@@ -22,7 +22,9 @@ test. It runs as acceptance argv 16: `python3 -m unittest discover -s tests/mode
 
 - Admitted: the schemes `http` and `https`; IP literals in loopback (127.0.0.0/8, ::1) or the private ranges (10.0.0.0/8,
   172.16.0.0/12, 192.168.0.0/16, fc00::/7); and the name `localhost`, mapped to 127.0.0.1 with no resolver call.
-- Refused, each with its own code: link-local addresses (169.254.0.0/16, fe80::/10), every other address, every other
+- Refused, each with its own code: link-local addresses (169.254.0.0/16, fe80::/10), the two IPv6 cloud metadata
+  addresses inside fc00::/7 that `_client.py` lists (Q-MEQA-1 (a); provenance unverified), every other address
+  (including the shared address space 100.64.0.0/10, 192.0.0.0/24 and 198.18.0.0/15, pinned by tests), every other
   name (never resolved), userinfo, a query, a fragment, an empty host, an invalid port, any other scheme and anything
   the guard cannot parse plainly.
 
@@ -37,8 +39,13 @@ the coded refusal `MEQ_REDIRECT_REFUSED`: a `Location` header is never followed.
 
 One record per profile id, never pooled: `dev-macos-arm64` (`planeon.ollama`), `linux-amd64-cpu` (`planeon.llamacpp`)
 and `linux-amd64-nvidia` (`planeon.vllm`). Each record carries one row per probe row of run plan section 5, in order,
-with a status of exactly `PASS`, `FAIL`, `NOT_SERVED` or `NOT_RUN_ENV_UNAVAILABLE`. The validator refuses any host,
-address, port, URL, account name, local path or credential-shaped value anywhere in a record.
+with a status of exactly `PASS`, `FAIL`, `NOT_SERVED` or `NOT_RUN_ENV_UNAVAILABLE`. The validator scans every string
+of a record outside the shape's own vocabulary and refuses what it detects: a URL (`://`, a percent-encoded `://` in any
+letter case, or a token starting with `//`); the name `localhost`; an e-mail-style account (`user@host`); a local path
+under a home, root, private or temporary directory; an IPv4 or IPv6 literal, or an integer, hex or short dotted IPv4
+form (bounded to address shapes, see `_short_ipv4`); a `:port`; a dotted host name in any `/`-separated part of a
+token; and credential shapes (authorization, password, secret and key markers, known key prefixes, JWTs and long
+opaque tokens). It cannot recognise a bare account or host name without a dot or an `@`.
 
 ## What waits for MEQ-CAMPAIGN-CONTRACT
 

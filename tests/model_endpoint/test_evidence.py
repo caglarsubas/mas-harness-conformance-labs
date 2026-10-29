@@ -3,6 +3,7 @@ port, URL, account, local path, credential). Leak vectors are built from parts, 
 """
 import ast
 import copy
+import ipaddress
 import unittest
 from pathlib import Path
 
@@ -146,6 +147,13 @@ class EvidenceTests(unittest.TestCase):
         key_like = ["sk" + "-" + "ab" * 10, "ghp" + "_" + "x1" * 10, "AK" + "IA" + "Q" * 16, "hf" + "_" + "z" * 12,
                     "a1b2" * 10]
         vectors["credential"] += key_like
+        # LM-P1-1 (PACKET r1): one vector per new rule, each built at run time.
+        loopback = ipaddress.IPv4Address(dot.join(["127", "0", "0", "1"]))
+        vectors["url"] += ["x" + "%3A" + "%2f" + "%2F" + "engine", slash * 2 + "engine"]
+        vectors["host"] += ["x" + slash + "engine" + dot + "example" + slash + "v1"]
+        vectors["credential"] += [dot.join(["ey" + "J" + "hbGciOiJub25lIn0", "ey" + "J" + "zdWIiOiJ4In0", "c2ln"])]
+        vectors["address"] += [str(int(loopback)), hex(int(loopback)), "127" + dot + "1", dot.join(["10", "0", "1"]),
+                               "0x7f" + dot + "1", str(2 ** 24)]
         for kind, texts in vectors.items():
             for text in texts:
                 with self.subTest(kind=kind, text_length=len(text)):
@@ -163,7 +171,9 @@ class EvidenceTests(unittest.TestCase):
     def test_benign_details_are_accepted(self):
         for text in ("The backend serves no embedding model.", "No GPU host is named.", "Truncated, not refused.",
                      "Context limit minus 256 tokens was accepted.", "Ollama 0.5 answered; e.g. one restart.",
-                     "First byte within the latency plus 5 s."):
+                     "First byte within the latency plus 5 s.",
+                     # The bound of the integer and short IPv4 rule: ordinary numbers stay legal.
+                     "12 rows, 4500 ms, 0.5 s, 1.25 s, flag 0x10 and " + str(2 ** 24 - 1) + " bytes."):
             with self.subTest(text=text):
                 self.assertIsNone(_evidence.leak_class(text))
                 _evidence.build_record("dev-macos-arm64", statuses("PASS"), {"cancellation": text})

@@ -2,9 +2,9 @@
 
 One record per profile id, never pooled (run plan rev 3, sections 2 and 6; owner decision Q-MEQ-PROFILES). Each record
 names its profile and backend role and carries one row per probe row of run plan section 5, in that order. A row's status
-is exactly PASS, FAIL, NOT_SERVED or NOT_RUN_ENV_UNAVAILABLE. A row may carry a short fixed `detail`; no record may
-carry a host, an address, a port, a URL, an account name or a credential-shaped value anywhere. The rows' pass rules, the
-PI-D1 mapping and the events binding wait for MEQ-CAMPAIGN-CONTRACT.
+is exactly PASS, FAIL, NOT_SERVED or NOT_RUN_ENV_UNAVAILABLE. A row may carry a short fixed `detail`; every string
+outside the shape's own vocabulary is scanned by leak_class, which detects the classes listed in its docstring. The
+rows' pass rules, the PI-D1 mapping and the events binding wait for MEQ-CAMPAIGN-CONTRACT.
 
 Records are serialized as sorted-key, compact, ASCII JSON plus a trailing newline.
 """
@@ -39,6 +39,14 @@ _SEPARATORS = frozenset(" \t\n\r,;()[]{}<>\"'`|=!?*")
 _HEX_RUN = frozenset("0123456789abcdefABCDEF:.")
 _LABEL = frozenset("abcdefghijklmnopqrstuvwxyz0123456789-")
 _OPAQUE = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_+/=")
+# LM-P1-1 (2): a percent-encoded scheme separator is refused as written, in any letter case; values are never decoded.
+_PERCENT_SEPARATOR = "%3a" + "%2f" * 2
+_BASE64URL = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
+_JWT_HEADER = "ey" + "J"
+_DIGIT_CHARS = frozenset("0123456789")
+_HEX_DIGITS = frozenset("0123456789abcdef")
+# The inet_aton field widths, in bits, of the one-, two- and three-part IPv4 forms (a, a.b and a.b.c).
+_INET_WIDTHS = {1: (32,), 2: (8, 24), 3: (8, 8, 16)}
 
 
 class EvidenceError(ValueError):
@@ -80,11 +88,73 @@ def _dotted_quad(run):
     return False
 
 
+def _inet_number(part):
+    """(value, is_hex) of a decimal or 0x-hex inet_aton part, or (None, False)."""
+    low = part.lower()
+    if low.startswith("0x") and 3 <= len(low) <= 10 and set(low[2:]) <= _HEX_DIGITS:
+        return int(low[2:], 16), True
+    if part and len(part) <= 10 and set(part) <= _DIGIT_CHARS:
+        return int(part), False
+    return None, False
+
+
+def _short_ipv4(token):
+    """LM-P1-1 (4): an integer, 0x-hex or short dotted IPv4 form (inet_aton's a, a.b and a.b.c shapes).
+
+    Bound, so that only address-shaped values are refused: every part must fit its inet_aton field, and the first octet
+    must be non-zero (0.0.0.0/8 is "this network", never a host). So a plain integer is refused only from 2^24 =
+    16,777,216 up to 2^32 - 1, and row counts, byte counts and latencies in milliseconds below that stay legal; 0x10
+    stays legal too. A two-part decimal a.b is also an ordinary decimal number, so it is refused only when a is 10 or
+    more: that covers the first octet of every loopback, private, link-local and shared range (10, 100, 127, 169, 172,
+    192, 198) while 0.5 or 1.25 stay legal. A hex part makes any form address-shaped.
+    """
+    parts = token.rstrip(".").split(".")
+    if len(parts) not in _INET_WIDTHS:
+        return False
+    values, hexed = [], False
+    for part, width in zip(parts, _INET_WIDTHS[len(parts)]):
+        value, is_hex = _inet_number(part)
+        if value is None or value >= 1 << width:
+            return False
+        values.append(value)
+        hexed = hexed or is_hex
+    first_octet = values[0] >> 24 if len(values) == 1 else values[0]
+    if len(values) == 2 and not hexed:
+        return first_octet >= 10
+    return first_octet >= 1
+
+
+def _jwt(token):
+    """LM-P1-1 (3): three base64url segments joined by '.', the first starting with a JSON-object header."""
+    segments = token.split(".")
+    return (len(segments) == 3 and segments[0].startswith(_JWT_HEADER)
+            and all(segment and set(segment) <= _BASE64URL for segment in segments))
+
+
+def _host(value):
+    """A dotted host name: two or more labels of [a-z0-9-], the last alphabetic and at least two letters long."""
+    labels = value.rstrip(".").split(".")
+    return (len(labels) >= 2 and all(label and set(label) <= _LABEL for label in labels) and labels[-1].isalpha()
+            and len(labels[-1]) >= 2)
+
+
 def leak_class(text):
-    """The first leak class found in `text` ("url", "localhost", "account", "path", "credential", "address", "port" or
-    "host"), or None."""
+    """The first leak class found in `text`, or None:
+    - "url": '://', a percent-encoded '://' in any letter case, or a token starting with '//';
+    - "localhost": the name localhost; "account": an '@' (an e-mail-style account, user@host);
+    - "path": a local path under a home, root, private or temporary directory, or a drive letter;
+    - "credential": authorization, password, secret and key markers, known key prefixes, a JWT, or a long opaque token;
+    - "address": an IPv4 or IPv6 literal, or an integer, 0x-hex or short dotted IPv4 form (bounded, see _short_ipv4);
+    - "port": a ':' followed by a digit;
+    - "host": a dotted host name in any '/'-separated part of a token.
+    """
     low = text.lower()
     if "://" in text:
+        return "url"
+    if _PERCENT_SEPARATOR in low:
+        return "url"
+    # LM-P1-1 (1): a network-path reference (a token starting with //).
+    if any(token.startswith("//") for token in _tokens(text)):
         return "url"
     if "localhost" in low:
         return "localhost"
@@ -103,19 +173,22 @@ def leak_class(text):
             return "address"
         except ValueError:
             pass
+    if any(_short_ipv4(token) for token in _tokens(text)):
+        return "address"
     for index, ch in enumerate(text[:-1]):
         if ch == ":" and text[index + 1].isdigit():
             return "port"
     for token in _tokens(text):
         lowered = token.lower()
+        if _jwt(token):
+            return "credential"
         if lowered.startswith(_KEY_PREFIXES):
             return "credential"
         if (len(token) >= 32 and all(ch in _OPAQUE for ch in token) and any(ch.isdigit() for ch in token)
                 and any(ch.isalpha() for ch in token)):
             return "credential"
-        labels = lowered.rstrip(".").split(".")
-        if (len(labels) >= 2 and all(label and set(label) <= _LABEL for label in labels) and labels[-1].isalpha()
-                and len(labels[-1]) >= 2):
+        # LM-P1-1 (1): the host rule applies to each /-separated part of a token.
+        if any(_host(part) for part in lowered.split("/")):
             return "host"
     return None
 

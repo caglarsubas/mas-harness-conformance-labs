@@ -415,6 +415,7 @@ class ReachabilityTests(ClientCase):
             "MEQ_GUARD_PORT": guard("http://127.0.0.1:65536/"),
             "MEQ_GUARD_NAME": guard("http://engine.example/"),
             "MEQ_GUARD_LINK_LOCAL": guard("http://169.254.169.254/"),
+            "MEQ_GUARD_METADATA": guard("http://[" + "fd20" + ":" + "ce" + "::" + "254" + "]/"),
             "MEQ_GUARD_HOST_CLASS": guard("http://192.0.2.10/"),
             "MEQ_CONFIG_INVALID": lambda: _client.MeqClient(BASE, "linux-arm64", factory=Fake().factory),
             "MEQ_CONNECT_FAILED": get(ConnectionRefusedError()),

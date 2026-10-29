@@ -2,38 +2,38 @@
  "added": {
   "task-packets/CONF-MEQ-001A.yaml": {
    "mode": "100644",
-   "sha256": "4c13caf0773a97edbbcdb82adb1ddf306163713372ed65b20fa233d5fbc67dcd",
-   "size": 8828
+   "sha256": "1ec00b0f05509a63d69c95c77ac5c3715e7fb493950ce6991ccd063c54b400a4",
+   "size": 9735
   },
   "tests/model_endpoint/README.md": {
    "mode": "100644",
-   "sha256": "ba1f02950f5e690e27fd86ff8833e07e85179dbefa221bd78e9941a9f0f95cf4",
-   "size": 4062
+   "sha256": "5a512a09abbd0ef1d78dcd1f2726623954bb9c73ff110bee2ee20db59571c79a",
+   "size": 4941
   },
   "tests/model_endpoint/_client.py": {
    "mode": "100644",
-   "sha256": "3f429f3c0000401b6bb1702c5a328c57259c21c7ce01ea2ec943c22d2108004b",
-   "size": 20869
+   "sha256": "ca63f84c042b21e8361b9a38ccd1645f8351d3f7a018cc6dfddef5ae98314ce0",
+   "size": 21678
   },
   "tests/model_endpoint/_evidence.py": {
    "mode": "100644",
-   "sha256": "703726db64602ecf79933dc9cc5ac6b81a4559adc4399703b551de23fff90fdc",
-   "size": 9578
+   "sha256": "ee1e2c644fc7ad6346d1dbacab04cc820e92c785f4d03e98fa2cea496998021f",
+   "size": 13318
   },
   "tests/model_endpoint/test_client.py": {
    "mode": "100644",
-   "sha256": "cfab0770fb9f3c56809ad4aa70b96e071349abf04325134e94d1554114e0cc3d",
-   "size": 23484
+   "sha256": "42863626533bdba68ef4530eff5e129f13f835aa2aaaa609087d4cfea35a72bd",
+   "size": 23581
   },
   "tests/model_endpoint/test_evidence.py": {
    "mode": "100644",
-   "sha256": "5c7798a69b8ab76ef95bca7394729b3ad2bdc22ffef9dcba9c42d8a13e09b1da",
-   "size": 10574
+   "sha256": "a0596ccc76888feb839ecf968fe71e254b43b34c9907489cd3d61850aea009d9",
+   "size": 11420
   },
   "tests/model_endpoint/test_guard.py": {
    "mode": "100644",
-   "sha256": "f190d28b0b15a458120163d4c3afe872c0409442cb71b70463ccc9f25ec5e55d",
-   "size": 6462
+   "sha256": "3e4af1e89e7a5e9a113f5271c0b1a53e9d0e75e61a7444140f4da55528122243",
+   "size": 8704
   }
  },
  "baseCommit": "6470b620b2ad0e08f26bbd865dadcbe9fa87637e",

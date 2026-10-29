@@ -3,6 +3,7 @@ resolver call), and refuses every other class with its own code. No resolver or 
 
 Public-address vectors are documentation addresses (RFC 5737 and RFC 3849).
 """
+import ipaddress
 import socket
 import unittest
 from unittest import mock
@@ -61,10 +62,39 @@ class GuardTests(unittest.TestCase):
 
     def test_public_addresses_are_refused(self):
         for url in ("http://192.0.2.10:8080", "http://198.51.100.7/", "http://203.0.113.5", "http://[2001:db8::1]:8080",
-                    "http://172.32.0.1", "http://172.15.255.254", "http://0.0.0.0", "http://255.255.255.255",
+                    "http://" + str(ipaddress.IPv4Address(0)), "http://" + str(ipaddress.IPv4Address(2 ** 32 - 1)),
                     "http://[::ffff:127.0.0.1]/", "http://[::ffff:169.254.169.254]/", "http://[::]/"):
             with self.subTest(url=url):
                 self.refused(url, "MEQ_GUARD_HOST_CLASS")
+
+    def test_the_addresses_just_outside_172_16_0_0_12_are_refused(self):
+        # LM-P1-2: computed at run time, the network address minus one and the broadcast address plus one.
+        block = ipaddress.ip_network(".".join(("172", "16", "0", "0")) + "/12")
+        self.admitted("http://" + str(block.network_address) + ":8080", "http", str(block.network_address), 8080)
+        self.admitted("http://" + str(block.broadcast_address) + ":8080", "http", str(block.broadcast_address), 8080)
+        for address in (block.network_address - 1, block.broadcast_address + 1):
+            with self.subTest(address=str(address)):
+                self.refused("http://" + str(address) + ":8080", "MEQ_GUARD_HOST_CLASS")
+
+    def test_the_two_ipv6_metadata_addresses_are_refused(self):
+        # Q-MEQA-1 (a): both /128s inside fc00::/7 are refused with their own code; their neighbours stay admitted.
+        for head, middle in (("fd00", "ec2"), ("fd20", "ce")):
+            metadata =ipaddress.IPv6Address(int(ipaddress.IPv6Address(head + ":" + middle + "::")) + 0x254)
+            with self.subTest(address=str(metadata)):
+                self.refused("http://[" + str(metadata) + "]/", "MEQ_GUARD_METADATA")
+                self.refused("http://[" + str(metadata) + "]:8080/v1", "MEQ_GUARD_METADATA")
+                for neighbour in (metadata - 1, metadata + 1):
+                    self.admitted("http://[" + str(neighbour) + "]:80", "http", str(neighbour), 80)
+
+    def test_shared_and_special_ipv4_ranges_stay_refused(self):
+        # Pins: 100.64.0.0/10 (shared address space), 192.0.0.0/24 and 198.18.0.0/15 are not admitted, whatever
+        # ipaddress's is_private says, because the guard lists RFC 1918 and fc00::/7 explicitly.
+        for parts in (("100", "64", "0", "1"), ("100", "100", "100", "200"), ("100", "127", "255", "254"),
+                      ("192", "0", "0", "9"), ("198", "18", "0", "1")):
+            host = ".".join(parts)
+            with self.subTest(address=host):
+                self.refused("http://" + host + "/", "MEQ_GUARD_HOST_CLASS")
+                self.refused("http://" + host + ":11434/v1", "MEQ_GUARD_HOST_CLASS")
 
     def test_dns_names_are_refused_without_a_resolver_call(self):
         for url in ("http://engine.example:11434", "http://localhost.example/", "http://localhost./", "http://example/",
@@ -114,7 +144,8 @@ class GuardTests(unittest.TestCase):
         self.assertEqual(len(codes), len(set(codes)))
         self.assertEqual(set(codes), {"MEQ_GUARD_MALFORMED", "MEQ_GUARD_SCHEME", "MEQ_GUARD_EMPTY_HOST",
                                       "MEQ_GUARD_USERINFO", "MEQ_GUARD_QUERY", "MEQ_GUARD_FRAGMENT", "MEQ_GUARD_PORT",
-                                      "MEQ_GUARD_NAME", "MEQ_GUARD_LINK_LOCAL", "MEQ_GUARD_HOST_CLASS"})
+                                      "MEQ_GUARD_NAME", "MEQ_GUARD_LINK_LOCAL", "MEQ_GUARD_METADATA",
+                                      "MEQ_GUARD_HOST_CLASS"})
 
 
 if __name__ == "__main__":
