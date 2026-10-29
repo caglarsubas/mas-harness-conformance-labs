@@ -46,9 +46,10 @@ vocabulary and refuses what it catches: a URL (`://`, a token starting with `//`
 percent-encoded scheme separator, an encoded double slash, or a doubly encoded colon or slash); the name `localhost`;
 an e-mail-style account (`user@host`); a local path under a home, root, private or temporary directory; an IPv4 or
 IPv6 literal, an integer, hex or short dotted IPv4 form bounded to address shapes (see `_short_ipv4`), or a dotted
-quad with a hex or leading-zero part; a `:port`; a dotted host name; and credential shapes (authorization, password,
+quad with a hex or leading-zero part; a `:port`; a dotted host name, also inside a path or followed by `:` and letters;
+and credential shapes (authorization, password,
 secret and key markers, known key prefixes, signed, unsigned or two-segment JWT shapes, and long opaque tokens). The
-host, JWT and short-IPv4 rules apply to every part of a token split on `/`, `\`, `#`, `&` and `~`.
+host, JWT and short-IPv4 rules apply to every part of a token split on `/`, `\`, `#`, `&`, `~` and `:`.
 
 Its limits:
 - a denylist cannot be complete, and the check cannot recognise a bare account or host name without a dot or an `@`;

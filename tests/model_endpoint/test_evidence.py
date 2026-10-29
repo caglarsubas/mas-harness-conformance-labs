@@ -162,6 +162,8 @@ class EvidenceTests(unittest.TestCase):
         vectors["address"] += ["x" + slash + "127" + dot + "1", dot.join(["0" + "177", "0", "0", "1"]),
                                dot.join(["0x" + "7f", "0", "0", "1"])]
         vectors["url"] += ["x" + "%2F" + "%2f" + "engine", "x" + "%25" + "3A" + "engine", "a" + "%25" + "2f" + "b"]
+        # Q-MEQA-2 (c4): a dotted host followed by ':' and letters.
+        vectors["host"] += ["engine" + dot + "example" + colon + "abc"]
         for kind, texts in vectors.items():
             for text in texts:
                 with self.subTest(kind=kind, text_length=len(text)):
@@ -185,6 +187,21 @@ class EvidenceTests(unittest.TestCase):
             with self.subTest(text=text):
                 self.assertIsNone(_evidence.leak_class(text))
                 _evidence.build_record("dev-macos-arm64", statuses("PASS"), {"cancellation": text})
+
+    def test_colon_separator_regression_pins(self):
+        # Q-MEQA-2 (MON-R12-MEQA-C4): with ':' a part separator, each of these keeps exactly its c3 class.
+        dot, colon = ".", ":"
+        host = "engine" + dot + "example"
+        pins = [(host + colon + "8080", "port"),
+                (dot.join(["10", "0", "0", "5"]) + colon + "8080", "address"),
+                ("[" + colon * 2 + "1" + "]", "address"),
+                ("[" + colon * 2 + "1" + "]" + colon + "8080", "address"),
+                ("fe80" + colon * 2 + "1" + "%" + "en0", "address"),
+                ("/v1/" + "2001" + colon + "db8" + colon * 2 + "7" + "/models", "address"),
+                ("status" + colon + "ok", None)]
+        for text, kind in pins:
+            with self.subTest(kind=kind, text_length=len(text)):
+                self.assertEqual(_evidence.leak_class(text), kind)
 
     def test_known_false_positives_are_recorded_as_a_limit(self):
         # LM-P2-1, MON-MEQ-EVIDENCE-TYPED: best-effort detection refuses these benign strings today. The bound is kept

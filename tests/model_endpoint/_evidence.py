@@ -46,7 +46,7 @@ _ENCODED_DOUBLE_SLASH = "%2f" * 2
 _DOUBLE_ENCODED_COLON = "%25" + "3a"
 _DOUBLE_ENCODED_SLASH = "%25" + "2f"
 # LM-P2-1 (1): every token is also checked part by part, split on each of these characters.
-_PART_SEPARATORS = ("/", "\\", "#", "&", "~")
+_PART_SEPARATORS = ("/", "\\", "#", "&", "~", ":")
 _OCTAL_DIGITS = frozenset("01234567")
 _BASE64URL = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
 _JWT_HEADER = "ey" + "J"
