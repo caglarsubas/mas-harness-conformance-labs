@@ -6,11 +6,13 @@ CONF-CI-002's layer and tests read; the chain adds nothing to that view.
 """
 from __future__ import annotations
 
+import ast
 import base64
 import copy
 import hashlib
 import importlib.util
 import json
+import re
 import unittest
 from pathlib import Path
 
@@ -219,6 +221,63 @@ LIVE_004A_CHANGED = {"src/harness_conformance/live_linux_boundary.py",
                      "tests/live_backend/test_linux_boundary.py"}
 LIVE_004A_ADDED = {"task-packets/CONF-LIVE-004A.yaml"}
 LIVE_004A_DECISION_DATES = {"Q-MEMFD-5": "2026-10-28", "W01-AMEND-QW3": "2026-10-10"}
+LIVE_004A_HEAD = "81a885d1cf995dfe5d38a6fe696cd5d9ce0821a4"
+# CONF-LIVE-003C (CONF-LIVE-003 closed for R12's client surface; owner decisions Q-PK-2 and Q-LPK0-4, 2026-10-22, and
+# Q-L3-3 and Q-L3-5, 2026-10-28) follows CONF-LIVE-004A. Data, tests and one doc section only, with no src change: it
+# changes docs/live-backend/proxy.md (one appended closing section) and this test, and adds the closure record and its
+# packet YAML.
+LIVE_003C_RECORD = "fixtures/ci/conf-live-003c-checkpoint.json"
+LIVE_003C_CHANGED = {"docs/live-backend/proxy.md",
+                     "tests/ci_checkpoint/test_checkpoint_chain.py"}
+LIVE_003C_ADDED = {"fixtures/live-backend/conf-live-003-closure.json",
+                   "task-packets/CONF-LIVE-003C.yaml"}
+LIVE_003C_DECISION_DATES = {"Q-PK-2": "2026-10-22", "Q-LPK0-4": "2026-10-22", "Q-L3-3": "2026-10-28", "Q-L3-5": "2026-10-28"}
+# The CONF-LIVE-003 closure record (fixtures/live-backend/conf-live-003-closure.json): its closed members, the classes of
+# the published packet's eight allowedPaths and of the 32 CONF-LIVE-003 rows of proxy.md's "Roadmap and evidence" table.
+LIVE_003_CLOSURE = "fixtures/live-backend/conf-live-003-closure.json"
+LIVE_003_CLOSURE_FIELDS = {"schemaVersion", "packetId", "closedBy", "evidenceClass", "nativeAcceptance", "tenantAcceptance",
+                           "publishedPacket", "productMerge", "publishedCorrection", "paths", "rows", "retiredPackets",
+                           "closedDraftPrs", "decisions"}
+LIVE_003_GUIDE = "docs/live-backend/proxy.md"
+LIVE_003_SECTION = "## CONF-LIVE-003 closure (CONF-LIVE-003C)"
+LIVE_003_KIT = "LINUX-PROBE-KIT-001"
+LIVE_003_PATH_CLASSES = {"src/harness_conformance/live_proxy_client.py": "KEPT_R12",
+                         "tests/live_backend/test_proxy_client.py": "KEPT_R12",
+                         "src/harness_conformance/live_proxy_server.py": "MOVED_RETAINED",
+                         "src/harness_conformance/live_mutation_admission.py": "MOVED_RETAINED",
+                         "tests/live_backend/test_proxy_server.py": "MOVED_RETAINED",
+                         "tests/live_backend/test_mutation_admission.py": "MOVED_RETAINED",
+                         "fixtures/live-backend/proxy-vectors.json": "SHARED",
+                         "docs/live-backend/proxy.md": "SHARED"}
+LIVE_003_MOVED_ROWS = {"CONF-LIVE-003 server-only API authentication": "IMPLEMENTED_NOT_ACCEPTED",
+                       "CONF-LIVE-003 returned-identity accounting": "IMPLEMENTED_NOT_ACCEPTED",
+                       "CONF-LIVE-003 CREATED result delivery": "IMPLEMENTED_NOT_ACCEPTED",
+                       "CONF-LIVE-003 local CREATE retirement": "IMPLEMENTED_NOT_ACCEPTED",
+                       "CONF-LIVE-003 native inspector / broker / API": "ONGOING"}
+LIVE_003_CLIENT_CLOSED_ROWS = {"CONF-LIVE-003 required CI", "CONF-LIVE-003 source completion / merge / exact-main"}
+# Q-L3-2 (a): the published correction exactly as Build-R00 relayed it (MON-R12-L3C-LAUNCH); the lane never reads it.
+LIVE_003_CORRECTION_FILES = [
+    {"path": "architecture/probe-kit-scope/amendment.json",
+     "sha256": "3de2d73e0413388ba286899cdd364c876dfbd869510c88537da8b1c91726ef8b"},
+    {"path": "architecture/probe-kit-scope/README.md",
+     "sha256": "b2761f010983fbac4f84e6b7653a3a5a7c26dd7c758e1ab7ee1d5f1d94c6dd0c"}]
+LIVE_003_CORRECTION_ROWS = {
+    "dispositions": [{"index": 0, "packetId": "CONF-LIVE-003", "disposition": "CONSUMED",
+                      "deliverables": {"1": "KEPT_R12", "2": "SUPERSEDED_UNACCEPTED_HISTORY",
+                                       "3": "SUPERSEDED_UNACCEPTED_HISTORY", "4": "SUPERSEDED_UNACCEPTED_HISTORY"}}],
+    "moved": [{"index": index, "item": item, "fromPacket": "CONF-LIVE-003", "to": LIVE_003_KIT}
+              for index, item in ((0, "ADMISSION_MODULE"), (3, "RECORD_INSPECTOR"), (4, "SERVER"), (5, "UID_LEDGER"))],
+    "retained": [{"index": 1, "item": "CLIENT", "text": "The campaign client (CONF-LIVE-003 deliverable 1)"}]}
+LIVE_003_DECISIONS = {"Q-PK-2": ("2026-10-22", "owner (via the lane monitor)"),
+                      "Q-LPK0-4": ("2026-10-22", "owner (via the lane monitor)"),
+                      "Q-L3-3": ("2026-10-28", "owner (via the lane monitor)"),
+                      "Q-L3-5": ("2026-10-28", "owner (via the lane monitor)"),
+                      "Q-L3-PRS": ("2026-10-28", "owner (via the lane monitor)"),
+                      "Q-L3-1": ("2026-10-29", "lane monitor (owner delegation 2026-10-22)"),
+                      "Q-L3-2": ("2026-10-29", "lane monitor (owner delegation 2026-10-22)"),
+                      "Q-L3-4": ("2026-10-29", "lane monitor (owner delegation 2026-10-22)"),
+                      "Q-L3-6": ("2026-10-29", "lane monitor (owner delegation 2026-10-22)"),
+                      "MON-R12-L3-STEP2": ("2026-10-29", "lane monitor (owner delegation 2026-10-22)")}
 
 
 def head():
@@ -294,6 +353,35 @@ def conf_live_004a():
     return HELPER.chain_record(entries()[:14], 13, sources), rows, sources
 
 
+def conf_live_003c():
+    rows, sources = HELPER.checkpoint_chain_project(ROOT, *head(), keep=15)
+    return HELPER.chain_record(entries()[:15], 14, sources), rows, sources
+
+
+def live_003_table(guide, every=False):
+    """(ID cell, status cell) of each row of proxy.md's "Roadmap and evidence" table whose ID cell starts with
+    'CONF-LIVE-003 ' (of every row with every=True), in table order; cells are split on '|' and stripped of spaces only."""
+    lines = guide.decode("utf-8").split("\n")
+    start = [index for index, line in enumerate(lines) if line == "## Roadmap and evidence"]
+    if len(start) != 1:
+        raise AssertionError("one Roadmap and evidence heading required")
+    index = start[0] + 1
+    while not lines[index].startswith("|"):
+        index += 1
+    if lines[index] != "| Phase | ID / gate | Status | Description |" or lines[index + 1] != "|---|---|---|---|":
+        raise AssertionError("the roadmap table header changed")
+    found = []
+    for line in lines[index + 2:]:
+        if not line.startswith("|"):
+            break
+        cells = [cell.strip(" ") for cell in line.strip(" ")[1:-1].split("|")]
+        if len(cells) != 4 or not line.endswith("|"):
+            raise AssertionError("four cells required")
+        if every or cells[1].startswith("CONF-LIVE-003 "):
+            found.append((cells[1], cells[2]))
+    return found
+
+
 class ChainRegistryTests(unittest.TestCase):
     def test_the_registry_starts_with_conf_ci_002_and_then_conf_enf_001(self):
         rows, sources = head()
@@ -314,6 +402,7 @@ class ChainRegistryTests(unittest.TestCase):
         self.assertEqual((value[11]["packetId"], value[11]["path"]), ("CONF-MAS-005", MAS_005_RECORD))
         self.assertEqual((value[12]["packetId"], value[12]["path"]), ("CONF-LINUX-002", LINUX_002_RECORD))
         self.assertEqual((value[13]["packetId"], value[13]["path"]), ("CONF-LIVE-004A", LIVE_004A_RECORD))
+        self.assertEqual((value[14]["packetId"], value[14]["path"]), ("CONF-LIVE-003C", LIVE_003C_RECORD))
         self.assertEqual(sources[HELPER.CHAIN_REGISTRY_PATH], HELPER.chain_registry_bytes(value))
         for entry in value:
             self.assertEqual(hashlib.sha256(sources[entry["path"]]).hexdigest(), entry["sha256"])
@@ -524,6 +613,182 @@ class ChainRegistryTests(unittest.TestCase):
             with self.subTest(decision=row["id"]):
                 self.assertEqual(row["date"], LIVE_004A_DECISION_DATES[row["id"]])
         self.assertTrue(all(pin["mode"] == "100644" for pin in record["added"].values()))
+
+    def test_the_conf_live_003c_record_names_exactly_its_paths_and_decisions(self):
+        # CONF-LIVE-003C: proxy.md (one appended section) and this test change, the closure record and the packet YAML are
+        # added; the record names neither itself nor the registry; there is no deletion and no src/, ci/, probes/,
+        # tests/enforcement/ or schemas/ path. Each decision carries its own date.
+        record, rows, sources = conf_live_003c()
+        self.assertEqual(record["predecessor"], {"packetId": "CONF-LIVE-004A", "sha256": entries()[13]["sha256"]})
+        self.assertEqual(record["baseCommit"], LIVE_004A_HEAD)
+        self.assertEqual(record["deleted"], {})
+        self.assertEqual(set(record["changed"]), LIVE_003C_CHANGED)
+        self.assertEqual(set(record["added"]), LIVE_003C_ADDED)
+        self.assertFalse(ENF_001_CHANGED & (set(record["changed"]) | set(record["added"])))
+        self.assertFalse([path for path in (*record["changed"], *record["added"])
+                          if path.startswith(("src/", "ci/", "probes/", "tests/enforcement/", "schemas/"))])
+        self.assertEqual([row["id"] for row in record["ownerDecisions"]], list(LIVE_003C_DECISION_DATES))
+        for row in record["ownerDecisions"]:
+            with self.subTest(decision=row["id"]):
+                self.assertEqual(row["date"], LIVE_003C_DECISION_DATES[row["id"]])
+        self.assertTrue(all(pin["mode"] == "100644" for pin in record["added"].values()))
+
+    def test_the_conf_live_003_closure_record_matches_the_tree(self):
+        # CONF-LIVE-003C: the closure record is canonical and closed, names the published packet's eight allowedPaths in
+        # order with HEAD's bytes, keeps every KEPT_R12 and MOVED_RETAINED path byte-unchanged from the base, classes every
+        # CONF-LIVE-003 row of proxy.md's table once, in order, with its status verbatim, and pins the Q-L3-4 import
+        # freeze and the supervisor's coupling; proxy.md's base bytes are its exact prefix and the suffix is the one
+        # closing section, with no status token of the table.
+        chain, rows, sources = conf_live_003c()
+        base_rows, base_sources = HELPER.checkpoint_chain_project(ROOT, *head(), keep=14)
+        raw = sources[LIVE_003_CLOSURE]
+        closure = HELPER.parse(raw)
+        self.assertEqual(raw, HELPER.canonical(closure) + b"\n")
+        self.assertEqual(set(closure), LIVE_003_CLOSURE_FIELDS)
+        self.assertEqual((closure["schemaVersion"], closure["packetId"], closure["closedBy"], closure["evidenceClass"]),
+                         ("r12.conf-live-003-closure/v1", "CONF-LIVE-003", "CONF-LIVE-003C", "SOURCE_DELTA_ONLY"))
+        self.assertIs(closure["nativeAcceptance"], False)
+        self.assertIs(closure["tenantAcceptance"], False)
+        self.assertEqual(closure["productMerge"], {"pr": 12, "commit": "092fcf475c6f3ebd455e3c354cddb7664ea1f900"})
+        # The published packet as R12 pins it, and its eight allowedPaths read from those pinned bytes, in order.
+        published = json.loads(sources["fixtures/platform/linux-baseline/scalar-repair.json"])["publishedPackets"]["CONF-LIVE-003"]
+        self.assertEqual(hashlib.sha256(published["raw"].encode()).hexdigest(), published["sha256"])
+        self.assertEqual(closure["publishedPacket"], {"path": "task-packets/CONF-LIVE-003.yaml", "sha256": published["sha256"]})
+        allowed = [json.loads(line[len("allowedPaths: "):]) for line in published["raw"].split("\n")
+                   if line.startswith("allowedPaths: ")]
+        self.assertEqual(len(allowed), 1)
+        self.assertEqual([entry["path"] for entry in closure["paths"]], allowed[0])
+        self.assertEqual(set(allowed[0]), set(LIVE_003_PATH_CLASSES))
+        named = {*chain["deleted"], *chain["changed"], *chain["added"]}
+        self.assertFalse([path for path in named if path.startswith("src/")])
+        for entry in closure["paths"]:
+            path, kind = entry["path"], LIVE_003_PATH_CLASSES[entry["path"]]
+            with self.subTest(path=path):
+                self.assertEqual(entry["class"], kind)
+                self.assertEqual(entry["sha256"], hashlib.sha256(sources[path]).hexdigest())
+                if kind == "MOVED_RETAINED":
+                    self.assertEqual(set(entry), {"path", "sha256", "class", "retainedBecause", "furtherDevelopment"})
+                    self.assertEqual(entry["furtherDevelopment"], LIVE_003_KIT)
+                    self.assertTrue(entry["retainedBecause"] and all(type(item) is str and item for item in entry["retainedBecause"]))
+                else:
+                    self.assertEqual(set(entry), {"path", "sha256", "class"})
+                if kind in ("KEPT_R12", "MOVED_RETAINED"):
+                    self.assertNotIn(path, named)
+                    self.assertEqual(sources[path], base_sources[path])
+        # Every CONF-LIVE-003 row of the table, once each, in order, status verbatim, with its one class.
+        expected = []
+        for row_id, status in live_003_table(sources[LIVE_003_GUIDE]):
+            rules = []
+            if status in ("LOCAL_AND_CI_PASS_RECORDED", "LOCAL_PASS_RECORDED"):
+                rules.append({"class": "HISTORY"})
+            if LIVE_003_MOVED_ROWS.get(row_id) == status:
+                rules.append({"class": "MOVED", "owner": LIVE_003_KIT})
+            if row_id == "CONF-LIVE-003 checkpoint / transport":
+                rules.append({"class": "KEPT_R12"})
+            if row_id in LIVE_003_CLIENT_CLOSED_ROWS:
+                rules.append({"class": "CLIENT_CLOSED_HERE", "movedRemainderOwner": LIVE_003_KIT})
+            with self.subTest(row=row_id):
+                self.assertEqual(len(rules), 1)
+            expected.append({"id": row_id, "status": status, **rules[0]})
+        self.assertEqual(len(expected), 32)
+        self.assertEqual(len({row["id"] for row in expected}), 32)
+        self.assertEqual(closure["rows"], expected)
+        # The published correction as relayed (Q-L3-2), the retired packets, the closed draft PRs and each decision.
+        correction = closure["publishedCorrection"]
+        self.assertEqual(set(correction), {"packetId", "repository", "slot", "merge", "files", "rows", "readmeLines",
+                                           "receiptVerification", "source"})
+        self.assertEqual((correction["packetId"], correction["repository"], correction["slot"], correction["merge"]),
+                         ("MET-LIVE-002", "harness-onion", 260, "b821ed65"))
+        self.assertEqual(correction["files"], LIVE_003_CORRECTION_FILES)
+        self.assertEqual(correction["rows"], LIVE_003_CORRECTION_ROWS)
+        self.assertEqual(correction["receiptVerification"], {"packetId": "CONF-LIVE-004", "retainedAs": "RECEIPT_VERIFICATION",
+                                                             "scope": "CONF-LIVE-004's narrowed scope", "claimedHere": False})
+        self.assertEqual(closure["retiredPackets"],
+                         [{"packetId": packet, "class": "NON_DISPATCHABLE_RETAINED_HISTORY", "decision": decision}
+                          for packet, decision in (("CONF-FIX-007", "Q-L3-3"), ("CONF-FIX-008", "Q-L3-3"),
+                                                   ("CONF-FIX-009", "Q-LPK0-4"), ("CONF-FIX-010", "Q-LPK0-4"))])
+        self.assertEqual(closure["closedDraftPrs"], [18, 20])
+        self.assertEqual([row["id"] for row in closure["decisions"]], list(LIVE_003_DECISIONS))
+        for row in closure["decisions"]:
+            with self.subTest(decision=row["id"]):
+                self.assertEqual(set(row), {"id", "date", "by", "ruling"})
+                self.assertEqual((row["date"], row["by"]), LIVE_003_DECISIONS[row["id"]])
+                self.assertTrue(type(row["ruling"]) is str and row["ruling"])
+        # The supervisor's exact coupling to the client, by ast (nothing is imported or executed): exactly two imports
+        # name the client, `from .live_proxy_client import execute_protected` and `from . import live_proxy_client as
+        # proxy`, and no plain import does; from `proxy` it reads exactly __name__, __loader__, execute_protected and
+        # _require_current_credential_policy, as an attribute or through getattr/hasattr with a string-constant name, and
+        # a getattr/hasattr on `proxy` with any other second argument is refused. Every read of the name `proxy` is the
+        # value of an attribute, the first argument of getattr/hasattr, the sole argument of type() or a return value,
+        # and every call to _fixed_credential_proxy is the whole value of an assignment to the name `proxy` alone.
+        # Q-L3-4: the client takes exactly require, retained_profile and _time from the frozen admission module.
+        def imported(path, module):
+            tree = ast.parse(sources[path])
+            names = [[alias.name for alias in node.names] for node in ast.walk(tree)
+                     if isinstance(node, ast.ImportFrom) and node.module and node.module.split(".")[-1] == module]
+            plain = [alias.name for node in ast.walk(tree) if isinstance(node, ast.Import)
+                     for alias in node.names if alias.name.split(".")[-1] == module]
+            return names, plain
+        supervisor = ast.parse(sources["src/harness_conformance/live_supervisor.py"])
+        client_imports = sorted(
+            ((node.level, node.module, [(alias.name, alias.asname) for alias in node.names]) for node in ast.walk(supervisor)
+             if isinstance(node, ast.ImportFrom) and ((node.module or "").split(".")[-1] == "live_proxy_client"
+                                                      or any(alias.name == "live_proxy_client" for alias in node.names))),
+            key=repr)
+        self.assertEqual(client_imports, sorted([(1, "live_proxy_client", [("execute_protected", None)]),
+                                                 (1, None, [("live_proxy_client", "proxy")])], key=repr))
+        self.assertFalse([alias.name for node in ast.walk(supervisor) if isinstance(node, ast.Import)
+                          for alias in node.names if "live_proxy_client" in alias.name])
+        members = set()
+        for node in ast.walk(supervisor):
+            if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "proxy":
+                members.add(node.attr)
+            if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in ("getattr", "hasattr")
+                    and node.args and isinstance(node.args[0], ast.Name) and node.args[0].id == "proxy"):
+                with self.subTest(member_read_line=node.lineno):
+                    self.assertTrue(len(node.args) >= 2 and isinstance(node.args[1], ast.Constant)
+                                    and type(node.args[1].value) is str, "a non-constant member read on proxy")
+                    members.add(node.args[1].value)
+        self.assertEqual(members, {"__name__", "__loader__", "execute_protected", "_require_current_credential_policy"})
+        parents = {child: node for node in ast.walk(supervisor) for child in ast.iter_child_nodes(node)}
+        for node in ast.walk(supervisor):
+            if isinstance(node, ast.Name) and node.id == "proxy" and isinstance(node.ctx, ast.Load):
+                parent = parents[node]
+                with self.subTest(proxy_read_line=node.lineno):
+                    self.assertTrue((isinstance(parent, ast.Attribute) and parent.value is node)
+                                    or (isinstance(parent, ast.Call) and isinstance(parent.func, ast.Name)
+                                        and ((parent.func.id in ("getattr", "hasattr") and parent.args
+                                              and parent.args[0] is node)
+                                             or (parent.func.id == "type" and len(parent.args) == 1
+                                                 and parent.args[0] is node and not parent.keywords)))
+                                    or (isinstance(parent, ast.Return) and parent.value is node),
+                                    "a read of proxy outside an attribute, getattr/hasattr, type() or return")
+            if isinstance(node, ast.Call) and getattr(node.func, "id", getattr(node.func, "attr", None)) == "_fixed_credential_proxy":
+                parent = parents[node]
+                with self.subTest(fixed_proxy_call_line=node.lineno):
+                    self.assertTrue(isinstance(parent, ast.Assign) and parent.value is node and len(parent.targets) == 1
+                                    and isinstance(parent.targets[0], ast.Name) and parent.targets[0].id == "proxy",
+                                    "a _fixed_credential_proxy call outside `proxy = _fixed_credential_proxy(...)`")
+        self.assertEqual(imported("src/harness_conformance/live_proxy_client.py", "live_mutation_admission"),
+                         ([["require", "retained_profile", "_time"]], []))
+        # proxy.md: the base bytes (this record's before-image) are an exact prefix; the suffix is the one closing section,
+        # at most 25 lines, pointing to the closure record by path and carrying no digest.
+        guide, before = sources[LIVE_003_GUIDE], base_sources[LIVE_003_GUIDE]
+        self.assertEqual(before, base64.b64decode(chain["changed"][LIVE_003_GUIDE]["beforeSourceBase64"]))
+        self.assertTrue(before.endswith(b"\n<!-- CONF-PERF-006 SOURCE_DELTA_ONLY END -->\n"))
+        self.assertEqual(guide[:len(before)], before)
+        suffix = guide[len(before):].decode("utf-8")
+        self.assertTrue(suffix.startswith(LIVE_003_SECTION + "\n") and suffix.endswith("\n"))
+        lines = suffix.split("\n")[:-1]
+        self.assertLessEqual(len(lines), 25)
+        self.assertEqual([line for line in lines if line.startswith("#")], [LIVE_003_SECTION])
+        self.assertNotIn("<!--", suffix)
+        self.assertIn(LIVE_003_CLOSURE, suffix)
+        self.assertIsNone(re.search("[0-9a-f]{40,64}", suffix))
+        # No overclaim: the section carries none of the status tokens of the table's rows (derived from the table).
+        tokens = {status for _, status in live_003_table(guide, every=True)}
+        self.assertIn("LOCAL_AND_CI_PASS_RECORDED", tokens)
+        self.assertEqual([token for token in sorted(tokens) if token in suffix], [])
 
     def test_every_stage_view_is_checked_and_the_first_is_the_conf_ci_002_head(self):
         rows, sources = head()
