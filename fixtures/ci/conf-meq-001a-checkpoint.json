@@ -2,13 +2,13 @@
  "added": {
   "task-packets/CONF-MEQ-001A.yaml": {
    "mode": "100644",
-   "sha256": "1ec00b0f05509a63d69c95c77ac5c3715e7fb493950ce6991ccd063c54b400a4",
-   "size": 9735
+   "sha256": "ad69c45e9aeae1e2dc5a2ac17e0979434bd8dfacce78dd72c454df79d438bab2",
+   "size": 10511
   },
   "tests/model_endpoint/README.md": {
    "mode": "100644",
-   "sha256": "5a512a09abbd0ef1d78dcd1f2726623954bb9c73ff110bee2ee20db59571c79a",
-   "size": 4941
+   "sha256": "4ee2b94a99268284e0694128621b917a8e7bc10d93a883cb262d3862ffc21ab7",
+   "size": 5769
   },
   "tests/model_endpoint/_client.py": {
    "mode": "100644",
@@ -17,8 +17,8 @@
   },
   "tests/model_endpoint/_evidence.py": {
    "mode": "100644",
-   "sha256": "ee1e2c644fc7ad6346d1dbacab04cc820e92c785f4d03e98fa2cea496998021f",
-   "size": 13318
+   "sha256": "271a5f2164bde55e8f611c2eb73f285284b07c424283ea768b44a5d25b65472b",
+   "size": 15659
   },
   "tests/model_endpoint/test_client.py": {
    "mode": "100644",
@@ -27,8 +27,8 @@
   },
   "tests/model_endpoint/test_evidence.py": {
    "mode": "100644",
-   "sha256": "a0596ccc76888feb839ecf968fe71e254b43b34c9907489cd3d61850aea009d9",
-   "size": 11420
+   "sha256": "6b46c372a69e5c9299132c1cda88bec4448a6e7efa27fbb9f08cbc1ac455c89e",
+   "size": 12932
   },
   "tests/model_endpoint/test_guard.py": {
    "mode": "100644",

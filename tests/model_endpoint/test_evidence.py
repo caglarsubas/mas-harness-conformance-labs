@@ -154,6 +154,14 @@ class EvidenceTests(unittest.TestCase):
         vectors["credential"] += [dot.join(["ey" + "J" + "hbGciOiJub25lIn0", "ey" + "J" + "zdWIiOiJ4In0", "c2ln"])]
         vectors["address"] += [str(int(loopback)), hex(int(loopback)), "127" + dot + "1", dot.join(["10", "0", "1"]),
                                "0x7f" + dot + "1", str(2 ** 24)]
+        # LM-P2-1 (PACKET r2): the accepted evasions, each built at run time.
+        backslash, jwt_head, jwt_body = "\\", "ey" + "J" + "hbGciOiJub25lIn0", "ey" + "J" + "zdWIiOiJ4In0"
+        vectors["host"] += ["x" + mark + "engine" + dot + "example" for mark in (backslash, "#", "&", "~")]
+        vectors["credential"] += ["x" + slash + dot.join([jwt_head, jwt_body, "c2ln"]),
+                                  dot.join([jwt_head, jwt_body, ""]), dot.join([jwt_head, jwt_body])]
+        vectors["address"] += ["x" + slash + "127" + dot + "1", dot.join(["0" + "177", "0", "0", "1"]),
+                               dot.join(["0x" + "7f", "0", "0", "1"])]
+        vectors["url"] += ["x" + "%2F" + "%2f" + "engine", "x" + "%25" + "3A" + "engine", "a" + "%25" + "2f" + "b"]
         for kind, texts in vectors.items():
             for text in texts:
                 with self.subTest(kind=kind, text_length=len(text)):
@@ -177,6 +185,16 @@ class EvidenceTests(unittest.TestCase):
             with self.subTest(text=text):
                 self.assertIsNone(_evidence.leak_class(text))
                 _evidence.build_record("dev-macos-arm64", statuses("PASS"), {"cancellation": text})
+
+    def test_known_false_positives_are_recorded_as_a_limit(self):
+        # LM-P2-1, MON-MEQ-EVIDENCE-TYPED: best-effort detection refuses these benign strings today. The bound is kept
+        # in 001A, and 001B types and closes every field instead; this asserts the limit rather than hiding it.
+        for text in ("42.7 tok/s", "99.9", "Ubuntu 24.04", "CUDA 12.4", "Python 3.12.14", "vLLM 1.0.0",
+                     str(20 * 1000 * 1000) + " bytes"):
+            with self.subTest(text=text):
+                self.assertEqual(_evidence.leak_class(text), "address")
+                with self.assertRaises(_evidence.EvidenceError):
+                    _evidence.build_record("dev-macos-arm64", statuses("PASS"), {"streaming": text})
 
     def test_the_module_imports_only_ipaddress_and_json(self):
         tree = ast.parse((HERE / "_evidence.py").read_text(encoding="utf-8"))

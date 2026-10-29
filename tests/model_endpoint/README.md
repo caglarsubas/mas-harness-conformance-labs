@@ -39,13 +39,24 @@ the coded refusal `MEQ_REDIRECT_REFUSED`: a `Location` header is never followed.
 
 One record per profile id, never pooled: `dev-macos-arm64` (`planeon.ollama`), `linux-amd64-cpu` (`planeon.llamacpp`)
 and `linux-amd64-nvidia` (`planeon.vllm`). Each record carries one row per probe row of run plan section 5, in order,
-with a status of exactly `PASS`, `FAIL`, `NOT_SERVED` or `NOT_RUN_ENV_UNAVAILABLE`. The validator scans every string
-of a record outside the shape's own vocabulary and refuses what it detects: a URL (`://`, a percent-encoded `://` in any
-letter case, or a token starting with `//`); the name `localhost`; an e-mail-style account (`user@host`); a local path
-under a home, root, private or temporary directory; an IPv4 or IPv6 literal, or an integer, hex or short dotted IPv4
-form (bounded to address shapes, see `_short_ipv4`); a `:port`; a dotted host name in any `/`-separated part of a
-token; and credential shapes (authorization, password, secret and key markers, known key prefixes, JWTs and long
-opaque tokens). It cannot recognise a bare account or host name without a dot or an `@`.
+with a status of exactly `PASS`, `FAIL`, `NOT_SERVED` or `NOT_RUN_ENV_UNAVAILABLE`.
+
+The validator's leak check is **best-effort detection**. It scans every string of a record outside the shape's own
+vocabulary and refuses what it catches: a URL (`://`, a token starting with `//`, or, as written in any letter case, a
+percent-encoded scheme separator, an encoded double slash, or a doubly encoded colon or slash); the name `localhost`;
+an e-mail-style account (`user@host`); a local path under a home, root, private or temporary directory; an IPv4 or
+IPv6 literal, an integer, hex or short dotted IPv4 form bounded to address shapes (see `_short_ipv4`), or a dotted
+quad with a hex or leading-zero part; a `:port`; a dotted host name; and credential shapes (authorization, password,
+secret and key markers, known key prefixes, signed, unsigned or two-segment JWT shapes, and long opaque tokens). The
+host, JWT and short-IPv4 rules apply to every part of a token split on `/`, `\`, `#`, `&` and `~`.
+
+Its limits:
+- a denylist cannot be complete, and the check cannot recognise a bare account or host name without a dot or an `@`;
+- some benign strings are refused as false positives: decimals with a whole part of 10 or more (`42.7 tok/s`,
+  `99.9`), two- and three-part version strings (`Ubuntu 24.04`, `CUDA 12.4`, `Python 3.12.14`, `vLLM 1.0.0`) and
+  integers from 2^24 up (a 20,000,000 byte count); `test_evidence.py` asserts them as a known limit;
+- per MON-MEQ-EVIDENCE-TYPED, CONF-MEQ-001B makes every record field typed and closed before it writes any detail,
+  and this leak check stays as defence in depth.
 
 ## What waits for MEQ-CAMPAIGN-CONTRACT
 

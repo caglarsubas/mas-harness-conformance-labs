@@ -41,6 +41,13 @@ _LABEL = frozenset("abcdefghijklmnopqrstuvwxyz0123456789-")
 _OPAQUE = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_+/=")
 # LM-P1-1 (2): a percent-encoded scheme separator is refused as written, in any letter case; values are never decoded.
 _PERCENT_SEPARATOR = "%3a" + "%2f" * 2
+# LM-P2-1 (2): an encoded double slash, and a doubly encoded colon or slash, refused as written in any letter case.
+_ENCODED_DOUBLE_SLASH = "%2f" * 2
+_DOUBLE_ENCODED_COLON = "%25" + "3a"
+_DOUBLE_ENCODED_SLASH = "%25" + "2f"
+# LM-P2-1 (1): every token is also checked part by part, split on each of these characters.
+_PART_SEPARATORS = ("/", "\\", "#", "&", "~")
+_OCTAL_DIGITS = frozenset("01234567")
 _BASE64URL = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
 _JWT_HEADER = "ey" + "J"
 _DIGIT_CHARS = frozenset("0123456789")
@@ -109,6 +116,8 @@ def _short_ipv4(token):
     192, 198) while 0.5 or 1.25 stay legal. A hex part makes any form address-shaped.
     """
     parts = token.rstrip(".").split(".")
+    if len(parts) == 4:
+        return _marked_quad(parts)
     if len(parts) not in _INET_WIDTHS:
         return False
     values, hexed = [], False
@@ -124,11 +133,39 @@ def _short_ipv4(token):
     return first_octet >= 1
 
 
+def _marked_quad(parts):
+    """LM-P2-1 (4): a four-part dotted form with a 0x-hex or leading-zero (octal) part, each part one octet. A plain
+    decimal dotted quad is caught by the address runs already."""
+    marked = False
+    for part in parts:
+        low = part.lower()
+        if low.startswith("0x") and 3 <= len(low) <= 4 and set(low[2:]) <= _HEX_DIGITS:
+            value, marked = int(low[2:], 16), True
+        elif len(part) > 1 and part.startswith("0") and set(part) <= _OCTAL_DIGITS:
+            value, marked = int(part, 8), True
+        elif part and set(part) <= _DIGIT_CHARS:
+            value = int(part)
+        else:
+            return False
+        if value > 255:
+            return False
+    return marked
+
+
 def _jwt(token):
-    """LM-P1-1 (3): three base64url segments joined by '.', the first starting with a JSON-object header."""
+    """A JWT shape: base64url segments joined by '.', the first starting with a JSON-object header. LM-P1-1 (3) takes
+    the signed form (three non-empty segments); LM-P2-1 (3) adds the unsigned form (an empty third segment) and a
+    two-segment form."""
     segments = token.split(".")
-    return (len(segments) == 3 and segments[0].startswith(_JWT_HEADER)
-            and all(segment and set(segment) <= _BASE64URL for segment in segments))
+    if not segments[0].startswith(_JWT_HEADER) or not all(set(segment) <= _BASE64URL for segment in segments):
+        return False
+    if len(segments) == 3 and segments[1] and segments[2]:
+        return True
+    if len(segments) == 3 and segments[1]:
+        return True
+    if len(segments) == 2 and segments[1]:
+        return True
+    return False
 
 
 def _host(value):
@@ -138,20 +175,39 @@ def _host(value):
             and len(labels[-1]) >= 2)
 
 
+def _parts(token):
+    """LM-P2-1 (1): the token itself and each part of it, split on every character of _PART_SEPARATORS."""
+    parts = [token]
+    for separator in _PART_SEPARATORS:
+        parts = [piece for part in parts for piece in part.split(separator)]
+    return [token] + parts
+
+
 def leak_class(text):
     """The first leak class found in `text`, or None:
-    - "url": '://', a percent-encoded '://' in any letter case, or a token starting with '//';
+    - "url": '://', a token starting with '//', or, as written in any letter case, a percent-encoded '://', an
+      encoded double slash, or a doubly encoded colon or slash;
     - "localhost": the name localhost; "account": an '@' (an e-mail-style account, user@host);
     - "path": a local path under a home, root, private or temporary directory, or a drive letter;
-    - "credential": authorization, password, secret and key markers, known key prefixes, a JWT, or a long opaque token;
-    - "address": an IPv4 or IPv6 literal, or an integer, 0x-hex or short dotted IPv4 form (bounded, see _short_ipv4);
+    - "credential": authorization, password, secret and key markers, known key prefixes, a signed, unsigned or
+      two-segment JWT shape, or a long opaque token;
+    - "address": an IPv4 or IPv6 literal, an integer, 0x-hex or short dotted IPv4 form (bounded, see _short_ipv4), or
+      a dotted quad with a hex or leading-zero part;
     - "port": a ':' followed by a digit;
-    - "host": a dotted host name in any '/'-separated part of a token.
+    - "host": a dotted host name.
+    The host, JWT and short-IPv4 rules apply to every part of a token (see _parts). Detection is best-effort; the
+    README states its limits.
     """
     low = text.lower()
     if "://" in text:
         return "url"
     if _PERCENT_SEPARATOR in low:
+        return "url"
+    if _ENCODED_DOUBLE_SLASH in low:
+        return "url"
+    if _DOUBLE_ENCODED_COLON in low:
+        return "url"
+    if _DOUBLE_ENCODED_SLASH in low:
         return "url"
     # LM-P1-1 (1): a network-path reference (a token starting with //).
     if any(token.startswith("//") for token in _tokens(text)):
@@ -173,22 +229,22 @@ def leak_class(text):
             return "address"
         except ValueError:
             pass
-    if any(_short_ipv4(token) for token in _tokens(text)):
+    if any(_short_ipv4(part) for token in _tokens(text) for part in _parts(token)):
         return "address"
     for index, ch in enumerate(text[:-1]):
         if ch == ":" and text[index + 1].isdigit():
             return "port"
     for token in _tokens(text):
         lowered = token.lower()
-        if _jwt(token):
+        if any(_jwt(part) for part in _parts(token)):
             return "credential"
         if lowered.startswith(_KEY_PREFIXES):
             return "credential"
         if (len(token) >= 32 and all(ch in _OPAQUE for ch in token) and any(ch.isdigit() for ch in token)
                 and any(ch.isalpha() for ch in token)):
             return "credential"
-        # LM-P1-1 (1): the host rule applies to each /-separated part of a token.
-        if any(_host(part) for part in lowered.split("/")):
+        # LM-P1-1 (1), LM-P2-1 (1): the host rule applies to each part of a token.
+        if any(_host(part) for part in _parts(lowered)):
             return "host"
     return None
 
