@@ -1410,7 +1410,9 @@ the client surface only.
 The server, the admission module, the UID ledger and cleanup, the native record
 inspector and their moved rows belong to the Linux probe kit,
 LINUX-PROBE-KIT-001 (owner decision Q-PK-2). The moved paths keep their R12
-bytes as retained source (Q-L3-4); no moved row changes status here.
+bytes: the admission module as frozen retained source under Q-L3-4, the others
+as the closure record's retainedBecause lists give; no moved row changes status
+here.
 CONF-FIX-007..010 are NON_DISPATCHABLE_RETAINED_HISTORY (owner decisions Q-L3-3
 and Q-LPK0-4); nothing is deleted.
 

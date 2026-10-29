@@ -358,9 +358,9 @@ def conf_live_003c():
     return HELPER.chain_record(entries()[:15], 14, sources), rows, sources
 
 
-def live_003_table(guide):
+def live_003_table(guide, every=False):
     """(ID cell, status cell) of each row of proxy.md's "Roadmap and evidence" table whose ID cell starts with
-    'CONF-LIVE-003 ', in table order; cells are split on '|' and stripped of spaces only."""
+    'CONF-LIVE-003 ' (of every row with every=True), in table order; cells are split on '|' and stripped of spaces only."""
     lines = guide.decode("utf-8").split("\n")
     start = [index for index, line in enumerate(lines) if line == "## Roadmap and evidence"]
     if len(start) != 1:
@@ -377,7 +377,7 @@ def live_003_table(guide):
         cells = [cell.strip(" ") for cell in line.strip(" ")[1:-1].split("|")]
         if len(cells) != 4 or not line.endswith("|"):
             raise AssertionError("four cells required")
-        if cells[1].startswith("CONF-LIVE-003 "):
+        if every or cells[1].startswith("CONF-LIVE-003 "):
             found.append((cells[1], cells[2]))
     return found
 
@@ -637,7 +637,8 @@ class ChainRegistryTests(unittest.TestCase):
         # CONF-LIVE-003C: the closure record is canonical and closed, names the published packet's eight allowedPaths in
         # order with HEAD's bytes, keeps every KEPT_R12 and MOVED_RETAINED path byte-unchanged from the base, classes every
         # CONF-LIVE-003 row of proxy.md's table once, in order, with its status verbatim, and pins the Q-L3-4 import
-        # freeze; proxy.md's base bytes are its exact prefix and the suffix is the one closing section.
+        # freeze and the supervisor's coupling; proxy.md's base bytes are its exact prefix and the suffix is the one
+        # closing section, with no status token of the table.
         chain, rows, sources = conf_live_003c()
         base_rows, base_sources = HELPER.checkpoint_chain_project(ROOT, *head(), keep=14)
         raw = sources[LIVE_003_CLOSURE]
@@ -713,8 +714,12 @@ class ChainRegistryTests(unittest.TestCase):
                 self.assertEqual(set(row), {"id", "date", "by", "ruling"})
                 self.assertEqual((row["date"], row["by"]), LIVE_003_DECISIONS[row["id"]])
                 self.assertTrue(type(row["ruling"]) is str and row["ruling"])
-        # Q-L3-4: the supervisor takes only execute_protected from the client, and the client takes exactly require,
-        # retained_profile and _time from the frozen admission module (by ast; nothing is imported or executed).
+        # The supervisor's exact coupling to the client, by ast (nothing is imported or executed): exactly two imports
+        # name the client, `from .live_proxy_client import execute_protected` and `from . import live_proxy_client as
+        # proxy`, and no plain import does; from `proxy` it reads exactly __name__, __loader__, execute_protected and
+        # _require_current_credential_policy, as an attribute or through getattr/hasattr with a string-constant name, and
+        # a getattr/hasattr on `proxy` with any other second argument is refused. Q-L3-4: the client takes exactly
+        # require, retained_profile and _time from the frozen admission module.
         def imported(path, module):
             tree = ast.parse(sources[path])
             names = [[alias.name for alias in node.names] for node in ast.walk(tree)
@@ -722,7 +727,27 @@ class ChainRegistryTests(unittest.TestCase):
             plain = [alias.name for node in ast.walk(tree) if isinstance(node, ast.Import)
                      for alias in node.names if alias.name.split(".")[-1] == module]
             return names, plain
-        self.assertEqual(imported("src/harness_conformance/live_supervisor.py", "live_proxy_client"), ([["execute_protected"]], []))
+        supervisor = ast.parse(sources["src/harness_conformance/live_supervisor.py"])
+        client_imports = sorted(
+            ((node.level, node.module, [(alias.name, alias.asname) for alias in node.names]) for node in ast.walk(supervisor)
+             if isinstance(node, ast.ImportFrom) and ((node.module or "").split(".")[-1] == "live_proxy_client"
+                                                      or any(alias.name == "live_proxy_client" for alias in node.names))),
+            key=repr)
+        self.assertEqual(client_imports, sorted([(1, "live_proxy_client", [("execute_protected", None)]),
+                                                 (1, None, [("live_proxy_client", "proxy")])], key=repr))
+        self.assertFalse([alias.name for node in ast.walk(supervisor) if isinstance(node, ast.Import)
+                          for alias in node.names if "live_proxy_client" in alias.name])
+        members = set()
+        for node in ast.walk(supervisor):
+            if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "proxy":
+                members.add(node.attr)
+            if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in ("getattr", "hasattr")
+                    and node.args and isinstance(node.args[0], ast.Name) and node.args[0].id == "proxy"):
+                with self.subTest(member_read_line=node.lineno):
+                    self.assertTrue(len(node.args) >= 2 and isinstance(node.args[1], ast.Constant)
+                                    and type(node.args[1].value) is str, "a non-constant member read on proxy")
+                    members.add(node.args[1].value)
+        self.assertEqual(members, {"__name__", "__loader__", "execute_protected", "_require_current_credential_policy"})
         self.assertEqual(imported("src/harness_conformance/live_proxy_client.py", "live_mutation_admission"),
                          ([["require", "retained_profile", "_time"]], []))
         # proxy.md: the base bytes (this record's before-image) are an exact prefix; the suffix is the one closing section,
@@ -739,6 +764,10 @@ class ChainRegistryTests(unittest.TestCase):
         self.assertNotIn("<!--", suffix)
         self.assertIn(LIVE_003_CLOSURE, suffix)
         self.assertIsNone(re.search("[0-9a-f]{40,64}", suffix))
+        # No overclaim: the section carries none of the status tokens of the table's rows (derived from the table).
+        tokens = {status for _, status in live_003_table(guide, every=True)}
+        self.assertIn("LOCAL_AND_CI_PASS_RECORDED", tokens)
+        self.assertEqual([token for token in sorted(tokens) if token in suffix], [])
 
     def test_every_stage_view_is_checked_and_the_first_is_the_conf_ci_002_head(self):
         rows, sources = head()

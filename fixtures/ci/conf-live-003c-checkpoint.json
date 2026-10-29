@@ -2,7 +2,7 @@
  "added": {
   "fixtures/live-backend/conf-live-003-closure.json": {
    "mode": "100644",
-   "sha256": "2a2cc8b451df19d49b986f4b037a6f9ca0b08bf7fee1971962451e90e1037939",
+   "sha256": "aa68305c5e2c8a53c1fc247a3d3f73449f50c28c9750f7315642c5d79500db26",
    "size": 10141
   },
   "task-packets/CONF-LIVE-003C.yaml": {
@@ -16,8 +16,8 @@
   "docs/live-backend/proxy.md": {
    "after": {
     "mode": "100644",
-    "sha256": "f6e21cdfbfd2bb532c6cadb04804cb475e9b73d6c4fe7eb365413a243a129fd5",
-    "size": 233418
+    "sha256": "78e91cebb5668facf1e1ada8231f1b16abd89a42750dcaf87eccf64c183095fd",
+    "size": 233514
    },
    "before": {
     "mode": "100644",
@@ -29,8 +29,8 @@
   "tests/ci_checkpoint/test_checkpoint_chain.py": {
    "after": {
     "mode": "100644",
-    "sha256": "c490135244babb924b1ae12ef1d72de9ccd8c1e05c6652f6217d23fb64731d67",
-    "size": 60227
+    "sha256": "07bc315b1cdbe27115d60385f0acee4793d3cc72e643be4e4f720084981349bd",
+    "size": 62803
    },
    "before": {
     "mode": "100644",
