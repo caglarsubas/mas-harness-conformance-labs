@@ -232,6 +232,7 @@ LIVE_003C_CHANGED = {"docs/live-backend/proxy.md",
 LIVE_003C_ADDED = {"fixtures/live-backend/conf-live-003-closure.json",
                    "task-packets/CONF-LIVE-003C.yaml"}
 LIVE_003C_DECISION_DATES = {"Q-PK-2": "2026-10-22", "Q-LPK0-4": "2026-10-22", "Q-L3-3": "2026-10-28", "Q-L3-5": "2026-10-28"}
+LIVE_003C_HEAD = "6470b620b2ad0e08f26bbd865dadcbe9fa87637e"
 # The CONF-LIVE-003 closure record (fixtures/live-backend/conf-live-003-closure.json): its closed members, the classes of
 # the published packet's eight allowedPaths and of the 32 CONF-LIVE-003 rows of proxy.md's "Roadmap and evidence" table.
 LIVE_003_CLOSURE = "fixtures/live-backend/conf-live-003-closure.json"
@@ -278,6 +279,20 @@ LIVE_003_DECISIONS = {"Q-PK-2": ("2026-10-22", "owner (via the lane monitor)"),
                       "Q-L3-4": ("2026-10-29", "lane monitor (owner delegation 2026-10-22)"),
                       "Q-L3-6": ("2026-10-29", "lane monitor (owner delegation 2026-10-22)"),
                       "MON-R12-L3-STEP2": ("2026-10-29", "lane monitor (owner delegation 2026-10-22)")}
+# CONF-MEQ-001A (MODEL-EXIST-QUAL-001's client core; owner decisions Q-MEQ-SCOPE, Q-MEQ-PROFILES and Q-MEQ-CANCEL,
+# 2026-10-28, under the lane monitor's ruling MON-R12-MEQC, 2026-10-29) follows CONF-LIVE-003C. Data and tests only, with
+# no src change: it adds the tests/model_endpoint root (acceptance argv 16) and its packet YAML, and changes only this
+# test.
+MEQ_001A_RECORD = "fixtures/ci/conf-meq-001a-checkpoint.json"
+MEQ_001A_CHANGED = {"tests/ci_checkpoint/test_checkpoint_chain.py"}
+MEQ_001A_ADDED = {"task-packets/CONF-MEQ-001A.yaml",
+                  "tests/model_endpoint/README.md",
+                  "tests/model_endpoint/_client.py",
+                  "tests/model_endpoint/_evidence.py",
+                  "tests/model_endpoint/test_client.py",
+                  "tests/model_endpoint/test_evidence.py",
+                  "tests/model_endpoint/test_guard.py"}
+MEQ_001A_DECISION_DATES = {"Q-MEQ-SCOPE": "2026-10-28", "Q-MEQ-PROFILES": "2026-10-28", "Q-MEQ-CANCEL": "2026-10-28"}
 
 
 def head():
@@ -358,6 +373,11 @@ def conf_live_003c():
     return HELPER.chain_record(entries()[:15], 14, sources), rows, sources
 
 
+def conf_meq_001a():
+    rows, sources = HELPER.checkpoint_chain_project(ROOT, *head(), keep=16)
+    return HELPER.chain_record(entries()[:16], 15, sources), rows, sources
+
+
 def live_003_table(guide, every=False):
     """(ID cell, status cell) of each row of proxy.md's "Roadmap and evidence" table whose ID cell starts with
     'CONF-LIVE-003 ' (of every row with every=True), in table order; cells are split on '|' and stripped of spaces only."""
@@ -403,6 +423,7 @@ class ChainRegistryTests(unittest.TestCase):
         self.assertEqual((value[12]["packetId"], value[12]["path"]), ("CONF-LINUX-002", LINUX_002_RECORD))
         self.assertEqual((value[13]["packetId"], value[13]["path"]), ("CONF-LIVE-004A", LIVE_004A_RECORD))
         self.assertEqual((value[14]["packetId"], value[14]["path"]), ("CONF-LIVE-003C", LIVE_003C_RECORD))
+        self.assertEqual((value[15]["packetId"], value[15]["path"]), ("CONF-MEQ-001A", MEQ_001A_RECORD))
         self.assertEqual(sources[HELPER.CHAIN_REGISTRY_PATH], HELPER.chain_registry_bytes(value))
         for entry in value:
             self.assertEqual(hashlib.sha256(sources[entry["path"]]).hexdigest(), entry["sha256"])
@@ -789,6 +810,25 @@ class ChainRegistryTests(unittest.TestCase):
         tokens = {status for _, status in live_003_table(guide, every=True)}
         self.assertIn("LOCAL_AND_CI_PASS_RECORDED", tokens)
         self.assertEqual([token for token in sorted(tokens) if token in suffix], [])
+
+    def test_the_conf_meq_001a_record_names_exactly_its_paths_and_decisions(self):
+        # CONF-MEQ-001A: this test changes; the six tests/model_endpoint files and the packet YAML are added; the record
+        # names neither itself nor the registry; there is no deletion and no src/, ci/, probes/, tests/enforcement/ or
+        # schemas/ path. Each decision carries its own date.
+        record, rows, sources = conf_meq_001a()
+        self.assertEqual(record["predecessor"], {"packetId": "CONF-LIVE-003C", "sha256": entries()[14]["sha256"]})
+        self.assertEqual(record["baseCommit"], LIVE_003C_HEAD)
+        self.assertEqual(record["deleted"], {})
+        self.assertEqual(set(record["changed"]), MEQ_001A_CHANGED)
+        self.assertEqual(set(record["added"]), MEQ_001A_ADDED)
+        self.assertFalse(ENF_001_CHANGED & (set(record["changed"]) | set(record["added"])))
+        self.assertFalse([path for path in (*record["changed"], *record["added"])
+                          if path.startswith(("src/", "ci/", "probes/", "tests/enforcement/", "schemas/"))])
+        self.assertEqual([row["id"] for row in record["ownerDecisions"]], list(MEQ_001A_DECISION_DATES))
+        for row in record["ownerDecisions"]:
+            with self.subTest(decision=row["id"]):
+                self.assertEqual(row["date"], MEQ_001A_DECISION_DATES[row["id"]])
+        self.assertTrue(all(pin["mode"] == "100644" for pin in record["added"].values()))
 
     def test_every_stage_view_is_checked_and_the_first_is_the_conf_ci_002_head(self):
         rows, sources = head()
