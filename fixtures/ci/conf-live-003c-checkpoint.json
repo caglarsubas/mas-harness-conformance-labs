@@ -29,8 +29,8 @@
   "tests/ci_checkpoint/test_checkpoint_chain.py": {
    "after": {
     "mode": "100644",
-    "sha256": "07bc315b1cdbe27115d60385f0acee4793d3cc72e643be4e4f720084981349bd",
-    "size": 62803
+    "sha256": "547ef79348bdb9a80828faf75a5dfbba7839e8604b054c0378fed21ca00dd6cf",
+    "size": 64818
    },
    "before": {
     "mode": "100644",

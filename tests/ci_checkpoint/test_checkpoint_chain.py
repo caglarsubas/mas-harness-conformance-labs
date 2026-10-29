@@ -718,8 +718,10 @@ class ChainRegistryTests(unittest.TestCase):
         # name the client, `from .live_proxy_client import execute_protected` and `from . import live_proxy_client as
         # proxy`, and no plain import does; from `proxy` it reads exactly __name__, __loader__, execute_protected and
         # _require_current_credential_policy, as an attribute or through getattr/hasattr with a string-constant name, and
-        # a getattr/hasattr on `proxy` with any other second argument is refused. Q-L3-4: the client takes exactly
-        # require, retained_profile and _time from the frozen admission module.
+        # a getattr/hasattr on `proxy` with any other second argument is refused. Every read of the name `proxy` is the
+        # value of an attribute, the first argument of getattr/hasattr, the sole argument of type() or a return value,
+        # and every call to _fixed_credential_proxy is the whole value of an assignment to the name `proxy` alone.
+        # Q-L3-4: the client takes exactly require, retained_profile and _time from the frozen admission module.
         def imported(path, module):
             tree = ast.parse(sources[path])
             names = [[alias.name for alias in node.names] for node in ast.walk(tree)
@@ -748,6 +750,25 @@ class ChainRegistryTests(unittest.TestCase):
                                     and type(node.args[1].value) is str, "a non-constant member read on proxy")
                     members.add(node.args[1].value)
         self.assertEqual(members, {"__name__", "__loader__", "execute_protected", "_require_current_credential_policy"})
+        parents = {child: node for node in ast.walk(supervisor) for child in ast.iter_child_nodes(node)}
+        for node in ast.walk(supervisor):
+            if isinstance(node, ast.Name) and node.id == "proxy" and isinstance(node.ctx, ast.Load):
+                parent = parents[node]
+                with self.subTest(proxy_read_line=node.lineno):
+                    self.assertTrue((isinstance(parent, ast.Attribute) and parent.value is node)
+                                    or (isinstance(parent, ast.Call) and isinstance(parent.func, ast.Name)
+                                        and ((parent.func.id in ("getattr", "hasattr") and parent.args
+                                              and parent.args[0] is node)
+                                             or (parent.func.id == "type" and len(parent.args) == 1
+                                                 and parent.args[0] is node and not parent.keywords)))
+                                    or (isinstance(parent, ast.Return) and parent.value is node),
+                                    "a read of proxy outside an attribute, getattr/hasattr, type() or return")
+            if isinstance(node, ast.Call) and getattr(node.func, "id", getattr(node.func, "attr", None)) == "_fixed_credential_proxy":
+                parent = parents[node]
+                with self.subTest(fixed_proxy_call_line=node.lineno):
+                    self.assertTrue(isinstance(parent, ast.Assign) and parent.value is node and len(parent.targets) == 1
+                                    and isinstance(parent.targets[0], ast.Name) and parent.targets[0].id == "proxy",
+                                    "a _fixed_credential_proxy call outside `proxy = _fixed_credential_proxy(...)`")
         self.assertEqual(imported("src/harness_conformance/live_proxy_client.py", "live_mutation_admission"),
                          ([["require", "retained_profile", "_time"]], []))
         # proxy.md: the base bytes (this record's before-image) are an exact prefix; the suffix is the one closing section,
