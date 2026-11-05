@@ -1,6 +1,9 @@
 """CONF-MEQ-001A: the client over socket.socketpair() with an in-thread fake HTTP/1.1 responder; never TCP, loopback
 included (the verify sandbox denies it; MEQ-CLIENT-0 dossier, section 2). The default connection factory is patched to
 fail in every test. Public-address vectors are documentation addresses (RFC 5737).
+
+CONF-MEQ-001A-F (R12 issue 38): a trickling peer, one byte or one small read per gap, cannot hold any part of an
+exchange past the request deadline.
 """
 import ast
 import json
@@ -22,7 +25,16 @@ GUARDED = ("http", "127.0.0.1", 11434, 2.0)
 HOLD = object()
 PUBLIC_PROXY = "http://192.0.2.10:3128"
 PROXY_VARIABLES = ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy")
-ALLOWED_IMPORTS = {"http.client", "ipaddress", "json", "socket", "time"}
+ALLOWED_IMPORTS = {"http.client", "io", "ipaddress", "json", "socket", "time"}
+# The deadline tests (R12 issue 38). A trickling peer sends one byte, or reads SLOW_READ_BYTES, every GAP_S, and each
+# trickled part is at least MIN_TRICKLE_STEPS gaps long, so a full trickle takes 10 s or more. The exchange must end at
+# DEADLINE_S, and before DEADLINE_S + SLACK_S, which stays far below the full trickle.
+DEADLINE_S = 0.3
+SLACK_S = 2.0
+GAP_S = 0.1
+MIN_TRICKLE_STEPS = 100
+SLOW_READ_BYTES = 64 * 1024
+PEER_TIMEOUT_S = 10
 
 
 def response(status, body=b"", reason="OK", headers=(), length=True):
@@ -110,6 +122,61 @@ class Fake:
     def join(self):
         for thread in self.threads:
             thread.join(15)
+
+
+class Trickle:
+    """One socketpair responder for the deadline tests. It reads the request whole, sends its reply's first `at` bytes at
+    once and then every later byte alone, GAP_S apart. With `slow_read` it instead reads the request SLOW_READ_BYTES at
+    a time, GAP_S apart, and never answers. It stops when it sees the client's end close (an end of stream, a broken
+    pipe or a reset) and records when; its own timeout is not a close."""
+
+    def __init__(self, reply=b"", at=0, slow_read=False):
+        self.reply, self.at, self.slow_read = reply, at, slow_read
+        self.client_end = None
+        self.thread = None
+        self.finished = False
+        self.received = 0
+        self.saw_close = False
+        self.closed_at = None
+
+    def factory(self, scheme, address, port, connect_timeout):
+        if self.client_end is not None:
+            raise AssertionError("an unexpected further connection")
+        self.client_end, server_end = socket.socketpair()
+        self.thread = threading.Thread(target=self.serve, args=(server_end,), daemon=True)
+        self.thread.start()
+        return self.client_end
+
+    def serve(self, sock):
+        with sock:
+            sock.settimeout(PEER_TIMEOUT_S)
+            try:
+                if self.slow_read:
+                    while True:
+                        time.sleep(GAP_S)
+                        chunk = sock.recv(SLOW_READ_BYTES)
+                        if not chunk:
+                            break
+                        self.received += len(chunk)
+                else:
+                    read_request(sock)
+                    sock.sendall(self.reply[:self.at])
+                    for index in range(self.at, len(self.reply)):
+                        time.sleep(GAP_S)
+                        sock.sendall(self.reply[index:index + 1])
+                    self.finished = True
+                    while sock.recv(65536):
+                        pass
+                self.saw_close = True
+            except TimeoutError:
+                pass
+            except OSError:
+                self.saw_close = True
+            self.closed_at = time.monotonic()
+
+
+def head_length(reply):
+    return reply.index(b"\r\n\r\n") + 4
 
 
 def _forbidden(name):
@@ -256,9 +323,66 @@ class RefusalTests(ClientCase):
         started = time.monotonic()
         error = self.error(lambda: self.client(fake, request_timeout_s=0.2).get_json("/v1/models"))
         self.assertEqual(error.code, "MEQ_READ_TIMEOUT")
-        self.assertLess(time.monotonic() - started, 5)
+        self.assertLess(time.monotonic() - started, 0.2 + SLACK_S)
         fake.join()
         self.assertEqual(fake.eof, [True])
+
+    def test_a_trickling_peer_cannot_hold_the_exchange_past_its_deadline(self):
+        # R12 issue 38: before CONF-MEQ-001A-F the timeout bounded each receive, so a peer sending a byte per gap held a
+        # header, a body or an event line open for its whole trickle. Every part of the exchange is covered here.
+        body = json.dumps({"data": [{"id": "model-%02d" % n} for n in range(8)]}).encode("ascii")
+        frames = [b"data: " + json.dumps({"choices": [{"delta": {"content": "x" * 96}}]}).encode("ascii") + b"\n\n",
+                  b"data: [DONE]\n\n"]
+        fixed = json_response(json.loads(body))
+        streamed = stream(b"".join(frames))
+        chunked_stream = chunked(frames)
+
+        def get(client):
+            return client.get_json("/v1/models")
+
+        def events(client):
+            return client.post_stream("/v1/chat/completions", {"stream": True})
+
+        payload = {"input": "x" * (MIN_TRICKLE_STEPS * SLOW_READ_BYTES)}
+        # An answer that is neither 2xx nor 3xx and whose error body trickles: the deadline ends it too, and it keeps the
+        # code its status gives, with its status and no body, as before CONF-MEQ-001A-F (the error body is read
+        # best-effort). A 404 stands for 4xx; a 600 stands for any status outside 2xx to 5xx.
+        error_body = {"error": {"message": "the model is not served here", "padding": "x" * 64}}
+        not_found = json_response(error_body, 404)
+        out_of_class = json_response(error_body, 600)
+        timeout = ("MEQ_READ_TIMEOUT", None, None)
+        cases = (("status line and headers", Trickle(fixed), get, timeout),
+                 ("fixed-length body", Trickle(fixed, head_length(fixed)), get, timeout),
+                 ("chunked body", Trickle(chunked([body], "application/json"),
+                                          head_length(chunked([body], "application/json"))), get, timeout),
+                 ("close-delimited body", Trickle(response(200, body, length=False),
+                                                  head_length(response(200, body, length=False))), get, timeout),
+                 ("event line, fixed length", Trickle(streamed, head_length(streamed)), events, timeout),
+                 ("event line, chunked", Trickle(chunked_stream, head_length(chunked_stream)), events, timeout),
+                 ("request body to a slow reader", Trickle(slow_read=True),
+                  lambda client: client.post_json("/v1/embeddings", payload), timeout),
+                 ("error body of a 404", Trickle(not_found, head_length(not_found)), get,
+                  ("MEQ_HTTP_CLIENT_ERROR", 404, None)),
+                 ("error body of a 600", Trickle(out_of_class, head_length(out_of_class)), get,
+                  ("MEQ_PROTOCOL_ERROR", 600, None)))
+        for name, trickle, call, expected in cases:
+            with self.subTest(path=name):
+                if not trickle.slow_read:
+                    self.assertGreaterEqual(len(trickle.reply) - trickle.at, MIN_TRICKLE_STEPS)
+                client = _client.MeqClient(BASE, PROFILE, factory=trickle.factory, request_timeout_s=DEADLINE_S)
+                started = time.monotonic()
+                error = self.error(lambda: call(client))
+                elapsed = time.monotonic() - started
+                trickle.thread.join(PEER_TIMEOUT_S + 5)
+                self.assertEqual((error.code, error.status, error.body), expected)
+                self.assertGreaterEqual(elapsed, DEADLINE_S - 0.02)
+                self.assertLess(elapsed, DEADLINE_S + SLACK_S)
+                self.assertFalse(trickle.finished)
+                self.assertLess(trickle.received, len(payload["input"]))
+                # The connection is closed: the client's end at once, and the peer sees it close within the bound.
+                self.assertEqual(trickle.client_end.fileno(), -1)
+                self.assertTrue(trickle.saw_close)
+                self.assertLess(trickle.closed_at - started, DEADLINE_S + SLACK_S)
 
     def test_an_oversize_body(self):
         declared = ("HTTP/1.1 200 OK\r\nContent-Length: %d\r\nConnection: close\r\n\r\n"
@@ -376,7 +500,7 @@ class ParameterTests(ClientCase):
         self.assertEqual(source.count("# PI-D1 class: mapped when MEQ-CAMPAIGN-CONTRACT lands."), len(codes))
         self.assertNotIn("PI_D1", source)
 
-    def test_the_client_imports_only_its_five_standard_modules_and_never_reads_the_environment(self):
+    def test_the_client_imports_only_its_six_standard_modules_and_never_reads_the_environment(self):
         source = (HERE / "_client.py").read_text(encoding="utf-8")
         tree = ast.parse(source)
         imported = set()

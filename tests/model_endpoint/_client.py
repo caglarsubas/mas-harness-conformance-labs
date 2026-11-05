@@ -8,9 +8,14 @@ and no redirect is followed. Every failure is a MeqError carrying one code of th
 
 The tests drive the client over socket.socketpair() with an in-thread fake responder: the verify sandbox denies TCP,
 loopback included (MEQ-CLIENT-0 dossier, section 2). A later packet may move this module into src/, so it imports only
-http.client, ipaddress, json, socket and time.
+http.client, io, ipaddress, json, socket and time.
+
+CONF-MEQ-001A-F (R12 issue 38): the request timeout is one monotonic absolute deadline for the whole exchange. Every
+send and every receive on the connection gets only the time left to it, so a peer that keeps trickling bytes cannot
+hold the status line, a header, a fixed-length, chunked or close-delimited body or an event line past it.
 """
 import http.client
+import io
 import ipaddress
 import json
 import socket
@@ -280,6 +285,63 @@ def _io_code(error):
     return "MEQ_CONNECTION_LOST"
 
 
+class _DeadlineSocket:
+    """The connection's view of the factory's socket, bound to the request's absolute deadline.
+
+    http.client reads through a buffered file whose single read, readline or header parse may take many receives, and a
+    socket timeout bounds each receive, not the operation. Here every receive and every send is armed with the time left
+    to the deadline, and once it has passed each raises TimeoutError, so no operation can outlast it. Its public methods
+    are exactly the ones http.client uses on a connection's socket: sendall, makefile and close. The view's own raw
+    reader calls the private _recv_into.
+    """
+
+    def __init__(self, sock, deadline):
+        self._sock = sock
+        self._deadline = deadline
+
+    def _arm(self):
+        remaining = self._deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError("the request deadline has passed")
+        self._sock.settimeout(remaining)
+
+    def sendall(self, data):
+        # A send loop, not the socket's own sendall: a TLS socket's sendall gives each of its sends the full timeout.
+        with memoryview(data) as view, view.cast("B") as octets:
+            sent = 0
+            while sent < len(octets):
+                self._arm()
+                sent += self._sock.send(octets[sent:])
+
+    def _recv_into(self, buffer):
+        self._arm()
+        return self._sock.recv_into(buffer)
+
+    def makefile(self, mode="r", buffering=None):
+        if mode != "rb":
+            raise ValueError("the deadline socket reads in binary mode only")
+        return io.BufferedReader(_DeadlineReader(self))
+
+    def close(self):
+        # http.client closes its socket once an answer is complete. The exchange owns the factory's socket and closes
+        # it, always, so this view does nothing here.
+        pass
+
+
+class _DeadlineReader(io.RawIOBase):
+    """The raw stream under http.client's buffered reader: one armed receive per raw read."""
+
+    def __init__(self, sock):
+        super().__init__()
+        self._sock = sock
+
+    def readable(self):
+        return True
+
+    def readinto(self, buffer):
+        return self._sock._recv_into(buffer)
+
+
 class _Exchange:
     """One request on one connection: the socket, the response and the request deadline."""
 
@@ -288,13 +350,10 @@ class _Exchange:
         self.deadline = deadline
         self.response = None
 
-    def arm(self):
-        remaining = self.deadline - time.monotonic()
-        if remaining <= 0:
+    def check(self):
+        # Between operations; within one, the deadline socket gives each send and receive only the time left.
+        if self.deadline - time.monotonic() <= 0:
             raise MeqError("MEQ_READ_TIMEOUT")
-        # http.client really closes the socket once a response is complete; a closed socket needs no timeout.
-        if self.sock.fileno() != -1:
-            self.sock.settimeout(remaining)
 
     def close(self, abort=False):
         if abort:
@@ -378,14 +437,15 @@ class MeqClient:
         exchange = _Exchange(sock, deadline)
         try:
             connection = http.client.HTTPConnection(target.address, target.port, timeout=self.request_timeout_s)
-            # The factory's socket is the connection's socket, as http.client allows; connect() is never called.
-            connection.sock = sock
+            # The factory's socket, seen through the deadline, is the connection's socket, as http.client allows;
+            # connect() is never called.
+            connection.sock = _DeadlineSocket(sock, deadline)
             headers = {"Accept": accept, "Connection": "close"}
             if body is not None:
                 headers["Content-Type"] = "application/json"
-            exchange.arm()
+            exchange.check()
             connection.request(method, target.base_path + path, body=body, headers=headers)
-            exchange.arm()
+            exchange.check()
             exchange.response = connection.getresponse()
             status = exchange.response.status
             if 300 <= status <= 399:
@@ -416,7 +476,7 @@ class MeqClient:
             raise MeqError("MEQ_OVERSIZE", status=response.status)
         data = bytearray()
         while True:
-            exchange.arm()
+            exchange.check()
             try:
                 chunk = response.read(min(READ_CHUNK_BYTES, MAX_RESPONSE_BYTES + 1 - len(data)))
             except (OSError, http.client.HTTPException) as error:
@@ -436,7 +496,7 @@ class MeqClient:
         while True:
             if cancel is not None and cancel():
                 raise MeqError("MEQ_CANCELLED")
-            exchange.arm()
+            exchange.check()
             try:
                 line = response.readline(MAX_SSE_LINE_BYTES + 1)
             except (OSError, http.client.HTTPException) as error:
