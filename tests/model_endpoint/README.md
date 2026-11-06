@@ -15,7 +15,7 @@ of its tests; `test_guard.py` and `test_evidence.py` never reach the factory. It
 | `_client.py` | the probe client: the base-URL guard, the fixed parameters, the injectable connection factory, JSON GET and POST, the streaming POST that reads server-sent events up to `[DONE]`, and the closed `MEQ_*` error set |
 | `_evidence.py` | the per-profile evidence record: a builder, a closed-shape validator, canonical bytes |
 | `test_guard.py` | every admitted and every refused base-URL class, with every resolver and connection call patched to fail |
-| `test_client.py` | round trips, streaming, the refusals and every error code, over `socketpair()` only |
+| `test_client.py` | round trips, streaming, the refusals, the request deadline against a trickling peer, and every error code, over `socketpair()` only |
 | `test_evidence.py` | the closed shape, statuses, row ids, no pooling, every leak class, a round trip per profile |
 
 ### The guard (owner decision Q-MEQ-SCOPE; Q-MEQC-4 (a))
@@ -34,6 +34,27 @@ A 2 s connect timeout; a request timeout of 30 s for `dev-macos-arm64` and `linu
 `linux-amd64-cpu`; an 8 MiB response bound (justified in `_client.py`), 1 MiB per event line; one request per
 connection. The client uses `http.client` directly, so the proxy environment variables have no effect, and any 3xx is
 the coded refusal `MEQ_REDIRECT_REFUSED`: a `Location` header is never followed.
+
+### The request deadline (CONF-MEQ-001A-F, R12 issue 38)
+
+The request timeout is one monotonic absolute deadline for the whole exchange, set before the connection is opened.
+`http.client` reads through a buffered file, and one of its reads may take many receives. A socket timeout bounds each
+receive, not the read, so before this packet a peer that trickled one byte at a time could hold the status line, a
+header, a body or an event line open past the deadline. The connection's socket is now a deadline view of the
+factory's socket. Every send and every receive gets only the time left, and once the deadline has passed each fails, so
+the exchange ends at the deadline with the connection closed, reported as `MEQ_READ_TIMEOUT`. The one exception is an
+answer that is neither 2xx nor 3xx and whose error body is cut short by the deadline. The client reads that body
+best-effort, so the answer keeps the code its status gives, with its status and no body, as before this packet:
+`MEQ_HTTP_CLIENT_ERROR` for 4xx, `MEQ_HTTP_SERVER_ERROR` for 5xx and `MEQ_PROTOCOL_ERROR` for any other status.
+`test_client.py` trickles each part over `socketpair()`: the status line and headers, a fixed-length, chunked or
+close-delimited body, an event line in either framing, the request body to a slow reader, a 404's error body and a
+600's error body. Each must end at the deadline, far inside the trickle's own duration. The deadline needs `io` (the buffered reader's raw stream), a sixth standard-library module.
+
+Not changed:
+- the connect timeout: the factory opens the connection, and with TLS also completes the handshake, under the 2 s
+  connect timeout, which still bounds each operation rather than the whole connect;
+- the cancellation hook, which is still polled before each event line, so a cancel takes effect only when that line has
+  been read, or when the deadline ends the exchange. Immediate cancellation stays with CONF-MEQ-001B.
 
 ### The evidence record (owner decision Q-MEQ-PROFILES)
 

@@ -293,6 +293,31 @@ MEQ_001A_ADDED = {"task-packets/CONF-MEQ-001A.yaml",
                   "tests/model_endpoint/test_evidence.py",
                   "tests/model_endpoint/test_guard.py"}
 MEQ_001A_DECISION_DATES = {"Q-MEQ-SCOPE": "2026-10-28", "Q-MEQ-PROFILES": "2026-10-28", "Q-MEQ-CANCEL": "2026-10-28"}
+MEQ_001A_HEAD = "b4bbea795e5a61d4ddc1815ddb8b0b58c2fe23b3"
+# CONF-MEQ-001A-F (R12 issue 38, under the lane monitor's GO, 2026-11-05) follows CONF-MEQ-001A. Data and tests only,
+# with no src change: it bounds the MEQ client's whole exchange by its request deadline, and it folds LM-P3-2's supervisor
+# coupling hardening into this test (MON-R12-L3F-DEFER; Q-MEQAF-1 (a)).
+MEQ_001AF_RECORD = "fixtures/ci/conf-meq-001a-f-checkpoint.json"
+MEQ_001AF_CHANGED = {"tests/ci_checkpoint/test_checkpoint_chain.py",
+                     "tests/model_endpoint/README.md",
+                     "tests/model_endpoint/_client.py",
+                     "tests/model_endpoint/test_client.py"}
+MEQ_001AF_ADDED = {"task-packets/CONF-MEQ-001A-F.yaml"}
+MEQ_001AF_DECISION_DATES = {"OWNER-ISSUE-TRACKING": "2026-11-05"}
+# LM-P3-2 (MON-R12-L3F-DEFER and VIS-L3F-1-2): every module that carries an ast coupling pin keeps the coupling rules a, b
+# and c, and refuses importlib (any submodule, including import_module and util) and __import__. The refusal follows the
+# pin, not a file prefix: today only the supervisor carries one.
+SUPERVISOR = "src/harness_conformance/live_supervisor.py"
+COUPLING_PINNED = (SUPERVISOR,)
+CLIENT_MODULE = "harness_conformance.live_proxy_client"
+# The mutation proof: each shape appended to the supervisor's source breaks exactly its own rule.
+COUPLING_MUTANTS = (("a", "\n\ndef _mutant(context):\n    proxy = _fixed_credential_proxy(context)\n    return proxy\n"),
+                    ("b", "\n\n_FIXED = _fixed_credential_proxy\n"),
+                    ("c-name", "\n\n_CLIENT = " + json.dumps(CLIENT_MODULE) + "\n"),
+                    ("c-importlib", "\n\ndef _mutant(name):\n    import importlib\n    return importlib.import_module(name)\n"),
+                    ("c-importlib", "\n\nfrom importlib import import_module\n"),
+                    ("c-importlib", "\n\nimport importlib.util\n"),
+                    ("c-dunder-import", "\n\n_LOAD = __import__\n"))
 
 
 def head():
@@ -378,6 +403,73 @@ def conf_meq_001a():
     return HELPER.chain_record(entries()[:16], 15, sources), rows, sources
 
 
+def conf_meq_001a_f():
+    rows, sources = HELPER.checkpoint_chain_project(ROOT, *head(), keep=17)
+    return HELPER.chain_record(entries()[:17], 16, sources), rows, sources
+
+
+def coupling_hardening(tree):
+    """The sorted names of the LM-P3-2 rules a parsed module breaks, by ast (nothing is imported or executed).
+
+    a: `return proxy` appears only directly inside the one module-level definition of _fixed_credential_proxy.
+    b: every use of _fixed_credential_proxy is the function of a direct call.
+    c-name: the client's module name appears in exactly one string or bytes constant: `proxy.__name__ == "<name>"`.
+    c-importlib: no import of importlib or any of its submodules, no import_module, and no constant naming importlib.
+    c-dunder-import: no __import__, as a name, an attribute or a constant.
+    """
+    broken = set()
+    parents = {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
+
+    def function_of(node):
+        while node in parents:
+            node = parents[node]
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+                return node
+        return None
+
+    definitions = [node for node in ast.walk(tree) if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                   and node.name == "_fixed_credential_proxy"]
+    if len(definitions) != 1 or parents.get(definitions[0]) is not tree:
+        broken.add("a")
+    names = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Return) and isinstance(node.value, ast.Name) and node.value.id == "proxy":
+            if function_of(node) not in definitions[:1] or parents.get(function_of(node)) is not tree:
+                broken.add("a")
+        if ((isinstance(node, ast.Name) and node.id == "_fixed_credential_proxy")
+                or (isinstance(node, ast.Attribute) and node.attr == "_fixed_credential_proxy")):
+            parent = parents.get(node)
+            if not (isinstance(parent, ast.Call) and parent.func is node):
+                broken.add("b")
+        text = None
+        if isinstance(node, ast.Constant) and type(node.value) in (str, bytes):
+            text = node.value if type(node.value) is str else node.value.decode("latin-1")
+            if "live_proxy_client" in text:
+                names.append(node)
+        if isinstance(node, ast.Import) and any(alias.name == "importlib" or alias.name.startswith("importlib.")
+                                                for alias in node.names):
+            broken.add("c-importlib")
+        if (isinstance(node, ast.ImportFrom) and node.module
+                and (node.module == "importlib" or node.module.startswith("importlib."))):
+            broken.add("c-importlib")
+        if ((isinstance(node, ast.Name) and node.id in ("importlib", "import_module"))
+                or (isinstance(node, ast.Attribute) and node.attr == "import_module")
+                or (isinstance(node, ast.alias) and node.name == "import_module")
+                or (text is not None and "importlib" in text)):
+            broken.add("c-importlib")
+        if ((isinstance(node, ast.Name) and node.id == "__import__")
+                or (isinstance(node, ast.Attribute) and node.attr == "__import__")
+                or (text is not None and "__import__" in text)):
+            broken.add("c-dunder-import")
+    compare = parents.get(names[0]) if len(names) == 1 else None
+    if not (isinstance(compare, ast.Compare) and names[0].value == CLIENT_MODULE and compare.comparators == [names[0]]
+            and [type(op) for op in compare.ops] == [ast.Eq] and isinstance(compare.left, ast.Attribute)
+            and compare.left.attr == "__name__" and isinstance(compare.left.value, ast.Name)
+            and compare.left.value.id == "proxy"):
+        broken.add("c-name")
+    return sorted(broken)
+
+
 def live_003_table(guide, every=False):
     """(ID cell, status cell) of each row of proxy.md's "Roadmap and evidence" table whose ID cell starts with
     'CONF-LIVE-003 ' (of every row with every=True), in table order; cells are split on '|' and stripped of spaces only."""
@@ -424,6 +516,7 @@ class ChainRegistryTests(unittest.TestCase):
         self.assertEqual((value[13]["packetId"], value[13]["path"]), ("CONF-LIVE-004A", LIVE_004A_RECORD))
         self.assertEqual((value[14]["packetId"], value[14]["path"]), ("CONF-LIVE-003C", LIVE_003C_RECORD))
         self.assertEqual((value[15]["packetId"], value[15]["path"]), ("CONF-MEQ-001A", MEQ_001A_RECORD))
+        self.assertEqual((value[16]["packetId"], value[16]["path"]), ("CONF-MEQ-001A-F", MEQ_001AF_RECORD))
         self.assertEqual(sources[HELPER.CHAIN_REGISTRY_PATH], HELPER.chain_registry_bytes(value))
         for entry in value:
             self.assertEqual(hashlib.sha256(sources[entry["path"]]).hexdigest(), entry["sha256"])
@@ -792,6 +885,15 @@ class ChainRegistryTests(unittest.TestCase):
                                     "a _fixed_credential_proxy call outside `proxy = _fixed_credential_proxy(...)`")
         self.assertEqual(imported("src/harness_conformance/live_proxy_client.py", "live_mutation_admission"),
                          ([["require", "retained_profile", "_time"]], []))
+        # LM-P3-2, folded by CONF-MEQ-001A-F (MON-R12-L3F-DEFER; Q-MEQAF-1 (a); rule text VIS-L3F-1-2): every module
+        # with an ast coupling pin keeps rules a, b and c and refuses importlib and __import__, and each mutant appended
+        # to the supervisor breaks exactly its own rule.
+        for path in COUPLING_PINNED:
+            with self.subTest(coupling_pinned=path):
+                self.assertEqual(coupling_hardening(ast.parse(sources[path])), [])
+        for rule, mutant in COUPLING_MUTANTS:
+            with self.subTest(coupling_mutant=mutant):
+                self.assertEqual(coupling_hardening(ast.parse(sources[SUPERVISOR].decode("utf-8") + mutant)), [rule])
         # proxy.md: the base bytes (this record's before-image) are an exact prefix; the suffix is the one closing section,
         # at most 25 lines, pointing to the closure record by path and carrying no digest.
         guide, before = sources[LIVE_003_GUIDE], base_sources[LIVE_003_GUIDE]
@@ -829,6 +931,27 @@ class ChainRegistryTests(unittest.TestCase):
             with self.subTest(decision=row["id"]):
                 self.assertEqual(row["date"], MEQ_001A_DECISION_DATES[row["id"]])
         self.assertTrue(all(pin["mode"] == "100644" for pin in record["added"].values()))
+
+    def test_the_conf_meq_001a_f_record_names_exactly_its_paths_and_decisions(self):
+        # CONF-MEQ-001A-F (R12 issue 38): this test, the client, its test and its README change; the packet YAML is added;
+        # the record names neither itself nor the registry; there is no deletion and no src/, ci/, probes/,
+        # tests/enforcement/ or schemas/ path. The decision carries its own date.
+        record, rows, sources = conf_meq_001a_f()
+        self.assertEqual(record["predecessor"], {"packetId": "CONF-MEQ-001A", "sha256": entries()[15]["sha256"]})
+        self.assertEqual(record["baseCommit"], MEQ_001A_HEAD)
+        self.assertEqual(record["deleted"], {})
+        self.assertEqual(set(record["changed"]), MEQ_001AF_CHANGED)
+        self.assertEqual(set(record["added"]), MEQ_001AF_ADDED)
+        self.assertFalse(ENF_001_CHANGED & (set(record["changed"]) | set(record["added"])))
+        self.assertFalse([path for path in (*record["changed"], *record["added"])
+                          if path.startswith(("src/", "ci/", "probes/", "tests/enforcement/", "schemas/"))])
+        self.assertEqual([row["id"] for row in record["ownerDecisions"]], list(MEQ_001AF_DECISION_DATES))
+        for row in record["ownerDecisions"]:
+            with self.subTest(decision=row["id"]):
+                self.assertEqual(row["date"], MEQ_001AF_DECISION_DATES[row["id"]])
+        self.assertTrue(all(pin["mode"] == "100644" for pin in record["added"].values()))
+        self.assertTrue(all(value["before"]["mode"] == value["after"]["mode"] == "100644"
+                            for value in record["changed"].values()))
 
     def test_every_stage_view_is_checked_and_the_first_is_the_conf_ci_002_head(self):
         rows, sources = head()
