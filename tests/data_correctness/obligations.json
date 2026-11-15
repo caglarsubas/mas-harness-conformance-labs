@@ -1,0 +1,1336 @@
+{
+ "byFamily": {
+  "RF-1": 24,
+  "RF-2": 6,
+  "RF-3": 24,
+  "RF-4": 10,
+  "RF-5": 24,
+  "RF-6": 5,
+  "RF-7": 10
+ },
+ "cells": [
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "WS-01",
+    "WS-02",
+    "WS-03"
+   ],
+   "deployable": "otel-collector",
+   "family": "RF-1",
+   "r12Extensions": []
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "CK-01",
+    "CK-02",
+    "CK-03"
+   ],
+   "deployable": "otel-collector",
+   "family": "RF-3",
+   "r12Extensions": [
+    "CK-04"
+   ]
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "CV-01",
+    "CV-02",
+    "CV-03",
+    "CV-05",
+    "CV-06"
+   ],
+   "deployable": "otel-collector",
+   "family": "RF-5",
+   "r12Extensions": [
+    "CV-04"
+   ]
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "WS-01",
+    "WS-02",
+    "WS-03"
+   ],
+   "deployable": "operator",
+   "family": "RF-1",
+   "r12Extensions": []
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "FN-01",
+    "FN-02",
+    "FN-03"
+   ],
+   "deployable": "operator",
+   "family": "RF-2",
+   "r12Extensions": []
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "CK-01",
+    "CK-02",
+    "CK-03"
+   ],
+   "deployable": "operator",
+   "family": "RF-3",
+   "r12Extensions": [
+    "CK-04"
+   ]
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "CV-01",
+    "CV-02",
+    "CV-03",
+    "CV-05",
+    "CV-06"
+   ],
+   "deployable": "operator",
+   "family": "RF-5",
+   "r12Extensions": [
+    "CV-04"
+   ]
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "WS-01",
+    "WS-02",
+    "WS-03"
+   ],
+   "deployable": "fleet-sync-agent",
+   "family": "RF-1",
+   "r12Extensions": []
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "CK-01",
+    "CK-02",
+    "CK-03"
+   ],
+   "deployable": "fleet-sync-agent",
+   "family": "RF-3",
+   "r12Extensions": [
+    "CK-04"
+   ]
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "CV-01",
+    "CV-02",
+    "CV-03",
+    "CV-05",
+    "CV-06"
+   ],
+   "deployable": "fleet-sync-agent",
+   "family": "RF-5",
+   "r12Extensions": [
+    "CV-04"
+   ]
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "WS-01",
+    "WS-02",
+    "WS-03"
+   ],
+   "deployable": "usage-ledger",
+   "family": "RF-1",
+   "r12Extensions": []
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "CK-01",
+    "CK-02",
+    "CK-03"
+   ],
+   "deployable": "usage-ledger",
+   "family": "RF-3",
+   "r12Extensions": [
+    "CK-04"
+   ]
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "CV-01",
+    "CV-02",
+    "CV-03",
+    "CV-05",
+    "CV-06"
+   ],
+   "deployable": "usage-ledger",
+   "family": "RF-5",
+   "r12Extensions": [
+    "CV-04"
+   ]
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "RS-01",
+    "RS-02"
+   ],
+   "deployable": "usage-ledger",
+   "family": "RF-7",
+   "r12Extensions": []
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "WS-01",
+    "WS-02",
+    "WS-03"
+   ],
+   "deployable": "governance-service",
+   "family": "RF-1",
+   "r12Extensions": []
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "CK-01",
+    "CK-02",
+    "CK-03"
+   ],
+   "deployable": "governance-service",
+   "family": "RF-3",
+   "r12Extensions": [
+    "CK-04"
+   ]
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "CV-01",
+    "CV-02",
+    "CV-03",
+    "CV-05",
+    "CV-06"
+   ],
+   "deployable": "governance-service",
+   "family": "RF-5",
+   "r12Extensions": [
+    "CV-04"
+   ]
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "WS-01",
+    "WS-02",
+    "WS-03"
+   ],
+   "deployable": "domain-service",
+   "family": "RF-1",
+   "r12Extensions": []
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "CK-01",
+    "CK-02",
+    "CK-03"
+   ],
+   "deployable": "domain-service",
+   "family": "RF-3",
+   "r12Extensions": [
+    "CK-04"
+   ]
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "CV-01",
+    "CV-02",
+    "CV-03",
+    "CV-05",
+    "CV-06"
+   ],
+   "deployable": "domain-service",
+   "family": "RF-5",
+   "r12Extensions": [
+    "CV-04"
+   ]
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "WS-01",
+    "WS-02",
+    "WS-03"
+   ],
+   "deployable": "registry-service",
+   "family": "RF-1",
+   "r12Extensions": []
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "CK-01",
+    "CK-02",
+    "CK-03"
+   ],
+   "deployable": "registry-service",
+   "family": "RF-3",
+   "r12Extensions": [
+    "CK-04"
+   ]
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "CV-01",
+    "CV-02",
+    "CV-03",
+    "CV-05",
+    "CV-06"
+   ],
+   "deployable": "registry-service",
+   "family": "RF-5",
+   "r12Extensions": [
+    "CV-04"
+   ]
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "WS-01",
+    "WS-02",
+    "WS-03"
+   ],
+   "deployable": "inference-api",
+   "family": "RF-1",
+   "r12Extensions": []
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "CK-01",
+    "CK-02",
+    "CK-03"
+   ],
+   "deployable": "inference-api",
+   "family": "RF-3",
+   "r12Extensions": [
+    "CK-04"
+   ]
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "CV-01",
+    "CV-02",
+    "CV-03",
+    "CV-05",
+    "CV-06"
+   ],
+   "deployable": "inference-api",
+   "family": "RF-5",
+   "r12Extensions": [
+    "CV-04"
+   ]
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "WS-01",
+    "WS-02",
+    "WS-03"
+   ],
+   "deployable": "connector-controller",
+   "family": "RF-1",
+   "r12Extensions": []
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "FN-01",
+    "FN-02",
+    "FN-03"
+   ],
+   "deployable": "connector-controller",
+   "family": "RF-2",
+   "r12Extensions": []
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "CK-01",
+    "CK-02",
+    "CK-03"
+   ],
+   "deployable": "connector-controller",
+   "family": "RF-3",
+   "r12Extensions": [
+    "CK-04"
+   ]
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "OP-01",
+    "OP-02",
+    "OP-03",
+    "OP-04",
+    "OP-05",
+    "OP-06",
+    "OP-07"
+   ],
+   "deployable": "connector-controller",
+   "family": "RF-4",
+   "r12Extensions": []
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "CV-01",
+    "CV-02",
+    "CV-03",
+    "CV-05",
+    "CV-06"
+   ],
+   "deployable": "connector-controller",
+   "family": "RF-5",
+   "r12Extensions": [
+    "CV-04"
+   ]
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "RS-01",
+    "RS-02"
+   ],
+   "deployable": "connector-controller",
+   "family": "RF-7",
+   "r12Extensions": []
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "WS-01",
+    "WS-02",
+    "WS-03"
+   ],
+   "deployable": "memory-service",
+   "family": "RF-1",
+   "r12Extensions": []
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "CK-01",
+    "CK-02",
+    "CK-03"
+   ],
+   "deployable": "memory-service",
+   "family": "RF-3",
+   "r12Extensions": [
+    "CK-04"
+   ]
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "CV-01",
+    "CV-02",
+    "CV-03",
+    "CV-05",
+    "CV-06"
+   ],
+   "deployable": "memory-service",
+   "family": "RF-5",
+   "r12Extensions": [
+    "CV-04"
+   ]
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "DD-01",
+    "DD-02",
+    "DD-03"
+   ],
+   "deployable": "memory-service",
+   "family": "RF-6",
+   "r12Extensions": [
+    "DD-04"
+   ]
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "WS-01",
+    "WS-02",
+    "WS-03"
+   ],
+   "deployable": "control-web",
+   "family": "RF-1",
+   "r12Extensions": []
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "CK-01",
+    "CK-02",
+    "CK-03"
+   ],
+   "deployable": "control-web",
+   "family": "RF-3",
+   "r12Extensions": [
+    "CK-04"
+   ]
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "OP-01",
+    "OP-02",
+    "OP-03",
+    "OP-04",
+    "OP-05",
+    "OP-06",
+    "OP-07"
+   ],
+   "deployable": "control-web",
+   "family": "RF-4",
+   "r12Extensions": []
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "CV-01",
+    "CV-02",
+    "CV-03",
+    "CV-05",
+    "CV-06"
+   ],
+   "deployable": "control-web",
+   "family": "RF-5",
+   "r12Extensions": [
+    "CV-04"
+   ]
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "DD-01",
+    "DD-02",
+    "DD-03"
+   ],
+   "deployable": "control-web",
+   "family": "RF-6",
+   "r12Extensions": [
+    "DD-04"
+   ]
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "RS-01",
+    "RS-02"
+   ],
+   "deployable": "control-web",
+   "family": "RF-7",
+   "r12Extensions": []
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "WS-01",
+    "WS-02",
+    "WS-03"
+   ],
+   "deployable": "ingest-worker",
+   "family": "RF-1",
+   "r12Extensions": []
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "FN-01",
+    "FN-02",
+    "FN-03"
+   ],
+   "deployable": "ingest-worker",
+   "family": "RF-2",
+   "r12Extensions": []
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "CK-01",
+    "CK-02",
+    "CK-03"
+   ],
+   "deployable": "ingest-worker",
+   "family": "RF-3",
+   "r12Extensions": [
+    "CK-04"
+   ]
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "CV-01",
+    "CV-02",
+    "CV-03",
+    "CV-05",
+    "CV-06"
+   ],
+   "deployable": "ingest-worker",
+   "family": "RF-5",
+   "r12Extensions": [
+    "CV-04"
+   ]
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "WS-01",
+    "WS-02",
+    "WS-03"
+   ],
+   "deployable": "retrieval-service",
+   "family": "RF-1",
+   "r12Extensions": []
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "CK-01",
+    "CK-02",
+    "CK-03"
+   ],
+   "deployable": "retrieval-service",
+   "family": "RF-3",
+   "r12Extensions": [
+    "CK-04"
+   ]
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "CV-01",
+    "CV-02",
+    "CV-03",
+    "CV-05",
+    "CV-06"
+   ],
+   "deployable": "retrieval-service",
+   "family": "RF-5",
+   "r12Extensions": [
+    "CV-04"
+   ]
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "DD-01",
+    "DD-02",
+    "DD-03"
+   ],
+   "deployable": "retrieval-service",
+   "family": "RF-6",
+   "r12Extensions": [
+    "DD-04"
+   ]
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "WS-01",
+    "WS-02",
+    "WS-03"
+   ],
+   "deployable": "protocol-gateway",
+   "family": "RF-1",
+   "r12Extensions": []
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "CK-01",
+    "CK-02",
+    "CK-03"
+   ],
+   "deployable": "protocol-gateway",
+   "family": "RF-3",
+   "r12Extensions": [
+    "CK-04"
+   ]
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "OP-01",
+    "OP-02",
+    "OP-03",
+    "OP-04",
+    "OP-05",
+    "OP-06",
+    "OP-07"
+   ],
+   "deployable": "protocol-gateway",
+   "family": "RF-4",
+   "r12Extensions": []
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "CV-01",
+    "CV-02",
+    "CV-03",
+    "CV-05",
+    "CV-06"
+   ],
+   "deployable": "protocol-gateway",
+   "family": "RF-5",
+   "r12Extensions": [
+    "CV-04"
+   ]
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "DD-01",
+    "DD-02",
+    "DD-03"
+   ],
+   "deployable": "protocol-gateway",
+   "family": "RF-6",
+   "r12Extensions": [
+    "DD-04"
+   ]
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "RS-01",
+    "RS-02"
+   ],
+   "deployable": "protocol-gateway",
+   "family": "RF-7",
+   "r12Extensions": []
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "WS-01",
+    "WS-02",
+    "WS-03"
+   ],
+   "deployable": "evidence-service",
+   "family": "RF-1",
+   "r12Extensions": []
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "CK-01",
+    "CK-02",
+    "CK-03"
+   ],
+   "deployable": "evidence-service",
+   "family": "RF-3",
+   "r12Extensions": [
+    "CK-04"
+   ]
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "CV-01",
+    "CV-02",
+    "CV-03",
+    "CV-05",
+    "CV-06"
+   ],
+   "deployable": "evidence-service",
+   "family": "RF-5",
+   "r12Extensions": [
+    "CV-04"
+   ]
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "WS-01",
+    "WS-02",
+    "WS-03"
+   ],
+   "deployable": "profile-compiler-worker",
+   "family": "RF-1",
+   "r12Extensions": []
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "FN-01",
+    "FN-02",
+    "FN-03"
+   ],
+   "deployable": "profile-compiler-worker",
+   "family": "RF-2",
+   "r12Extensions": []
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "CK-01",
+    "CK-02",
+    "CK-03"
+   ],
+   "deployable": "profile-compiler-worker",
+   "family": "RF-3",
+   "r12Extensions": [
+    "CK-04"
+   ]
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "OP-01",
+    "OP-02",
+    "OP-03",
+    "OP-04",
+    "OP-05",
+    "OP-06",
+    "OP-07"
+   ],
+   "deployable": "profile-compiler-worker",
+   "family": "RF-4",
+   "r12Extensions": []
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "CV-01",
+    "CV-02",
+    "CV-03",
+    "CV-05",
+    "CV-06"
+   ],
+   "deployable": "profile-compiler-worker",
+   "family": "RF-5",
+   "r12Extensions": [
+    "CV-04"
+   ]
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "RS-01",
+    "RS-02"
+   ],
+   "deployable": "profile-compiler-worker",
+   "family": "RF-7",
+   "r12Extensions": []
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "WS-01",
+    "WS-02",
+    "WS-03"
+   ],
+   "deployable": "index-worker",
+   "family": "RF-1",
+   "r12Extensions": []
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "CK-01",
+    "CK-02",
+    "CK-03"
+   ],
+   "deployable": "index-worker",
+   "family": "RF-3",
+   "r12Extensions": [
+    "CK-04"
+   ]
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "CV-01",
+    "CV-02",
+    "CV-03",
+    "CV-05",
+    "CV-06"
+   ],
+   "deployable": "index-worker",
+   "family": "RF-5",
+   "r12Extensions": [
+    "CV-04"
+   ]
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "DD-01",
+    "DD-02",
+    "DD-03"
+   ],
+   "deployable": "index-worker",
+   "family": "RF-6",
+   "r12Extensions": [
+    "DD-04"
+   ]
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "WS-01",
+    "WS-02",
+    "WS-03"
+   ],
+   "deployable": "orchestration-api",
+   "family": "RF-1",
+   "r12Extensions": []
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "CK-01",
+    "CK-02",
+    "CK-03"
+   ],
+   "deployable": "orchestration-api",
+   "family": "RF-3",
+   "r12Extensions": [
+    "CK-04"
+   ]
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "OP-01",
+    "OP-02",
+    "OP-03",
+    "OP-04",
+    "OP-05",
+    "OP-06",
+    "OP-07"
+   ],
+   "deployable": "orchestration-api",
+   "family": "RF-4",
+   "r12Extensions": []
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "CV-01",
+    "CV-02",
+    "CV-03",
+    "CV-05",
+    "CV-06"
+   ],
+   "deployable": "orchestration-api",
+   "family": "RF-5",
+   "r12Extensions": [
+    "CV-04"
+   ]
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "RS-01",
+    "RS-02"
+   ],
+   "deployable": "orchestration-api",
+   "family": "RF-7",
+   "r12Extensions": []
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "WS-01",
+    "WS-02",
+    "WS-03"
+   ],
+   "deployable": "decision-service",
+   "family": "RF-1",
+   "r12Extensions": []
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "CK-01",
+    "CK-02",
+    "CK-03"
+   ],
+   "deployable": "decision-service",
+   "family": "RF-3",
+   "r12Extensions": [
+    "CK-04"
+   ]
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "CV-01",
+    "CV-02",
+    "CV-03",
+    "CV-05",
+    "CV-06"
+   ],
+   "deployable": "decision-service",
+   "family": "RF-5",
+   "r12Extensions": [
+    "CV-04"
+   ]
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "WS-01",
+    "WS-02",
+    "WS-03"
+   ],
+   "deployable": "assurance-worker",
+   "family": "RF-1",
+   "r12Extensions": []
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "FN-01",
+    "FN-02",
+    "FN-03"
+   ],
+   "deployable": "assurance-worker",
+   "family": "RF-2",
+   "r12Extensions": []
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "CK-01",
+    "CK-02",
+    "CK-03"
+   ],
+   "deployable": "assurance-worker",
+   "family": "RF-3",
+   "r12Extensions": [
+    "CK-04"
+   ]
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "OP-01",
+    "OP-02",
+    "OP-03",
+    "OP-04",
+    "OP-05",
+    "OP-06",
+    "OP-07"
+   ],
+   "deployable": "assurance-worker",
+   "family": "RF-4",
+   "r12Extensions": []
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "CV-01",
+    "CV-02",
+    "CV-03",
+    "CV-05",
+    "CV-06"
+   ],
+   "deployable": "assurance-worker",
+   "family": "RF-5",
+   "r12Extensions": [
+    "CV-04"
+   ]
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "RS-01",
+    "RS-02"
+   ],
+   "deployable": "assurance-worker",
+   "family": "RF-7",
+   "r12Extensions": []
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "WS-01",
+    "WS-02",
+    "WS-03"
+   ],
+   "deployable": "tool-broker",
+   "family": "RF-1",
+   "r12Extensions": []
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "CK-01",
+    "CK-02",
+    "CK-03"
+   ],
+   "deployable": "tool-broker",
+   "family": "RF-3",
+   "r12Extensions": [
+    "CK-04"
+   ]
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "OP-01",
+    "OP-02",
+    "OP-03",
+    "OP-04",
+    "OP-05",
+    "OP-06",
+    "OP-07"
+   ],
+   "deployable": "tool-broker",
+   "family": "RF-4",
+   "r12Extensions": []
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "CV-01",
+    "CV-02",
+    "CV-03",
+    "CV-05",
+    "CV-06"
+   ],
+   "deployable": "tool-broker",
+   "family": "RF-5",
+   "r12Extensions": [
+    "CV-04"
+   ]
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "WS-01",
+    "WS-02",
+    "WS-03"
+   ],
+   "deployable": "orchestration-worker",
+   "family": "RF-1",
+   "r12Extensions": []
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "FN-01",
+    "FN-02",
+    "FN-03"
+   ],
+   "deployable": "orchestration-worker",
+   "family": "RF-2",
+   "r12Extensions": []
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "CK-01",
+    "CK-02",
+    "CK-03"
+   ],
+   "deployable": "orchestration-worker",
+   "family": "RF-3",
+   "r12Extensions": [
+    "CK-04"
+   ]
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "OP-01",
+    "OP-02",
+    "OP-03",
+    "OP-04",
+    "OP-05",
+    "OP-06",
+    "OP-07"
+   ],
+   "deployable": "orchestration-worker",
+   "family": "RF-4",
+   "r12Extensions": []
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "CV-01",
+    "CV-02",
+    "CV-03",
+    "CV-05",
+    "CV-06"
+   ],
+   "deployable": "orchestration-worker",
+   "family": "RF-5",
+   "r12Extensions": [
+    "CV-04"
+   ]
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "RS-01",
+    "RS-02"
+   ],
+   "deployable": "orchestration-worker",
+   "family": "RF-7",
+   "r12Extensions": []
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "WS-01",
+    "WS-02",
+    "WS-03"
+   ],
+   "deployable": "ai-gateway",
+   "family": "RF-1",
+   "r12Extensions": []
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "CK-01",
+    "CK-02",
+    "CK-03"
+   ],
+   "deployable": "ai-gateway",
+   "family": "RF-3",
+   "r12Extensions": [
+    "CK-04"
+   ]
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "OP-01",
+    "OP-02",
+    "OP-03",
+    "OP-04",
+    "OP-05",
+    "OP-06",
+    "OP-07"
+   ],
+   "deployable": "ai-gateway",
+   "family": "RF-4",
+   "r12Extensions": []
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "CV-01",
+    "CV-02",
+    "CV-03",
+    "CV-05",
+    "CV-06"
+   ],
+   "deployable": "ai-gateway",
+   "family": "RF-5",
+   "r12Extensions": [
+    "CV-04"
+   ]
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "RS-01",
+    "RS-02"
+   ],
+   "deployable": "ai-gateway",
+   "family": "RF-7",
+   "r12Extensions": []
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "WS-01",
+    "WS-02",
+    "WS-03"
+   ],
+   "deployable": "experience-gateway",
+   "family": "RF-1",
+   "r12Extensions": []
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "CK-01",
+    "CK-02",
+    "CK-03"
+   ],
+   "deployable": "experience-gateway",
+   "family": "RF-3",
+   "r12Extensions": [
+    "CK-04"
+   ]
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "OP-01",
+    "OP-02",
+    "OP-03",
+    "OP-04",
+    "OP-05",
+    "OP-06",
+    "OP-07"
+   ],
+   "deployable": "experience-gateway",
+   "family": "RF-4",
+   "r12Extensions": []
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "CV-01",
+    "CV-02",
+    "CV-03",
+    "CV-05",
+    "CV-06"
+   ],
+   "deployable": "experience-gateway",
+   "family": "RF-5",
+   "r12Extensions": [
+    "CV-04"
+   ]
+  },
+  {
+   "adapterState": "PENDING",
+   "cases": [
+    "RS-01",
+    "RS-02"
+   ],
+   "deployable": "experience-gateway",
+   "family": "RF-7",
+   "r12Extensions": []
+  }
+ ],
+ "record": {
+  "commit": "cf2535065bf1d79efaccdc6bbc2aebac5bcd2aae",
+  "path": "architecture/data-correctness/record.json",
+  "sha256": "7a3d2aa8785d18322606ea9d394606e6394412012fd00fbe03a4b4ed0c7d6370"
+ },
+ "schemaVersion": "r12.data-correctness-obligations/v1"
+}

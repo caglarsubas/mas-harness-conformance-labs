@@ -1,0 +1,26 @@
+{
+  "id": "rf3-skew-and-jump",
+  "family": "RF-3",
+  "setup": {},
+  "steps": [
+    {
+      "op": "lease_start",
+      "monotonicMs": 0,
+      "wallMs": 100000,
+      "leaseMs": 1000
+    },
+    {
+      "op": "wall_jump",
+      "deltaMs": -5000
+    },
+    {
+      "op": "lease_check",
+      "monotonicMs": 1500,
+      "wallMs": 96500,
+      "held": true
+    }
+  ],
+  "expect": {
+    "refuse": "DC_CLOCK"
+  }
+}

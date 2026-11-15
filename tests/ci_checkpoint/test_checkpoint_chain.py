@@ -304,6 +304,41 @@ MEQ_001AF_CHANGED = {"tests/ci_checkpoint/test_checkpoint_chain.py",
                      "tests/model_endpoint/test_client.py"}
 MEQ_001AF_ADDED = {"task-packets/CONF-MEQ-001A-F.yaml"}
 MEQ_001AF_DECISION_DATES = {"OWNER-ISSUE-TRACKING": "2026-11-05"}
+# CONF-DATA-001 (DATA-CORRECTNESS-001's R12 cases; owner direction DC-D1, 2026-10-22; lane monitor's GO under conventions
+# C14-C16, 2026-11-15) follows CONF-MEQ-001A-F. Data and tests only, with no src change: it adds the tests/data_correctness
+# root (acceptance argv 17) and its packet YAML, and changes only this test.
+MEQ_001AF_HEAD = "b50fead247dae755dc1ebc3a36cc99c9e7c6f2ee"
+DATA_001_RECORD = "fixtures/ci/conf-data-001-checkpoint.json"
+DATA_001_CHANGED = {"tests/ci_checkpoint/test_checkpoint_chain.py"}
+DATA_001_ADDED = {"task-packets/CONF-DATA-001.yaml",
+                   "tests/data_correctness/README.md",
+                   "tests/data_correctness/_judge.py",
+                   "tests/data_correctness/_ledger.py",
+                   "tests/data_correctness/_sim.py",
+                   "tests/data_correctness/campaign-record.json",
+                   "tests/data_correctness/cases.json",
+                   "tests/data_correctness/contracts.json",
+                   "tests/data_correctness/golden/neg-bounded-not-exactly-once.json",
+                   "tests/data_correctness/golden/neg-exception-path-dedup.json",
+                   "tests/data_correctness/golden/rf1-concurrent-reservations.json",
+                   "tests/data_correctness/golden/rf2-paused-holder.json",
+                   "tests/data_correctness/golden/rf3-skew-and-jump.json",
+                   "tests/data_correctness/golden/rf4-receipt-key-per-attempt.json",
+                   "tests/data_correctness/golden/rf4-receipt-key-restart.json",
+                   "tests/data_correctness/golden/rf4-replay-per-class.json",
+                   "tests/data_correctness/golden/rf4-retry-after-unknown.json",
+                   "tests/data_correctness/golden/rf5-mixed-versions.json",
+                   "tests/data_correctness/golden/rf5-reader-drops-previous-version.json",
+                   "tests/data_correctness/golden/rf6-deletion-through-derived.json",
+                   "tests/data_correctness/golden/rf7-log-only-replay-diverges.json",
+                   "tests/data_correctness/obligations.json",
+                   "tests/data_correctness/results.json",
+                   "tests/data_correctness/test_cases.py",
+                   "tests/data_correctness/test_golden_vectors.py",
+                   "tests/data_correctness/test_ledger.py",
+                   "tests/data_correctness/test_obligations.py",
+                   "tests/data_correctness/test_oracle_conf_data_001.py"}
+DATA_001_DECISION_DATES = {"DC-D1": "2026-10-22"}
 # LM-P3-2 (MON-R12-L3F-DEFER and VIS-L3F-1-2): every module that carries an ast coupling pin keeps the coupling rules a, b
 # and c, and refuses importlib (any submodule, including import_module and util) and __import__. The refusal follows the
 # pin, not a file prefix: today only the supervisor carries one.
@@ -406,6 +441,11 @@ def conf_meq_001a():
 def conf_meq_001a_f():
     rows, sources = HELPER.checkpoint_chain_project(ROOT, *head(), keep=17)
     return HELPER.chain_record(entries()[:17], 16, sources), rows, sources
+
+
+def conf_data_001():
+    rows, sources = HELPER.checkpoint_chain_project(ROOT, *head(), keep=18)
+    return HELPER.chain_record(entries()[:18], 17, sources), rows, sources
 
 
 def coupling_hardening(tree):
@@ -517,6 +557,7 @@ class ChainRegistryTests(unittest.TestCase):
         self.assertEqual((value[14]["packetId"], value[14]["path"]), ("CONF-LIVE-003C", LIVE_003C_RECORD))
         self.assertEqual((value[15]["packetId"], value[15]["path"]), ("CONF-MEQ-001A", MEQ_001A_RECORD))
         self.assertEqual((value[16]["packetId"], value[16]["path"]), ("CONF-MEQ-001A-F", MEQ_001AF_RECORD))
+        self.assertEqual((value[17]["packetId"], value[17]["path"]), ("CONF-DATA-001", DATA_001_RECORD))
         self.assertEqual(sources[HELPER.CHAIN_REGISTRY_PATH], HELPER.chain_registry_bytes(value))
         for entry in value:
             self.assertEqual(hashlib.sha256(sources[entry["path"]]).hexdigest(), entry["sha256"])
@@ -949,6 +990,27 @@ class ChainRegistryTests(unittest.TestCase):
         for row in record["ownerDecisions"]:
             with self.subTest(decision=row["id"]):
                 self.assertEqual(row["date"], MEQ_001AF_DECISION_DATES[row["id"]])
+        self.assertTrue(all(pin["mode"] == "100644" for pin in record["added"].values()))
+        self.assertTrue(all(value["before"]["mode"] == value["after"]["mode"] == "100644"
+                            for value in record["changed"].values()))
+
+    def test_the_conf_data_001_record_names_exactly_its_paths_and_decisions(self):
+        # CONF-DATA-001: this test changes; the tests/data_correctness files and the packet YAML are added; the record
+        # names neither itself nor the registry; there is no deletion and no src/, ci/, probes/, tests/enforcement/ or
+        # schemas/ path. The decision carries its own date.
+        record, rows, sources = conf_data_001()
+        self.assertEqual(record["predecessor"], {"packetId": "CONF-MEQ-001A-F", "sha256": entries()[16]["sha256"]})
+        self.assertEqual(record["baseCommit"], MEQ_001AF_HEAD)
+        self.assertEqual(record["deleted"], {})
+        self.assertEqual(set(record["changed"]), DATA_001_CHANGED)
+        self.assertEqual(set(record["added"]), DATA_001_ADDED)
+        self.assertFalse(ENF_001_CHANGED & (set(record["changed"]) | set(record["added"])))
+        self.assertFalse([path for path in (*record["changed"], *record["added"])
+                          if path.startswith(("src/", "ci/", "probes/", "tests/enforcement/", "schemas/"))])
+        self.assertEqual([row["id"] for row in record["ownerDecisions"]], list(DATA_001_DECISION_DATES))
+        for row in record["ownerDecisions"]:
+            with self.subTest(decision=row["id"]):
+                self.assertEqual(row["date"], DATA_001_DECISION_DATES[row["id"]])
         self.assertTrue(all(pin["mode"] == "100644" for pin in record["added"].values()))
         self.assertTrue(all(value["before"]["mode"] == value["after"]["mode"] == "100644"
                             for value in record["changed"].values()))

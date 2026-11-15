@@ -1,0 +1,35 @@
+{
+  "id": "rf4-replay-per-class",
+  "family": "RF-4",
+  "setup": {},
+  "steps": [
+    {
+      "op": "call",
+      "operation": "op-1",
+      "edge": "ai-gateway->inference-api",
+      "class": "NATIVE",
+      "attempt": 1,
+      "outcome": "committed",
+      "applied": true
+    },
+    {
+      "op": "call",
+      "operation": "op-1",
+      "edge": "ai-gateway->inference-api",
+      "class": "NONE",
+      "attempt": 1,
+      "outcome": "accepted",
+      "applied": true
+    },
+    {
+      "op": "call",
+      "operation": "op-1",
+      "edge": "ai-gateway->inference-api",
+      "class": "NATIVE",
+      "attempt": 2,
+      "outcome": "committed",
+      "applied": false
+    }
+  ],
+  "expect": "ACCEPT"
+}

@@ -1,0 +1,709 @@
+{
+ "cases": [
+  {
+   "arms": [
+    {
+     "code": null,
+     "floor": 0,
+     "kind": "DEFENDED",
+     "name": "SERIALIZABLE"
+    },
+    {
+     "code": null,
+     "floor": 0,
+     "kind": "DEFENDED",
+     "name": "ROW_LOCK"
+    },
+    {
+     "code": null,
+     "floor": 0,
+     "kind": "DEFENDED",
+     "name": "ADVISORY_LOCK"
+    },
+    {
+     "code": null,
+     "floor": 0,
+     "kind": "DEFENDED",
+     "name": "SINGLE_WRITER"
+    },
+    {
+     "code": "DC_WRITE_SKEW",
+     "floor": 32,
+     "kind": "CONTROL",
+     "name": "NONE"
+    },
+    {
+     "code": "DC_WRITE_SKEW",
+     "floor": 32,
+     "kind": "CONTROL",
+     "name": "APPEND_ONLY"
+    }
+   ],
+   "crashPoints": [
+    "CP-1"
+   ],
+   "expectedArmsBy": "RECORD",
+   "family": "RF-1",
+   "id": "WS-01",
+   "parity": "MODEL_OPS",
+   "provisional": false,
+   "scenario": "2 to 4 concurrent budget reservations (usage-ledger, AM-02) that each fit and together overspend"
+  },
+  {
+   "arms": [
+    {
+     "code": null,
+     "floor": 0,
+     "kind": "DEFENDED",
+     "name": "SERIALIZABLE"
+    },
+    {
+     "code": "DC_WRITE_SKEW",
+     "floor": 32,
+     "kind": "CONTROL",
+     "name": "NONE"
+    }
+   ],
+   "crashPoints": [],
+   "expectedArmsBy": "RECORD",
+   "family": "RF-1",
+   "id": "WS-02",
+   "parity": "MODEL_OPS",
+   "provisional": false,
+   "scenario": "two concurrent decisions on one approval request; [sim mapping] a one-unit decision slot"
+  },
+  {
+   "arms": [
+    {
+     "code": null,
+     "floor": 0,
+     "kind": "DEFENDED",
+     "name": "EFFECT_AFTER_COMMIT"
+    },
+    {
+     "code": "DC_WRITE_SKEW",
+     "floor": 32,
+     "kind": "CONTROL",
+     "name": "EFFECT_INSIDE_TX"
+    }
+   ],
+   "crashPoints": [],
+   "expectedArmsBy": "RECORD",
+   "family": "RF-1",
+   "id": "WS-03",
+   "parity": "MODEL_OPS",
+   "provisional": false,
+   "scenario": "a serialization failure aborts a transaction whose retry must not reissue its external effect"
+  },
+  {
+   "arms": [
+    {
+     "code": null,
+     "floor": 0,
+     "kind": "DEFENDED",
+     "name": "STORE_CHECKED_TOKEN"
+    },
+    {
+     "code": "DC_FENCE",
+     "floor": 32,
+     "kind": "CONTROL",
+     "name": "CHECK_OFF"
+    }
+   ],
+   "crashPoints": [
+    "CP-5"
+   ],
+   "expectedArmsBy": "RECORD",
+   "family": "RF-2",
+   "id": "FN-01",
+   "parity": "MODEL_OPS",
+   "provisional": false,
+   "scenario": "a holder paused 1.5 to 4 lease lengths writes after a new holder took the lease"
+  },
+  {
+   "arms": [
+    {
+     "code": null,
+     "floor": 0,
+     "kind": "DEFENDED",
+     "name": "TARGET_CHECKED_GENERATION"
+    },
+    {
+     "code": "DC_FENCE",
+     "floor": 32,
+     "kind": "CONTROL",
+     "name": "CHECK_OFF"
+    }
+   ],
+   "crashPoints": [
+    "CP-5"
+   ],
+   "expectedArmsBy": "RECORD",
+   "family": "RF-2",
+   "id": "FN-02",
+   "parity": "MODEL_OPS",
+   "provisional": false,
+   "scenario": "as FN-01, with the fence held by the effect target's generation"
+  },
+  {
+   "arms": [
+    {
+     "code": null,
+     "floor": 0,
+     "kind": "DEFENDED",
+     "name": "PERSISTED_COUNTER"
+    },
+    {
+     "code": "DC_FENCE",
+     "floor": 32,
+     "kind": "CONTROL",
+     "name": "COUNTER_RESET"
+    }
+   ],
+   "crashPoints": [],
+   "expectedArmsBy": "RECORD",
+   "family": "RF-2",
+   "id": "FN-03",
+   "parity": "MODEL_OPS",
+   "provisional": false,
+   "scenario": "the lease store fails over and must not reissue a token at or below the newest"
+  },
+  {
+   "arms": [
+    {
+     "code": null,
+     "floor": 0,
+     "kind": "DEFENDED",
+     "name": "MONOTONIC"
+    },
+    {
+     "code": "DC_CLOCK",
+     "floor": 32,
+     "kind": "CONTROL",
+     "name": "WALL"
+    }
+   ],
+   "crashPoints": [],
+   "expectedArmsBy": "RECORD",
+   "family": "RF-3",
+   "id": "CK-01",
+   "parity": "MODEL_OPS",
+   "provisional": false,
+   "scenario": "wall clock jumps of -5 s to +5 s during a lease"
+  },
+  {
+   "arms": [
+    {
+     "code": null,
+     "floor": 0,
+     "kind": "DEFENDED",
+     "name": "DECLARED_MARGIN"
+    },
+    {
+     "code": "DC_CLOCK",
+     "floor": 32,
+     "kind": "CONTROL",
+     "name": "NO_MARGIN"
+    }
+   ],
+   "crashPoints": [
+    "CP-5"
+   ],
+   "expectedArmsBy": "RECORD",
+   "family": "RF-3",
+   "id": "CK-02",
+   "parity": "MODEL_OPS",
+   "provisional": false,
+   "scenario": "cross-host token and approval expiry under skew within the declared bound"
+  },
+  {
+   "arms": [
+    {
+     "code": null,
+     "floor": 0,
+     "kind": "DEFENDED",
+     "name": "SEQUENCE_OR_TOKEN"
+    },
+    {
+     "code": "DC_CLOCK",
+     "floor": 32,
+     "kind": "CONTROL",
+     "name": "WALL"
+    }
+   ],
+   "crashPoints": [],
+   "expectedArmsBy": "RECORD",
+   "family": "RF-3",
+   "id": "CK-03",
+   "parity": "MODEL_OPS",
+   "provisional": false,
+   "scenario": "concurrent writes ordered under skew"
+  },
+  {
+   "arms": [
+    {
+     "code": null,
+     "floor": 0,
+     "kind": "DEFENDED",
+     "name": "PERSISTED_EXPIRY"
+    },
+    {
+     "code": "DC_CLOCK",
+     "floor": 32,
+     "kind": "CONTROL",
+     "name": "IN_MEMORY_EXPIRY"
+    }
+   ],
+   "crashPoints": [],
+   "expectedArmsBy": "R12",
+   "family": "RF-3",
+   "id": "CK-04",
+   "parity": "R12_EXTENSION",
+   "provisional": true,
+   "scenario": "a lease holder's host is replaced; persisted expiry survives"
+  },
+  {
+   "arms": [
+    {
+     "code": null,
+     "floor": 0,
+     "kind": "DEFENDED",
+     "name": "DEDUP"
+    },
+    {
+     "code": "DC_OPID",
+     "floor": 24,
+     "kind": "CONTROL",
+     "name": "DEDUP_OFF"
+    }
+   ],
+   "crashPoints": [
+    "CP-1",
+    "CP-3"
+   ],
+   "expectedArmsBy": "RECORD",
+   "family": "RF-4",
+   "id": "OP-01",
+   "parity": "MODEL_OPS",
+   "provisional": false,
+   "scenario": "a retry after a timeout on a NATIVE edge"
+  },
+  {
+   "arms": [
+    {
+     "code": null,
+     "floor": 0,
+     "kind": "DEFENDED",
+     "name": "DEDUP"
+    },
+    {
+     "code": "DC_OPID",
+     "floor": 32,
+     "kind": "CONTROL",
+     "name": "DEDUP_OFF"
+    }
+   ],
+   "crashPoints": [
+    "CP-2"
+   ],
+   "expectedArmsBy": "RECORD",
+   "family": "RF-4",
+   "id": "OP-02",
+   "parity": "MODEL_OPS",
+   "provisional": false,
+   "scenario": "an outbox redelivery after a crash between commit and acknowledgement"
+  },
+  {
+   "arms": [
+    {
+     "code": null,
+     "floor": 0,
+     "kind": "DEFENDED",
+     "name": "RECONCILE"
+    },
+    {
+     "code": "DC_OPID",
+     "floor": 24,
+     "kind": "CONTROL",
+     "name": "RETRY"
+    }
+   ],
+   "crashPoints": [
+    "CP-4"
+   ],
+   "expectedArmsBy": "RECORD",
+   "family": "RF-4",
+   "id": "OP-03",
+   "parity": "MODEL_OPS",
+   "provisional": false,
+   "scenario": "an unknown outcome on a NONE edge, reconciled through the status lookup"
+  },
+  {
+   "arms": [
+    {
+     "code": null,
+     "floor": 0,
+     "kind": "DEFENDED",
+     "name": "OP_EDGE_KEY"
+    },
+    {
+     "code": "DC_OPID",
+     "floor": 24,
+     "kind": "CONTROL",
+     "name": "KEY_PER_ATTEMPT"
+    }
+   ],
+   "crashPoints": [
+    "CP-3",
+    "CP-4"
+   ],
+   "expectedArmsBy": "RECORD",
+   "family": "RF-4",
+   "id": "OP-04",
+   "parity": "MODEL_OPS",
+   "provisional": false,
+   "scenario": "a RECEIPT_KEY call retried across a restart"
+  },
+  {
+   "arms": [
+    {
+     "code": null,
+     "floor": 0,
+     "kind": "DEFENDED",
+     "name": "EVERY_PATH"
+    },
+    {
+     "code": "DC_OPID",
+     "floor": 32,
+     "kind": "CONTROL",
+     "name": "NORMAL_PATH_ONLY"
+    }
+   ],
+   "crashPoints": [],
+   "expectedArmsBy": "RECORD",
+   "family": "RF-4",
+   "id": "OP-05",
+   "parity": "MODEL_OPS",
+   "provisional": false,
+   "scenario": "deduplication on the exception path (hermes-agent's baseline)"
+  },
+  {
+   "arms": [
+    {
+     "code": null,
+     "floor": 0,
+     "kind": "DEFENDED",
+     "name": "BOUNDED_CLAIM"
+    },
+    {
+     "code": "DC_OPID",
+     "floor": 32,
+     "kind": "CONTROL",
+     "name": "EXACTLY_ONCE_CLAIMED"
+    }
+   ],
+   "crashPoints": [],
+   "expectedArmsBy": "RECORD",
+   "family": "RF-4",
+   "id": "OP-06",
+   "parity": "MODEL_OPS",
+   "provisional": false,
+   "scenario": "a claim of exactly-once delivery from local controls (opencode's baseline)"
+  },
+  {
+   "arms": [
+    {
+     "code": null,
+     "floor": 0,
+     "kind": "DEFENDED",
+     "name": "CLASS_RULES"
+    },
+    {
+     "code": "DC_OPID",
+     "floor": 8,
+     "kind": "CONTROL",
+     "name": "IRREVERSIBLE_RETRIED"
+    }
+   ],
+   "crashPoints": [
+    "CP-4"
+   ],
+   "expectedArmsBy": "RECORD",
+   "family": "RF-4",
+   "id": "OP-07",
+   "parity": "MODEL_OPS",
+   "provisional": false,
+   "scenario": "tool effect classes drive retry; [sim mapping] READ free, IDEMPOTENT_WRITE NATIVE, NON_IDEMPOTENT RECEIPT_KEY, IRREVERSIBLE NONE after approval"
+  },
+  {
+   "arms": [
+    {
+     "code": null,
+     "floor": 0,
+     "kind": "DEFENDED",
+     "name": "BOTH_VERSIONS"
+    }
+   ],
+   "crashPoints": [],
+   "expectedArmsBy": "RECORD",
+   "family": "RF-5",
+   "id": "CV-01",
+   "parity": "MODEL_OPS",
+   "provisional": false,
+   "scenario": "N-1 and N writers and readers interleave across a rolling upgrade"
+  },
+  {
+   "arms": [
+    {
+     "code": null,
+     "floor": 0,
+     "kind": "DEFENDED",
+     "name": "N_MINUS_1_READS_N"
+    },
+    {
+     "code": "DC_VERSION",
+     "floor": 32,
+     "kind": "CONTROL",
+     "name": "N_MINUS_1_REJECTS_N"
+    }
+   ],
+   "crashPoints": [],
+   "expectedArmsBy": "RECORD",
+   "family": "RF-5",
+   "id": "CV-02",
+   "parity": "MODEL_OPS",
+   "provisional": false,
+   "scenario": "rollback to N-1 readers after N writes"
+  },
+  {
+   "arms": [
+    {
+     "code": null,
+     "floor": 0,
+     "kind": "DEFENDED",
+     "name": "BOTH_VERSIONS"
+    },
+    {
+     "code": "DC_VERSION",
+     "floor": 32,
+     "kind": "CONTROL",
+     "name": "PREVIOUS_DROPPED"
+    }
+   ],
+   "crashPoints": [],
+   "expectedArmsBy": "RECORD",
+   "family": "RF-5",
+   "id": "CV-03",
+   "parity": "MODEL_OPS",
+   "provisional": false,
+   "scenario": "a reader drops the previous version mid-rollout"
+  },
+  {
+   "arms": [
+    {
+     "code": null,
+     "floor": 0,
+     "kind": "DEFENDED",
+     "name": "KEPT_INERT"
+    },
+    {
+     "code": "DC_VERSION",
+     "floor": 32,
+     "kind": "CONTROL",
+     "name": "DROPPED"
+    },
+    {
+     "code": "DC_VERSION",
+     "floor": 32,
+     "kind": "CONTROL",
+     "name": "ACTED_ON"
+    }
+   ],
+   "crashPoints": [],
+   "expectedArmsBy": "R12",
+   "family": "RF-5",
+   "id": "CV-04",
+   "parity": "R12_EXTENSION",
+   "provisional": true,
+   "scenario": "an N-1 writer rewrites an envelope with opaque extension data; an extension naming a role stays inert"
+  },
+  {
+   "arms": [
+    {
+     "code": null,
+     "floor": 0,
+     "kind": "DEFENDED",
+     "name": "PAIRS_AND_ROLLBACK"
+    },
+    {
+     "code": "DC_VERSION",
+     "floor": 32,
+     "kind": "CONTROL",
+     "name": "ROLLBACK_MISSING"
+    }
+   ],
+   "crashPoints": [],
+   "expectedArmsBy": "RECORD",
+   "family": "RF-5",
+   "id": "CV-05",
+   "parity": "MODEL_OPS",
+   "provisional": false,
+   "scenario": "a migration states its reader-writer pairs and its rollback"
+  },
+  {
+   "arms": [
+    {
+     "code": null,
+     "floor": 0,
+     "kind": "DEFENDED",
+     "name": "REJECTION_ALLOWED"
+    }
+   ],
+   "crashPoints": [],
+   "expectedArmsBy": "RECORD",
+   "family": "RF-5",
+   "id": "CV-06",
+   "parity": "MODEL_OPS",
+   "provisional": false,
+   "scenario": "public security-sensitive input rejects an unknown field and version"
+  },
+  {
+   "arms": [
+    {
+     "code": null,
+     "floor": 0,
+     "kind": "DEFENDED",
+     "name": "ALL_WITH_RECEIPT"
+    },
+    {
+     "code": "DC_DERIVED",
+     "floor": 32,
+     "kind": "CONTROL",
+     "name": "ONE_MISSED"
+    },
+    {
+     "code": "DC_DERIVED",
+     "floor": 32,
+     "kind": "CONTROL",
+     "name": "NO_RECEIPT"
+    }
+   ],
+   "crashPoints": [],
+   "expectedArmsBy": "RECORD",
+   "family": "RF-6",
+   "id": "DD-01",
+   "parity": "MODEL_OPS",
+   "provisional": false,
+   "scenario": "an erasure through the derived stores (index, embedding, projection, cache, memory vectors)"
+  },
+  {
+   "arms": [
+    {
+     "code": null,
+     "floor": 0,
+     "kind": "DEFENDED",
+     "name": "REBUILD_BY_SEQUENCE"
+    }
+   ],
+   "crashPoints": [],
+   "expectedArmsBy": "RECORD",
+   "family": "RF-6",
+   "id": "DD-02",
+   "parity": "MODEL_OPS",
+   "provisional": false,
+   "scenario": "a derived index rebuilt from a duplicated and reordered change log matches its source"
+  },
+  {
+   "arms": [
+    {
+     "code": null,
+     "floor": 0,
+     "kind": "DEFENDED",
+     "name": "REPORTED"
+    },
+    {
+     "code": "DC_DERIVED",
+     "floor": 32,
+     "kind": "CONTROL",
+     "name": "NOT_REPORTED"
+    }
+   ],
+   "crashPoints": [],
+   "expectedArmsBy": "RECORD",
+   "family": "RF-6",
+   "id": "DD-03",
+   "parity": "MODEL_OPS",
+   "provisional": false,
+   "scenario": "injected drift is found by the rebuild-and-compare audit"
+  },
+  {
+   "arms": [
+    {
+     "code": null,
+     "floor": 0,
+     "kind": "DEFENDED",
+     "name": "REAPPLIED"
+    },
+    {
+     "code": "DC_DERIVED",
+     "floor": 32,
+     "kind": "CONTROL",
+     "name": "NOT_REAPPLIED"
+    }
+   ],
+   "crashPoints": [],
+   "expectedArmsBy": "R12",
+   "family": "RF-6",
+   "id": "DD-04",
+   "parity": "R12_EXTENSION",
+   "provisional": true,
+   "scenario": "PAR-D1's restore scenario: a restore from a backup taken before an erasure re-applies the deletion ledger before serving; residuals stated"
+  },
+  {
+   "arms": [
+    {
+     "code": "DC_REPLAY_STATE",
+     "floor": 32,
+     "kind": "NEGATIVE",
+     "name": "LOG_ONLY"
+    }
+   ],
+   "crashPoints": [],
+   "expectedArmsBy": "RECORD",
+   "family": "RF-7",
+   "id": "RS-01",
+   "parity": "MODEL_OPS",
+   "provisional": false,
+   "scenario": "a replay given the log alone diverges, as expected (RL-17 H-27d)"
+  },
+  {
+   "arms": [
+    {
+     "code": null,
+     "floor": 0,
+     "kind": "DEFENDED",
+     "name": "STATE_AS_INPUT"
+    },
+    {
+     "code": "DC_REPLAY_STATE",
+     "floor": 32,
+     "kind": "CONTROL",
+     "name": "LOG_ONLY"
+    }
+   ],
+   "crashPoints": [],
+   "expectedArmsBy": "RECORD",
+   "family": "RF-7",
+   "id": "RS-02",
+   "parity": "MODEL_OPS",
+   "provisional": false,
+   "scenario": "a replay given the log and the state it consults reproduces the final state digest"
+  }
+ ],
+ "packet": "CONF-DATA-001",
+ "schemaVersion": "r12.data-correctness-cases/v1",
+ "seeds": {
+  "first": 1,
+  "last": 32
+ }
+}

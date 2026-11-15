@@ -1,0 +1,36 @@
+{
+  "id": "rf5-mixed-versions",
+  "family": "RF-5",
+  "setup": {},
+  "steps": [
+    {
+      "op": "read_record",
+      "recordVersion": "N-1",
+      "reader": "N-1",
+      "rollout": true,
+      "accepted": true
+    },
+    {
+      "op": "read_record",
+      "recordVersion": "N-1",
+      "reader": "N",
+      "rollout": true,
+      "accepted": true
+    },
+    {
+      "op": "read_record",
+      "recordVersion": "N",
+      "reader": "N-1",
+      "rollout": true,
+      "accepted": true
+    },
+    {
+      "op": "read_record",
+      "recordVersion": "N",
+      "reader": "N",
+      "rollout": true,
+      "accepted": true
+    }
+  ],
+  "expect": "ACCEPT"
+}

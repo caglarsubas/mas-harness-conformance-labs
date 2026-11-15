@@ -1,0 +1,15 @@
+{
+  "id": "neg-bounded-not-exactly-once",
+  "family": "RF-4",
+  "setup": {},
+  "steps": [
+    {
+      "op": "claim",
+      "exactlyOnce": true,
+      "maxAttempts": 3
+    }
+  ],
+  "expect": {
+    "refuse": "DC_OPID"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "id": "rf6-deletion-through-derived",
+  "family": "RF-6",
+  "setup": {
+    "derived": [
+      "index",
+      "embedding"
+    ]
+  },
+  "steps": [
+    {
+      "op": "insert",
+      "id": "doc-1"
+    },
+    {
+      "op": "delete",
+      "id": "doc-1",
+      "propagatedTo": [
+        "embedding"
+      ],
+      "receipt": true
+    }
+  ],
+  "expect": {
+    "refuse": "DC_DERIVED"
+  }
+}

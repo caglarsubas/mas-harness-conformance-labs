@@ -1,0 +1,30 @@
+{
+  "id": "rf4-receipt-key-per-attempt",
+  "family": "RF-4",
+  "setup": {},
+  "steps": [
+    {
+      "op": "call",
+      "operation": "op-4",
+      "edge": "caller->callee",
+      "class": "RECEIPT_KEY",
+      "attempt": 1,
+      "key": "k-1",
+      "outcome": "unknown",
+      "applied": true
+    },
+    {
+      "op": "call",
+      "operation": "op-4",
+      "edge": "caller->callee",
+      "class": "RECEIPT_KEY",
+      "attempt": 2,
+      "key": "k-2",
+      "outcome": "committed",
+      "applied": true
+    }
+  ],
+  "expect": {
+    "refuse": "DC_OPID"
+  }
+}

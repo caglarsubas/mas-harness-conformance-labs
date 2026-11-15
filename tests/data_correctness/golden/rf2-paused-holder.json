@@ -1,0 +1,38 @@
+{
+  "id": "rf2-paused-holder",
+  "family": "RF-2",
+  "setup": {
+    "fencing": "STORE_CHECKED_TOKEN"
+  },
+  "steps": [
+    {
+      "op": "acquire",
+      "holder": "a",
+      "token": 1
+    },
+    {
+      "op": "expire",
+      "holder": "a"
+    },
+    {
+      "op": "acquire",
+      "holder": "b",
+      "token": 2
+    },
+    {
+      "op": "write",
+      "holder": "b",
+      "token": 2,
+      "accepted": true
+    },
+    {
+      "op": "write",
+      "holder": "a",
+      "token": 1,
+      "accepted": true
+    }
+  ],
+  "expect": {
+    "refuse": "DC_FENCE"
+  }
+}
