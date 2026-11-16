@@ -1,0 +1,29 @@
+{
+  "id": "neg-exception-path-dedup",
+  "family": "RF-4",
+  "setup": {},
+  "steps": [
+    {
+      "op": "call",
+      "operation": "op-5",
+      "edge": "ai-gateway->inference-api",
+      "class": "NATIVE",
+      "attempt": 1,
+      "outcome": "unknown",
+      "applied": true
+    },
+    {
+      "op": "call",
+      "operation": "op-5",
+      "edge": "ai-gateway->inference-api",
+      "class": "NATIVE",
+      "attempt": 2,
+      "path": "exception",
+      "dedup": false,
+      "applied": true
+    }
+  ],
+  "expect": {
+    "refuse": "DC_OPID"
+  }
+}

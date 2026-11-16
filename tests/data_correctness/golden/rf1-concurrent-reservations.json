@@ -1,0 +1,39 @@
+{
+  "id": "rf1-concurrent-reservations",
+  "family": "RF-1",
+  "setup": {
+    "units": 1,
+    "guard": "NONE"
+  },
+  "steps": [
+    {
+      "op": "begin",
+      "tx": "a"
+    },
+    {
+      "op": "begin",
+      "tx": "b"
+    },
+    {
+      "op": "reserve",
+      "tx": "a",
+      "units": 1
+    },
+    {
+      "op": "reserve",
+      "tx": "b",
+      "units": 1
+    },
+    {
+      "op": "commit",
+      "tx": "a"
+    },
+    {
+      "op": "commit",
+      "tx": "b"
+    }
+  ],
+  "expect": {
+    "refuse": "DC_WRITE_SKEW"
+  }
+}

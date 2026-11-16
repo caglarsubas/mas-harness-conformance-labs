@@ -1,0 +1,28 @@
+{
+  "id": "rf4-retry-after-unknown",
+  "family": "RF-4",
+  "setup": {},
+  "steps": [
+    {
+      "op": "call",
+      "operation": "op-2",
+      "edge": "ai-gateway->inference-api",
+      "class": "NONE",
+      "attempt": 1,
+      "outcome": "unknown",
+      "applied": true
+    },
+    {
+      "op": "call",
+      "operation": "op-2",
+      "edge": "ai-gateway->inference-api",
+      "class": "NONE",
+      "attempt": 2,
+      "outcome": "committed",
+      "applied": true
+    }
+  ],
+  "expect": {
+    "refuse": "DC_OPID"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "id": "rf7-log-only-replay-diverges",
+  "family": "RF-7",
+  "setup": {},
+  "steps": [
+    {
+      "op": "replay",
+      "inputs": [
+        "log"
+      ],
+      "consulted": [
+        "log",
+        "checkpoint-state"
+      ]
+    }
+  ],
+  "expect": {
+    "refuse": "DC_REPLAY_STATE"
+  }
+}

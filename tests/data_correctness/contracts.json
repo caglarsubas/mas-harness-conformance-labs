@@ -1,0 +1,101 @@
+{
+ "commit": "cf2535065bf1d79efaccdc6bbc2aebac5bcd2aae",
+ "files": [
+  {
+   "packet": "MET-007",
+   "path": "architecture/data-correctness/record.json",
+   "sha256": "7a3d2aa8785d18322606ea9d394606e6394412012fd00fbe03a4b4ed0c7d6370",
+   "size": 52698
+  },
+  {
+   "packet": "MET-007",
+   "path": "architecture/data-correctness/schema.json",
+   "sha256": "f0e5e0968b6f184154f557b756e6a69a565c888a264a3652f58d2e3387f2258d",
+   "size": 32357
+  },
+  {
+   "packet": "MET-007",
+   "path": "scripts/data_correctness.py",
+   "sha256": "dd795c8ab2ff7ee9c130cc0683749bf498cd085079abb508fc495299fa6e0f27",
+   "size": 12175
+  },
+  {
+   "packet": "MET-007",
+   "path": "architecture/data-correctness/vectors/rf1-concurrent-reservations.json",
+   "sha256": "9fdb78ca49910e49b274b0240565a95571d28909663748e0a57577b8e81e9fcb",
+   "size": 524
+  },
+  {
+   "packet": "MET-007",
+   "path": "architecture/data-correctness/vectors/rf2-paused-holder.json",
+   "sha256": "3bcd4f7f787b5008c6c869c5a64274a8c470f95f825b0188594c395a122d77f0",
+   "size": 563
+  },
+  {
+   "packet": "MET-007",
+   "path": "architecture/data-correctness/vectors/rf3-skew-and-jump.json",
+   "sha256": "4c88c67e45c3caa6883a0569fdaef2037ed8ac4cfa03cee42c85d2054ef86622",
+   "size": 408
+  },
+  {
+   "packet": "MET-007",
+   "path": "architecture/data-correctness/vectors/rf4-replay-per-class.json",
+   "sha256": "00ae3a52bf1df74e20d82a9e08aabf1c14c48c9746ec37e67dae6adf435b6ea3",
+   "size": 707
+  },
+  {
+   "packet": "MET-007",
+   "path": "architecture/data-correctness/vectors/rf4-retry-after-unknown.json",
+   "sha256": "8a549031fca07a77d7419bd05559dd3305cf1aa477baff60cda261ef1c7e7598",
+   "size": 527
+  },
+  {
+   "packet": "MET-007",
+   "path": "architecture/data-correctness/vectors/rf4-receipt-key-restart.json",
+   "sha256": "f8c01547bc17e5c96d3270e61a50bd9d37a161168d75c4cfa9a95190a5a5d4ac",
+   "size": 595
+  },
+  {
+   "packet": "MET-007",
+   "path": "architecture/data-correctness/vectors/rf4-receipt-key-per-attempt.json",
+   "sha256": "bb0f1a6ba23051b621095973adc98ab81a648402d6073c239a24f9067bcf8b5f",
+   "size": 563
+  },
+  {
+   "packet": "MET-007",
+   "path": "architecture/data-correctness/vectors/neg-bounded-not-exactly-once.json",
+   "sha256": "975e128a281f7a32fbf6cf0835f38074d6318e9e4c806bc052a970450fd17670",
+   "size": 222
+  },
+  {
+   "packet": "MET-007",
+   "path": "architecture/data-correctness/vectors/neg-exception-path-dedup.json",
+   "sha256": "92279bb7bfbb8742953d9180401bd1405040dd6d00c2903696b3cb88fa5bf6a1",
+   "size": 551
+  },
+  {
+   "packet": "MET-007",
+   "path": "architecture/data-correctness/vectors/rf5-mixed-versions.json",
+   "sha256": "9532d688d7111ebbee29ad2db392a44e08d509698f77bb32088837c497adb198",
+   "size": 655
+  },
+  {
+   "packet": "MET-007",
+   "path": "architecture/data-correctness/vectors/rf5-reader-drops-previous-version.json",
+   "sha256": "71f15bc9ae5d946a1b9ede4ab3a4f73849011b570d64f349ce14e5dffea2927a",
+   "size": 419
+  },
+  {
+   "packet": "MET-007",
+   "path": "architecture/data-correctness/vectors/rf6-deletion-through-derived.json",
+   "sha256": "a1293ffdf8b47f8820c398e3e68ac355139bca55ded77b8f04d1eeef935b4c75",
+   "size": 386
+  },
+  {
+   "packet": "MET-007",
+   "path": "architecture/data-correctness/vectors/rf7-log-only-replay-diverges.json",
+   "sha256": "d6f638f9d6a403b21774456eac6e09a0288ee44ab0b31f9e461244306f680e81",
+   "size": 293
+  }
+ ]
+}

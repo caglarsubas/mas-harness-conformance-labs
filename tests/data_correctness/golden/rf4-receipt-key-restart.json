@@ -1,0 +1,29 @@
+{
+  "id": "rf4-receipt-key-restart",
+  "family": "RF-4",
+  "setup": {},
+  "steps": [
+    {
+      "op": "call",
+      "operation": "op-3",
+      "edge": "caller->callee",
+      "class": "RECEIPT_KEY",
+      "attempt": 1,
+      "key": "op-3/caller->callee",
+      "outcome": "unknown",
+      "applied": true
+    },
+    {
+      "op": "call",
+      "operation": "op-3",
+      "edge": "caller->callee",
+      "class": "RECEIPT_KEY",
+      "attempt": 2,
+      "key": "op-3/caller->callee",
+      "outcome": "final",
+      "applied": false,
+      "afterRestart": true
+    }
+  ],
+  "expect": "ACCEPT"
+}
